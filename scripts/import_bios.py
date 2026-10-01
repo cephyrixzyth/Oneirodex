@@ -13,7 +13,8 @@ is written until you pass --apply.
     python scripts/import_bios.py --source E:\\_bios
     python scripts/import_bios.py --source E:\\_bios --apply
 
-The destination is `oneirodex/static/library/bios` (gitignored) unless
+The destination is `oneirodex/static/library/bios` (gitignored), or `bios` in
+the data folder when ONEIRODEX_LIBRARY_DIR moves the library, unless
 EMULATOR_BIOS_PATH is set or --dest is given. Firmware stays out of git.
 """
 
@@ -28,8 +29,8 @@ import shutil
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _load_bios_module():
-    """Load emulator_bios.py directly, without importing the app package.
+def _load_util(filename: str, alias: str):
+    """Load oneirodex/utils/<filename> by path, without importing the app package.
 
     `import oneirodex.utils.emulator_bios` runs `oneirodex/__init__`, which
     imports config and refuses to load without SECRET_KEY — a real requirement
@@ -38,18 +39,26 @@ def _load_bios_module():
     does not call at import time, so loading it by path is safe and keeps
     BIOS_REQUIREMENTS a single source of truth.
     """
-    path = os.path.join(REPO_ROOT, 'oneirodex', 'utils', 'emulator_bios.py')
-    spec = importlib.util.spec_from_file_location('_gt_emulator_bios', path)
+    path = os.path.join(REPO_ROOT, 'oneirodex', 'utils', filename)
+    spec = importlib.util.spec_from_file_location(alias, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-_bios = _load_bios_module()
+_bios = _load_util('emulator_bios.py', '_gt_emulator_bios')
+# The same link-refusing file checks the server's firmware import uses, so the
+# script cannot copy ``scph5501.bin -> /app/.env`` into the firmware volume.
+_security = _load_util('security.py', '_gt_security')
 BIOS_REQUIREMENTS = _bios.BIOS_REQUIREMENTS
 BIOS_HARD_REQUIRED_CORES = _bios.BIOS_HARD_REQUIRED_CORES
 
-DEFAULT_DEST = os.path.join(REPO_ROOT, 'oneirodex', 'static', 'library', 'bios')
+# The server's own rule (utils/library_paths): a library moved to a data folder
+# with ONEIRODEX_LIBRARY_DIR keeps its firmware there too.
+_paths = _load_util('library_paths.py', '_gt_library_paths')
+DEFAULT_DEST = os.path.join(
+    _paths.relocated_library_dir() or os.path.join(REPO_ROOT, 'oneirodex', 'static', 'library'), 'bios'
+)
 
 
 def wanted_names() -> dict[str, str]:
@@ -61,9 +70,9 @@ def wanted_names() -> dict[str, str]:
     return out
 
 
-def _digest(path: str) -> str:
+def _digest(path: str, base: str) -> str:
     h = hashlib.sha1()
-    with open(path, 'rb') as fh:
+    with _security.open_plain_file_within(base, path) as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
@@ -75,16 +84,27 @@ def scan(source: str, wanted: dict[str, str]) -> dict[str, list[str]]:
     for dirpath, _dirnames, filenames in os.walk(source):
         for filename in filenames:
             canonical = wanted.get(filename.lower())
-            if canonical:
-                found.setdefault(canonical, []).append(os.path.join(dirpath, filename))
+            if not canonical:
+                continue
+            path = os.path.join(dirpath, filename)
+            if _security.is_plain_file_within(source, path):  # links are skipped, not followed
+                found.setdefault(canonical, []).append(path)
     return found
+
+
+def _copy(source: str, src: str, dest: str) -> None:
+    with _security.open_plain_file_within(source, src) as fin:
+        with open(dest, 'wb') as fout:
+            shutil.copyfileobj(fin, fout, 1024 * 1024)
+        info = os.fstat(fin.fileno())
+    os.utime(dest, ns=(info.st_atime_ns, info.st_mtime_ns))
 
 
 def cores_for(name: str) -> list[str]:
     return [core for core, names in BIOS_REQUIREMENTS.items() if name in names]
 
 
-def _choose_source(sources: list[str]) -> tuple[str, str]:
+def _choose_source(sources: list[str], base: str) -> tuple[str, str]:
     """Pick which copy to import, and describe why.
 
     When several files share a firmware name and their contents differ, prefer
@@ -101,7 +121,12 @@ def _choose_source(sources: list[str]) -> tuple[str, str]:
 
     by_digest: dict[str, list[str]] = {}
     for path in sources:
-        by_digest.setdefault(_digest(path), []).append(path)
+        try:
+            by_digest.setdefault(_digest(path, base), []).append(path)
+        except OSError:
+            continue  # replaced by a link since the scan: not a candidate
+    if not by_digest:
+        return sources[0], '  [could not be read]'
 
     if len(by_digest) == 1:
         return sources[0], f'  [{len(sources)} identical copies]'
@@ -143,7 +168,7 @@ def main() -> int:
         # Distinct contents under one name is worth saying out loud — regional
         # dumps and bad rips share filenames, and picking silently would make
         # the choice invisible.
-        chosen, note = _choose_source(sources)
+        chosen, note = _choose_source(sources, args.source)
 
         if already and not args.overwrite:
             print(f'  = {name:<24} already present{note}')

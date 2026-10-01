@@ -11,12 +11,13 @@ from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.api_response import api_error
 
 from . import apis_bp
+from oneirodex.utils.rbac import is_admin
 
 
 @apis_bp.route('/health/library', methods=['GET'])
 @login_required
 def library_health_summary():
-    if current_user.role != 'admin':
+    if not is_admin(current_user):
         return api_error('Admin required', code='forbidden')
     try:
         limit = min(int(request.args.get('limit') or 200), 2000)

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { checkModSourceUrl, checkServerUrl, isPrivateOrLoopbackHost } from './transport-policy.js'
+import {
+  checkDownloadRedirectUrl,
+  checkModSourceUrl,
+  checkServerUrl,
+  isPrivateOrLoopbackHost,
+  savedServerUrlProblem,
+} from './transport-policy.js'
 
 // The Rust twin is `validate_server_base_url` in src-tauri/src/lib.rs; the host
 // lists below mirror its tests so the two stay in step.
@@ -24,6 +30,20 @@ const allowedHttp = [
   'http://nas.local./',
   'http://nas',
   'http://nas:5000',
+  // The rest of the backend's `_PRIVATE_SUFFIXES` (oneirodex/utils/trusted_host.py):
+  // names a household router hands out.
+  'http://tower.lan:5006',
+  'http://NAS.LAN/',
+  'http://nas.home.arpa',
+  'http://nas.internal',
+  'http://nas.localdomain',
+  'http://a.b.lan',
+  // Shared address space 100.64.0.0/10 — where Tailscale puts every peer; the
+  // backend already treats it as home-lab space.
+  'http://100.64.0.1',
+  'http://100.100.100.100:5006',
+  'http://100.127.255.255',
+  'http://[fd7a:115c:a1e0::1]',
   // WHATWG host parsing folds these to 127.0.0.1 / 192.168.0.1.
   'http://0x7f.1/',
   'http://2130706433/',
@@ -41,7 +61,9 @@ const refusedHttp = [
   'http://192.169.1.1',
   'http://11.0.0.1',
   'http://0.0.0.0',
-  'http://100.64.0.1',
+  // Just outside 100.64.0.0/10.
+  'http://100.63.255.255',
+  'http://100.128.0.1',
   'http://[2001:db8::1]',
   'http://[::ffff:8.8.8.8]',
   'http://[fec0::1]',
@@ -51,6 +73,14 @@ const refusedHttp = [
   'http://localhost.evil.com',
   'http://nas.local.evil.com',
   'http://.local',
+  // A suffix is a whole label, never a substring or a bare suffix.
+  'http://nas.lan.evil.com',
+  'http://evil-lan.com',
+  'http://lan.example.com',
+  'http://.lan',
+  'http://home.arpa',
+  'http://nas.internal.evil.com',
+  'http://nas.home.arpa.evil.com',
   // Hex-encoded public address.
   'http://0x08080808/',
   // The host is evil.com; 192.168.1.1 is only userinfo.
@@ -149,5 +179,75 @@ describe('isPrivateOrLoopbackHost', () => {
     expect(isPrivateOrLoopbackHost('')).toBe(false)
     expect(isPrivateOrLoopbackHost('.')).toBe(false)
     expect(isPrivateOrLoopbackHost('[not-an-address]')).toBe(false)
+  })
+
+  it('matches the backend: router suffixes and the Tailscale range are local', () => {
+    for (const host of [
+      'tower.lan',
+      'nas.home.arpa',
+      'nas.internal',
+      'nas.localdomain',
+      'nas.local',
+      '100.64.0.0',
+      '100.127.255.255',
+    ]) {
+      expect(isPrivateOrLoopbackHost(host), host).toBe(true)
+    }
+    for (const host of [
+      'lan',
+      'example.lan.com',
+      '.lan',
+      '.internal',
+      '100.63.0.1',
+      '100.128.0.1',
+    ]) {
+      // A bare `lan` is a dotless name, so it is local for that reason alone.
+      expect(isPrivateOrLoopbackHost(host), host).toBe(host === 'lan')
+    }
+  })
+})
+
+describe('savedServerUrlProblem', () => {
+  it('is null for nothing saved and for a URL that is still allowed', () => {
+    expect(savedServerUrlProblem('')).toBeNull()
+    expect(savedServerUrlProblem('   ')).toBeNull()
+    expect(savedServerUrlProblem('https://games.example.com')).toBeNull()
+    expect(savedServerUrlProblem('http://tower.lan:5006')).toBeNull()
+    expect(savedServerUrlProblem('http://100.101.102.103:5006')).toBeNull()
+  })
+
+  it('explains a saved URL that the policy now refuses', () => {
+    // What the thin client shows on start-up, instead of sitting idle.
+    expect(savedServerUrlProblem('http://games.example.com')).toMatch(
+      /Refusing http:\/\/ for games\.example\.com.*API token/s,
+    )
+    expect(savedServerUrlProblem('ftp://games.example.com')).toMatch(/https:\/\//)
+  })
+})
+
+describe('checkDownloadRedirectUrl', () => {
+  it('accepts an https hop and an http hop on the local network', () => {
+    for (const url of [
+      'https://cdn.example.com/game.zip',
+      'http://192.168.1.5:5006/download_zip/7',
+      'http://tower.lan/file.zip',
+      'http://100.100.100.100/file.zip',
+    ]) {
+      expect(checkDownloadRedirectUrl(url).ok, url).toBe(true)
+    }
+  })
+
+  it('refuses a plain http hop on a public host and says an archive could be tampered with', () => {
+    for (const url of ['http://cdn.example.com/game.zip', 'http://8.8.8.8/x.zip']) {
+      const result = checkDownloadRedirectUrl(url)
+      expect(result.ok, url).toBe(false)
+      expect(result.ok === false && result.message, url).toMatch(/tampered with.*https:\/\//s)
+    }
+  })
+
+  it('refuses other schemes and junk', () => {
+    for (const url of ['ftp://cdn.example.com/x.zip', 'file:///C:/x.zip', '']) {
+      expect(checkDownloadRedirectUrl(url).ok, url).toBe(false)
+    }
   })
 })

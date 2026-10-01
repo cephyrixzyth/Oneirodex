@@ -34,6 +34,7 @@ from sqlalchemy import func, select
 from . import apis_bp
 
 from . import game_batch  # noqa: F401  -- registers its routes on apis_bp
+from oneirodex.utils.rbac import is_admin
 
 def _refuse_inaccessible_game(game):
     """Refusal for a game the caller may not see, or ``None`` when they may.
@@ -329,7 +330,7 @@ def admin_freshness_refresh():
     """
     from oneirodex.utils.freshness import check_and_store_freshness
 
-    if not current_user.is_authenticated or current_user.role != 'admin':
+    if not current_user.is_authenticated or not is_admin(current_user):
         return api_error('Admin required', code='forbidden')
 
     data = request.get_json(silent=True) or {}

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+from contextlib import contextmanager
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # Windows (standalone): msvcrt byte-range locks instead
+    fcntl = None
+    import msvcrt
 
 from flask import current_app
 from werkzeug.utils import secure_filename
@@ -20,6 +28,16 @@ _SAFE_UUID = re.compile(
 MAX_CHEAT_FILE_BYTES = 1024 * 1024
 #: Per game. The folder is listed on every details-page load.
 MAX_CHEAT_FILES_PER_GAME = 200
+#: Across every game (``CHEAT_STORAGE_MAX_BYTES`` overrides it). The per-game
+#: caps are not a bound on their own: any member who can open a game may add
+#: cheats, and 200 x 1 MB for each of 500 games is 100 GB. Real cheat sets are
+#: a few KB each, so this is generous for a library of thousands of games.
+MAX_CHEAT_STORAGE_BYTES = 256 * 1024 * 1024
+
+#: Serialises count-then-write between threads of one process; ``_storage_lock``
+#: adds a lock file so other worker processes wait their turn too.
+_WRITE_LOCK = threading.Lock()
+_LOCK_FILE = '.write.lock'
 
 
 class CheatLimitError(ValueError):
@@ -81,24 +99,111 @@ def _too_large() -> CheatLimitError:
     )
 
 
-def _ensure_room(folder: str, dest: str) -> None:
-    """Refuse a *new* cheat file once the game holds MAX_CHEAT_FILES_PER_GAME.
+def _storage_limit() -> int:
+    try:
+        configured = int(current_app.config.get('CHEAT_STORAGE_MAX_BYTES') or 0)
+    except (TypeError, ValueError):
+        configured = 0
+    return configured if configured > 0 else MAX_CHEAT_STORAGE_BYTES
 
-    Replacing a file that already exists never counts against the cap.
-    """
-    if os.path.isfile(dest):
-        return
-    existing = sum(
+
+def _storage_used() -> int:
+    """Bytes of cheat files held for every game."""
+    total = 0
+    for dirpath, _dirs, names in os.walk(cheats_root()):
+        for name in names:
+            if not name.lower().endswith('.cht'):
+                continue
+            try:
+                total += os.path.getsize(os.path.join(dirpath, name))
+            except OSError:
+                continue
+    return total
+
+
+def _count_cht(folder: str) -> int:
+    return sum(
         1
         for name in os.listdir(folder)
         if name.lower().endswith('.cht') and os.path.isfile(os.path.join(folder, name))
     )
-    if existing >= MAX_CHEAT_FILES_PER_GAME:
-        raise CheatLimitError(
+
+
+def _full_error(kind: str) -> CheatLimitError:
+    if kind == 'game':
+        return CheatLimitError(
             f'This game already has the maximum of {MAX_CHEAT_FILES_PER_GAME} cheat files; '
             'delete one before adding another',
             code='conflict',
         )
+    return CheatLimitError(
+        'Cheat storage on this server is full; ask an admin to clear unused cheat files',
+        code='conflict',
+    )
+
+
+def _ensure_room(folder: str, dest: str, incoming: int = 0) -> None:
+    """Refuse a cheat file once the game holds MAX_CHEAT_FILES_PER_GAME, or the
+    server's cheat storage as a whole would pass its limit.
+
+    Replacing a file that already exists never counts against the per-game cap;
+    it counts only its growth against the storage limit.
+    """
+    replacing = os.path.isfile(dest)
+    if not replacing and _count_cht(folder) >= MAX_CHEAT_FILES_PER_GAME:
+        raise _full_error('game')
+    growth = incoming - (os.path.getsize(dest) if replacing else 0)
+    if growth > 0 and _storage_used() + growth > _storage_limit():
+        raise _full_error('storage')
+
+
+def _lock_fd(fd: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return
+    os.lseek(fd, 0, os.SEEK_SET)
+    while True:  # LK_LOCK gives up after ~10 s of retries; keep waiting
+        try:
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            return
+        except OSError:
+            continue
+
+
+def _unlock_fd(fd: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return
+    os.lseek(fd, 0, os.SEEK_SET)
+    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+
+@contextmanager
+def _storage_lock():
+    """One cheat writer at a time, across threads and worker processes.
+
+    The caps are count-then-write; without this two workers could both pass the
+    check against the same total and together overshoot it.
+    """
+    with _WRITE_LOCK:
+        root = cheats_root()
+        os.makedirs(root, exist_ok=True)
+        fd = os.open(os.path.join(root, _LOCK_FILE), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            _lock_fd(fd)
+            try:
+                yield
+            finally:
+                _unlock_fd(fd)
+        finally:
+            os.close(fd)
+
+
+def _commit(folder: str, dest: str, data: bytes) -> None:
+    """Check the caps and write, as one step for every worker process."""
+    with _storage_lock():
+        _ensure_room(folder, dest, len(data))
+        _write_atomic(dest, data)
 
 
 def _write_atomic(dest: str, data: bytes) -> None:
@@ -233,7 +338,7 @@ def store_cheat_file(game_uuid: str, file_storage) -> dict[str, Any]:
     data = stream.read(MAX_CHEAT_FILE_BYTES + 1)
     if len(data) > MAX_CHEAT_FILE_BYTES:
         raise _too_large()
-    _write_atomic(dest, data)
+    _commit(folder, dest, data)
     return {
         'name': safe,
         'size': os.path.getsize(dest),
@@ -259,7 +364,7 @@ def create_cheat_file(
     dest = _assert_under_game_dir(game_uuid, os.path.join(folder, safe))
     _ensure_room(folder, dest)
     # ``build_cht_text`` joins with newline='\n' already; write the bytes as-is.
-    _write_atomic(dest, encoded)
+    _commit(folder, dest, encoded)
     row: dict[str, Any] = {
         'name': safe,
         'size': os.path.getsize(dest),

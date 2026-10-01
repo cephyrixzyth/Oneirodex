@@ -20,7 +20,8 @@ export interface OpenPathFailure {
 
 /**
  * Absolute Windows drive, UNC, or Unix absolute path (no relative / bare names).
- * Shape only: "absolute" is not "allowed" — `validateRevealPath` refuses UNC.
+ * Shape only: "absolute" is not "allowed" — device paths are always refused and a
+ * UNC path only opens when its share is trusted (see `validateRevealPath`).
  */
 export function isAbsoluteOsPath(path: string): boolean {
   const trimmed = path.trim()
@@ -50,13 +51,31 @@ export function isNetworkOrDevicePath(path: string): boolean {
   return /^[\\/]{2}/.test(path) || path.startsWith('\\??\\') || path.startsWith('/??/')
 }
 
-/** Shown when a reveal path names a network share or a device. */
-export const NETWORK_PATH_REFUSED =
-  'Network (UNC) and device paths are blocked — map the share to a drive letter and use that path instead'
+/**
+ * The Win32 / NT device namespaces (`\\?\`, `\\.\`, `\??\`, any separator mix).
+ * Never openable, whatever the user trusts: a trusted share has to be a plain
+ * `\\server\share`.
+ */
+export function isDevicePath(path: string): boolean {
+  return /^[\\/]{2}[?.]([\\/]|$)/.test(path) || path.startsWith('\\??\\') || path.startsWith('/??/')
+}
 
 /**
- * Reject empty, relative, traversal-only, null/control chars, UNC / device, and
- * overlong paths before handing off to the native reveal command.
+ * Shown when a reveal path names a device, or a network share nobody trusted.
+ * Keep in step with `NETWORK_PATH_REFUSED` in `src-tauri/src/lib.rs`.
+ */
+export const NETWORK_PATH_REFUSED =
+  'Network (UNC) paths only open for shares you list under Trusted network shares in the companion (or map the share to a drive letter); device paths are always blocked'
+
+/**
+ * Reject empty, relative, traversal-only, null/control chars, device, and overlong
+ * paths before handing off to the native reveal command.
+ *
+ * A UNC path passes this screen but is *not* thereby allowed: whether its share is
+ * trusted is decided by `reveal_path_in_os` (Rust), which reads the user's trusted
+ * share list itself and refuses an untrusted UNC path before any filesystem probe.
+ * That decision lives in one place — the one that nothing the webview or the
+ * server sends can talk into widening it.
  */
 export function validateRevealPath(
   raw: string,
@@ -74,7 +93,7 @@ export function validateRevealPath(
   if (/[\0\r\n]/.test(path)) {
     return { ok: false, error: 'Path contains invalid control characters' }
   }
-  if (isNetworkOrDevicePath(path)) {
+  if (isDevicePath(path)) {
     return { ok: false, error: NETWORK_PATH_REFUSED }
   }
   if (!isAbsoluteOsPath(path)) {

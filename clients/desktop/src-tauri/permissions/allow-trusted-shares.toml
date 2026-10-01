@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-trusted-shares"
+description = "Reads and saves the network shares the user trusts for opening queued paths."
+commands.allow = ["load_trusted_shares", "save_trusted_shares"]

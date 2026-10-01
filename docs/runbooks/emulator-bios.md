@@ -41,6 +41,8 @@ Operator-supplied only. There is no download button.
 
 The folder must sit under a library root (`ONEIRODEX_LIBRARY_ROOTS` / `BASE_FOLDER_*`) or be the path named by `BIOS_IMPORT_SOURCE`.
 
+Symbolic links inside the collection are skipped, by the admin scan/install, the boot import and `scripts/import_bios.py` alike: a `scph5501.bin -> /somewhere/else` would otherwise copy whatever it points at into the firmware volume, which every signed-in member can download. Keep real files in the collection folder (a hardlink is fine). A file replaced by a link between the scan and the copy is reported as not installed rather than followed.
+
 `GET /api/emulator-bios` includes `import_source` (the configured default) and `missing_markdown`. Preview/apply are `POST /api/emulator-bios/scan` and `POST /api/emulator-bios/install`.
 
 ## Checking coverage

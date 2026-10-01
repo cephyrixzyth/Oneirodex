@@ -5,9 +5,11 @@ Provides memory-efficient streaming ZIP creation for multi-file games.
 
 import os
 import asyncio
+import time
+import zipfile
 from typing import AsyncGenerator, Iterator, Tuple, Optional, Dict, Any
 import zipstream
-from oneirodex.utils.security import is_plain_file_within, is_safe_path
+from oneirodex.utils.security import is_plain_file_within, is_safe_path, open_plain_file_within
 from oneirodex.utils.event_logging import log_system_event
 
 
@@ -35,6 +37,56 @@ def _iter_folder_files(source_path: str, excluded_folders) -> Iterator[str]:
             if not is_plain_file_within(real_root, file_path):
                 continue
             yield file_path
+
+
+class _ModePreservingZipFile(zipstream.ZipFile):
+    """``zipstream.ZipFile`` that keeps each file's Unix mode when members are
+    streamed from our own iterator.
+
+    ``write_iter`` stamps every member ``rw-------``; ``write`` (which stats the
+    path itself) records the real mode, so a downloaded Linux game keeps its
+    executable bits. ``_writecheck`` runs once per member just after its
+    ``ZipInfo`` is built and before the header goes out, which is the one place
+    to correct the attributes without touching the library's private methods.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._modes: Dict[str, int] = {}
+
+    def write_vetted(self, arcname: str, size: int, mtime: float, mode: int, chunks) -> None:
+        """Queue *chunks* as member *arcname*, carrying the file's size, mtime and mode."""
+        # Same normalisation ``zipstream`` applies before it builds the ZipInfo.
+        member = os.path.normpath(os.path.splitdrive(arcname)[1])
+        while member[:1] in (os.sep, os.altsep):
+            member = member[1:]
+        self._modes[zipfile.ZipInfo(member).filename] = mode
+        self.write_iter(arcname, chunks, buffer_size=size, date_time=time.localtime(mtime)[0:6])
+
+    def _writecheck(self, zinfo):
+        super()._writecheck(zinfo)
+        mode = self._modes.get(zinfo.filename)
+        if mode is not None:
+            zinfo.external_attr = (mode & 0xFFFF) << 16
+
+
+def _stream_vetted_file(real_root: str, path: str, chunk_size: int = 65536) -> Iterator[bytes]:
+    """Yield a game file's bytes, vetting it when the download reaches it.
+
+    ``_iter_folder_files`` vets every file during the walk, but zipstream only
+    queues the path; the file is opened chunks later, minutes later for a big
+    game. Someone with write access to the share could flip ``big.bin`` to a
+    link at ``/app/.env`` in that window. So the open happens here, through
+    ``open_plain_file_within``, which checks the descriptor it got rather than
+    the path it was given. A file that stopped being a plain file under the
+    folder fails the download instead of streaming whatever it points to now.
+    """
+    with open_plain_file_within(real_root, path) as handle:
+        while True:
+            block = handle.read(chunk_size)
+            if not block:
+                return
+            yield block
 
 
 async def async_generate_zipstream_chunks(
@@ -74,7 +126,7 @@ async def async_generate_zipstream_chunks(
         # Initialize zipstream with proper API and ZIP64 support
         from zipfile import ZIP_STORED, ZIP_DEFLATED
         compression_method = ZIP_DEFLATED if compression_level > 0 else ZIP_STORED
-        zs = zipstream.ZipFile(mode='w', compression=compression_method, allowZip64=enable_zip64)
+        zs = _ModePreservingZipFile(mode='w', compression=compression_method, allowZip64=enable_zip64)
         
         # Add files to ZIP stream
         if os.path.isfile(source_path):
@@ -83,10 +135,21 @@ async def async_generate_zipstream_chunks(
             zs.write(source_path, arcname=file_name)
         else:
             # Directory - walk and add files while excluding certain folders
+            real_root = os.path.realpath(source_path)
             for file_path in _iter_folder_files(source_path, excluded_folders):
                 # Create relative path for archive
                 rel_path = os.path.relpath(file_path, source_path)
-                zs.write(file_path, arcname=rel_path)
+                try:
+                    info = os.lstat(file_path)
+                except OSError:
+                    continue  # gone since the walk
+                zs.write_vetted(
+                    rel_path,
+                    info.st_size,
+                    info.st_mtime,
+                    info.st_mode,
+                    _stream_vetted_file(real_root, file_path),
+                )
         
         # Generate chunks asynchronously
         for chunk in zs:

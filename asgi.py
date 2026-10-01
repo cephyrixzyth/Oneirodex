@@ -44,7 +44,7 @@ from oneirodex.utils.rom_archive import (
 from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 from oneirodex.utils.security_headers import baseline_static_headers
 from oneirodex.utils.library_paths import library_dir
-from oneirodex.utils.static_files import library_access, resolve_served_static
+from oneirodex.utils.static_files import resolve_served_static, static_access
 from sqlalchemy import select
 
 
@@ -267,7 +267,7 @@ class LazyASGIApp:
 
         # Members' private files under /static/library/ are never static; BIOS
         # needs a signed-in member. 404 either way, so nothing is confirmed.
-        access = library_access(path)
+        access = static_access(root, path)
         if access == 'private' or (access == 'member' and await self._get_user_from_session(scope) is None):
             await self._send_error(send, 404, "Not Found")
             return

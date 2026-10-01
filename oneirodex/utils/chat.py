@@ -482,6 +482,11 @@ def _fanout_mentions_and_dm(channel: ChatChannel, author: User, msg: ChatMessage
             membership = _is_member(channel.id, target.id)
             if membership is None or membership.muted:
                 continue
+            # A membership row alone is not access: rows left from before
+            # invite-only spaces were enforced, or from a removed member,
+            # would otherwise carry the message text to a non-member.
+            if not user_can_access_channel(target, channel):
+                continue
             notify_user(
                 target.id,
                 kind='mention',

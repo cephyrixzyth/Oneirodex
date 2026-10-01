@@ -121,3 +121,16 @@ def test_library_progress_text_escapes_game_and_message():
     for line in lines:
         assert 'escapeHtml(data.current_game)' in line, line
         assert 'escapeHtml(data.message' in line, line
+
+
+def test_webretro_shell_trusts_replies_only_from_its_own_emulator_frame():
+    """Another window holding a handle to the shell could forge an export reply,
+    which the shell uploads as the member's cloud save."""
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / 'oneirodex' / 'static' / 'vendor' / 'webretro' / 'webretro.html').read_text(encoding='utf-8')
+    listener = html[html.index("window.addEventListener('message'"):]
+    listener = listener[:listener.index('});')]
+    assert 'ev.origin !== window.location.origin' in listener
+    assert 'ev.source !== emuFrame.contentWindow' in listener
+    assert 'crypto.getRandomValues' in html, 'request ids must not be guessable'

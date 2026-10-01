@@ -28,6 +28,18 @@ if [[ -f /.dockerenv ]]; then
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
     export POSTGRES_DB="${POSTGRES_DB:-oneirodex}"
 
+    # The env templates ship a placeholder, not a password. It is public (it is
+    # in this repo), so starting a database with it is refused outright. The
+    # old default `postgres` is only warned about: existing stacks rely on it.
+    if [[ "${POSTGRES_PASSWORD}" == CHANGE_ME* || "${DATABASE_URL}" == *":CHANGE_ME"* ]]; then
+        echo "❌ POSTGRES_PASSWORD is still the template placeholder. Set a strong password in .env"
+        echo "   (e.g. openssl rand -hex 24) before the first start; see docs/runbooks/docker-compose-deploy.md."
+        exit 1
+    fi
+    if [[ "${POSTGRES_PASSWORD}" == "postgres" ]]; then
+        echo "⚠️  POSTGRES_PASSWORD is the old default 'postgres'. Rotate it (docs/runbooks/docker-compose-deploy.md)."
+    fi
+
     if [[ -z "${DATABASE_URL}" \
         || "${DATABASE_URL}" == *"@localhost"* \
         || "${DATABASE_URL}" == *"@127.0.0.1"* \

@@ -710,6 +710,29 @@ def test_link_changes_and_syncs_never_overlap(app):
         assert running.value.reason == 'sync_in_progress'
 
 
+@pytest.mark.parametrize('clear_history', [True, False])
+def test_a_link_change_leaves_no_deleted_job_in_the_session(app, clear_history):
+    """The marker is deleted after a rollback has expired it. The session must
+    forget it too: where ids are reused (SQLite) the next job got the marker's
+    id and its flush collided with the stale object (an SAWarning, or a crash
+    when the stale object was garbage-collected mid-refresh)."""
+    import warnings
+
+    from sqlalchemy.exc import SAWarning
+
+    from oneirodex.utils.store_sync_jobs import exclusive_link_change
+    with app.app_context():
+        _link(MEMBER, 'gog', credential='{"refresh_token": "r"}')
+        held = []  # a strong reference, so garbage collection cannot hide the stale object
+        exclusive_link_change(MEMBER, 'gog', 'disconnect',
+                              lambda: held.append(store_sync_jobs.running_job(MEMBER, 'gog')),
+                              clear_history=clear_history)
+        assert held[0] is not None and held[0] not in db.session
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', SAWarning)
+            _job(MEMBER, 'gog')
+
+
 def test_a_linked_steam_id_can_be_changed_without_a_server_key(app):
     with app.app_context():
         _link(MEMBER, 'steam', external='765')

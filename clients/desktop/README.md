@@ -145,9 +145,12 @@ clients/desktop/
     connect.ts            # Connection validation + library preview
     config-store.ts       # Tauri file persistence (base URL; migrates/scrubs plaintext token)
     keychain.ts           # KeychainAdapter → OS credential store
+    trusted-shares.ts     # Trusted network shares editor (UNC roots `open_path` may reach)
     app.ts                # Minimal UI
   src-tauri/
     src/lib.rs            # Config, secure_store_*, lifecycle, installs, zip extract commands
+    src/trusted_shares.rs # UNC trust list matching (string-only, no filesystem probe)
+    src/install_recovery.rs # Atomic registry write; snapshot / update-generation copy (never follows links)
     tauri.conf.json       # Full companion
     tauri.thin.conf.json  # Thin flavor (stripped capabilities)
     capabilities/         # default + social (full); thin-main + thin-library + social (thin)

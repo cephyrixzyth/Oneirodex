@@ -35,6 +35,12 @@ import {
 import { loadStoredConfig, saveStoredConfig } from './config-store.js'
 import { openSocialCompanionWindow } from './social-window.js'
 import { keychainAdapter } from './keychain.js'
+import {
+  formatTrustedShares,
+  loadTrustedShares,
+  parseTrustedShares,
+  saveTrustedShares,
+} from './trusted-shares.js'
 import { buildLocalArchiveName } from './paths.js'
 import { checkServerUrl } from './transport-policy.js'
 import {
@@ -722,6 +728,46 @@ function bindElements(root: HTMLElement): void {
     lifecyclePanel: root.querySelector('#lifecycle-panel')!,
   }
 }
+/**
+ * The "Trusted network shares" editor. The list is stored and enforced by the
+ * native side; this only reads it into the box and sends edits back, showing the
+ * native validation message (which names the entry that is not `\\server\share`).
+ */
+function bindTrustedShares(root: HTMLElement): void {
+  const box = root.querySelector<HTMLTextAreaElement>('#trusted-shares')!
+  const status = root.querySelector<HTMLElement>('#trusted-shares-status')!
+  const saveBtn = root.querySelector<HTMLButtonElement>('#trusted-shares-save')!
+  const show = (message: string, tone: 'info' | 'error' | 'success') => {
+    status.textContent = message
+    status.dataset.tone = tone
+  }
+  void loadTrustedShares()
+    .then((roots) => {
+      box.value = formatTrustedShares(roots)
+    })
+    .catch((error) => {
+      show(error instanceof Error ? error.message : String(error), 'error')
+    })
+  saveBtn.addEventListener('click', () => {
+    saveBtn.disabled = true
+    void saveTrustedShares(parseTrustedShares(box.value))
+      .then((stored) => {
+        box.value = formatTrustedShares(stored)
+        show(
+          stored.length
+            ? `Saved ${stored.length} trusted network share${stored.length === 1 ? '' : 's'}.`
+            : 'Saved. No network shares are trusted.',
+          'success',
+        )
+      })
+      .catch((error) => {
+        show(error instanceof Error ? error.message : String(error), 'error')
+      })
+      .finally(() => {
+        saveBtn.disabled = false
+      })
+  })
+}
 export async function mountApp(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <main class="shell">
@@ -745,6 +791,16 @@ export async function mountApp(root: HTMLElement): Promise<void> {
           <button id="friends-btn" type="button">Open friends window</button>
         </form>
         <p id="status" class="status" data-tone="info"></p>
+      </section>
+      <section class="panel">
+        <h2>Trusted network shares</h2>
+        <p class="muted">Network folders that Show in Explorer may open when your server asks for them, one per line (for example the library root of a Windows-hosted server). Opening a network path makes Windows sign in to that computer, so a share is never opened unless it is listed here.</p>
+        <label>
+          Shares
+          <textarea id="trusted-shares" rows="3" spellcheck="false" autocomplete="off" placeholder="&#92;&#92;nas&#92;roms"></textarea>
+        </label>
+        <button id="trusted-shares-save" type="button">Save shares</button>
+        <p id="trusted-shares-status" class="status" data-tone="info"></p>
       </section>
       <section class="panel">
         <h2>Library preview</h2>
@@ -788,6 +844,7 @@ export async function mountApp(root: HTMLElement): Promise<void> {
         setStatus(message, 'error')
       })
   })
+  bindTrustedShares(root)
   els.library.addEventListener('click', handleLibraryClick)
   els.lifecyclePanel.addEventListener('click', handleLibraryClick)
   await ensureLifecycleRegistry()

@@ -56,6 +56,16 @@ input {
   color: inherit;
 }
 
+textarea {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #314055;
+  background: #0f1419;
+  color: inherit;
+  font-family: inherit;
+  resize: vertical;
+}
+
 button,
 .action-btn {
   cursor: pointer;

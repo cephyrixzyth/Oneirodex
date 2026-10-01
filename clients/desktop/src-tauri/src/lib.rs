@@ -8,6 +8,7 @@ use tauri::Manager;
 use url::{Host, Url};
 use zip::ZipArchive;
 mod install_recovery;
+mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
 /// identifier is unavailable (tests, unbundled dev runs).
@@ -48,6 +49,16 @@ pub struct LifecycleRegistryFile {
     pub records: Vec<LifecycleRecord>,
 }
 
+/// The generation an update replaced, kept for one more update so a file the new
+/// archive overwrote stays recoverable (see `GameInstallRecord.superseded`).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupersededInstall {
+    pub archive_path: String,
+    pub extract_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_path: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InstallRecord {
     pub archive_path: String,
@@ -57,6 +68,8 @@ pub struct InstallRecord {
     pub retained_path: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pending_uninstall: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded: Option<SupersededInstall>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -286,13 +299,21 @@ fn check_process_running(pid: u32) -> bool {
 }
 
 /// Is this IPv4 address on the local machine or local network?
-/// 127/8, 10/8, 172.16/12, 192.168/16 and 169.254/16.
+/// 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 and the shared address space
+/// 100.64/10 (RFC 6598), where Tailscale puts every peer. Tailscale encrypts the
+/// hop, and the backend already treats that range as home-lab space
+/// (`_is_blocked_ip` in `oneirodex/utils/security.py`, `trusted_host.py`).
 fn is_private_or_loopback_ipv4(ip: &Ipv4Addr) -> bool {
-    ip.is_loopback() || ip.is_private() || ip.is_link_local()
+    let [a, b, _, _] = ip.octets();
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || (a == 100 && (64..=127).contains(&b))
 }
 
-/// Same for IPv6: `::1`, unique-local `fc00::/7`, link-local `fe80::/10`, and an
-/// IPv4-mapped address (`::ffff:a.b.c.d`) whose embedded IPv4 is itself local.
+/// Same for IPv6: `::1`, unique-local `fc00::/7` (which holds Tailscale's
+/// `fd7a:115c:a1e0::/48`), link-local `fe80::/10`, and an IPv4-mapped address
+/// (`::ffff:a.b.c.d`) whose embedded IPv4 is itself local.
 fn is_private_or_loopback_ipv6(ip: &Ipv6Addr) -> bool {
     if let Some(mapped) = ip.to_ipv4_mapped() {
         return is_private_or_loopback_ipv4(&mapped);
@@ -301,19 +322,30 @@ fn is_private_or_loopback_ipv6(ip: &Ipv6Addr) -> bool {
     ip.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
 }
 
+/// House-network host suffixes a router hands out. Same list as
+/// `_PRIVATE_SUFFIXES` in `oneirodex/utils/trusted_host.py`, so the server, the
+/// app and the companion agree on what "my own network" means.
+const PRIVATE_HOST_SUFFIXES: [&str; 5] =
+    [".local", ".lan", ".home.arpa", ".internal", ".localdomain"];
+
 /// Does this host name a machine on the user's own network?
 ///
-/// Besides the literal local address ranges: `*.local` (mDNS) and a bare
-/// single-label name such as `nas` or `localhost`, which only resolve through the
-/// local resolver / search domain. Anything with a public-looking dotted name is
-/// not local, however much like a LAN address it reads (`192.168.1.1.evil.com`).
+/// Besides the literal local address ranges: the house-network suffixes
+/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and a
+/// bare single-label name such as `nas` or `localhost`, which only resolve
+/// through the local resolver / search domain. Anything with a public-looking
+/// dotted name is not local, however much like a LAN address it reads
+/// (`192.168.1.1.evil.com`).
 fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
     match host {
         Host::Ipv4(ip) => is_private_or_loopback_ipv4(ip),
         Host::Ipv6(ip) => is_private_or_loopback_ipv6(ip),
         Host::Domain(domain) => {
             let name = domain.trim_end_matches('.').to_ascii_lowercase();
-            match name.strip_suffix(".local") {
+            match PRIVATE_HOST_SUFFIXES
+                .iter()
+                .find_map(|suffix| name.strip_suffix(suffix))
+            {
                 Some(label) => !label.is_empty(),
                 None => !name.is_empty() && !name.contains('.'),
             }
@@ -348,7 +380,7 @@ fn validate_server_base_url(raw: &str) -> Result<(), String> {
                 return Ok(());
             }
             Err(format!(
-                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, LAN addresses and .local names).",
+                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names).",
                 url.host_str().unwrap_or("this server")
             ))
         }
@@ -485,7 +517,21 @@ fn retain_install_files(app: tauri::AppHandle, from: String, to: String) -> Resu
     if source.starts_with(&destination) || destination.starts_with(&source) {
         return Err("Update directories must be separate".into());
     }
-    install_recovery::retain_missing(&source, &destination).map_err(|error| error.to_string())
+    let summary = install_recovery::retain_missing(&source, &destination)
+        .map_err(|error| error.to_string())?;
+    log_skipped_links("update", &summary);
+    Ok(())
+}
+
+/// Linked files are never copied (see `install_recovery::retain_missing`); say so
+/// on the companion's own stderr rather than let the copy look complete.
+fn log_skipped_links(operation: &str, summary: &install_recovery::RetainSummary) {
+    if !summary.skipped_links.is_empty() {
+        eprintln!(
+            "oneirodex: {operation} did not copy {} symbolic link(s)/junction(s); the data they point at was left where it is",
+            summary.skipped_links.len()
+        );
+    }
 }
 
 #[tauri::command]
@@ -511,7 +557,9 @@ fn preserve_install_files(
         return Err("Invalid install backup destination".into());
     }
     fs::create_dir(&backup).map_err(|error| error.to_string())?;
-    install_recovery::retain_missing(&source, &backup).map_err(|error| error.to_string())?;
+    let summary =
+        install_recovery::retain_missing(&source, &backup).map_err(|error| error.to_string())?;
+    log_skipped_links("snapshot", &summary);
     Ok(Some(backup_path))
 }
 
@@ -533,7 +581,9 @@ fn restore_install_snapshot(
         return Err("Restore destination must be a separate new directory".into());
     }
     fs::create_dir(&destination).map_err(|error| error.to_string())?;
-    install_recovery::retain_missing(&source, &destination).map_err(|error| error.to_string())?;
+    let summary = install_recovery::retain_missing(&source, &destination)
+        .map_err(|error| error.to_string())?;
+    log_skipped_links("restore", &summary);
     // `canonicalize` hands back `\\?\C:\…` on Windows. That string ends up in the
     // install record and later in "Show in Explorer", which refuses device-style
     // paths — give the record the ordinary drive path instead.
@@ -543,9 +593,15 @@ fn restore_install_snapshot(
     })
 }
 
-/// Strip the Win32 verbatim prefix from a drive path (`\\?\C:\x` -> `C:\x`).
-/// Verbatim UNC (`\\?\UNC\host\share`) and every other shape is returned as is.
+/// Strip the Win32 verbatim prefix from a drive path (`\\?\C:\x` -> `C:\x`) or a
+/// UNC path (`\\?\UNC\host\share` -> `\\host\share`, the form the OS itself reports
+/// for a redirected profile folder). Every other shape is returned as is.
 fn user_facing_path(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        if !rest.is_empty() && !rest.starts_with('\\') {
+            return format!(r"\\{rest}");
+        }
+    }
     if let Some(rest) = path.strip_prefix(r"\\?\") {
         let bytes = rest.as_bytes();
         if bytes.len() >= 3
@@ -990,9 +1046,66 @@ fn rename_path(app: tauri::AppHandle, from: String, to: String) -> Result<(), St
     fs::rename(&source, &destination).map_err(|error| error.to_string())
 }
 
-/// Shown when a reveal path names a network share or a device.
+fn trusted_shares_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("trusted_shares.json"))
+}
+
+/// The network shares the user listed under *Trusted network shares*.
+#[tauri::command]
+fn load_trusted_shares(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    Ok(trusted_shares::read_share_roots(&trusted_shares_path(
+        &app,
+    )?))
+}
+
+/// Replace the list. Every entry is validated first and one bad entry fails the
+/// whole save, so the list on disk is always one the user actually meant. Returns
+/// the canonical form that was stored.
+#[tauri::command]
+fn save_trusted_shares(app: tauri::AppHandle, roots: Vec<String>) -> Result<Vec<String>, String> {
+    let normalized = trusted_shares::normalize_share_roots(&roots)?;
+    let data = serde_json::to_string_pretty(&serde_json::json!({ "roots": &normalized }))
+        .map_err(|error| error.to_string())?;
+    install_recovery::atomic_write(&trusted_shares_path(&app)?, data.as_bytes())
+        .map_err(|error| error.to_string())?;
+    Ok(normalized)
+}
+
+/// UNC folders the OS itself reports for this user (Windows Folder Redirection
+/// puts Documents / AppData / the profile on a file server). Those hosts are
+/// already trusted by the OS, so paths under them need no entry in the list; a
+/// path the server chose that merely *looks* similar still has to match one
+/// of these segment for segment.
+fn os_reported_share_roots(app: &tauri::AppHandle) -> Vec<String> {
+    let resolver = app.path();
+    [
+        resolver.home_dir(),
+        resolver.document_dir(),
+        resolver.data_dir(),
+        resolver.config_dir(),
+        resolver.local_data_dir(),
+        resolver.app_data_dir(),
+    ]
+    .into_iter()
+    .filter_map(Result::ok)
+    .map(|dir| dir.to_string_lossy().into_owned())
+    .filter(|dir| trusted_shares::is_plain_unc(dir))
+    .collect()
+}
+
+/// Everything a queued `open_path` may reach over the network: the user's list
+/// plus the OS-reported roots. Read fresh on every reveal, never cached, and never
+/// supplied by the webview — a path the server chose cannot widen it.
+fn effective_trusted_shares(app: &tauri::AppHandle) -> Result<Vec<String>, String> {
+    let mut shares = trusted_shares::read_share_roots(&trusted_shares_path(app)?);
+    shares.extend(os_reported_share_roots(app));
+    Ok(shares)
+}
+
+/// Shown when a reveal path names a network share or a device. Keep in step with
+/// `NETWORK_PATH_REFUSED` in `src/open-path.ts`.
 const NETWORK_PATH_REFUSED: &str =
-    "Network (UNC) and device paths are blocked — map the share to a drive letter and use that path instead";
+    "Network (UNC) paths only open for shares you list under Trusted network shares in the companion (or map the share to a drive letter); device paths are always blocked";
 
 fn is_absolute_os_path(path: &Path) -> bool {
     if path.is_absolute() {
@@ -1037,15 +1150,11 @@ fn is_network_or_device_path(path: &str) -> bool {
     path.starts_with("\\??\\") || path.starts_with("/??/")
 }
 
-/// Validate a caller-supplied reveal path and classify it as a file or directory.
-///
-/// Every rejection here happens before any OS process is spawned, which is what
-/// makes the guard testable in isolation: empty / whitespace-only, longer than
-/// 4096 bytes, embedded NUL / CR / LF, a UNC or device path, any `..` path
-/// segment, a non-absolute path, or a path that does not exist on this machine.
-/// The UNC / device check comes before the first filesystem call (`exists()`).
-fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
-    let trimmed = path.trim();
+/// Every check on the text of a reveal path — all of `validate_reveal_path` that
+/// does not touch the filesystem. Split out so the decision "may this path be
+/// probed at all" is testable without a probe (on Windows a probe of an
+/// untrusted UNC path is the very thing being prevented).
+fn check_reveal_path_text(trimmed: &str, trusted_shares: &[String]) -> Result<(), String> {
     if trimmed.is_empty() {
         return Err("Path is required".into());
     }
@@ -1055,17 +1164,40 @@ fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
     if trimmed.contains('\0') || trimmed.contains('\n') || trimmed.contains('\r') {
         return Err("Path contains invalid control characters".into());
     }
-    if is_network_or_device_path(trimmed) {
+    if is_network_or_device_path(trimmed)
+        && !trusted_shares::is_under_trusted_share(trimmed, trusted_shares)
+    {
         return Err(NETWORK_PATH_REFUSED.into());
     }
     if path_has_dotdot_segment(trimmed) {
         return Err("Path must not contain .. segments".into());
     }
-
-    let target = PathBuf::from(trimmed);
-    if !is_absolute_os_path(&target) {
+    if !is_absolute_os_path(Path::new(trimmed)) {
         return Err("Path must be absolute".into());
     }
+    Ok(())
+}
+
+/// Validate a caller-supplied reveal path and classify it as a file or directory.
+///
+/// Every rejection here happens before any OS process is spawned, which is what
+/// makes the guard testable in isolation: empty / whitespace-only, longer than
+/// 4096 bytes, embedded NUL / CR / LF, a UNC or device path, any `..` path
+/// segment, a non-absolute path, or a path that does not exist on this machine.
+/// The UNC / device check comes before the first filesystem call (`exists()`).
+///
+/// A UNC path passes that check only when it sits at or below a share in
+/// `trusted_shares` — the shares the user listed, plus the ones the OS itself
+/// reports for the user's folders. The match is string-only, so the filesystem is
+/// still never touched for a host nobody trusted.
+fn validate_reveal_path(
+    path: &str,
+    trusted_shares: &[String],
+) -> Result<(PathBuf, &'static str), String> {
+    let trimmed = path.trim();
+    check_reveal_path_text(trimmed, trusted_shares)?;
+
+    let target = PathBuf::from(trimmed);
     if !target.exists() {
         return Err(format!("Path does not exist on this machine: {trimmed}"));
     }
@@ -1081,9 +1213,14 @@ fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
 /// Open `path` in Explorer (Windows), Finder (macOS), or the default file manager (Linux).
 /// When `select` is true and the path is a file, select it in the parent folder.
 #[tauri::command]
-fn reveal_path_in_os(path: String, select: Option<bool>) -> Result<RevealPathResult, String> {
+fn reveal_path_in_os(
+    app: tauri::AppHandle,
+    path: String,
+    select: Option<bool>,
+) -> Result<RevealPathResult, String> {
     let trimmed = path.trim();
-    let (target, revealed_as) = validate_reveal_path(trimmed)?;
+    let trusted = effective_trusted_shares(&app)?;
+    let (target, revealed_as) = validate_reveal_path(trimmed, &trusted)?;
     let select_item = select.unwrap_or(true);
 
     #[cfg(windows)]
@@ -1196,6 +1333,8 @@ pub fn run() {
             extract_zip_archive,
             launch_game,
             reveal_path_in_os,
+            load_trusted_shares,
+            save_trusted_shares,
             is_process_running,
             remove_path,
             rename_path,
@@ -1215,6 +1354,12 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
     use zip::write::{SimpleFileOptions, ZipWriter};
+
+    /// The reveal tests below run with an empty trust list (nothing on the
+    /// network is trusted); the trusted-share cases have their own section.
+    fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
+        super::validate_reveal_path(path, &[])
+    }
 
     // ---------------------------------------------------------------
     // ensure_path_under_root
@@ -1821,6 +1966,102 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
+    // Trusted network shares — a UNC path is probed only when the user (or the
+    // OS, for the user's own folders) named its share. These call the
+    // text-only gate: the real thing would open an SMB connection.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn a_trusted_share_lets_its_paths_through_the_text_gate() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        for path in [
+            r"\\nas\roms\Game",
+            r"\\NAS\ROMS\Game\disc.cue",
+            "//nas/roms/Game",
+            r"\\nas\roms",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted),
+                Ok(()),
+                "path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_untrusted_host_or_share_is_still_refused_with_the_list_in_place() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        for path in [
+            r"\\attacker\roms\Game",
+            r"\\nas.evil.example\roms\Game",
+            r"\\nas\other\Game",
+            r"\\nas",
+            r"\\?\UNC\nas\roms\Game",
+            r"\\.\nas\roms",
+            r"\??\UNC\nas\roms",
+            r"//?/UNC/nas/roms",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "path: {path}"
+            );
+        }
+        // No list, nothing trusted: the default is still refusal.
+        assert_eq!(
+            check_reveal_path_text(r"\\nas\roms\Game", &[]).unwrap_err(),
+            NETWORK_PATH_REFUSED
+        );
+    }
+
+    #[test]
+    fn a_trusted_share_does_not_excuse_traversal_or_control_characters() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        // A `..` anywhere takes the path out of the trusted prefix altogether, so
+        // it is refused as an untrusted network path rather than walked out of
+        // the share.
+        for path in [
+            r"\\nas\roms\..\other",
+            r"\\nas\roms\Game\..\..\other",
+            r"\\nas\roms\.\Game",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "path: {path}"
+            );
+        }
+        assert!(check_reveal_path_text("\\\\nas\\roms\\a\nb", &trusted)
+            .unwrap_err()
+            .contains("control"));
+        assert_eq!(
+            check_reveal_path_text(&format!(r"\\nas\roms\{}", "a".repeat(5000)), &trusted)
+                .unwrap_err(),
+            "Path is too long"
+        );
+    }
+
+    #[test]
+    fn only_os_reported_unc_roots_count_as_implicit_trust() {
+        // `os_reported_share_roots` keeps a folder only when it is a plain UNC
+        // path; a drive path or a verbatim form is never an implicit root.
+        assert!(trusted_shares::is_plain_unc(
+            r"\\fs01\profiles$\chris\Documents"
+        ));
+        assert!(!trusted_shares::is_plain_unc(r"C:\Users\chris\Documents"));
+        assert!(!trusted_shares::is_plain_unc(r"\\?\UNC\fs01\profiles$"));
+        let redirected = vec![r"\\fs01\profiles$\chris\Documents".to_string()];
+        assert_eq!(
+            check_reveal_path_text(
+                r"\\fs01\profiles$\chris\Documents\My Games\Saves",
+                &redirected
+            ),
+            Ok(())
+        );
+        assert!(check_reveal_path_text(r"\\fs01\profiles$\other\Documents", &redirected).is_err());
+    }
+
+    // ---------------------------------------------------------------
     // user_facing_path — no \\?\ in the install record
     // ---------------------------------------------------------------
 
@@ -1832,12 +2073,18 @@ mod tests {
         );
         assert_eq!(user_facing_path(r"C:\Users\me\game"), r"C:\Users\me\game");
         assert_eq!(user_facing_path("/home/me/game"), "/home/me/game");
-        // Verbatim UNC and device shapes are left alone (and refused at reveal).
+        // Verbatim UNC becomes the plain UNC form the OS reports for a redirected
+        // profile; it is then refused at reveal unless its share is trusted.
         assert_eq!(
-            user_facing_path(r"\\?\UNC\host\share"),
-            r"\\?\UNC\host\share"
+            user_facing_path(r"\\?\UNC\host\share\game"),
+            r"\\host\share\game"
         );
+        assert_eq!(user_facing_path(r"\\?\UNC\host\share"), r"\\host\share");
+        // Device shapes, and a verbatim UNC with no host, are left alone.
+        assert_eq!(user_facing_path(r"\\?\UNC\"), r"\\?\UNC\");
+        assert_eq!(user_facing_path(r"\\?\UNC\\x"), r"\\?\UNC\\x");
         assert_eq!(user_facing_path(r"\\?\pipe"), r"\\?\pipe");
+        assert_eq!(user_facing_path(r"\\.\pipe\x"), r"\\.\pipe\x");
     }
 
     // ---------------------------------------------------------------
@@ -1879,6 +2126,18 @@ mod tests {
             "http://nas.local./",
             "http://nas",
             "http://nas:5000",
+            // The rest of the backend's `_PRIVATE_SUFFIXES`: router-assigned names.
+            "http://tower.lan:5006",
+            "http://NAS.LAN/",
+            "http://nas.home.arpa",
+            "http://nas.internal",
+            "http://nas.localdomain",
+            "http://a.b.lan",
+            // Shared address space 100.64.0.0/10 - Tailscale peers.
+            "http://100.64.0.1",
+            "http://100.100.100.100:5006",
+            "http://100.127.255.255",
+            "http://[fd7a:115c:a1e0::1]",
             // WHATWG host parsing folds these to 127.0.0.1 / 192.168.0.1.
             "http://0x7f.1/",
             "http://2130706433/",
@@ -1901,7 +2160,9 @@ mod tests {
             "http://192.169.1.1",
             "http://11.0.0.1",
             "http://0.0.0.0",
-            "http://100.64.0.1",
+            // Just outside 100.64.0.0/10.
+            "http://100.63.255.255",
+            "http://100.128.0.1",
             "http://[2001:db8::1]",
             "http://[::ffff:8.8.8.8]",
             "http://[fec0::1]",
@@ -1911,6 +2172,14 @@ mod tests {
             "http://localhost.evil.com",
             "http://nas.local.evil.com",
             "http://.local",
+            // A suffix is a whole label, never a substring or a bare suffix.
+            "http://nas.lan.evil.com",
+            "http://evil-lan.com",
+            "http://lan.example.com",
+            "http://.lan",
+            "http://home.arpa",
+            "http://nas.internal.evil.com",
+            "http://nas.home.arpa.evil.com",
             // Hex-encoded public address.
             "http://0x08080808/",
             // The host is evil.com; 192.168.1.1 is only userinfo.
@@ -1959,5 +2228,41 @@ mod tests {
         assert!(validate_config_base_url(&config, "http://other.example.com").is_err());
         fs::write(&config, "not json").unwrap();
         assert!(validate_config_base_url(&config, "http://games.example.com").is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // InstallRecord - superseded generation survives a save/load round trip
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn install_record_keeps_the_superseded_generation_and_stays_compatible() {
+        let legacy: InstallsFile = serde_json::from_str(
+            r#"{"installs":{"g":{"archive_path":"a.zip","extract_path":"i/g","exe_path":null}}}"#,
+        )
+        .unwrap();
+        let legacy_json = serde_json::to_string(&legacy).unwrap();
+        assert!(!legacy_json.contains("superseded"), "{legacy_json}");
+
+        let with_previous: InstallsFile = serde_json::from_str(
+            r#"{"installs":{"g":{"archive_path":"new.zip","extract_path":"i/g-new","exe_path":null,
+                "superseded":{"archive_path":"old.zip","extract_path":"i/g","retained_path":"i/g.uninstalled-1"}}}}"#,
+        )
+        .unwrap();
+        let record = &with_previous.installs["g"];
+        let previous = record.superseded.as_ref().expect("superseded is read");
+        assert_eq!(previous.extract_path, "i/g");
+        assert_eq!(previous.archive_path, "old.zip");
+        assert_eq!(previous.retained_path.as_deref(), Some("i/g.uninstalled-1"));
+        // Writing it back must not drop it - `save_installs` is a straight re-serialise.
+        let round: InstallsFile =
+            serde_json::from_str(&serde_json::to_string(&with_previous).unwrap()).unwrap();
+        assert_eq!(
+            round.installs["g"]
+                .superseded
+                .as_ref()
+                .unwrap()
+                .extract_path,
+            "i/g"
+        );
     }
 }

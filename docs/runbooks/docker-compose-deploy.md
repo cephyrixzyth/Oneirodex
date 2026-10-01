@@ -81,7 +81,7 @@ over the Compose network.
 |---|---|---|
 | Published host port | `127.0.0.1:5432` — `POSTGRES_HOST_BIND` (default `127.0.0.1`) and `POSTGRES_HOST_PORT` (default `5432`) | `POSTGRES_HOST_BIND=<host LAN IP>` (or `0.0.0.0`) in `.env`, then `docker compose up -d db`. Opt-in; set a strong password first. |
 | Client auth | `docker/postgres/pg_hba.conf`: scram-sha-256 from loopback, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` only. There is no `0.0.0.0/0` rule. | Add a line for any other CIDR (a custom Docker address pool, Tailscale `100.64.0.0/10`, a global IPv6 prefix), then `docker compose up -d --force-recreate db`. |
-| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a placeholder, not a working value. Compose falls back to `postgres` only when the variable is unset, so old stacks keep starting. | See below. |
+| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and the app container refuses to start while it is still set. Compose falls back to `postgres` only when the variable is unset, so old stacks keep starting (with a warning in the log). | See below. |
 
 Generate a password (hex, because it is spliced into `DATABASE_URL` and `@ : / ? # % $` would break the URL):
 

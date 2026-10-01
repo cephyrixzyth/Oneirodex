@@ -7,7 +7,6 @@ from typing import Any
 
 from flask import current_app, g, has_request_context
 from werkzeug.utils import secure_filename
-from oneirodex.utils.library_paths import library_dir
 
 # Common libretro system files (operators supply legally obtained BIOS).
 #
@@ -240,6 +239,10 @@ def bios_root() -> str:
     root = current_app.config.get('EMULATOR_BIOS_PATH')
     if root:
         return root
+    # Imported here: scripts/import_bios.py loads this module by path, without
+    # the oneirodex package, for BIOS_REQUIREMENTS alone.
+    from oneirodex.utils.library_paths import library_dir
+
     return os.path.join(library_dir(), 'bios')
 
 

@@ -32,7 +32,10 @@ def _as(app, user):
 
 
 def _fresh_g():
+    """Forget the previous request's user and token: the test holds one app
+    context, so ``g`` outlives each request here (it never does in a server)."""
     g.pop('_login_user', None)
+    g.pop('api_token', None)
 
 
 # -- sessions end when the account is disabled or the password changes ------
@@ -118,6 +121,12 @@ def test_a_blocked_member_cannot_lift_the_block(app, db_session):
     assert _as(app, blocked).delete(f'/api/social/friends/{row_id}').status_code == 404
     _fresh_g()
     assert db_session.get(UserFriendship, row_id) is not None
+    _fresh_g()
+    # Re-blocking from the blocked side must not take the row over either.
+    assert _as(app, blocked).post(f'/api/social/friends/{row_id}/block').status_code == 404
+    _fresh_g()
+    db_session.expire_all()
+    assert db_session.get(UserFriendship, row_id).user_id == blocker.id
     assert _as(app, blocker).delete(f'/api/social/friends/{row_id}').status_code == 200
 
 
@@ -176,6 +185,12 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
     assert not event_visible_to(event, friend.id), 'the player turned sharing off'
     assert event_visible_to(SimpleNamespace(type='scan', payload={'progress': 3}), stranger.id)
     assert not event_visible_to(event, None)
+    download = SimpleNamespace(type='download', payload={'user_id': player.id, 'request_id': 7, 'status': 'available'})
+    assert event_visible_to(download, player.id) and event_visible_to(download, admin.id)
+    assert not event_visible_to(download, friend.id), "a member's downloads are theirs"
+    player.state = False
+    db_session.commit()
+    assert not event_visible_to(download, player.id), 'a disabled account receives nothing more'
 
 
 # -- the readiness probe does not describe the database to strangers -----------
@@ -189,3 +204,109 @@ def test_the_readiness_probe_hides_the_database_error_text(app, monkeypatch):
     monkeypatch.setattr(health_probes.db.session, 'execute', boom)
     ok, error = health_probes.check_database()
     assert ok is False and 'db.internal' not in error and error == 'RuntimeError'
+
+
+# -- an invite link registers exactly one account ------------------------------
+
+def test_an_invite_registers_exactly_one_account(app, db_session, monkeypatch):
+    """The claim used to run before the user row existed (used_by references
+    users.user_id), so every invite registration failed with an IntegrityError."""
+    from oneirodex.models import InviteToken
+    import oneirodex.routes_login as routes_login
+
+    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: None)
+    inviter = _user(db_session, prefix='inviter')
+    invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
+    db_session.add(invite)
+    db_session.commit()
+    token = invite.token
+
+    def register(name):
+        return app.test_client().post(f'/register?token={token}', data={
+            'username': name, 'email': f'{name}@example.com', 'password': 'long-enough-1'})
+
+    first, second = f'guest{uuid4().hex[:6]}', f'guest{uuid4().hex[:6]}'
+    register(first)
+    db_session.expire_all()
+    created = db_session.query(User).filter_by(name=first).one_or_none()
+    assert created is not None, 'the invited guest got an account'
+    claimed = db_session.query(InviteToken).filter_by(token=token).one()
+    assert claimed.used and claimed.used_by == created.user_id
+    register(second)
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(name=second).one_or_none() is None, 'one link, one account'
+
+
+def test_a_token_cannot_mint_a_broader_token(app, db_session):
+    """An admin's companion token could mint itself an admin-scope token."""
+    from oneirodex.utils.api_tokens import generate_api_token
+
+    admin = _user(db_session, role='admin', prefix='mint_admin')
+    _row, companion = generate_api_token(admin, 'desktop', ['read:library', 'write:download'])
+    bearer = {'Authorization': f'Bearer {companion}'}
+    client = app.test_client()
+    resp = client.post('/api/tokens', json={'name': 'x', 'scopes': ['admin']}, headers=bearer)
+    assert resp.status_code == 403
+    _fresh_g()
+    resp = client.post('/api/tokens', json={'name': 'y', 'scopes': ['read:library']}, headers=bearer)
+    assert resp.status_code == 201, 'narrower or equal scopes are still fine'
+    _fresh_g()
+    resp = _as(app, admin).post('/api/tokens', json={'name': 'from-browser', 'scopes': ['admin']})
+    assert resp.status_code == 201, 'a signed-in admin session can still create an admin token'
+
+
+@pytest.mark.parametrize('role', ['user', 'librarian'])
+@pytest.mark.parametrize('padded', [' admin', 'admin ', '\tadmin', 'admin\n'])
+def test_a_padded_admin_scope_is_still_the_admin_scope(app, db_session, role, padded):
+    """' admin' passed the role check (a raw list compare) and was then stored
+    stripped, as 'admin', the wildcard scope."""
+    from oneirodex.models import ApiToken
+
+    member = _user(db_session, role=role, prefix=f'pad_{role}')
+    _fresh_g()
+    resp = _as(app, member).post('/api/tokens', json={'name': 'sneaky', 'scopes': [padded]})
+    assert resp.status_code == 403
+    assert db_session.query(ApiToken).filter_by(user_id=member.id).count() == 0
+
+
+def test_token_scopes_must_be_strings(app, db_session):
+    member = _user(db_session, prefix='scope_types')
+    _fresh_g()
+    resp = _as(app, member).post('/api/tokens', json={'name': 'odd', 'scopes': ['read:library', 7]})
+    assert resp.status_code == 400
+
+
+def test_mentions_reach_only_people_who_can_read_the_channel(app, db_session, monkeypatch):
+    """A stale membership row (from before invite-only spaces were enforced, or a
+    removed member) used to carry the mention text to a non-member."""
+    from oneirodex.models import ChatChannelMember
+    from oneirodex.utils import chat as chat_mod
+    from oneirodex.utils.chat_spaces import add_space_member, create_channel, create_space, remove_space_member
+
+    owner, bob = _user(db_session, prefix='owner'), _user(db_session, prefix='bob')
+    space = create_space(name='Private', created_by_user_id=owner.id, visibility='invite')
+    ch = create_channel(space=space, name='plans', created_by_user_id=owner.id)
+    add_space_member(space, bob.id)
+    chat_mod.ensure_channel_membership(ch, bob)
+    remove_space_member(space, bob.id)
+    assert db_session.query(ChatChannelMember).filter_by(channel_id=ch.id, user_id=bob.id).count() == 0, \
+        'leaving a space removes its channel memberships'
+    db_session.add(ChatChannelMember(channel_id=ch.id, user_id=bob.id))  # a stale row from before
+    db_session.commit()
+
+    sent = []
+    monkeypatch.setattr(chat_mod, 'notify_user', lambda user_id, **kw: sent.append(user_id))
+    chat_mod.post_message(ch, owner, f'@{bob.name} secret plans')
+    assert bob.id not in sent
+
+
+def test_an_operator_can_trust_a_provider_that_omits_email_verified(app, db_session, monkeypatch):
+    from oneirodex.utils.oidc import provision_or_update_user
+
+    member = _user(db_session, prefix='ssolegacy')
+    claims = {'sub': 'idp-legacy', 'email': member.email, 'preferred_username': member.name}
+    with pytest.raises(ValueError, match='already exists'):
+        provision_or_update_user(db_session, claims, _oidc_config())
+    db_session.rollback()
+    monkeypatch.setitem(app.config, 'OIDC_TRUST_PROVIDER_EMAIL', True)
+    assert provision_or_update_user(db_session, claims, _oidc_config()).id == member.id

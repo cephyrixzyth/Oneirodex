@@ -21,11 +21,12 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from oneirodex import db
 from oneirodex.models import (
     ChatChannel,
+    ChatChannelMember,
     ChatSpace,
     ChatSpaceInvite,
     ChatSpaceMember,
@@ -165,6 +166,15 @@ def remove_space_member(space: ChatSpace, user_id: int) -> bool:
     if not member:
         return False
     db.session.delete(member)
+    # Their channel memberships in this space go too, so nothing keyed on a
+    # membership row (mentions, unread counts) reaches them afterwards.
+    channel_ids = select(ChatChannel.id).where(ChatChannel.space_id == space.id)
+    db.session.execute(
+        delete(ChatChannelMember).where(
+            ChatChannelMember.user_id == user_id,
+            ChatChannelMember.channel_id.in_(channel_ids),
+        )
+    )
     db.session.commit()
     return True
 

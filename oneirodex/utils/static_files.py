@@ -33,12 +33,52 @@ def library_access(url_path: str) -> str:
     parts = _static_parts(url_path)
     if len(parts) < 2 or parts[0].casefold() != 'library':
         return 'public'
-    folder = parts[1].casefold()
+    return _folder_access(parts[1])
+
+
+_ORDER = {'public': 0, 'member': 1, 'private': 2}
+
+
+def _folder_access(folder: str) -> str:
+    folder = folder.casefold()
     if folder in PRIVATE_LIBRARY_FOLDERS:
         return 'private'
     if folder in MEMBER_LIBRARY_FOLDERS:
         return 'member'
     return 'public'
+
+
+def static_access(static_root: Path, url_path: str) -> str:
+    """The strictest of what the URL says and where the file really is.
+
+    On Windows, ``saves.``, ``saves `` (``%20``), ``saves::$INDEX_ALLOCATION``
+    and 8.3 short names all open the ``saves`` folder while the URL names
+    something else, so the URL alone cannot be trusted. The resolved file is
+    classified against the library root too (Windows resolves to the canonical
+    long name), and library segments that only exist to alias a name (a
+    trailing dot or space, ``:`` streams, ``~`` short names) are refused.
+    """
+    access = library_access(url_path)
+    if not url_path.startswith('/static/'):
+        return access
+    parts = _static_parts(url_path)
+    if parts and parts[0].rstrip('. ').casefold() == 'library':
+        if any(p != p.rstrip('. ') or ':' in p or '~' in p for p in parts[:2]):
+            return 'private'
+    candidate = resolve_served_static(static_root, url_path)
+    if candidate is None:
+        return access
+    relocated = relocated_library_dir()
+    library_root = Path(relocated) if relocated else Path(static_root) / 'library'
+    try:
+        rel = candidate.resolve().relative_to(library_root.resolve())
+    except (OSError, ValueError):
+        return access
+    if rel.parts:
+        resolved = _folder_access(rel.parts[0])
+        if _ORDER[resolved] > _ORDER[access]:
+            return resolved
+    return access
 
 
 def resolve_static_path(static_root: Path, url_path: str) -> Path | None:

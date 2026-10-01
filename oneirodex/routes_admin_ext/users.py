@@ -1,7 +1,7 @@
 # /oneirodex/routes_admin_ext/users.py
 from oneirodex.utils.api_response import api_error, api_ok
 from flask import render_template, request, jsonify
-from flask_login import login_required, current_user
+from flask_login import login_required, current_user, login_user
 from oneirodex.models import Library, User, Genre, Theme
 from oneirodex import db
 from sqlalchemy import select, func
@@ -418,7 +418,10 @@ def manage_user_api(user_id):
         
         try:
             db.session.commit()
-            
+            if 'password' in changes and user.id == current_user.id:
+                # An admin changing their own password keeps this session.
+                login_user(user, remember=True)
+
             # Log changes if any were made
             if changes:
                 changes_str = ", ".join(changes)

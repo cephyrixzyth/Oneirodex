@@ -72,11 +72,10 @@ async function persistResolvedExePath(
   record: GameInstallRecord,
   exePath: string,
 ): Promise<void> {
-  const updated: GameInstallRecord = {
-    archivePath: record.archivePath,
-    extractPath: record.extractPath,
-    exePath,
-  }
+  // Spread the record: it also carries `retainedPath`, `pendingUninstall` and
+  // `superseded`, and rebuilding it from three fields drops the pointers to those
+  // files and orphans them.
+  const updated: GameInstallRecord = { ...record, exePath }
   const installs = await loadInstallsFromDisk()
   installs[gameUuid] = updated
   await saveInstallsToDisk(installs)

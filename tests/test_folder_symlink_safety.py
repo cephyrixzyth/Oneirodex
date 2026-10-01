@@ -2,8 +2,9 @@
 download any file the container can read via ``game.bin -> /etc/whatever``).
 
 Covers the walk that builds folder downloads (``zipstream``), the folder ROM
-resolve, the cue bundle, DAT hashing, and the local cover / screenshot / sidecar
-files that ``send_file`` serves.
+resolve, the cue bundle, DAT hashing, the local cover / screenshot / sidecar
+files that ``send_file`` serves, the NFO text stored for every game, and the
+firmware import (a collection folder is somebody's share too).
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from oneirodex.utils.rom_hash import (
     hash_rom_file,
     resolve_hashable_file,
 )
-from oneirodex.utils.security import is_path_within, is_plain_file_within
+from oneirodex.utils.security import is_path_within, is_plain_file_within, open_plain_file_within
 from oneirodex.utils.zipstream import async_generate_zipstream_chunks, estimate_zip_size
 
 SECRET = b'TOP-SECRET-CONTENTS-' * 40
@@ -355,3 +356,251 @@ def test_local_image_route_serves_a_real_cover_but_not_a_linked_one(client, app,
     blocked_shot = client.get(f'/game/{game.uuid}/local_image/screenshot?index=0')
     assert blocked_shot.status_code == 404
     assert SECRET not in blocked_shot.data
+
+
+# --------------------------------------------------------------------------
+# open_plain_file_within: the check runs on the descriptor, not the path
+# --------------------------------------------------------------------------
+
+def test_open_plain_file_within_reads_a_plain_file(game_dir):
+    (game_dir / 'a.bin').write_bytes(GAME)
+    with open_plain_file_within(game_dir, game_dir / 'a.bin') as handle:
+        assert handle.read() == GAME
+
+
+def test_open_plain_file_within_refuses_links_however_they_point(game_dir, secret):
+    (game_dir / 'real.bin').write_bytes(GAME)
+    _link(game_dir / 'out.bin', secret)
+    _link(game_dir / 'in.bin', game_dir / 'real.bin')
+    _link(game_dir / 'dir', secret.parent, directory=True)
+    for name in ('out.bin', 'in.bin', 'dir/secret.bin', 'missing.bin'):
+        with pytest.raises(OSError):
+            open_plain_file_within(game_dir, game_dir / name)
+
+
+def test_open_plain_file_within_refuses_a_path_outside_the_folder(game_dir, secret):
+    with pytest.raises(OSError):
+        open_plain_file_within(game_dir, secret)
+
+
+def test_open_plain_file_within_trusts_the_descriptor_over_the_path(game_dir, secret, monkeypatch):
+    """A parent folder swapped for a link at open time and back before the
+    checks leaves a path that looks fine and a descriptor that is not: where the
+    kernel can say what the descriptor is, that answer decides."""
+    from oneirodex.utils import security
+
+    (game_dir / 'a.bin').write_bytes(GAME)
+    monkeypatch.setattr(security, '_opened_path', lambda fd: str(secret))
+    with pytest.raises(OSError):
+        open_plain_file_within(game_dir, game_dir / 'a.bin')
+
+
+@pytest.mark.skipif(not os.path.isdir('/proc/self/fd'), reason='needs /proc/self/fd')
+def test_opened_path_names_the_real_file(game_dir):
+    from oneirodex.utils.security import _opened_path
+
+    (game_dir / 'a.bin').write_bytes(GAME)
+    fd = os.open(game_dir / 'a.bin', os.O_RDONLY)
+    try:
+        assert _opened_path(fd) == os.path.realpath(game_dir / 'a.bin')
+    finally:
+        os.close(fd)
+
+
+@pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='needs POSIX FIFOs')
+def test_open_plain_file_within_does_not_hang_on_a_fifo(game_dir):
+    import signal
+
+    os.mkfifo(game_dir / 'pipe.nfo')
+    signal.alarm(5)  # a blocking open would never return
+    try:
+        with pytest.raises(OSError):
+            open_plain_file_within(game_dir, game_dir / 'pipe.nfo')
+    finally:
+        signal.alarm(0)
+
+
+# --------------------------------------------------------------------------
+# NFO text (Game.nfo_content is shown to every member)
+# --------------------------------------------------------------------------
+
+def test_nfo_that_is_a_link_is_never_read(game_dir, secret):
+    from oneirodex.utils.helpers.fs import read_first_nfo_content
+
+    _link(game_dir / 'info.nfo', secret)
+    assert read_first_nfo_content(str(game_dir)) is None
+
+
+def test_a_real_nfo_wins_over_a_linked_one_whatever_the_order(game_dir, secret):
+    from oneirodex.utils.helpers.fs import read_first_nfo_content
+
+    _link(game_dir / 'a_leak.nfo', secret)
+    (game_dir / 'b_real.nfo').write_text('REAL NFO', encoding='utf-8')
+    _link(game_dir / 'c_leak.nfo', secret)
+    assert read_first_nfo_content(str(game_dir)) == 'REAL NFO'
+
+
+def test_only_links_inside_the_folder_are_refused_not_the_folder_itself(tmp_path, secret):
+    """The folder being a link is the operator's choice; a link *to a file* inside it is not."""
+    from oneirodex.utils.helpers.fs import read_first_nfo_content
+
+    (secret.parent / 'x.nfo').write_bytes(b'REAL-NFO-VIA-LINKED-FOLDER')
+    game = tmp_path / 'library' / 'G'
+    game.mkdir(parents=True)
+    _link(game / 'nfos', secret.parent, directory=True)
+    assert read_first_nfo_content(str(game / 'nfos')) == 'REAL-NFO-VIA-LINKED-FOLDER'
+
+    folder = tmp_path / 'library' / 'H'
+    folder.mkdir()
+    _link(folder / 'x.nfo', secret.parent / 'x.nfo')
+    assert read_first_nfo_content(str(folder)) is None
+
+
+def test_nfo_reader_used_by_the_add_game_form_ignores_a_linked_file(app, tmp_path, monkeypatch, secret):
+    """The finding's path: info.nfo -> a readable file, then add/edit stores it."""
+    from oneirodex.routes_games_ext.add import read_first_nfo_content as add_reader
+
+    library_root = tmp_path / 'library'
+    folder = library_root / 'Linked Nfo'
+    folder.mkdir(parents=True)
+    monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(library_root))
+    _link(folder / 'info.nfo', secret)
+    with app.app_context():
+        assert add_reader(str(folder)) is None
+    (folder / 'real.nfo').write_text('hello', encoding='utf-8')
+    with app.app_context():
+        assert add_reader(str(folder)) == 'hello'
+
+
+# --------------------------------------------------------------------------
+# folder download: the file is vetted when the download reaches it
+# --------------------------------------------------------------------------
+
+def test_a_file_swapped_for_a_link_after_the_walk_is_not_streamed(game_dir, secret, monkeypatch):
+    """TOCTOU: the walk saw a plain ``big.bin``; it becomes a link before its turn."""
+    from oneirodex.utils import zipstream as zs
+
+    (game_dir / 'big.bin').write_bytes(GAME)
+    (game_dir / 'ok.bin').write_bytes(b'ok-bytes')
+    real_walk = zs._iter_folder_files
+
+    def walk_then_swap(source, excluded):
+        found = list(real_walk(source, excluded))   # the whole walk happens first
+        (game_dir / 'big.bin').unlink()
+        _link(game_dir / 'big.bin', secret)
+        return iter(found)
+
+    monkeypatch.setattr(zs, '_iter_folder_files', walk_then_swap)
+    monkeypatch.setattr(zs, 'log_system_event', lambda *_a, **_k: None)  # the error path logs to the DB
+
+    received = []
+
+    async def run():
+        async for chunk in zs.async_generate_zipstream_chunks(str(game_dir)):
+            received.append(chunk)
+
+    with pytest.raises(OSError):
+        asyncio.run(run())
+    assert SECRET not in b''.join(received), 'the link target must not be streamed'
+
+
+def test_folder_download_keeps_unix_modes(game_dir):
+    """Members are streamed from our own iterator; they must keep what ``write`` recorded."""
+    if os.name == 'nt':
+        pytest.skip('POSIX modes')
+    exe = game_dir / 'run.sh'
+    exe.write_bytes(b'#!/bin/sh\n')
+    exe.chmod(0o755)
+    plain = game_dir / 'data.bin'
+    plain.write_bytes(GAME)
+    plain.chmod(0o640)
+    with zipfile.ZipFile(io.BytesIO(_collect(game_dir))) as archive:
+        modes = {info.filename: (info.external_attr >> 16) & 0o777 for info in archive.infolist()}
+        assert modes == {'run.sh': 0o755, 'data.bin': 0o640}
+        assert archive.read('data.bin') == GAME
+
+
+# --------------------------------------------------------------------------
+# firmware import
+# --------------------------------------------------------------------------
+
+def test_firmware_scan_skips_linked_files(tmp_path, secret):
+    from oneirodex.utils.bios_install import scan_for_firmware
+
+    pack = tmp_path / 'pack'
+    (pack / 'psx').mkdir(parents=True)
+    _link(pack / 'psx' / 'scph5501.bin', secret)
+    _link(pack / 'saturn_bios.bin', pack / 'psx' / 'scph5501.bin')
+    _link(pack / 'linked_dir', secret.parent, directory=True)
+    (secret.parent / 'scph5500.bin').write_bytes(SECRET)
+    (pack / 'psx' / 'scph5500.bin').write_bytes(GAME)
+    assert scan_for_firmware(str(pack)) == {'scph5500.bin': [str(pack / 'psx' / 'scph5500.bin')]}
+
+
+def test_firmware_copy_refuses_a_file_swapped_for_a_link_after_the_scan(tmp_path, secret):
+    from oneirodex.utils.bios_install import _copy_firmware
+
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    _link(pack / 'scph5501.bin', secret)
+    dest = tmp_path / 'volume' / 'scph5501.bin'
+    dest.parent.mkdir()
+    with pytest.raises(OSError):
+        _copy_firmware(str(pack), str(pack / 'scph5501.bin'), str(dest))
+    assert not dest.exists(), 'nothing is created when the source is refused'
+
+
+def test_firmware_boot_import_and_apply_never_copy_a_linked_file(app, tmp_path, secret):
+    from oneirodex.utils.bios_install import apply_firmware_import, import_bios_from
+
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    _link(pack / 'scph5501.bin', secret)
+    (pack / 'saturn_bios.bin').write_bytes(GAME)
+    volume = tmp_path / 'volume'
+    volume2 = tmp_path / 'volume2'
+    with app.app_context():
+        assert import_bios_from(str(pack), str(volume)) == 1
+        result = apply_firmware_import(str(pack), str(volume2))
+    assert sorted(p.name for p in volume.iterdir()) == ['saturn_bios.bin']
+    assert result['copied'] == ['saturn_bios.bin']
+    assert not (volume2 / 'scph5501.bin').exists()
+    for copy in (volume / 'saturn_bios.bin', volume2 / 'saturn_bios.bin'):
+        assert copy.read_bytes() == GAME
+
+
+def test_firmware_apply_reports_a_swapped_file_instead_of_copying_it(app, tmp_path, secret, monkeypatch):
+    from oneirodex.utils import bios_install
+
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    _link(pack / 'scph5501.bin', secret)  # what the file became after the scan
+    monkeypatch.setattr(
+        bios_install, 'scan_for_firmware',
+        lambda *_a, **_k: {'scph5501.bin': [str(pack / 'scph5501.bin')]},
+    )
+    volume = tmp_path / 'volume'
+    with app.app_context():
+        result = bios_install.apply_firmware_import(str(pack), str(volume))
+    assert result['copied'] == []
+    assert 'scph5501.bin' in result['unresolved']
+    assert not (volume / 'scph5501.bin').exists()
+
+
+def test_import_bios_script_skips_and_refuses_links(tmp_path, secret):
+    import importlib.util
+
+    script = Path(__file__).resolve().parents[1] / 'scripts' / 'import_bios.py'
+    spec = importlib.util.spec_from_file_location('import_bios_script_under_test', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    _link(pack / 'scph5501.bin', secret)
+    (pack / 'scph5500.bin').write_bytes(GAME)
+    found = module.scan(str(pack), module.wanted_names())
+    assert found == {'scph5500.bin': [str(pack / 'scph5500.bin')]}
+    with pytest.raises(OSError):
+        module._copy(str(pack), str(pack / 'scph5501.bin'), str(tmp_path / 'out.bin'))
+    assert not (tmp_path / 'out.bin').exists()

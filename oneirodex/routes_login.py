@@ -46,6 +46,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 
 from oneirodex.utils.tokens import get_serializer
+from oneirodex.utils.rbac import is_admin
 
 
 login_bp = Blueprint('login', __name__)
@@ -318,11 +319,14 @@ def register():
                 created=datetime.now(timezone.utc)
             )
             user.set_password(form.password.data)
+            db.session.add(user)
             if invite:
                 # Claim the invite in the same transaction as the account, and
                 # only if nobody else has: one link, one account. It used to be
                 # marked used after the commit, and never saved at all when no
                 # mail went out, so one link could register many accounts.
+                # The user row is flushed first: used_by references it.
+                db.session.flush()
                 claimed = db.session.execute(
                     update(InviteToken)
                     .where(InviteToken.id == invite.id, InviteToken.used.is_(False))
@@ -332,7 +336,6 @@ def register():
                     db.session.rollback()
                     flash('The invite is invalid or has expired.', 'warning')
                     return redirect(url_for('login.register'))
-            db.session.add(user)
             db.session.commit()
 
             log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
@@ -445,7 +448,7 @@ def invites():
         email = request.form.get('email')
         # Ensure the user has invites left to send
         current_invites = db.session.scalar(select(func.count(InviteToken.id)).filter_by(creator_user_id=current_user.user_id, used=False))
-        if current_user.role == 'admin' or current_user.invite_quota > current_invites:
+        if is_admin(current_user) or current_user.invite_quota > current_invites:
             token = str(uuid.uuid4())
             invite_token = InviteToken(
                 token=token, 

@@ -43,6 +43,22 @@ def list_api_tokens():
     })
 
 
+def _beyond_calling_token(scopes) -> list[str]:
+    """Requested scopes the calling API token does not itself hold.
+
+    A caller on a token may only mint tokens narrower than (or equal to) its
+    own: an admin's companion token (read:library, write:download) used to be
+    able to mint an admin-scope token, undoing every scope check. A browser
+    session has no token and is limited by the account's role as before.
+    """
+    from flask import g
+
+    token = g.get('api_token')
+    if token is None:
+        return []
+    return [s for s in (scopes or ['read:library']) if not token.has_scope(str(s).strip())]
+
+
 @apis_bp.route('/tokens', methods=['POST'])
 @login_required
 @validate_body(CreateApiTokenBody)
@@ -57,8 +73,21 @@ def create_api_token(body: CreateApiTokenBody):
         scopes = preset_def['scopes']
     if scopes is not None and not isinstance(scopes, list):
         return api_error('scopes must be a list', code='bad_request')
+    if scopes is not None:
+        if not all(isinstance(s, str) for s in scopes):
+            return api_error('scopes must be strings', code='bad_request')
+        # One cleaned list for every check below and for the stored token:
+        # ' admin' used to pass the role check here and be stored as 'admin'.
+        scopes = [s.strip() for s in scopes]
     if current_user.role != 'admin' and scopes and 'admin' in scopes:
         return api_error('admin scope requires admin role', code='forbidden')
+    beyond = _beyond_calling_token(scopes)
+    if beyond:
+        return api_error(
+            'A token can only create tokens with scopes it already has',
+            code='forbidden',
+            detail={'denied_scopes': beyond},
+        )
     denied = forbidden_scopes_for_role(getattr(current_user, 'role', None))
     blocked = [str(s).strip() for s in (scopes or []) if str(s).strip() in denied]
     if blocked:

@@ -19,7 +19,7 @@ import { startClientHeartbeat, type HeartbeatScheduler } from './heartbeat.js'
 import { keychainAdapter } from './keychain.js'
 import { joinUrl } from './paths.js'
 import { openSocialCompanionWindow } from './social-window.js'
-import { checkServerUrl } from './transport-policy.js'
+import { checkServerUrl, savedServerUrlProblem } from './transport-policy.js'
 
 const LIBRARY_LABEL = 'library'
 
@@ -227,6 +227,11 @@ export async function mountThinApp(root: HTMLElement): Promise<void> {
   try {
     const stored = await loadStoredConfig()
     if (stored.baseUrl) baseUrlEl.value = stored.baseUrl
+    // A URL saved by an older build that the transport policy refuses now (plain
+    // http:// to a public host) never reaches presence — and without this the
+    // seat just vanishes from Ops while the window still says "enter your URL".
+    const refused = savedServerUrlProblem(stored.baseUrl)
+    if (refused) setStatus(refused, 'error')
     const fromKeychain = await keychainAdapter.load()
     const token = stored.token || fromKeychain
     if (token) tokenEl.value = normalizeOneirodexToken(token)

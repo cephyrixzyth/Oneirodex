@@ -3,9 +3,14 @@ import { invoke } from '@tauri-apps/api/core'
 import type { AuthStore } from './auth.js'
 import type { OneirodexClient } from './api.js'
 import { isTauriRuntime } from './config-store.js'
+import { logCompanion } from './connect.js'
 import { downloadGameArchive } from './download.js'
 import { extractInstallArchive, getInstallRecord } from './install.js'
-import { loadInstallsFromDisk, saveInstallsToDisk } from './install-store.js'
+import {
+  loadInstallsFromDisk,
+  saveInstallsToDisk,
+  type SupersededInstall,
+} from './install-store.js'
 import type { GameLifecycleState, LifecycleRegistry } from './lifecycle.js'
 import { assertValidGameUuid } from './paths.js'
 
@@ -14,6 +19,48 @@ async function removeLocalPath(path: string | undefined | null): Promise<void> {
     return
   }
   await invoke('remove_path', { path })
+}
+
+/**
+ * Everything on disk that belongs to the generation an update replaced, minus
+ * anything the current install still uses.
+ */
+function supersededPaths(
+  superseded: SupersededInstall | null | undefined,
+  inUse: Array<string | null | undefined> = [],
+): string[] {
+  if (!superseded) {
+    return []
+  }
+  const live = new Set(inUse.filter(Boolean))
+  return [
+    superseded.extractPath ? `${superseded.extractPath}.staging` : null,
+    superseded.extractPath,
+    superseded.archivePath,
+    superseded.retainedPath,
+  ].filter((path): path is string => Boolean(path) && !live.has(path as string))
+}
+
+/**
+ * Remove the superseded generation after the record that no longer points at it
+ * is already saved. Best effort by design: a failure can only leave an
+ * unreferenced copy behind, and must never undo or fail the operation that
+ * triggered it.
+ */
+async function removeSupersededBestEffort(
+  superseded: SupersededInstall | null | undefined,
+  inUse: Array<string | null | undefined>,
+): Promise<void> {
+  for (const path of supersededPaths(superseded, inUse)) {
+    try {
+      await removeLocalPath(path)
+    } catch (error) {
+      logCompanion(
+        'uninstall',
+        `could not remove superseded install file: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
 }
 
 export async function kickoffUninstall(
@@ -29,9 +76,36 @@ export async function kickoffUninstall(
 
   const removeArchive = options.removeArchive ?? true
   const record = await getInstallRecord(gameUuid)
-  if (record) {
-    // Preserve the complete merged install, including game-local saves. Archive
-    // retention alone cannot reconstruct a base game plus later patch packs.
+  if (record && removeArchive) {
+    // Nothing is kept, so nothing is copied: a snapshot here would cost a full
+    // extra copy of the game, could fail on a locked file or a full disk, and
+    // would be orphaned the moment the record is dropped.
+    //
+    // The order matters. The record is the only thing that remembers these paths,
+    // so it goes last: a removal that fails part way (a locked exe, an antivirus
+    // scan) throws with the record still in place, the registry still on
+    // `installed`, and a second Uninstall simply tries again. Every removal is a
+    // no-op for a path that is already gone.
+    if (record.extractPath) {
+      // Update staging dirs may remain after a failed rename — clean them too.
+      await removeLocalPath(`${record.extractPath}.staging`)
+      if (state !== 'downloaded') await removeLocalPath(record.extractPath)
+    }
+    await removeLocalPath(record.archivePath)
+    // An earlier archive-retaining uninstall (or a reinstall from its snapshot)
+    // left a snapshot behind; this is the "remove everything" path.
+    await removeLocalPath(record.retainedPath)
+    // The generation an update replaced is only reachable through this record too.
+    for (const path of supersededPaths(record.superseded)) {
+      await removeLocalPath(path)
+    }
+    const installs = await loadInstallsFromDisk()
+    delete installs[gameUuid]
+    await saveInstallsToDisk(installs)
+  } else if (record) {
+    // Archive-retaining uninstall: preserve the complete merged install,
+    // including game-local saves. Archive retention alone cannot reconstruct a
+    // base game plus later patch packs.
     const retainedPath =
       state === 'downloaded' || record.pendingUninstall
         ? record.retainedPath
@@ -45,18 +119,26 @@ export async function kickoffUninstall(
     if (record.extractPath) {
       await removeLocalPath(`${record.extractPath}.staging`)
     }
-    if (removeArchive) {
-      await removeLocalPath(record.archivePath)
-    }
 
+    // The snapshot is recorded before the working files go: the record is what
+    // makes the snapshot reachable, so a crash in between keeps both copies.
     const installs = await loadInstallsFromDisk()
-    if (removeArchive) {
-      delete installs[gameUuid]
-    } else {
-      installs[gameUuid] = { ...record, retainedPath, pendingUninstall: true, exePath: null }
+    installs[gameUuid] = {
+      ...record,
+      retainedPath,
+      pendingUninstall: true,
+      exePath: null,
+      superseded: null,
     }
     await saveInstallsToDisk(installs)
     if (state !== 'downloaded') await removeLocalPath(record.extractPath)
+    // The snapshot above is the complete current install; the generation an
+    // earlier update replaced is no longer needed.
+    await removeSupersededBestEffort(record.superseded, [
+      record.extractPath,
+      record.archivePath,
+      retainedPath,
+    ])
   }
 
   let next =
@@ -119,10 +201,26 @@ export async function kickoffUpdate(
         extracted.extractPath + existing.exePath.slice(existing.extractPath.length)
     }
   }
+  // Keep the generation this update replaces — a file the new archive overwrote
+  // stays recoverable there — but only that one: the generation it replaced
+  // earlier is removed once the new record is saved, so repeated updates never
+  // pile up full copies of the game.
+  const superseded: SupersededInstall = {
+    archivePath: existing.archivePath,
+    extractPath: existing.extractPath,
+    ...(existing.retainedPath ? { retainedPath: existing.retainedPath } : {}),
+  }
   await saveInstallsToDisk({
     ...(await loadInstallsFromDisk()),
-    [gameUuid]: extracted,
+    [gameUuid]: { ...extracted, superseded },
   })
+  await removeSupersededBestEffort(existing.superseded, [
+    extracted.extractPath,
+    extracted.archivePath,
+    superseded.extractPath,
+    superseded.archivePath,
+    superseded.retainedPath,
+  ])
 
   if (needsForcedUpdateState) {
     registry.signalUpdateAvailable(gameUuid)

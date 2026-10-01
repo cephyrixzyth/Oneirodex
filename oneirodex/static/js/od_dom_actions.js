@@ -21,7 +21,8 @@
  *   - data-od-click / data-od-change only run the handlers listed below.
  *   - data-od-open only opens same-origin paths and http(s) URLs.
  * A new data-od-click or data-od-change name goes in the matching list in the
- * same change; tests/test_od_dom_actions_allowlist.py fails when they drift.
+ * same change; tests/test_client_injection_guards.py (with
+ * tests/js/od_dom_actions.test.mjs) fails when they drift.
  */
 (function () {
   'use strict';

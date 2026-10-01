@@ -101,6 +101,7 @@ def _create_or_get_download_request(
             'available',
             game_uuid=game.uuid,
             game_name=game.name,
+            user_id=new_request.user_id,  # streams send it to this member (and admins) only
         )
     except Exception:
         pass

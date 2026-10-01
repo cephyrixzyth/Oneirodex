@@ -127,6 +127,10 @@ def social_friends_block(friendship_id: int):
     row = db.session.get(UserFriendship, friendship_id)
     if not row or (row.user_id != current_user.id and row.friend_user_id != current_user.id):
         return api_error('Not found', code='not_found')
+    # An existing block belongs to the blocker. Re-blocking from the blocked
+    # side used to swap the row onto the caller, who could then delete it.
+    if row.status == 'blocked' and row.user_id != current_user.id:
+        return api_error('Not found', code='not_found')
     row.status = 'blocked'
     row.updated_at = datetime.now(timezone.utc)
     # Ensure blocker is always user_id for consistent filtering later.

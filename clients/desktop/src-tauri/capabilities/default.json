@@ -66,6 +66,8 @@
 
     "allow-reveal-path-in-os",
 
+    "allow-trusted-shares",
+
     "allow-is-process-running",
 
     "allow-get-flips-path",

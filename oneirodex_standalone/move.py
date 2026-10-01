@@ -576,7 +576,7 @@ def check_bundle(bundle: Path, expect: str) -> dict:
         raise Refused(f'unsupported move folder format {manifest.get("format")!r}')
     problems = []
     dump = bundle / 'db.dump'
-    if not dump.is_file() or _sha256(dump) != manifest['db_dump']['sha256']:
+    if dump.is_symlink() or not dump.is_file() or _sha256(dump) != manifest['db_dump']['sha256']:
         problems.append('db.dump missing or changed')
     for entry in manifest['files']:
         if not is_carried_path(entry['path']):
@@ -682,7 +682,17 @@ def import_(args) -> int:
         raise Refused(f'{len(conflicts)} file(s) already exist in the server library with other content, '
                       f'e.g. {conflicts[0]}; nothing was changed')
 
-    restore(url, bundle / 'db.dump', args.pg_bin, int(manifest['db_dump'].get('pg_major') or 0))
+    # check_bundle hashed db.dump minutes ago (and every file after it); on a
+    # share, someone with write access could have swapped it since, and
+    # pg_restore runs the dump's SQL. So pg_restore reads a private copy that
+    # was hashed as it was written, never the path on the share.
+    scratch = Path(tempfile.mkdtemp(prefix='oneirodex-restore-'))
+    try:
+        dump = scratch / 'db.dump'
+        _copy_checked(bundle / 'db.dump', dump, manifest['db_dump']['sha256'])
+        restore(url, dump, args.pg_bin, int(manifest['db_dump'].get('pg_major') or 0))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
     created: list[Path] = []
     try:
         for entry in manifest['files']:

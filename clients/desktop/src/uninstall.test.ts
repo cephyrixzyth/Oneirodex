@@ -72,6 +72,8 @@ describe('uninstall helper', () => {
     expect(saveInstallsToDisk).toHaveBeenCalledWith({})
     expect(next).toBe('not_downloaded')
     expect(registry.get('game-7')).toBe('not_downloaded')
+    // Nothing is kept, so no snapshot copy is made (it would be orphaned at once).
+    expect(invoke).not.toHaveBeenCalledWith('preserve_install_files', expect.anything())
   })
 
   it.each(['.', '..', 'a/b', 'a\\b', ''])(
@@ -150,6 +152,11 @@ describe('update helper', () => {
         archivePath: '/appdata/downloads/game-9-update.zip',
         extractPath: '/appdata/installs/game-9-update',
         exePath: '/appdata/installs/game-9-update/game.exe',
+        // The generation this update replaced stays recoverable until the next one.
+        superseded: {
+          archivePath: '/appdata/downloads/game-9.zip',
+          extractPath: '/appdata/installs/game-9',
+        },
       },
     })
     expect(next).toBe('installed')

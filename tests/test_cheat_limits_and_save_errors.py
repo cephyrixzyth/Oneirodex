@@ -7,6 +7,7 @@ wrote whatever they were given, as many files as they were given.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from io import BytesIO
 from uuid import uuid4
@@ -111,6 +112,220 @@ def test_the_cap_is_per_game(app, tmp_path, monkeypatch):
         store_cheat_file(second, _upload('a.cht', b'x'))
         with pytest.raises(CheatLimitError):
             store_cheat_file(first, _upload('b.cht', b'x'))
+
+
+# --------------------------------------------------------------------------
+# the sum across games, and the count-then-write race
+# --------------------------------------------------------------------------
+
+def test_storage_across_all_games_is_bounded(app, tmp_path, monkeypatch):
+    """200 x 1 MB per game is not a bound when a member can reach hundreds of games."""
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path))
+    monkeypatch.setitem(app.config, 'CHEAT_STORAGE_MAX_BYTES', 100)
+    first, second, third = (str(uuid4()) for _ in range(3))
+    with app.app_context():
+        store_cheat_file(first, _upload('a.cht', b'x' * 40))
+        store_cheat_file(second, _upload('a.cht', b'x' * 40))
+        with pytest.raises(CheatLimitError) as exc:
+            store_cheat_file(third, _upload('a.cht', b'x' * 40))
+        assert exc.value.code == 'conflict'
+        assert 'storage' in str(exc.value).lower()
+        assert not list((tmp_path / third).glob('*')), 'a refused upload leaves nothing behind'
+
+        # The same bound applies to easy-create.
+        with pytest.raises(CheatLimitError):
+            create_cheat_file(third, name='more', codes=[{'code': 'A' * 80}])
+
+        # A file that still fits is fine, and replacing counts only its growth.
+        store_cheat_file(third, _upload('small.cht', b'x' * 20))
+        store_cheat_file(first, _upload('a.cht', b'y' * 40))
+        with pytest.raises(CheatLimitError):
+            store_cheat_file(first, _upload('a.cht', b'y' * 90))
+        assert (tmp_path / first / 'a.cht').read_bytes() == b'y' * 40, 'a refused replacement keeps the old file'
+
+        # Deleting frees room.
+        delete_cheat_file(second, 'a.cht')
+        store_cheat_file(third, _upload('other.cht', b'x' * 40))
+
+
+def test_the_storage_bound_defaults_without_configuration(app, tmp_path, monkeypatch):
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path))
+    monkeypatch.setitem(app.config, 'CHEAT_STORAGE_MAX_BYTES', 0)
+    with app.app_context():
+        assert emulator_cheats._storage_limit() == emulator_cheats.MAX_CHEAT_STORAGE_BYTES == 256 * 1024 * 1024
+    monkeypatch.setitem(app.config, 'CHEAT_STORAGE_MAX_BYTES', 'not a number')
+    with app.app_context():
+        assert emulator_cheats._storage_limit() == emulator_cheats.MAX_CHEAT_STORAGE_BYTES
+
+
+@pytest.mark.parametrize('raw', ['256MB', '1e9', '0x10', '-5'])
+def test_a_malformed_storage_limit_in_the_environment_is_ignored_not_fatal(raw, monkeypatch, caplog):
+    """`int(os.getenv(...))` ran at `import config`: a typo stopped the app from
+    starting without naming the variable."""
+    import config
+
+    monkeypatch.setenv('CHEAT_STORAGE_MAX_BYTES', raw)
+    with caplog.at_level('WARNING'):
+        assert config._env_int('CHEAT_STORAGE_MAX_BYTES') == 0
+    assert 'CHEAT_STORAGE_MAX_BYTES' in caplog.text
+    monkeypatch.setenv('CHEAT_STORAGE_MAX_BYTES', ' 1048576 ')
+    assert config._env_int('CHEAT_STORAGE_MAX_BYTES') == 1048576
+
+
+def test_concurrent_uploads_cannot_exceed_the_per_game_cap(app, tmp_path, monkeypatch):
+    """``_ensure_room`` was a bare count: N threads all saw room and all wrote."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path))
+    monkeypatch.setattr(emulator_cheats, 'MAX_CHEAT_FILES_PER_GAME', 5)
+    game_uuid = str(uuid4())
+    real_count = emulator_cheats._count_cht
+
+    def slow_count(folder):
+        import time
+
+        found = real_count(folder)
+        time.sleep(0.02)  # widen the check-to-write window the race lives in
+        return found
+
+    monkeypatch.setattr(emulator_cheats, '_count_cht', slow_count)
+
+    def upload(index):
+        with app.app_context():
+            try:
+                store_cheat_file(game_uuid, _upload(f'race{index}.cht', b'cheats = 0\n'))
+                return True
+            except CheatLimitError:
+                return False
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(upload, range(24)))
+    assert sum(results) == 5
+    assert len(list((tmp_path / game_uuid).glob('*.cht'))) == 5
+    assert not list((tmp_path / game_uuid).glob('*.tmp-*'))
+
+
+def test_only_one_writer_is_ever_between_the_check_and_the_write(app, tmp_path, monkeypatch):
+    """The caps hold only if check-then-write is one step: pin the lock itself,
+    not just the end state."""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path))
+    inside, peak, guard = [0], [0], threading.Lock()
+    real_write = emulator_cheats._write_atomic
+
+    def tracked_write(*args, **kwargs):
+        # The in-lock check runs just before this; overlapping writes mean the
+        # lock is gone. (store_cheat_file also pre-checks, unlocked, to refuse
+        # early before reading the body, so the check itself is not counted.)
+        with guard:
+            inside[0] += 1
+            peak[0] = max(peak[0], inside[0])
+        try:
+            time.sleep(0.01)
+            return real_write(*args, **kwargs)
+        finally:
+            with guard:
+                inside[0] -= 1
+
+    monkeypatch.setattr(emulator_cheats, '_write_atomic', tracked_write)
+
+    def upload(index):
+        with app.app_context():
+            store_cheat_file(str(uuid4()), _upload(f'p{index}.cht', b'cheats = 0\n'))
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(upload, range(16)))
+    assert peak[0] == 1
+
+
+_CHILD_UPLOAD = r'''
+import os, sys, time
+from io import BytesIO
+from flask import Flask
+from werkzeug.datastructures import FileStorage
+from oneirodex.utils import emulator_cheats as ec
+
+root, game, name, size, start = sys.argv[1:6]
+app = Flask('cheat-worker')
+app.config['EMULATOR_CHEATS_PATH'] = root
+app.config['CHEAT_STORAGE_MAX_BYTES'] = int(os.environ['CHEAT_LIMIT'])
+ec.MAX_CHEAT_FILES_PER_GAME = int(os.environ['CHEAT_PER_GAME'])
+
+def slow(fn):
+    def inner(*args):
+        found = fn(*args)
+        time.sleep(0.05)  # widen the check-to-write window the race lives in
+        return found
+    return inner
+
+ec._count_cht, ec._storage_used = slow(ec._count_cht), slow(ec._storage_used)
+while not os.path.exists(start):
+    time.sleep(0.005)
+with app.app_context():
+    try:
+        ec.store_cheat_file(game, FileStorage(stream=BytesIO(b'x' * int(size)), filename=name))
+        print('ok')
+    except ec.CheatLimitError:
+        print('refused')
+'''
+
+
+def _race_in_processes(tmp_path, jobs, *, per_game, limit):
+    """Run each (game, name, size) upload in its own Python process, all
+    released at once, the way two server workers would race."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ, CHEAT_PER_GAME=str(per_game), CHEAT_LIMIT=str(limit),
+               PYTHONPATH=repo + os.pathsep + os.environ.get('PYTHONPATH', ''))
+    env.setdefault('SECRET_KEY', 'cheat-race-test')
+    script, start = tmp_path / 'child.py', tmp_path / 'go'
+    script.write_text(_CHILD_UPLOAD, encoding='utf-8')
+    root = tmp_path / 'cheats'
+    children = [
+        subprocess.Popen([sys.executable, str(script), str(root), game, name, str(size), str(start)],
+                         env=env, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        for game, name, size in jobs
+    ]
+    import time
+
+    time.sleep(3)  # let every child finish importing before the start signal
+    start.write_text('go')
+    outcomes = []
+    for child in children:
+        out, err = child.communicate(timeout=120)
+        assert child.returncode == 0, err[-2000:]
+        outcomes.append(out.strip().splitlines()[-1])
+    return root, outcomes
+
+
+def test_worker_processes_racing_for_the_last_slots_get_exactly_the_cap(tmp_path):
+    """Separate processes passed the same per-game check: the cap was overshot,
+    or (with the old re-count) every racer backed out of a slot that was free."""
+    game = str(uuid4())
+    root, outcomes = _race_in_processes(
+        tmp_path, [(game, f'race{index}.cht', 10) for index in range(6)], per_game=3, limit=10**9)
+    assert outcomes.count('ok') == 3
+    assert len(list((root / game).glob('*.cht'))) == 3
+
+
+def test_worker_processes_replacing_files_cannot_push_storage_past_the_limit(tmp_path):
+    """Each worker grows its own existing file; together they passed the same total."""
+    games = [str(uuid4()) for _ in range(5)]
+    root = tmp_path / 'cheats'
+    for game in games:
+        (root / game).mkdir(parents=True)
+        (root / game / 'mine.cht').write_bytes(b'x' * 50)
+    root, outcomes = _race_in_processes(
+        tmp_path, [(game, 'mine.cht', 150) for game in games], per_game=200, limit=600)
+    total = sum(p.stat().st_size for p in root.rglob('*.cht'))
+    assert total <= 600
+    assert outcomes.count('ok') == 3, 'room for exactly three of the five 100-byte growths'
 
 
 # --------------------------------------------------------------------------

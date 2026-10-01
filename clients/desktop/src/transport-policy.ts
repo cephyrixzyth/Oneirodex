@@ -12,8 +12,15 @@
 
 export type TransportCheck = { ok: true; url: URL } | { ok: false; message: string }
 
+/**
+ * House-network host suffixes a router hands out. Same list as `_PRIVATE_SUFFIXES`
+ * in `oneirodex/utils/trusted_host.py`, so the app, the server and the companion
+ * agree on what "my own network" means.
+ */
+const PRIVATE_HOST_SUFFIXES = ['.local', '.lan', '.home.arpa', '.internal', '.localdomain']
+
 const HTTP_LOCAL_HINT =
-  'plain http:// is only allowed for localhost, LAN addresses and .local names'
+  'plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names'
 
 /** Parse a dotted-quad from `URL.hostname` (WHATWG already folded 0x7f.1 and friends). */
 function parseIpv4(host: string): [number, number, number, number] | null {
@@ -28,14 +35,20 @@ function parseIpv4(host: string): [number, number, number, number] | null {
   return [octets[0]!, octets[1]!, octets[2]!, octets[3]!]
 }
 
-/** 127/8, 10/8, 172.16/12, 192.168/16 and 169.254/16. */
+/**
+ * 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 and the shared address space
+ * 100.64/10 (RFC 6598), where Tailscale puts every peer. Tailscale encrypts the
+ * hop, and the backend already treats that range as home-lab space
+ * (`_is_blocked_ip` in `oneirodex/utils/security.py`, `trusted_host.py`).
+ */
 function isPrivateOrLoopbackIpv4([a, b]: [number, number, number, number]): boolean {
   return (
     a === 127 ||
     a === 10 ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
-    (a === 169 && b === 254)
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
   )
 }
 
@@ -76,7 +89,10 @@ function parseIpv6(host: string): number[] | null {
   return [...head, ...Array<number>(missing).fill(0), ...tail]
 }
 
-/** `::1`, unique-local fc00::/7, link-local fe80::/10, or a mapped local IPv4. */
+/**
+ * `::1`, unique-local fc00::/7 (which holds Tailscale's fd7a:115c:a1e0::/48),
+ * link-local fe80::/10, or a mapped local IPv4.
+ */
 function isPrivateOrLoopbackIpv6(groups: number[]): boolean {
   const first = groups[0]!
   const isLoopback = groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1
@@ -95,9 +111,10 @@ function isPrivateOrLoopbackIpv6(groups: number[]): boolean {
 /**
  * Does this `URL.hostname` name a machine on the user's own network?
  *
- * Literal local address ranges, `*.local` (mDNS), and a bare single-label name
- * (`nas`, `localhost`) that only the local resolver can answer. A dotted public
- * name never qualifies, however much it reads like an address
+ * Literal local address ranges, the house-network suffixes (`*.local` mDNS,
+ * `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`), and a bare single-label
+ * name (`nas`, `localhost`) that only the local resolver can answer. A dotted
+ * public name never qualifies, however much it reads like an address
  * (`192.168.1.1.evil.com`).
  */
 export function isPrivateOrLoopbackHost(hostname: string): boolean {
@@ -111,8 +128,9 @@ export function isPrivateOrLoopbackHost(hostname: string): boolean {
   if (ipv4) {
     return isPrivateOrLoopbackIpv4(ipv4)
   }
-  if (name.endsWith('.local')) {
-    return name.length > '.local'.length
+  const suffix = PRIVATE_HOST_SUFFIXES.find((candidate) => name.endsWith(candidate))
+  if (suffix) {
+    return name.length > suffix.length
   }
   return name !== '' && !name.includes('.')
 }
@@ -152,6 +170,37 @@ export function checkServerUrl(raw: string): TransportCheck {
     (host) =>
       `Refusing http:// for ${host}: your API token would be sent unencrypted. Use an https:// server URL (${HTTP_LOCAL_HINT}).`,
     'Server URL must start with https:// (or http:// for a server on your own network).',
+  )
+}
+
+/**
+ * Why a server URL saved by an earlier build is refused now, or `null` when it is
+ * still acceptable. Shown on start-up so a seat does not sit silently idle: a
+ * saved `http://` URL the policy no longer allows never reaches the auth store,
+ * so presence and Connect quietly do nothing unless the reason is put in front of
+ * the user.
+ */
+export function savedServerUrlProblem(raw: string): string | null {
+  if (!raw.trim()) {
+    return null
+  }
+  const check = checkServerUrl(raw)
+  return check.ok ? null : check.message
+}
+
+/**
+ * A hop an archive download landed on after redirects (`response.url`). Same
+ * `http://`-only-on-your-own-network rule as the server and mod sources: an
+ * archive that can be rewritten in transit is unpacked into a game folder and
+ * later launched.
+ */
+export function checkDownloadRedirectUrl(raw: string): TransportCheck {
+  return checkTransportUrl(
+    raw,
+    'The download was redirected to a URL that is not valid. It must start with https://.',
+    (host) =>
+      `Refusing http:// download redirect to ${host}: the archive could be tampered with in transit. The server should redirect to an https:// URL (${HTTP_LOCAL_HINT}).`,
+    'The download was redirected to a URL that must start with https:// (http:// is only allowed on your own network).',
   )
 }
 

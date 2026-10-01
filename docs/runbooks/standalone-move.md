@@ -55,6 +55,14 @@ a database runs its contents on the server. So a folder someone changed along
 the way, even with every checksum inside rewritten to match, is refused unless
 its fingerprint is the one your export printed.
 
+The check is repeated at the moment of use. The import copies `db.dump` into a
+private temporary folder, hashing it as it writes, and runs `pg_restore` on that
+copy, never on the path in the move folder. A dump swapped on the share after the
+folder was checked (or a `db.dump` that is a symbolic link) is refused with
+`db.dump changed in the move folder while it was being copied`, before the
+database is touched. The copy needs free space equal to the dump in the server's
+temporary folder, and is removed when the import ends.
+
 The folder holds your members' data (password hashes, settings and API keys
 included), their saves and, if any saves are encrypted, the key that opens
 them. It is created readable only by you. Keep it private and delete it once

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import os
 import re
 import socket
+import stat
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -139,6 +141,78 @@ def is_plain_file_within(base, path) -> bool:
     return is_path_within(base, path)
 
 
+def _opened_path(fd: int) -> str | None:
+    """The path the kernel has for an open descriptor (Linux), else None."""
+    try:
+        target = os.readlink(f'/proc/self/fd/{fd}')
+    except (OSError, ValueError):
+        return None
+    return target if os.path.isabs(target) else None
+
+
+def open_plain_file_within(base, path):
+    """Open *path* for binary reading, but only if it is a plain file under *base*.
+
+    :func:`is_plain_file_within` answers "is it safe *now*"; a folder that
+    someone else can write to can change between that answer and the ``open``
+    that follows (``big.bin`` swapped for a link to ``/app/.env``). This opens
+    first and checks the descriptor it got, so what is read is what was vetted:
+
+    * ``O_NOFOLLOW`` refuses a link as the last path component where the
+      platform has it, and ``O_NONBLOCK`` keeps a swapped-in FIFO from hanging
+      the open;
+    * the descriptor must be a regular file, the path must not be a link, and
+      the path must still name that same file (``samestat``), which catches a
+      parent directory swapped for a link and covers Windows, which has no
+      ``O_NOFOLLOW``;
+    * the file must be under *base*. Where the kernel can say what the
+      descriptor points at (``/proc/self/fd`` on Linux) that answer is checked,
+      so a parent directory swapped for a link and back between the checks
+      cannot pass; elsewhere the path's realpath is.
+
+    Raises ``OSError`` for anything else; the caller decides whether that skips
+    the file or stops the operation.
+    """
+    flags = (
+        os.O_RDONLY
+        | getattr(os, 'O_NOFOLLOW', 0)
+        | getattr(os, 'O_BINARY', 0)
+        | getattr(os, 'O_NONBLOCK', 0)
+    )
+    fd = os.open(path, flags)
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise OSError(errno.EINVAL, 'not a regular file')
+        if os.path.islink(path) or not os.path.samestat(opened, os.stat(path)):
+            raise OSError(errno.ELOOP, 'path no longer names the file that was opened')
+        if not is_path_within(base, _opened_path(fd) or path):
+            raise OSError(errno.EACCES, 'file is outside its folder')
+        return os.fdopen(fd, 'rb')
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+#: Instance-metadata endpoints that are not link-local, so the ``is_link_local``
+#: test misses them, or that are globally routable and so pass the "not global"
+#: test. Alibaba's sits in the shared address space; AWS's IPv6 endpoint and
+#: its DNS resolver are ULAs; Oracle's is the IANA service-continuity block
+#: (192.0.0.0/24), which the LAN flag reopens as "not global"; Azure's wire
+#: server 168.63.129.16 is an ordinary public address. All of them stay
+#: blocked even when ``ALLOW_PRIVATE_LAN_URLS`` reopens private ranges, and
+#: ``_is_blocked_ip`` refuses them outright.
+_CLOUD_METADATA_HOSTS = frozenset({
+    'metadata.google.internal',
+    '169.254.169.254',
+    '100.100.100.200',
+    '168.63.129.16',
+    '192.0.0.192',
+    'fd00:ec2::254',
+    'fd00:ec2::23',
+})
+
+
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """True for any address an outbound fetch has no business reaching."""
     # An IPv4-mapped IPv6 literal (``::ffff:127.0.0.1``) reports False for
@@ -147,7 +221,8 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if mapped is not None:
         ip = mapped
     return bool(
-        ip.is_private
+        str(ip) in _CLOUD_METADATA_HOSTS
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_reserved
@@ -230,18 +305,6 @@ def is_blocked_outbound_host(hostname: str | None, *, resolve: bool = True) -> b
 
     resolved = _resolve_host(host)
     return any(_is_blocked_ip(ip) for ip in resolved)
-
-
-#: Instance-metadata endpoints that are not link-local, so the ``is_link_local``
-#: test misses them: Alibaba's sits in the shared address space that
-#: ``_is_blocked_ip`` now refuses, and AWS's IPv6 endpoint is a ULA. Both would
-#: otherwise come back when ``ALLOW_PRIVATE_LAN_URLS`` reopens private ranges.
-_CLOUD_METADATA_HOSTS = frozenset({
-    'metadata.google.internal',
-    '169.254.169.254',
-    '100.100.100.200',
-    'fd00:ec2::254',
-})
 
 
 def is_cloud_metadata_host(hostname: str | None) -> bool:

@@ -16,12 +16,12 @@ services:
     ports:
       - "127.0.0.1:${ONEIRODEX_REVIEW_PORT:-6120}:5006"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/oneirodextest
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/oneirodex
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=oneirodextest
+      - POSTGRES_DB=oneirodex
       - SECRET_KEY=review-only-not-a-production-secret
       - DATA_FOLDER_GAMES=/storage
       - UPLOAD_FOLDER=/app/oneirodex/static/library
@@ -49,18 +49,21 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=oneirodextest
+      - POSTGRES_DB=oneirodex
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
+      # The review app uses `oneirodex`; pytest uses its own `oneirodextest` in
+      # this container (created once: docs/runbooks/local-postgres-pytest.md),
+      # so a test run never wipes the review data.
       # Published so local pytest still has a database while this stack is up.
       # Without it, replacing the main db container silently breaks every test
-      # that needs Postgres â€” which looked like 14 code failures, not a missing
+      # that needs Postgres — which looked like 14 code failures, not a missing
       # port mapping.
       - "127.0.0.1:${ONEIRODEX_REVIEW_DB_PORT:-5432}:5432"
     volumes:
       - review_db:/var/lib/postgresql/data/pgdata
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d oneirodextest"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oneirodex"]
       interval: 5s
       timeout: 5s
       retries: 20

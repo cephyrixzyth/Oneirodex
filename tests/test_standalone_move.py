@@ -7,6 +7,7 @@ server database, re-keyed saves, cross-OS paths, every refusal) is
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.fernet import Fernet
@@ -199,6 +200,79 @@ def test_a_file_swapped_after_the_check_is_not_copied(tmp_path):
     src.write_bytes(b'checked')
     move._copy_checked(src, dest, expected)
     assert dest.read_bytes() == b'checked'
+
+
+# -- the dump pg_restore runs is the dump that was checked -----------------------
+
+def _importable_bundle(tmp_path, monkeypatch):
+    """A move folder whose import runs to the restore step, with no database."""
+    bundle, manifest, _ = _bundle(tmp_path)
+    manifest['db'] = {'alembic_revision': 'rev1', 'tables': {}}
+    fingerprint = _seal(bundle, manifest)
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://u:p@127.0.0.1/oneirodex_test')
+    monkeypatch.delenv('SECRET_KEY', raising=False)
+    monkeypatch.setattr(move, 'check_schema_known', lambda revision: None)
+    monkeypatch.setattr(move, 'database_is_empty', lambda url: True)
+    monkeypatch.setattr(move, 'remap_paths', lambda *a, **k: {})
+    monkeypatch.setattr(move, 'verify', lambda *a, **k: [])
+    scratch_parent = tmp_path / 'scratch'
+    scratch_parent.mkdir()
+    monkeypatch.setattr(move.tempfile, 'tempdir', str(scratch_parent))
+    args = SimpleNamespace(bundle=str(bundle), expect=fingerprint, library_dir=str(tmp_path / 'server'),
+                           root=None, pg_bin=None)
+    return bundle, args, scratch_parent
+
+
+def test_pg_restore_reads_a_private_copy_of_the_dump_not_the_share(tmp_path, monkeypatch):
+    bundle, args, scratch_parent = _importable_bundle(tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_restore(url, dump, pg_bin, dump_major):
+        seen['dump'], seen['bytes'] = Path(dump), Path(dump).read_bytes()
+        # Someone with write access to the share swaps the dump while pg_restore runs.
+        (bundle / 'db.dump').write_bytes(b'EVIL')
+
+    monkeypatch.setattr(move, 'restore', fake_restore)
+    assert move.import_(args) == 0
+    assert seen['dump'] != bundle / 'db.dump'
+    assert seen['dump'].is_relative_to(scratch_parent), 'a private temporary folder'
+    assert seen['bytes'] == b'dump', 'the bytes that were hashed'
+    assert not list(scratch_parent.iterdir()), 'the private copy is removed afterwards'
+
+
+def test_a_dump_swapped_after_the_bundle_check_is_never_restored(tmp_path, monkeypatch):
+    """The window: check_bundle hashes db.dump, minutes of other hashing follow, then restore."""
+    bundle, args, scratch_parent = _importable_bundle(tmp_path, monkeypatch)
+    real_check = move.check_bundle
+
+    def check_then_swap(path, expect):
+        manifest = real_check(path, expect)
+        (Path(path) / 'db.dump').write_bytes(b'crafted dump with attacker SQL')
+        return manifest
+
+    def restore_must_not_run(*_a, **_k):
+        raise AssertionError('pg_restore ran on a dump that did not match the manifest')
+
+    monkeypatch.setattr(move, 'check_bundle', check_then_swap)
+    monkeypatch.setattr(move, 'restore', restore_must_not_run)
+    with pytest.raises(Refused, match='db.dump changed'):
+        move.import_(args)
+    assert not list(scratch_parent.iterdir()), 'nothing left behind'
+
+
+def test_a_dump_that_is_a_symbolic_link_is_refused(tmp_path):
+    bundle, manifest, fingerprint = _bundle(tmp_path)
+    elsewhere = tmp_path / 'elsewhere.dump'
+    elsewhere.write_bytes(b'dump')  # same bytes: only the link makes it unacceptable
+    (bundle / 'db.dump').unlink()
+    try:
+        (bundle / 'db.dump').symlink_to(elsewhere)
+    except (OSError, NotImplementedError):
+        pytest.skip('symlinks are not available here')
+    with pytest.raises(Refused, match='db.dump missing or changed'):
+        move.check_bundle(bundle, fingerprint)
+    with pytest.raises(Refused, match='symbolic link'):
+        move._copy_checked(bundle / 'db.dump', tmp_path / 'copy.dump', move._sha256(b'dump'))
 
 
 @pytest.mark.parametrize('name', ['x:y', 'games"; DROP TABLE users; --', '', '1abc'])

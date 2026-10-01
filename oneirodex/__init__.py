@@ -254,11 +254,12 @@ def create_app(config_object=None):
         BIOS needs a signed-in member."""
         from flask import abort, request
         from flask_login import current_user
-        from oneirodex.utils.static_files import library_access
+        from pathlib import Path as _Path
+        from oneirodex.utils.static_files import static_access
 
         if not request.path.startswith('/static/'):
             return None
-        access = library_access(request.path)
+        access = static_access(_Path(app.static_folder or ''), request.path)
         if access == 'private' or (access == 'member' and not current_user.is_authenticated):
             abort(404)
         return None

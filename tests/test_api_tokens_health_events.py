@@ -141,7 +141,11 @@ def test_bearer_auth_failure_logs_warning_without_secret(client, db_session, use
 
 
 def test_create_token_secret_payload_is_pure(client, db_session, user):
-    _row, raw = generate_api_token(user, 'auth', ['read:library'])
+    from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS
+
+    # A token may only mint tokens within its own scopes, so the caller holds
+    # the companion preset's scopes itself.
+    _row, raw = generate_api_token(user, 'auth', list(TOKEN_SCOPE_PRESETS['companion']['scopes']))
     headers = {
         'Authorization': f'Bearer {raw}',
         'Content-Type': 'application/json',

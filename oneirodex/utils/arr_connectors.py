@@ -21,7 +21,7 @@ from oneirodex.utils.indexer_registry import (
     indexer_status_summary,
     ready_native_indexers,
 )
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
 from oneirodex.utils.security import validate_connector_http_url, validate_outbound_http_url
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,34 @@ def _exc_for_log(exc: BaseException) -> str:
         where = _url_for_log(getattr(getattr(exc, 'request', None), 'url', None))
         return f'{type(exc).__name__} ({where})' if where else type(exc).__name__
     return _SECRET_PARAM_RE.sub(lambda m: f'{m.group(1)}=***', str(exc))
+
+
+def client_error_message(exc: BaseException, *, noun: str = 'download service') -> str:
+    """Text for the JSON error body when a connector call fails; logs the real cause.
+
+    ``str(exc)`` of a ``requests`` failure holds the full request URL, and
+    SABnzbd, AllDebrid and Jackett take the API key as ``?apikey=`` -- so
+    ``api_error(str(exc))`` handed the key (and the pinned internal address)
+    to whoever triggered the call. The browser gets fixed wording; the log gets
+    the exception type and the URL with its query stripped. Failures this module
+    raises itself (``RuntimeError`` / ``ValueError``, wording we wrote) pass
+    through with credential parameters scrubbed; anything unexpected is generic.
+    """
+    logger.warning('Connector call failed: %s', _exc_for_log(exc))
+    if isinstance(exc, BlockedOutboundUrl):
+        return str(exc)  # validator reason only, never the URL
+    if isinstance(exc, requests.Timeout):
+        return f'The {noun} did not respond in time'
+    if isinstance(exc, requests.ConnectionError):
+        return f'Could not reach the {noun}'
+    if isinstance(exc, requests.HTTPError):
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        return f'The {noun} returned an error ({status})' if status else f'The {noun} returned an error'
+    if isinstance(exc, requests.RequestException):
+        return f'The request to the {noun} failed'
+    if isinstance(exc, (RuntimeError, ValueError)):
+        return _SECRET_PARAM_RE.sub(lambda m: f'{m.group(1)}=***', str(exc))
+    return f'The request to the {noun} failed'
 
 
 @dataclass

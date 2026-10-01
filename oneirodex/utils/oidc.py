@@ -470,8 +470,16 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
 
 
 def _email_verified(claims: dict[str, Any]) -> bool:
-    """The provider vouches for the email (OIDC ``email_verified``)."""
+    """The provider vouches for the email (OIDC ``email_verified``), or the
+    operator vouches for the provider (``OIDC_TRUST_PROVIDER_EMAIL``)."""
     value = claims.get('email_verified')
     if isinstance(value, str):
-        return value.strip().lower() == 'true'
-    return value is True
+        value = value.strip().lower() == 'true'
+    if value is True:
+        return True
+    try:
+        from flask import current_app, has_app_context
+
+        return bool(has_app_context() and current_app.config.get('OIDC_TRUST_PROVIDER_EMAIL'))
+    except Exception:  # noqa: BLE001
+        return False

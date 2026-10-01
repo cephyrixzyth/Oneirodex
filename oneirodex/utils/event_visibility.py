@@ -24,8 +24,8 @@ def event_visible_to(event, viewer_id: int | None) -> bool:
     if owner_id is None and not game_uuid:
         return True  # not about a member or a game: scan progress, ops, hello
     viewer = db.session.get(User, viewer_id)
-    if viewer is None:
-        return False
+    if viewer is None or not viewer.is_active:
+        return False  # a stream opened before the account was disabled gets nothing more
     is_admin = normalize_role(getattr(viewer, 'role', None)) == 'admin'
 
     if game_uuid:
@@ -35,6 +35,8 @@ def event_visible_to(event, viewer_id: int | None) -> bool:
         if game is not None and not user_can_access_game(viewer, game):
             return False
 
+    if owner_id is not None and owner_id != viewer_id and getattr(event, 'type', None) != 'activity':
+        return is_admin  # one member's downloads and the like: theirs and admins' only
     if getattr(event, 'type', None) == 'activity' and owner_id is not None and owner_id != viewer_id:
         if is_admin:
             return True

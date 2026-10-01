@@ -19,6 +19,7 @@ import {
   buildLocalInstallDirName,
   joinUrl,
 } from './paths.js'
+import { checkDownloadRedirectUrl } from './transport-policy.js'
 
 export interface DownloadProgress {
   bytesReceived: number
@@ -67,6 +68,31 @@ export async function initiateDownloadRequest(
   return api.downloads.initiateGameDownload(gameUuid, options)
 }
 
+/**
+ * An https server may answer with a redirect, and `fetch` follows it. The hop it
+ * landed on has to pass the same http://-only-on-your-own-network rule as the
+ * server URL, or an on-path attacker on a plain `http://` leg could swap the
+ * archive that is then extracted into `installs/` and launched. (`fetch` already
+ * drops the Authorization header on a cross-origin hop, so the token is safe
+ * either way.) Mocks and some runtimes leave `url` empty — nothing to check then.
+ */
+function assertDownloadHopAllowed(response: Response): void {
+  if (!response.url) {
+    return
+  }
+  const check = checkDownloadRedirectUrl(response.url)
+  if (check.ok) {
+    return
+  }
+  // Stop the transfer; nothing has been written to disk yet.
+  try {
+    void Promise.resolve(response.body?.cancel()).catch(() => undefined)
+  } catch {
+    // No stream to cancel (a stub response, or one already locked).
+  }
+  throw new Error(check.message)
+}
+
 export async function fetchDownloadStream(
   auth: AuthStore,
   streamPath: string,
@@ -87,6 +113,7 @@ export async function fetchDownloadStream(
       Authorization: authHeader,
     },
   })
+  assertDownloadHopAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()
@@ -148,6 +175,7 @@ export async function streamDownloadToFile(
       Authorization: authHeader,
     },
   })
+  assertDownloadHopAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()

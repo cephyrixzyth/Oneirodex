@@ -27,6 +27,15 @@ anything that resolves outside the game's own folder is skipped, because members
 download what the server can read. Symlinking the game folder itself (or the library
 root) is unaffected; keep real files, or hardlinks, inside the folder.
 
+The same rule covers the other files the scanner reads out of a game folder. A
+`.nfo` that is a link is not read (so it cannot end up in the NFO text every member
+sees), and a firmware file that is a link inside a collection folder is not copied
+by **Scan collection** / **Install matching firmware**, the `BIOS_IMPORT_SOURCE`
+boot import or `scripts/import_bios.py`. The check is made on the file that is
+actually opened, not only when the folder is listed, so a file swapped for a link
+while a folder download is already streaming stops that download instead of
+sending the link's target. An NFO is read up to 256 KB.
+
 A location that is configured but not currently mounted is still listed, marked
 *not mounted* — see [../runbooks/remote-scan-locations.md](../runbooks/remote-scan-locations.md)
 for mounting recipes per OS and for the Docker host-path-vs-container-path trap.

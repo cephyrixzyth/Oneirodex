@@ -7,7 +7,7 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 1. Open **Account → API tokens** (`/tokens`) — or create via `POST /api/tokens` if you prefer the API.
 2. Create a token with the **Desktop companion** preset (`read:library` + `write:download`), or **Thin client** for connect-only seats.
 3. Copy the one-time secret (`gt_<hexprefix>_<urlsafe-secret>`) — it is shown only once. The secret uses URL-safe base64 (`A–Z`, `a–z`, `0–9`, `_`, `-`), so **hyphens and underscores in the secret are normal**. Paste the **entire** `gt_…` string into Connect. Truncating at a `-` (or any earlier character) always fails auth. On plain HTTP LAN, browser clipboard may be limited — use **Copy secret** (copies the raw token only) or select the one-time secret field and Ctrl+C / ⌘C.
-4. Open the companion, enter your Oneirodex **base URL** (**`https://`** — plain `http://` is accepted only for `localhost`/loopback, private LAN addresses such as `192.168.x.x`, `10.x.x.x` and `172.16–31.x.x`, link-local `169.254.x.x`, IPv6 `::1` / `fc00::/7` / `fe80::/10`, `*.local` names and bare single-word host names like `nas`; any other `http://` server is refused before the token is sent, with a message telling you to use `https://`) and token, Connect. Paste is normalized (whitespace/newlines, BOM/zero-width, wrapping quotes, first `gt_…` match from labeled/HTML junk) — hyphens inside the secret are kept. Status distinguishes invalid shape, 401 (wrong/truncated secret), network/TLS/CORS, and OS credential-store failures. Companion console logs `[Oneirodex:connect]` / `[Oneirodex:keyring]` (prefix only, never the secret) when the server log is empty.
+4. Open the companion, enter your Oneirodex **base URL** (**`https://`** — plain `http://` is accepted only for `localhost`/loopback, private LAN addresses such as `192.168.x.x`, `10.x.x.x` and `172.16–31.x.x`, link-local `169.254.x.x`, the shared range `100.64.0.0/10` that Tailscale uses, IPv6 `::1` / `fc00::/7` (which covers Tailscale's `fd7a:115c:a1e0::/48`) / `fe80::/10`, `*.local`, `*.lan`, `*.home.arpa`, `*.internal` and `*.localdomain` names (the same list the server uses for its own household-host check) and bare single-word host names like `nas`; any other `http://` server is refused before the token is sent, with a message telling you to use `https://`) and token, Connect. Paste is normalized (whitespace/newlines, BOM/zero-width, wrapping quotes, first `gt_…` match from labeled/HTML junk) — hyphens inside the secret are kept. Status distinguishes invalid shape, 401 (wrong/truncated secret), network/TLS/CORS, and OS credential-store failures. Companion console logs `[Oneirodex:connect]` / `[Oneirodex:keyring]` (prefix only, never the secret) when the server log is empty.
 5. Library preview loads via search; local lifecycle syncs with the server when available.
 6. Status shows **Online** / **Offline (server unreachable)** / **Not connected**. After two failed heartbeats, Download and Update are disabled; Play, Install, and Uninstall still run locally. Web-queued Install/Update commands stay pending until heartbeat recovers (nack → retry).
 
@@ -51,8 +51,8 @@ retain this upstream dependency risk; Windows tests do not resolve it.
 |---|---|
 | Download | Streams archive into the companion downloads folder (chunked append). When a title has more than one version, an in-window picker (arrow keys / Enter, Escape to cancel) chooses base vs. update/extra; a single version downloads straight away. |
 | Install | Extracts zip into installs folder |
-| Update | Prepares a separate generation, carries forward missing base/save files, then atomically selects the new install |
-| Uninstall | Preserves an install snapshot before removing the active directory; removes the archive by default |
+| Update | Prepares a separate generation, carries forward missing base/save files, then atomically selects the new install. The generation it replaced is kept until the next update, then removed |
+| Uninstall | Removes the install folder, then the archive, then forgets the game (a failed removal can simply be retried). No snapshot is copied unless an archive-retaining uninstall is requested |
 | Play | Launches detected / stored exe |
 | Cheat staging | Before RetroArch companion launch, downloads library `.cht` into `app_data/cheats/{gameUuid}/` **only when** launch/payload `cheat_surface=retroarch` (Wave 19 GM lock). Never stages for PCWIN/PCDOS/MAC/OTHER (`pc_wand` / soft-hide). Tauri ACL allows `downloads` + `cheats`. |
 | Translation patch apply | When `ENABLE_ROM_PATCH_APPLY=true` and `FLIPS_PATH` is set, stages `.ips`/`.bps` under `app_data/patches/` and runs Flips CLI — [translation-patches.md](translation-patches.md) |
@@ -64,18 +64,35 @@ retain this upstream dependency risk; Windows tests do not resolve it.
 
 When search marks `has_updates` (or `lifecycle_state=update_available`) and the title is locally **installed**, Connect flips it to **Update available**.
 
-Updates retain the previous install and archive. A failed download, extraction,
-copy or registry replacement leaves that working install selected. After restart,
-the registry selects either the old or fully prepared new generation. Save files
-absent from the update are carried forward; files replaced by the archive remain
-recoverable in the previous directory. No game-specific save-conflict merge is attempted.
+Updates prepare a new generation beside the working install. A failed download,
+extraction, copy or registry replacement leaves that working install selected. After
+restart, the registry selects either the old or fully prepared new generation. Save
+files absent from the update are carried forward; files replaced by the archive remain
+recoverable in the generation the update replaced. That one superseded generation is
+kept until the next update (or until the game is uninstalled) and then removed, so at
+most one extra copy of the game is on disk. No game-specific save-conflict merge is
+attempted.
 
-Uninstall copies the complete install (including local saves) to a sibling
-`.uninstalled-…` snapshot before removing active files. Retaining the archive also
-retains that snapshot's record, so Install restores the complete game and patch
-packs without downloading again. A failed restore can be retried into a new directory.
-Snapshots and previous update generations consume disk space and are not automatically
-deleted; review and back up saves before manually removing any obsolete copies.
+Uninstall removes the install folder, then the archive, and only then forgets the game.
+Nothing is copied first, so it needs no spare disk space and cannot fail for lack of it.
+If a file is locked (a running game, an antivirus scan) the uninstall stops with an error,
+the game still shows as installed, and running **Uninstall** again resumes where it
+stopped. A superseded update generation, and any snapshot left by an earlier
+archive-retaining uninstall, are removed with it.
+
+An archive-retaining uninstall (the `removeArchive: false` option; the companion's
+**Uninstall** button does not use it) first copies the complete install (including local
+saves) to a sibling `.uninstalled-…` snapshot and records it before removing active
+files. Retaining the archive also retains that snapshot's record, so Install restores the
+complete game and patch packs without downloading again. A failed restore can be retried
+into a new directory. A snapshot uses disk space until the game is uninstalled for good;
+review and back up saves before manually removing any obsolete copy.
+
+Symbolic links and Windows junctions inside an install folder (a Wine prefix's
+`dosdevices`, a save-folder junction) are never followed. Snapshots and update
+generations skip them, and the data they point at stays exactly where it is — it is not
+copied, moved or deleted. The game or Wine recreates its own links; re-make any you added
+yourself.
 
 Browser WebRetro still applies cheats via the in-page Emscripten FS bridge when `cheat_surface=retroarch`; use the companion path for heavy/native RetroArch systems when the browser FS cannot write. Author or upload `.cht` files on game details → **Cheats** (same library the play bar lists). PC / native (`PCWIN`/`PCDOS`/`MAC`/`OTHER`): notes or BYO trainer only — companion never stages `.cht`.
 
@@ -84,7 +101,7 @@ Browser WebRetro still applies cheats via the in-page Emscripten FS bridge when 
 The browser cannot open Unraid/host paths. When the companion is Online:
 
 1. **Local install** — use **Show in Explorer** in the companion (no server command).
-2. **Member library / admin unmatched** — queue `action: "open_path"` with an absolute `path` the companion machine can see (mapped drive letter / local mount — **not** a UNC `\\host\share` path). Heartbeat delivers it; companion validates (absolute, not UNC / device, no `..`, no control chars, path exists) then opens Explorer / Finder.
+2. **Member library / admin unmatched** — queue `action: "open_path"` with an absolute `path` the companion machine can see (a mapped drive letter, a local mount, or a UNC `\\host\share` path whose share is listed under **Trusted network shares** — see below). Heartbeat delivers it; companion validates (absolute, not a device path, a UNC path only for a trusted share, no `..`, no control chars, path exists) then opens Explorer / Finder.
 
 ### How UI should invoke
 
@@ -96,9 +113,21 @@ The browser cannot open Unraid/host paths. When the companion is Online:
 
 **Server allowlist:** enqueue rejects paths outside configured library roots (`DATA_FOLDER_GAMES` / `BASE_FOLDER_*`) and library `last_scan_folder` values — clear `400` with the validation message. `open_path` is allowlisted in `client_commands`. `GET /api/path/open` remains path-info only (admin).
 
-**Safe path checks (companion):** absolute only · reject UNC (`\\host\share`, `//host/share`) and device paths (`\\?\…`, `\\.\…`, `\??\…`) before any file-system lookup — on Windows even checking whether such a path exists makes Windows authenticate to that host and leak the user's NTLM hash, and a queued `open_path` is chosen by the server · reject `..` segments · reject null/CR/LF · max 4096 chars · must exist on the companion host · local-install reveal also under `app_data/installs`. The companion does not know the server's library roots (the server never tells it, and the same folder has a different path on each PC), so queued `open_path` commands are not restricted to a root list on this side; the server allowlist above plus the checks in this paragraph are the guards.
+**Safe path checks (companion):** absolute only · reject device paths (`\\?\…`, `\\.\…`, `\??\…`) always, and reject UNC paths (`\\host\share`, `//host/share`) unless they sit at or below a trusted share (below) — decided on the text of the path, before any file-system lookup: on Windows even checking whether such a path exists makes Windows authenticate to that host and leak the user's NTLM hash, and a queued `open_path` is chosen by the server · reject `..` segments · reject null/CR/LF · max 4096 chars · must exist on the companion host · local-install reveal also under `app_data/installs`. The companion does not know the server's library roots (the server never tells it, and the same folder has a different path on each PC), so queued `open_path` commands are not restricted to a root list on this side; the server allowlist above plus the checks in this paragraph are the guards.
 
-**Mount caveat:** Docker/Unraid paths like `/mnt/user/games/…` will fail unless that exact path exists on the companion PC. Send the Windows/macOS-visible path (e.g. `Z:\games\…` — map a network share to a drive letter; UNC paths are refused).
+**Mount caveat:** Docker/Unraid paths like `/mnt/user/games/…` will fail unless that exact path exists on the companion PC. Send the Windows/macOS-visible path (e.g. `Z:\games\…` for a mapped network drive, or the UNC path of a share you have trusted below).
+
+### Trusted network shares (UNC library roots)
+
+A Windows-hosted server is told to use UNC library roots (`ONEIRODEX_LIBRARY_ROOTS=NAS ROMs=\\nas\roms`, see [remote-scan-locations.md](../runbooks/remote-scan-locations.md)), so a queued **Open folder** can name `\\nas\roms\Some Game`. Opening a network path makes Windows sign in to that computer, so the companion refuses it unless you have said you trust that share:
+
+1. In the companion, open **Trusted network shares**.
+2. Enter one share per line, as `\\server\share` (or deeper, `\\server\share\sub`). Server names are matched exactly (letters are not case-sensitive); `\\nas.local\roms` and `\\nas\roms` are different entries. Device paths, `..`, and a server with no share are rejected, and one bad line rejects the whole save with a message naming it.
+3. **Save shares.** The list is kept on this PC (`trusted_shares.json` in the companion's app-data folder) and read fresh on every open; nothing the server sends can add to it.
+
+A path is allowed when it is at or below a listed share, compared segment by segment — `\\nas\roms\Game` is under `\\nas\roms`, `\\nas\romsx`, `\\nas.evil.example\roms` and anything containing `..` are not. A refused path never reaches the file system, so with an empty list no network path is ever looked up.
+
+On a domain PC where Windows Folder Redirection puts Documents, AppData or the profile on a file server, that server is already trusted by Windows. The companion treats the folders Windows itself reports for you (home, Documents, AppData, local data, config) as trusted when they are network paths, so **Open save folder** and **Show in Explorer** work without an entry.
 
 ## Limits (this polish pass)
 
@@ -119,13 +148,14 @@ The browser cannot open Unraid/host paths. When the companion is Online:
 | Download / Update buttons disabled | Companion Offline banner | Re-Connect or wait for heartbeat; Play/Install/Uninstall still work |
 | Friends window permission errors on install | Social webview has no FS ACL (by design) | Use lifecycle actions in the **main** companion window |
 | Update button missing | Server didn’t flag updates | Refresh Connect; check freshness inbox on web |
-| Extra update / uninstall directories | Recovery copies or an interrupted preparation | Keep the selected install and save backups; retry the operation. Review obsolete copies before manual cleanup |
+| Extra update / uninstall directories | The one previous update generation (removed at the next update or uninstall), an archive-retaining snapshot, or a leftover from an update that failed part way | Keep the selected install and save backups; retry the operation. A failed update's own files (`…-update-<id>` folders and zips) are not removed automatically — review before manual cleanup |
 | Cheat not applied in native RetroArch | Missing `cheat_surface=retroarch`, PC platform, or core needs Quick Menu load | Confirm browse/launch payload has `cheat_surface=retroarch` (not PCWIN/PCDOS/MAC/OTHER). Then Quick Menu → Cheats → Load Cheat File from companion `cheats/{uuid}/` |
 | Apply patch fails / button missing | Flag off or Flips missing | Set `ENABLE_ROM_PATCH_APPLY` + `FLIPS_PATH`, or apply manually with Flips |
 | Apply mods disabled / fails | Companion offline, no install, or empty mod list | Re-Connect (Online); install locally first; librarian must add enabled mods with BYO URLs. WebRetro cannot load PC mods. |
-| Open path / Show in Explorer fails | Path missing on this PC, relative path, or companion offline for queued open | Use a mapped-drive or local path the companion can see (UNC `\\host\share` paths are refused — map the share to a drive letter); for local installs use **Show in Explorer**; keep clipboard / Auto Scan fallback on admin unmatched when companion is offline |
-| Connect / thin client says *Refusing http://… your API token would be sent unencrypted* | Server URL is plain `http://` to a host outside your local network | Use the server's `https://` URL; for a home server use its LAN address, `.local` name or bare host name, which are allowed over `http://` |
+| Open path / Show in Explorer fails | Path missing on this PC, relative path, or companion offline for queued open | Use a mapped-drive or local path the companion can see; if the server uses a UNC `\\host\share` path, list that share under **Trusted network shares** (an untrusted UNC path is refused before it is looked up, and device paths are always refused); for local installs use **Show in Explorer**; keep clipboard / Auto Scan fallback on admin unmatched when companion is offline |
+| Connect / thin client says *Refusing http://… your API token would be sent unencrypted* | Server URL is plain `http://` to a host outside your local network | Use the server's `https://` URL; for a home server use its LAN address, its Tailscale `100.x.y.z` address, a `.local` / `.lan` / `.home.arpa` / `.internal` / `.localdomain` name or a bare host name, which are all allowed over `http://`. A URL saved by an earlier build that is refused now is shown in the status line when the companion or thin client starts, so it is not silently ignored |
 | *Invalid game id from server* | The server sent a game id that is not letters / digits / `_` / `-` (1–64 chars) | Nothing was written. Report it to the server admin — such an id cannot be used as a folder name |
 | *Refusing http:// mod source …* | A mod `source_url` is plain `http://` to a host outside your local network (or redirects to one) | The librarian should change the mod's source URL to `https://` |
+| *Refusing http:// download redirect …* | The server answered a game download with a redirect to plain `http://` on a host outside your local network | Fix the server or its reverse proxy so the download is served from, or redirects to, an `https://` URL. Nothing was written to disk |
 
 Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [translation-patches.md](translation-patches.md) · [social-and-voice.md](social-and-voice.md) — Friends window section mirrors web dock / pop-out / Big Picture **Y**

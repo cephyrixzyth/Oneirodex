@@ -24,6 +24,7 @@ is on) for admin-configured connectors.
 
 from __future__ import annotations
 
+import logging
 from copy import copy
 from typing import Callable
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -32,6 +33,8 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from oneirodex.utils import security
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_REDIRECTS = 5
 
@@ -48,6 +51,43 @@ _REDIRECT_HEADERS = frozenset({
 def _origin(url):
     parsed = urlparse(url)
     return parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)
+
+
+def _keeps_credentials(old: str, new: str) -> bool:
+    """True when a redirect from *old* to *new* may keep credentials, headers and body.
+
+    Same origin, plus the one move ``requests`` itself allows across origins: an
+    ``http`` to ``https`` upgrade of the same host on the default ports (a
+    reverse proxy answering ``308`` to its TLS listener). A change of host,
+    port, or an ``https`` to ``http`` downgrade is still another origin.
+    """
+    before, after = _origin(old), _origin(new)
+    if before == after:
+        return True
+    return (
+        before[0] == 'http' and after[0] == 'https'
+        and before[1] == after[1]
+        and before[2] == 80 and after[2] == 443
+    )
+
+
+def _userinfo(url: str):
+    """``(username, password)`` embedded in *url*, or None when it has none."""
+    parsed = urlparse(url)
+    if parsed.username is None and parsed.password is None:
+        return None
+    return parsed.username, parsed.password
+
+
+def _with_userinfo(url: str, info) -> str:
+    """*url* with the userinfo *info* put back in front of its host."""
+    username, password = info
+    parsed = urlparse(url)
+    hostport = parsed.netloc.rpartition('@')[2]
+    auth = username or ''
+    if password is not None:
+        auth += f':{password}'
+    return urlunparse((parsed.scheme, f'{auth}@{hostport}', parsed.path, parsed.params, parsed.query, parsed.fragment))
 
 
 def _body_positions(kwargs):
@@ -169,8 +209,13 @@ def _pin_checked_address(url: str, validator: Validator) -> tuple[str, str | Non
     """Dial the address the validator just accepted, not whatever DNS says next.
 
     Returns ``(connect_url, original_hostname)``. *original_hostname* is None
-    when the URL already used a literal IP, or when the name does not resolve
-    — unresolvable hosts are allowed by the validator and fail at connect.
+    when the URL already used a literal IP.
+
+    A name that does not resolve is refused, not passed through: letting
+    ``requests`` look it up again at connect time would be the unvalidated,
+    unpinned dial this function exists to prevent (a resolver that answers the
+    validator's lookups with NODATA and the connect-time lookup with
+    169.254.169.254).
     """
     parsed = urlparse(url)
     host = parsed.hostname
@@ -181,7 +226,7 @@ def _pin_checked_address(url: str, validator: Validator) -> tuple[str, str | Non
 
     addrs = security._resolve_host(host)
     if not addrs:
-        return url, None
+        raise BlockedOutboundUrl(url, 'URL host could not be resolved')
 
     last_reason = 'URL host is not allowed'
     for ip in addrs:
@@ -273,15 +318,27 @@ def _request_loop(
         # Joining against the pinned IP would drop the name on the next hop.
         try:
             target = _validated(urljoin(current, location), validator)
-            cross_origin = _origin(current) != _origin(target)
+            cross_origin = not _keeps_credentials(current, target)
             if cross_origin and response.status_code in (307, 308) and any(
                 kwargs.get(key) is not None for key in ('data', 'json', 'files')
             ):
                 # OAuth/device-auth bodies contain secrets too. Header stripping
                 # cannot make their replay to a new origin safe.
                 raise BlockedOutboundUrl(target, 'Cross-origin request body replay is not allowed')
-            # A Location must not inject new URL credentials, even with a permissive validator.
-            if urlparse(target).username is not None:
+            # A Location must not inject new URL credentials, even with a permissive
+            # validator. Credentials the connector URL already carried
+            # (``http://user:pw@proxy.lan``) are the exception, and only for a hop
+            # that keeps them: ``urljoin`` copies them onto a relative Location, an
+            # absolute Location drops them, and either way the next hop must send
+            # what the first one did. Another origin never receives them.
+            current_info, target_info = _userinfo(current), _userinfo(target)
+            if cross_origin:
+                if target_info is not None:
+                    raise BlockedOutboundUrl(target, 'Redirect credentials are not allowed')
+            elif target_info is None:
+                if current_info is not None:
+                    target = _with_userinfo(target, current_info)
+            elif target_info != current_info:
                 raise BlockedOutboundUrl(target, 'Redirect credentials are not allowed')
             kwargs.pop('params', None)
             headers = dict(kwargs.get('headers') or {})
@@ -305,6 +362,19 @@ def _request_loop(
                     })
                 caller = redirected
             if cross_origin:
+                dropped = sorted(
+                    {k for k in headers if k.lower() not in _REDIRECT_HEADERS}
+                    | {k for k in ('auth', 'cookies', 'cert') if kwargs.get(k) is not None}
+                    | ({'URL credentials'} if current_info is not None else set())
+                )
+                if dropped:
+                    # Names only, never values or the URL: a connector that
+                    # starts failing with 401 after its server began redirecting
+                    # to another origin should say why.
+                    logger.warning(
+                        'Redirect from %s to %s is another origin; dropped: %s',
+                        urlparse(current).hostname, urlparse(target).hostname, ', '.join(dropped),
+                    )
                 headers = {k: v for k, v in headers.items() if k.lower() in _REDIRECT_HEADERS}
                 for key in ('auth', 'cookies', 'hooks', 'cert'):
                     kwargs.pop(key, None)

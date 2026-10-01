@@ -227,7 +227,13 @@ def exclusive_link_change(user_id: int, store: str, trigger: str, change, *, cle
         condition = [StoreSyncJob.user_id == user_id, StoreSyncJob.store == store]
         if not clear_history:
             condition.append(StoreSyncJob.id == marker_id)
-        db.session.execute(delete(StoreSyncJob).where(*condition))
+        # 'fetch', not the default 'evaluate': the rollback above expired the
+        # marker, evaluate skips expired objects, and the deleted marker would
+        # stay in the identity map. Where ids are reused (SQLite) the next job
+        # then collides with it on flush.
+        db.session.execute(
+            delete(StoreSyncJob).where(*condition).execution_options(synchronize_session='fetch')
+        )
         db.session.commit()
 
 

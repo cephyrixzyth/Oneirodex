@@ -499,6 +499,11 @@
             }
 
             window.addEventListener('message', function (ev) {
+                // Replies only from our own emulator frame: another window
+                // holding a handle to this page could otherwise forge an
+                // export reply, which the shell would upload as the member's save.
+                if (ev.origin !== window.location.origin) return;
+                if (!emuFrame || ev.source !== emuFrame.contentWindow) return;
                 var data = ev.data;
                 if (!data || data.source !== 'oneirodex-emu') return;
                 var waiter = pending[data.reqId];
@@ -514,7 +519,10 @@
                         reject(new Error('Emulator frame not ready'));
                         return;
                     }
-                    var reqId = 'gt-' + (++reqSeq);
+                    // Unguessable, so a reply cannot be matched to a request blind.
+                    var nonce = new Uint32Array(2);
+                    window.crypto.getRandomValues(nonce);
+                    var reqId = 'gt-' + (++reqSeq) + '-' + nonce[0].toString(36) + nonce[1].toString(36);
                     pending[reqId] = { resolve: resolve, reject: reject };
                     // Own origin only: the bridge refuses others (od-bridge.js isTrustedOrigin).
                     emuFrame.contentWindow.postMessage(

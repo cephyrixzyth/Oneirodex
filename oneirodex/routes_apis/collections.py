@@ -18,12 +18,13 @@ from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
+from oneirodex.utils.rbac import is_admin
 
 
 def _can_edit_collection(collection: GameCollection) -> bool:
     return (
         collection.owner_user_id == current_user.id
-        or current_user.role == 'admin'
+        or is_admin(current_user)
     )
 
 
@@ -58,7 +59,7 @@ def list_collections():
     rows = db.session.execute(query).scalars().all()
     visible = [
         c for c in rows
-        if c.is_public or c.owner_user_id == current_user.id or current_user.role == 'admin'
+        if c.is_public or c.owner_user_id == current_user.id or is_admin(current_user)
     ]
     counts = _item_counts_by_collection_id([c.id for c in visible])
     return jsonify({
@@ -105,7 +106,7 @@ def _editable_collection(collection_uuid: str):
 
 
 def _is_collection_owner_or_admin(collection: GameCollection) -> bool:
-    return collection.owner_user_id == current_user.id or current_user.role == 'admin'
+    return collection.owner_user_id == current_user.id or is_admin(current_user)
 
 
 def _filtered_collection_payload(collection: GameCollection):
@@ -250,7 +251,7 @@ def reorder_collection_items(collection_uuid: str, body: ReorderCollectionItemsB
 def list_announcements():
     include_drafts = (
         request.args.get('include_drafts') == '1'
-        and current_user.role == 'admin'
+        and is_admin(current_user)
     )
     query = select(Announcement).order_by(Announcement.created_at.desc()).limit(50)
     if not include_drafts:
@@ -264,7 +265,7 @@ def list_announcements():
 @login_required
 @validate_body(CreateAnnouncementBody)
 def create_announcement(body: CreateAnnouncementBody):
-    if current_user.role != 'admin':
+    if not is_admin(current_user):
         return api_error('Admin required', code='forbidden')
     row = Announcement(
         title=body.title[:200],

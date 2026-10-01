@@ -262,7 +262,9 @@ nssm start Oneirodex
 ```
 
 Either way, mapped drive letters are per-user and will not resolve — use UNC
-paths in `ONEIRODEX_LIBRARY_ROOTS`.
+paths in `ONEIRODEX_LIBRARY_ROOTS`. Members using the desktop companion with a
+UNC root list that share under **Trusted network shares** in the companion
+([desktop-companion.md](../user/desktop-companion.md#trusted-network-shares-unc-library-roots)).
 
 ---
 

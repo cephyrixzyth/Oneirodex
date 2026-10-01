@@ -175,7 +175,7 @@ Default JSON role map (also configurable in admin):
 }
 ```
 
-JIT provisioning creates users with role `user` unless a mapped claim is present. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, existing local users are not linked automatically: they get a new account on first SSO sign-in.
+JIT provisioning creates users with role `user` unless a mapped claim is present. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
 
 ## Flow
 
