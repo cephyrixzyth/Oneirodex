@@ -116,3 +116,47 @@ export async function fetchGenreHub(genre: any, { signal }: LooseProps = {}) {
     sections: Array.isArray(data.sections) ? data.sections : [],
   }
 }
+
+export interface SurpriseGenre {
+  id: number
+  name: string
+}
+
+export interface SurprisePick {
+  game: Record<string, unknown> | null
+  reason: string
+  genre: SurpriseGenre | null
+  genres: SurpriseGenre[]
+}
+
+/**
+ * One title from the top of this member's ranking (INSP-4b), plus the genres
+ * the picker offers. `exclude` is what was just shown, so "another" moves on.
+ */
+export async function fetchSurprise({
+  genre = null,
+  exclude = [],
+  signal,
+}: {
+  genre?: number | null
+  exclude?: string[]
+  signal?: AbortSignal
+} = {}): Promise<SurprisePick> {
+  const params = new URLSearchParams()
+  if (genre != null) params.set('genre', String(genre))
+  if (exclude.length) params.set('exclude', exclude.join(','))
+  const query = params.toString()
+  const data = requireJson(
+    await getJson(`/api/discover/surprise${query ? `?${query}` : ''}`, {
+      signal,
+      label: 'surprise',
+    }),
+    'surprise',
+  )
+  return {
+    game: data.game || null,
+    reason: String(data.reason || ''),
+    genre: data.genre || null,
+    genres: Array.isArray(data.genres) ? data.genres : [],
+  }
+}
