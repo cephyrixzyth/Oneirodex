@@ -223,10 +223,32 @@ def dedupe_title_keys(title: str | None) -> set[str]:
     return keys
 
 
+_HTTP_URL_RE = re.compile(r'^https?://[^\s/?#]', re.IGNORECASE)
+_CONTROL_CHAR_RE = re.compile(r'[\x00-\x1f\x7f]')
+
+
+def http_url_or_none(value: Any) -> str | None:
+    """The URL if it is an absolute ``http(s)`` URL, else ``None``.
+
+    Offer feeds are untrusted. A ``javascript:`` or ``data:`` claim URL would
+    otherwise be stored, returned by the API, handed to ``window.open`` and
+    wrapped into a ``steam://openurl/`` deeplink. Control characters are
+    refused outright: browsers strip a tab or newline inside a scheme, so a
+    TAB-split ``javascript:`` must not get past a prefix check.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or _CONTROL_CHAR_RE.search(text) or not _HTTP_URL_RE.match(text):
+        return None
+    return text
+
+
 def claim_links(offer: dict[str, Any], connected_stores: set[str] | frozenset[str] | None = None) -> dict[str, str | None]:
     """HTTPS claim URL plus optional protocol deeplink when store is connected."""
     connected = {str(s).lower() for s in (connected_stores or set())}
-    https = (offer.get('claim_url') or offer.get('store_url') or '').strip() or None
+    # Rows stored before claim URLs were scheme-checked are cleaned here too.
+    https = http_url_or_none(offer.get('claim_url')) or http_url_or_none(offer.get('store_url'))
     store = normalize_store(offer.get('store'))
     protocol = None
     if https and store in connected:
@@ -335,10 +357,22 @@ def claim_assist_for_user(user_id: int, offer: Any) -> dict[str, Any]:
     sync_result = None
     sync_error = None
     if store == 'steam':
+        # Recorded as an ordinary sync job; only a catalogue sentence comes
+        # back. str(exc) here once returned the Steam request URL, server key
+        # included, to the member's browser.
+        from oneirodex.utils.store_sync_errors import SyncOutcomeError, reason_payload
+        from oneirodex.utils.store_sync_jobs import run_store_sync
+
         try:
-            sync_result = sync_steam_owned_games(user_id)
-        except Exception as exc:
-            sync_error = str(exc)
+            outcome = run_store_sync(user_id, 'steam', trigger='member', actor_id=user_id,
+                                     sync_fn=sync_steam_owned_games)
+        except SyncOutcomeError as exc:
+            sync_error = reason_payload(exc.reason, 'Steam')['message']
+        else:
+            if outcome['job'].status in ('succeeded', 'partial'):
+                sync_result = outcome['result']
+            else:
+                sync_error = reason_payload(outcome['reason'], 'Steam')['message']
 
     connected = {store}
     links = claim_links(
@@ -524,7 +558,13 @@ def fetch_gamerpower_giveaways() -> list[dict[str, Any]]:
         if status and status not in ('active',):
             continue
         title = (item.get('title') or '').strip()
-        claim = (item.get('open_giveaway_url') or item.get('gamerpower_url') or '').strip()
+        # Only http(s) survives; a hostile feed serving javascript: or data:
+        # loses the offer rather than reaching the browser.
+        claim = (
+            http_url_or_none(item.get('open_giveaway_url'))
+            or http_url_or_none(item.get('gamerpower_url'))
+            or ''
+        )
         if not title or not claim:
             continue
         platforms = item.get('platforms') or ''
@@ -676,8 +716,8 @@ def offer_to_api_dict(
         'title': row.title,
         'description': row.description,
         'image_url': row.image_url,
-        'claim_url': row.claim_url,
-        'store_url': row.store_url,
+        'claim_url': http_url_or_none(row.claim_url),
+        'store_url': http_url_or_none(row.store_url),
         'worth': row.worth,
         'starts_at': row.starts_at.isoformat() if row.starts_at else None,
         'ends_at': row.ends_at.isoformat() if row.ends_at else None,

@@ -1,5 +1,7 @@
 import { formatBearerAuthorization } from '@oneirodex/api-client'
 
+import { checkServerUrl } from './transport-policy.js'
+
 /** OS / secure-store persistence for the API token. */
 export interface KeychainAdapter {
   load(): Promise<string | null>
@@ -19,7 +21,7 @@ export interface AuthSnapshot {
 }
 
 export function createAuthStore(initial?: Partial<AuthConfig>) {
-  let baseUrl = initial?.baseUrl ? normalizeBaseUrl(initial.baseUrl) : ''
+  let baseUrl = initial?.baseUrl ? requireSecureBaseUrl(initial.baseUrl) : ''
   let token: string | null = initial?.token ?? null
 
   return {
@@ -27,8 +29,13 @@ export function createAuthStore(initial?: Partial<AuthConfig>) {
       return baseUrl
     },
 
+    /**
+     * Throws for a server the token must not be sent to (plain `http://` on a
+     * public host, other schemes). The store is the only source of the base URL
+     * every request is built from, so refusing here covers them all.
+     */
     setBaseUrl(nextBaseUrl: string): void {
-      baseUrl = normalizeBaseUrl(nextBaseUrl)
+      baseUrl = requireSecureBaseUrl(nextBaseUrl)
     },
 
     getToken(): string | null {
@@ -83,6 +90,24 @@ export type AuthStore = ReturnType<typeof createAuthStore>
 
 export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, '')
+}
+
+/**
+ * `normalizeBaseUrl` plus the transport policy: `https://` anywhere, `http://`
+ * only for loopback / private-LAN hosts (see `transport-policy.ts`). Returns ''
+ * for a blank URL; throws an Error carrying the user-facing reason otherwise.
+ * UI code should call `checkServerUrl` first to show that reason without throwing.
+ */
+export function requireSecureBaseUrl(baseUrl: string): string {
+  const normalized = normalizeBaseUrl(baseUrl)
+  if (!normalized) {
+    return ''
+  }
+  const checked = checkServerUrl(normalized)
+  if (!checked.ok) {
+    throw new Error(checked.message)
+  }
+  return normalized
 }
 
 /** BOM / zero-width / soft-hyphen often sneak in on clipboard paste. */

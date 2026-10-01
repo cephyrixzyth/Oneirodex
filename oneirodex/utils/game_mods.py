@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from flask import current_app
+from oneirodex.utils.library_paths import library_dir
 
 _SAFE_UUID = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -26,7 +27,7 @@ def mods_root() -> str:
     root = current_app.config.get('GAME_MODS_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'mods')
+    return os.path.join(library_dir(), 'mods')
 
 
 def _pack_path(game_uuid: str) -> str:

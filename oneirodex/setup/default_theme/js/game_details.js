@@ -338,9 +338,20 @@ document.addEventListener('DOMContentLoaded', function initFreshnessPanel() {
     }
     const gameUuid = panel.dataset.gameUuid;
 
+    // local_version is parsed out of folder and file names on disk, and the
+    // remote fields come from store APIs: escape before building markup.
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     function renderFreshness(data) {
         if (!data || data.error) {
-            statusLine.innerHTML = `<span class="text-danger">${(data && data.error) || 'Check failed'}</span>`;
+            statusLine.innerHTML = `<span class="text-danger">${esc((data && data.error) || 'Check failed')}</span>`;
             if (details && data) {
                 details.hidden = false;
                 details.textContent = JSON.stringify(data, null, 2);
@@ -348,11 +359,11 @@ document.addEventListener('DOMContentLoaded', function initFreshnessPanel() {
             return;
         }
         const bits = [
-            `<strong>${data.status || 'unknown'}</strong>`,
-            data.confidence ? `(${data.confidence})` : '',
-            data.local_version ? `— local ${data.local_version}` : '',
-            data.remote_version_summary ? `— ${data.remote_version_summary}` : '',
-            data.checked_at ? `<span class="text-muted"> · checked ${data.checked_at}</span>` : '',
+            `<strong>${esc(data.status || 'unknown')}</strong>`,
+            data.confidence ? `(${esc(data.confidence)})` : '',
+            data.local_version ? `— local ${esc(data.local_version)}` : '',
+            data.remote_version_summary ? `— ${esc(data.remote_version_summary)}` : '',
+            data.checked_at ? `<span class="text-muted"> · checked ${esc(data.checked_at)}</span>` : '',
         ].filter(Boolean);
         statusLine.innerHTML = bits.join(' ');
         if (details) {
@@ -395,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function initFreshnessPanel() {
             }
             renderFreshness(data);
         } catch (err) {
-            statusLine.innerHTML = `<span class="text-danger">${err.message || err}</span>`;
+            statusLine.innerHTML = `<span class="text-danger">${esc(err.message || err)}</span>`;
         } finally {
             btn.disabled = false;
             btn.textContent = prev;

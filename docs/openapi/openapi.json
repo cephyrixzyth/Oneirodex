@@ -33,6 +33,106 @@
           }
         }
       },
+      "StoreSyncJob": {
+        "type": "object",
+        "nullable": true,
+        "description": "One live ownership sync attempt. outcome carries only catalogue text; a running job whose heartbeat is older than ten minutes is reported as failed/interrupted.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "store": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "member",
+              "schedule",
+              "admin"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "partial",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "outcome": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "reconnect",
+                  "retry",
+                  "retry_later",
+                  "contact_admin",
+                  "import_csv",
+                  "check_privacy",
+                  "none"
+                ]
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "audience": {
+                "type": "string",
+                "enum": [
+                  "member",
+                  "admin"
+                ]
+              }
+            }
+          },
+          "cancellable": {
+            "type": "boolean"
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "pages": {
+                "type": "integer"
+              },
+              "items_seen": {
+                "type": "integer"
+              }
+            }
+          },
+          "synced": {
+            "type": "integer",
+            "nullable": true
+          },
+          "matched": {
+            "type": "integer",
+            "nullable": true
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "heartbeat_at": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ApiTokenPublic": {
         "type": "object",
         "properties": {
@@ -94,6 +194,749 @@
     }
   },
   "paths": {
+    "/api/ownership/titles/{title_id}/candidates": {
+      "get": {
+        "summary": "Propose visible title-name candidates without merging editions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "title_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Up to 20 candidates with separate game_uuid, library_uuid, platform, title_only basis, requires_review and truncation flag; no automatic merge."
+          },
+          "404": {
+            "description": "Ownership record not found"
+          }
+        }
+      }
+    },
+    "/api/ownership/titles": {
+      "get": {
+        "summary": "List the current member's ownership records for review",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envelope with up to 50 titles and next_after_id cursor. Each title has id, match_revision, match_reviewed and an ACL-filtered matched_game_uuid."
+          },
+          "400": {
+            "description": "Invalid cursor"
+          }
+        }
+      }
+    },
+    "/api/ownership/titles/{title_id}/match": {
+      "post": {
+        "summary": "Review or clear one owned title's exact library match",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "title_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "game_uuid",
+                  "expected_revision"
+                ],
+                "properties": {
+                  "game_uuid": {
+                    "type": "string",
+                    "nullable": true,
+                    "format": "uuid"
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated mapping and incremented match_revision"
+          },
+          "400": {
+            "description": "Invalid decision"
+          },
+          "404": {
+            "description": "Ownership record or accessible game not found"
+          },
+          "409": {
+            "description": "Stale revision"
+          }
+        }
+      }
+    },
+    "/api/ownership/titles/{title_id}/match/undo": {
+      "post": {
+        "summary": "Undo the latest review with an append-only journal entry",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "title_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "expected_revision"
+                ],
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Previous mapping restored, revision incremented"
+          },
+          "404": {
+            "description": "Record or prior game no longer accessible"
+          },
+          "409": {
+            "description": "Stale revision or no latest review to undo"
+          }
+        }
+      }
+    },
+    "/api/ownership/providers": {
+      "get": {
+        "summary": "List implemented store capabilities separately from account readiness",
+        "description": "Read-only registry; no provider requests or credentials. Unsupported operations remain unavailable. policy_enabled is operator policy, not successful account authentication.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capability registry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "schema_version",
+                    "providers"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "schema_version": {
+                      "type": "integer",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "capabilities",
+                          "policy_enabled",
+                          "account_readiness"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "aliases": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "authority": {
+                            "type": "string"
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "policy_enabled": {
+                            "type": "boolean"
+                          },
+                          "account_readiness": {
+                            "type": "string",
+                            "enum": [
+                              "not_checked"
+                            ]
+                          },
+                          "requires_unofficial_opt_in": {
+                            "type": "boolean"
+                          },
+                          "unofficial_opted_in": {
+                            "type": "boolean"
+                          },
+                          "ownership_caveat": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required; session authentication may redirect to login"
+          }
+        }
+      }
+    },
+    "/api/ownership/connections": {
+      "get": {
+        "summary": "The current member's connection status per provider",
+        "description": "One contract for first-run, Settings and admin repair. Derived from stored facts only (operator policy, linked account, credential source, recorded titles, latest sync job); no provider request, no credential. connected means linked and the last sync did not fail, not that a provider would accept the sign-in now.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Envelope with sync_enabled and one entry per registered provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "schema_version",
+                    "sync_enabled",
+                    "connections"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "schema_version": {
+                      "type": "integer",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "sync_enabled": {
+                      "type": "boolean"
+                    },
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "provider",
+                          "state",
+                          "actions"
+                        ],
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "disabled",
+                              "import_only",
+                              "not_configured",
+                              "not_connected",
+                              "needs_credential",
+                              "connected",
+                              "syncing",
+                              "partial",
+                              "reauth_required",
+                              "failed",
+                              "cancelled"
+                            ]
+                          },
+                          "live": {
+                            "type": "boolean"
+                          },
+                          "cancellable": {
+                            "type": "boolean",
+                            "description": "The adapter checks for cancellation between provider pages (GOG, Epic, Amazon). Single-request adapters are never cancellable."
+                          },
+                          "setup": {
+                            "type": "object",
+                            "properties": {
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "missing": {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  "server_key",
+                                  "opt_in",
+                                  "client_package",
+                                  null
+                                ]
+                              }
+                            }
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "member",
+                                  "household",
+                                  "unknown",
+                                  "none",
+                                  "not_required"
+                                ],
+                                "description": "Which sign-in a sync would use. `unknown`: saved before LIB-04 on a server that has a household sign-in for this store, so it may be a household copy; reconnecting settles it."
+                              },
+                              "household_available": {
+                                "type": "boolean"
+                              }
+                            }
+                          },
+                          "account": {
+                            "type": "object",
+                            "properties": {
+                              "connected": {
+                                "type": "boolean"
+                              },
+                              "linked_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "updated_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "external_account_id": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "records": {
+                            "type": "object",
+                            "properties": {
+                              "owned": {
+                                "type": "integer"
+                              },
+                              "matched": {
+                                "type": "integer"
+                              },
+                              "needs_review": {
+                                "type": "integer"
+                              },
+                              "last_recorded_at": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "last_sync": {
+                            "$ref": "#/components/schemas/StoreSyncJob"
+                          },
+                          "previous_failure": {
+                            "$ref": "#/components/schemas/StoreSyncJob"
+                          },
+                          "actions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "connect",
+                                "reconnect",
+                                "sync",
+                                "cancel",
+                                "import_csv",
+                                "import_file",
+                                "disconnect"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required; session authentication may redirect to login"
+          }
+        }
+      }
+    },
+    "/api/ownership/{store}/sync": {
+      "post": {
+        "summary": "Run one live ownership sync as a recorded job",
+        "description": "Existing per-store routes (steam, gog, epic, amazon, xbox, psn). Failures return a fixed catalogue sentence and detail {reason, message, action, retryable, audience}; exception text, request URLs and upstream bodies are never returned. A cancelled sync returns 200 with cancelled=true and nothing saved.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "steam",
+                "gog",
+                "epic",
+                "amazon",
+                "xbox",
+                "psn"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "synced, matched, store, job (StoreSyncJob) and summary; job.status succeeded, partial or cancelled. A succeeded job may carry job.outcome as a warning (library_not_visible: the provider returned no visible library)."
+          },
+          "400": {
+            "description": "not_connected, credential_missing, device_serial_missing, credential_rejected (member sign-in expired or revoked), household_credential_rejected (the operator's household sign-in was refused; admin-fixable), server_key_missing, client_package_missing"
+          },
+          "403": {
+            "description": "sync_disabled or opt_in_required (detail carries the reason)"
+          },
+          "409": {
+            "description": "sync_in_progress (another sync for this member and store is running) or store_busy (a connect/disconnect for it is in progress)"
+          },
+          "500": {
+            "description": "internal_error or interrupted"
+          },
+          "502": {
+            "description": "Upstream: access_denied, rate_limited, upstream_unavailable, network_error, blocked_by_policy, invalid_response"
+          }
+        }
+      }
+    },
+    "/api/ownership/{store}": {
+      "post": {
+        "summary": "Link or reconnect a store account (existing per-store routes)",
+        "description": "Bodies are validated (unknown fields and over-long values return 422). Tokens are stored server-side and never returned. Refused with 409 while a sync or another link change for the same store is running, so a finishing sync cannot overwrite a new sign-in. Only a new sign-in (or, for Steam, a different Steam ID) counts as a reconnect that clears an earlier sign-in failure.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "steam",
+                "gog",
+                "epic",
+                "amazon",
+                "xbox",
+                "psn"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "account (no credential) and summary"
+          },
+          "403": {
+            "description": "Store ownership sync disabled"
+          },
+          "409": {
+            "description": "sync_in_progress or store_busy"
+          },
+          "422": {
+            "description": "Invalid body"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Disconnect: remove the link, its recorded titles, their match decisions and its sync history",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "steam",
+                "gog",
+                "epic",
+                "amazon",
+                "xbox",
+                "psn"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "summary"
+          },
+          "403": {
+            "description": "Store ownership sync disabled"
+          },
+          "409": {
+            "description": "sync_in_progress or store_busy"
+          }
+        }
+      }
+    },
+    "/api/ownership/{store}/sync/cancel": {
+      "post": {
+        "summary": "Ask a running sync to stop at its next provider page",
+        "description": "Honoured only by adapters that read several pages (GOG, Epic, Amazon). Steam, Xbox and PlayStation make one provider call and are refused with not_cancellable rather than shown a fake cancellation.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "cancel_requested recorded. The sync stops at its next provider page and reports cancelled with nothing saved; a sync already writing its results finishes and reports succeeded."
+          },
+          "404": {
+            "description": "No live sync exists for this store"
+          },
+          "409": {
+            "description": "not_cancellable or nothing_to_cancel"
+          }
+        }
+      }
+    },
+    "/api/admin/ownership/connections": {
+      "get": {
+        "summary": "Administrator: redacted store-connection diagnostics per member",
+        "description": "States, reason codes, record counts, credential source and household configuration as presence flags. Never credentials, external account IDs or title lists. Non-admin sessions are redirected to login.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "after_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "household (presence flags), members[{user_id, name, stores[...admin_actions]}], next_after_id, stale_running_jobs"
+          },
+          "302": {
+            "description": "Not an administrator"
+          },
+          "400": {
+            "description": "Invalid after_id cursor"
+          }
+        }
+      }
+    },
+    "/api/admin/ownership/connections/{user_id}/{store}/sync": {
+      "post": {
+        "summary": "Administrator: retry a member's live sync with the member's saved sign-in",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "job (trigger admin)"
+          },
+          "302": {
+            "description": "Not an administrator"
+          },
+          "400": {
+            "description": "not_connected or member-fixable failure"
+          },
+          "403": {
+            "description": "sync_disabled or opt_in_required"
+          },
+          "404": {
+            "description": "Member or live store not found"
+          },
+          "409": {
+            "description": "sync_in_progress or store_busy"
+          },
+          "500": {
+            "description": "internal_error or interrupted"
+          },
+          "502": {
+            "description": "Upstream failure (redacted)"
+          }
+        }
+      }
+    },
+    "/api/admin/ownership/connections/{user_id}/{store}/cancel": {
+      "post": {
+        "summary": "Administrator: request cancellation of a member's running sync",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "store",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "cancel_requested recorded"
+          },
+          "302": {
+            "description": "Not an administrator"
+          },
+          "404": {
+            "description": "Member or live store not found"
+          },
+          "409": {
+            "description": "not_cancellable or nothing_to_cancel"
+          }
+        }
+      }
+    },
     "/api/openapi.json": {
       "get": {
         "summary": "OpenAPI document",

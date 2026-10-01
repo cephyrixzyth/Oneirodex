@@ -43,9 +43,11 @@ built in, and `.env.example` ships `devkey` too. The problem was posture: the
 script pushed a dev configuration onto a live host, overriding
 `.env.unraid.example`, which leaves `LIVEKIT_API_KEY` deliberately **blank**.
 With the server on `--bind 0.0.0.0` and the port published on every interface,
-anyone on the LAN reaching `:7880` could mint room tokens. Turning LiveKit on
-for real means dropping `--dev` and setting real keys in the host `.env` — an
-operator decision, not one a flags-merge script should make.
+anyone on the LAN reaching `:7880` could mint room tokens. Since 2026-09-30
+the compose `livekit` service no longer runs `--dev`: it takes its keys from
+`LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` and refuses to start without them
+([livekit-unraid.md](../../docs/runbooks/livekit-unraid.md)). Setting those
+keys is still an operator decision, not one a flags-merge script should make.
 
 **2. The `.env` write is atomic.** It was `read_text` then `write_text` in
 place: an interrupt between truncate and flush left a half-written file holding

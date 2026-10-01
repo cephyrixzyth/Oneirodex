@@ -8,6 +8,17 @@
     return {'Content-Type': 'application/json', 'X-CSRFToken': csrf};
   }
 
+  // Game names, folder paths and proposal candidates come from the filesystem
+  // and store metadata. Anything interpolated into innerHTML goes through here.
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   let lastDoctorRows = [];
   let lastRenamePlan = [];
 
@@ -60,7 +71,7 @@
       const resp = await fetch('/api/library_tools/proposals');
       data = await resp.json();
       if (!data.proposals || !data.proposals.length) {
-        box.innerHTML = `<p>No proposal sidecars found. (${err.message || 'scan failed'})</p>`;
+        box.innerHTML = `<p>No proposal sidecars found. (${esc(err.message || 'scan failed')})</p>`;
         return;
       }
     }
@@ -73,11 +84,11 @@
       const proposal = p.proposal || p;
       const name = p.game_name || p.name || proposal.guessed_name || 'Unknown';
       const path = p.path || p.folder_path || '';
-      const cands = ((proposal.candidates || p.candidates || [])).map(c => `${c.name} (${c.score})`).join(', ');
+      const cands = ((proposal.candidates || p.candidates || [])).map(c => `${esc(c.name)} (${esc(c.score)})`).join(', ');
       const uuid = p.game_uuid || '';
-      return `<div class="border rounded p-2 mb-2 od-proposal-row" data-path="${path}">
-        <strong>${name}</strong>${uuid ? ` <code>${uuid}</code>` : ''}<br>
-        <code>${path}</code><br>${cands || '<em>No candidates</em>'}
+      return `<div class="border rounded p-2 mb-2 od-proposal-row" data-path="${esc(path)}">
+        <strong>${esc(name)}</strong>${uuid ? ` <code>${esc(uuid)}</code>` : ''}<br>
+        <code>${esc(path)}</code><br>${cands || '<em>No candidates</em>'}
       </div>`;
     }).join('');
   });
@@ -103,13 +114,13 @@
         const name = g.name || 'Untitled';
         const path = g.full_disk_path || g.path || '';
         return `<button type="button" class="list-group-item list-group-item-action rename-hit"
-          data-uuid="${uuid}" data-name="${name.replace(/"/g, '&quot;')}">
-          <strong>${name}</strong><br><code class="small">${uuid}</code>
-          ${path ? `<br><span class="small text-muted">${path}</span>` : ''}
+          data-uuid="${esc(uuid)}" data-name="${esc(name)}">
+          <strong>${esc(name)}</strong><br><code class="small">${esc(uuid)}</code>
+          ${path ? `<br><span class="small text-muted">${esc(path)}</span>` : ''}
         </button>`;
       }).join('');
     } catch (err) {
-      hits.innerHTML = `<div class="list-group-item text-danger">${err.message || err}</div>`;
+      hits.innerHTML = `<div class="list-group-item text-danger">${esc(err.message || err)}</div>`;
     }
   }
 
@@ -146,7 +157,7 @@
     planBox.innerHTML = lastRenamePlan.map((item, idx) => `
       <div class="form-check">
         <input class="form-check-input rename-item" type="checkbox" data-idx="${idx}" id="rn${idx}" checked>
-        <label class="form-check-label" for="rn${idx}"><code>${item.kind}</code>: ${item.from_path} → ${item.to_path}</label>
+        <label class="form-check-label" for="rn${idx}"><code>${esc(item.kind)}</code>: ${esc(item.from_path)} → ${esc(item.to_path)}</label>
       </div>`).join('') || '<p>No changes.</p>';
     document.getElementById('renameApplyBtn').disabled = lastRenamePlan.length === 0;
     document.getElementById('renameOutput').textContent = JSON.stringify(data, null, 2);

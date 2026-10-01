@@ -21,6 +21,38 @@ databases, and write a `.env` with a generated `SECRET_KEY`. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
 
+## Standalone (preview): no PostgreSQL to install
+
+[ADR 0011](../adr/0011-standalone-bundled-postgres.md) adds a third way in:
+a standalone install carries its own PostgreSQL 17 and runs it in your user
+account. No administrator rights, no system service, nothing listening beyond
+`127.0.0.1`. **Status:** the launcher works and is proven end to end on Linux.
+Packaged downloads for Windows, macOS and Steam Deck do not exist yet, and each
+OS is called supported only after a run on a real machine.
+
+```bash
+python -m oneirodex_standalone --pg-home /path/to/bundled-postgres [--data-dir DIR] [--port 5006]
+```
+
+| | |
+|---|---|
+| Data folder | `%LOCALAPPDATA%\Oneirodex` (Windows), `~/Library/Application Support/Oneirodex` (macOS), `~/.local/share/oneirodex` (Linux), or `--data-dir` |
+| Inside it | `pgdata/` (the database), `library/` (themes, icon packs, artwork, saves, fonts and caches), `logs/postgres.log`, `standalone.json` (generated database password, secret key and port; readable only by you) |
+| Install folder | Never written to, so it can be read-only (Program Files, a signed app bundle) |
+| First start | Creates the database cluster with an OS-independent collation, runs the normal startup (migrations, setup), then serves `http://127.0.0.1:5006` |
+| While running | If the database stops unexpectedly it is restarted; if it keeps stopping (more than 5 times in 10 minutes), everything shuts down |
+| Stopping | Ctrl+C or a normal terminate stops the server, then the database |
+
+`--pg-home` takes either an archive with `bin/` (Windows/macOS style) or the
+relocated Linux layout (`usr/lib/postgresql/17/bin` plus `libs/`) built by
+`scripts/spikes/desk03/proof_d/make_bundle.sh`.
+
+The launcher does this by setting `ONEIRODEX_LIBRARY_DIR` to `<data folder>/library`.
+URLs do not change: files are still served at `/static/library/`.
+
+Moving to a household server later: `python -m oneirodex_standalone export`
+here, then `import` on the server ([standalone-move.md](standalone-move.md)).
+
 ---
 
 ## Linux
@@ -51,6 +83,30 @@ build tools, then configures the database and `.env`.
 ```
 
 Start it: `./startweb.sh` — then open http://localhost:5006
+
+### Database role (what the installer does and does not touch)
+
+The installer creates one dedicated role, `oneirodexuser`, with a generated
+password that goes into `.env` (mode `600`), plus `pg_hba.conf` password rules
+for that role on the `oneirodex` database. Oneirodex connects as that role only.
+It never sets, resets or relies on a password for the `postgres` superuser, and
+the superuser keeps its distro default (peer over the local socket).
+
+> **Installed with an older `install-linux.sh`?** Earlier versions ran
+> `ALTER USER postgres WITH ENCRYPTED PASSWORD 'postgres'` and added `md5` rules
+> for `postgres` to `pg_hba.conf`, which left a known superuser password on the
+> host. Fix it once:
+>
+> ```bash
+> sudo -u postgres psql          # then, at the prompt: \password postgres
+> # or drop password login for the superuser altogether:
+> #   ALTER USER postgres PASSWORD NULL;
+> ```
+>
+> Then remove the lines ending in `postgres … md5` (`local`, `127.0.0.1/32` and
+> `::1/128`) from the block under `# Added by Oneirodex installer` in
+> `pg_hba.conf` (`sudo -u postgres psql -tAc "SHOW hba_file;"` prints the path)
+> and run `sudo systemctl reload postgresql`. The `oneirodexuser` lines stay.
 
 ### Run at boot (systemd)
 

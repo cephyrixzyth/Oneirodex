@@ -8,6 +8,7 @@ import {
   toggleItemKindFilter,
 } from './ItemKindFilterChips'
 import { SavedFilterPanel } from './filterBuilder/SavedFilterPanel'
+import { OwnershipFilterControls } from './OwnershipFilterControls'
 import type { FilterNode } from '../api/savedFilters'
 
 const EMPTY_OPTIONS: Record<string, any[]> = {
@@ -18,6 +19,7 @@ const EMPTY_OPTIONS: Record<string, any[]> = {
   themes: [],
   gameModes: [],
   playerPerspectives: [],
+  ownershipStores: [],
 }
 
 const SELECTS = [
@@ -153,7 +155,7 @@ export function FilterBar({
   useEffect(() => {
     const controller = new AbortController()
     fetchFilterOptions({ signal: controller.signal })
-      .then(setOptions)
+      .then((next) => setOptions({ ...EMPTY_OPTIONS, ...next } as Record<string, any[]>))
       .catch((error: any) => {
         if (error.name !== 'AbortError') {
           setLoadError(true)
@@ -429,6 +431,14 @@ export function FilterBar({
             </div>
           </fieldset>
         )}
+
+        <OwnershipFilterControls
+          filters={filters}
+          stores={options.ownershipStores || []}
+          onApply={applyBadgeToggle}
+          clean={cleanFilters}
+          t={t}
+        />
 
         <label className="library-filters__rating">
           <span className="library-filters__rating-head">

@@ -78,8 +78,20 @@ def ensure_channel_membership(channel: ChatChannel, user: User) -> ChatChannelMe
     return row
 
 
+def _space_allows(user: User, channel: ChatChannel) -> bool:
+    """A channel inside a space follows the space's membership (invite-only
+    spaces are private). Channels outside any space are household-wide."""
+    if getattr(channel, 'space_id', None) is None:
+        return True
+    from oneirodex.utils import chat_spaces
+
+    return chat_spaces.user_can_access_channel(user, channel)
+
+
 def user_can_access_channel(user: User, channel: ChatChannel) -> bool:
     if channel.archived_at is not None:
+        return False
+    if not _space_allows(user, channel):
         return False
     role = normalize_role(getattr(user, 'role', None))
     if channel.kind == 'channel':
@@ -110,6 +122,8 @@ def list_channels_for_user(user: User) -> list[dict]:
         if ch.kind == 'channel':
             if role == 'child' and not ch.is_child_safe:
                 continue
+            if not _space_allows(user, ch):
+                continue  # an invite-only space this member is not in
             member = ensure_channel_membership(ch, user)
             payload = ch.to_dict()
             payload['muted'] = bool(member.muted)

@@ -11,9 +11,10 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Audience | Go to |
 |---|---|
 | End users | [user/getting-started.md](user/getting-started.md) · [faq.md](user/faq.md) · [troubleshooting.md](user/troubleshooting.md) · [browser-play.md](user/browser-play.md) · [desktop-companion.md](user/desktop-companion.md) · [controllers-and-vr.md](user/controllers-and-vr.md) · [translation-patches.md](user/translation-patches.md) · [free-games.md](user/free-games.md) · [social-and-voice.md](user/social-and-voice.md) · [library-and-systems.md](user/library-and-systems.md) · [preferences-themes.md](user/preferences-themes.md) · [downloads.md](user/downloads.md) |
-| Operators / native install | [runbooks/install-native.md](runbooks/install-native.md) — Linux · macOS · Windows installers, service units, upgrade |
-| Operators / scan locations | [runbooks/remote-scan-locations.md](runbooks/remote-scan-locations.md) — `ONEIRODEX_LIBRARY_ROOTS` / `ONEIRODEX_LIBRARY_ROOTS`: NAS shares and extra disks, not just the server's own disk |
-| Operators / Unraid | [runbooks/unraid-deploy.md](runbooks/unraid-deploy.md) · [NAS-DEPLOY.md](../NAS-DEPLOY.md) (live `_projects` checkout; `isos/` retired) |
+| Operators / native install | [runbooks/install-native.md](runbooks/install-native.md) — Linux · macOS · Windows installers, service units, upgrade; standalone preview with a bundled PostgreSQL ([ADR 0011](adr/0011-standalone-bundled-postgres.md)) |
+| Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, saves re-encrypted |
+| Operators / scan locations | [runbooks/remote-scan-locations.md](runbooks/remote-scan-locations.md) — `ONEIRODEX_LIBRARY_ROOTS`: NAS shares and extra disks, not just the server's own disk |
+| Operators / Unraid | [runbooks/unraid-deploy.md](runbooks/unraid-deploy.md) · [NAS-DEPLOY.md](../NAS-DEPLOY.md) (portable checkout examples) |
 | Operators / Docker Compose | [runbooks/docker-compose-deploy.md](runbooks/docker-compose-deploy.md) — optional `--profile livekit` · `--profile clamav` · GPU art on a workstation: [artwork-gpu-workstation.md](runbooks/artwork-gpu-workstation.md) |
 | Operators / observability (optional) | [runbooks/observability-profile.md](runbooks/observability-profile.md) — Prometheus stub; Admin Ops is default |
 | Operators / LiveKit voice | [runbooks/livekit-unraid.md](runbooks/livekit-unraid.md) |
@@ -31,7 +32,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Maintainers / desktop installers | [runbooks/local-installers.md](runbooks/local-installers.md) — build Windows · macOS · Linux bundles without GitHub Actions; a `.dmg` still needs a Mac |
 | Admins | [admin/libraries-and-scans.md](admin/libraries-and-scans.md) · [members-and-invites.md](admin/members-and-invites.md) (invites without email · local accounts) · [privacy-data-handling.md](admin/privacy-data-handling.md) (what the host stores · child ACL · optional outbound) · [webretro-core-clauses.md](admin/webretro-core-clauses.md) (snes9x / genesis_plus_gx quotes — **not counsel**) · [settings-modules.md](admin/settings-modules.md) · [discover-sections.md](admin/discover-sections.md) (storefront shelves · layouts · timed events) · [theme-fonts-and-images.md](admin/theme-fonts-and-images.md) (fonts · batch artwork) · [ops-summary.md](admin/ops-summary.md) · [support-inbox.md](admin/support-inbox.md) · [troubleshooting.md](admin/troubleshooting.md) · [themes-reset.md](admin/themes-reset.md) |
 | Maintainers / architecture | [dev/architecture.md](dev/architecture.md) · [adr/README.md](adr/README.md) — the ten decision records, with what each supersedes · [CONTRIBUTING.md](../CONTRIBUTING.md) |
-| CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — what each job gates, and the two owed (the `pytest-core` marker flip, the coverage floor). Replaces `ci-wishlist.md` |
+| CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — current marker selection, explicit exclusions and coverage gate. Replaces `ci-wishlist.md` |
 | Support triage (maintainers) | [dev/ui-debt-log.md](dev/ui-debt-log.md) · [dev/api-envelope-keeps.md](dev/api-envelope-keeps.md) |
 | Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers · [dev/test-harness-2026-08-07.md](dev/test-harness-2026-08-07.md) (lock-storm) · [dev/test-harness-failures.md](dev/test-harness-failures.md) (Aug re-baseline — counts stale) · **[dev/test-suite-failures-2026-09-16.md](dev/test-suite-failures-2026-09-16.md)** — the current failures, named and grouped |
 | Admin Jinja → React (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — which admin pages still render server-side, their handlers and APIs, and the port order (H-D.5) |
@@ -42,6 +43,12 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | API | [openapi/openapi.json](openapi/openapi.json) |
 | How-to videos | [media/video/howto/](media/video/howto/README.md) — 20 narrated clips (AI voice, captions, WebVTT + transcripts), one worked example per feature, members + admins |
 | README media | [assets/readme/](assets/readme/) · capture recipe [CAPTURE.md](assets/readme/CAPTURE.md) |
+
+## Documentation boundaries and status
+
+User/admin guides describe implemented behavior; proposals and dated reports are not release verification. Local staging evidence is separate from production acceptance. Household PostgreSQL remains the supported server configuration; a serverless desktop migration is still a design/proof phase.
+
+Operator host details, credentials, research exports, human responses and internal execution records belong in ignored local storage. Public docs use example addresses and paths. Never paste full database connection URLs into logs or support reports. Historical Git commits are not scrubbed by a working-tree documentation update.
 
 ## Layout
 

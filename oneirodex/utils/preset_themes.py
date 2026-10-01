@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import time
 from datetime import date
 
 from oneirodex.product import LEGACY_NAME, PRODUCT_NAME
@@ -319,12 +320,24 @@ def source_fingerprint(root: str) -> str:
     return digest.hexdigest()
 
 
+#: A modification time this recent is not trusted to prove two files match:
+#: a file rewritten within the filesystem's timestamp granularity can keep it.
+_QUICK_CHECK_MIN_AGE = 2.0
+
+
 def _files_match(src: str, dest: str) -> bool:
     try:
-        if os.path.getsize(src) != os.path.getsize(dest):
-            return False
+        src_stat, dest_stat = os.stat(src), os.stat(dest)
     except OSError:
         return False
+    if src_stat.st_size != dest_stat.st_size:
+        return False
+    # copy2 keeps the source's mtime, so an untouched copy matches on size and
+    # mtime without reading either file. Every boot syncs ~100 files into each
+    # of 21 presets; opening and hashing both sides took ~16 s on Windows.
+    if (src_stat.st_mtime_ns == dest_stat.st_mtime_ns
+            and time.time() - src_stat.st_mtime > _QUICK_CHECK_MIN_AGE):
+        return True
     return file_digest(src) == file_digest(dest)
 
 

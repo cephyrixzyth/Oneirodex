@@ -376,10 +376,21 @@
       pickSramBytes: pickSramBytes,
       volumeToDb: volumeToDb,
       rewindOkForCore: rewindOkForCore,
+      isTrustedOrigin: isTrustedOrigin,
     };
   }
 
+  /* The only sender is the same-origin shell (webretro.html) that embeds this
+     page. Saves move over this channel, in and out, so a message from any other
+     origin -- a page that opened or framed us -- is dropped unanswered. An
+     opaque origin ('null': sandboxed frame, file:) equals itself, so it is
+     refused by name rather than compared. */
+  function isTrustedOrigin(origin) {
+    return !!origin && origin !== 'null' && origin === window.location.origin;
+  }
+
   window.addEventListener('message', function (ev) {
+    if (!isTrustedOrigin(ev.origin)) return;
     var data = ev.data;
     if (!data || data.source !== 'oneirodex') return;
     var type = data.type;

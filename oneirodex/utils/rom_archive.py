@@ -25,6 +25,7 @@ from oneirodex.utils.rom_archive_select import (  # noqa: F401
     _cue_companion_targets,
     _is_rom_name,
     _safe_basename,
+    _safe_member_name,
 )
 from oneirodex.utils.rom_archive_types import (  # noqa: F401
     ARCHIVE_EXTENSIONS,
@@ -46,6 +47,7 @@ from oneirodex.utils.rom_archive_zip import (  # noqa: F401
     extract_rom_from_zip,
     _list_roms_with_sizes_in_zip,
 )
+from oneirodex.utils.security import is_path_within, is_plain_file_within
 
 
 def find_archive_extractors() -> dict[str, str]:
@@ -124,13 +126,24 @@ def _list_roms_via_7z(archive_path: str, seven_z: str) -> list[tuple[str, int]]:
     path: str | None = None
     size = 0
     is_dir = False
+    is_link = False
+
+    def _flush() -> None:
+        # Member names are attacker-controlled: anything that could land outside
+        # the extraction directory never reaches the chooser, and links are not
+        # ROMs (7z prints the target on a ``Symbolic Link =`` line).
+        if path and not is_dir and not is_link and _is_rom_name(path):
+            safe = _safe_member_name(path)
+            if safe is not None:
+                members.append((safe, size))
+
     for line in (result.stdout or '').splitlines():
         if line.startswith('Path = '):
-            if path and not is_dir and _is_rom_name(path):
-                members.append((path.replace('\\', '/'), size))
+            _flush()
             path = line[7:].strip()
             size = 0
             is_dir = False
+            is_link = False
         elif line.startswith('Size = '):
             try:
                 size = int(line[7:].strip() or 0)
@@ -139,14 +152,15 @@ def _list_roms_via_7z(archive_path: str, seven_z: str) -> list[tuple[str, int]]:
         elif line.startswith('Attributes = '):
             attrs = line[13:].strip().upper()
             is_dir = 'D' in attrs
+        elif line.startswith('Symbolic Link = '):
+            is_link = bool(line[16:].strip())
         elif line == '' and path:
-            if not is_dir and _is_rom_name(path):
-                members.append((path.replace('\\', '/'), size))
+            _flush()
             path = None
             size = 0
             is_dir = False
-    if path and not is_dir and _is_rom_name(path):
-        members.append((path.replace('\\', '/'), size))
+            is_link = False
+    _flush()
     return members
 
 
@@ -165,17 +179,95 @@ def _list_roms_via_bsdtar(archive_path: str, bsdtar: str) -> list[tuple[str, int
         if not name or name.endswith('/'):
             continue
         if _is_rom_name(name):
-            members.append((name, 0))
+            safe = _safe_member_name(name)
+            if safe is not None:
+                members.append((safe, 0))
     return members
 
 
-def _extract_paths_for(cache_dir: str, targets: list[str]) -> list[str]:
-    """Where a target can land: flattened (7z -e) or nested (bsdtar)."""
+def _lexical_extract_paths(cache_dir: str, targets: list[str]) -> list[str]:
+    """Where a target can land -- flattened (7z -e) or nested (bsdtar) -- by name only.
+
+    Member names are attacker-controlled. Anything ``_safe_member_name`` refuses
+    (absolute, drive letter, ``..``) yields no candidate at all, and the nested
+    form is only ever built from the normalised, already-safe relative name.
+    This does not look at the disk; :func:`_extract_paths_for` adds the
+    realpath containment check that catches links the archive planted.
+    """
     out: list[str] = []
     for target in targets:
-        out.append(os.path.join(cache_dir, Path(target).name))
-        out.append(os.path.join(cache_dir, target.replace('/', os.sep)))
+        safe = _safe_member_name(target)
+        if safe is None:
+            continue
+        base = Path(safe).name
+        if not base or base in ('.', '..'):
+            continue
+        out.append(os.path.join(cache_dir, base))
+        out.append(os.path.join(cache_dir, safe.replace('/', os.sep)))
     return out
+
+
+def _extract_paths_for(cache_dir: str, targets: list[str]) -> list[str]:
+    """Candidate landing paths that really resolve inside ``cache_dir``."""
+    return [
+        path for path in _lexical_extract_paths(cache_dir, targets)
+        if is_path_within(cache_dir, path)
+    ]
+
+
+def _parent_in_cache(cache_dir: str, path: str) -> bool:
+    """True when the directory holding *path* is ``cache_dir`` or below it, links resolved."""
+    real_cache = os.path.realpath(cache_dir)
+    real_parent = os.path.realpath(os.path.dirname(path))
+    return real_parent == real_cache or is_path_within(real_cache, real_parent)
+
+
+def _unlink_in_cache(cache_dir: str, path: str, *, links_only: bool = False) -> None:
+    """Remove one extracted file or link, but never anything reached *through* a link.
+
+    Only the final path component is removed, and only when the directory that
+    holds it resolves inside the cache -- so a planted ``dir -> /elsewhere``
+    cannot turn a cleanup into a delete outside it.
+    """
+    try:
+        if not _parent_in_cache(cache_dir, path):
+            return
+        if os.path.islink(path):
+            os.remove(path)
+        elif not links_only and os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _replace_in_cache(cache_dir: str, src: str, dest: str) -> bool:
+    """``os.replace`` that refuses unless both ends are plain paths inside ``cache_dir``."""
+    try:
+        if os.path.islink(src) or not os.path.isfile(src):
+            return False
+        if not (is_path_within(cache_dir, src) and is_path_within(cache_dir, dest)):
+            return False
+        os.replace(src, dest)
+        return True
+    except OSError:
+        return False
+
+
+def _prune_empty_dirs(cache_dir: str, start: str) -> None:
+    """Remove now-empty nested directories up to (not including) ``cache_dir``."""
+    parent = start
+    while is_path_within(cache_dir, parent):
+        try:
+            os.rmdir(parent)
+        except OSError:
+            break
+        parent = os.path.dirname(parent)
+
+
+def _remove_extracted_links(cache_dir: str, targets: list[str]) -> None:
+    """An archive can carry a symlink member named like a ROM; never keep one."""
+    for path in _lexical_extract_paths(cache_dir, targets):
+        _unlink_in_cache(cache_dir, path, links_only=True)
 
 
 def _extracted_bytes(cache_dir: str, targets: list[str], chosen: str) -> bool:
@@ -186,10 +278,10 @@ def _extracted_bytes(cache_dir: str, targets: list[str], chosen: str) -> bool:
 def _clear_empty_extracts(cache_dir: str, targets: list[str]) -> None:
     """Remove the zero-byte husks a failed decode leaves, so the next tool
     starts clean and a later run does not serve an empty ROM from cache."""
-    for path in _extract_paths_for(cache_dir, targets):
+    for path in _lexical_extract_paths(cache_dir, targets):
         try:
-            if os.path.isfile(path) and os.path.getsize(path) == 0:
-                os.remove(path)
+            if os.path.islink(path) or (os.path.isfile(path) and os.path.getsize(path) == 0):
+                _unlink_in_cache(cache_dir, path)
         except OSError:
             pass
 
@@ -204,12 +296,18 @@ def _extract_members_via_7z(
     cmdline = [seven_z, 'e', '-y', f'-o{cache_dir}', archive_path, '--', *members]
     result = _run_extractor(cmdline)
     if result.returncode != 0:
+        # The extractor's own words name the archive and the cache directory;
+        # they go to the server log, not to the member who asked for the ROM.
+        logger.warning(
+            'rom_archive: 7z extract failed for %s: %s',
+            os.path.basename(archive_path),
+            (result.stderr or result.stdout or '7z extract failed').strip()[:240],
+        )
         raise ArchiveRomError(
             'Failed to extract ROM with 7z',
             status_code=415,
             code='extract_failed',
-            hint=(result.stderr or result.stdout or '7z extract failed').strip()[:240]
-            or 'Prefer re-packing as .zip.',
+            hint='Archive may be corrupt, password-protected or use an unsupported method; prefer re-packing as .zip.',
         )
 
 
@@ -230,18 +328,14 @@ def _bsdtar_literal(member: str) -> str:
 
 def _member_has_bytes(cache_dir: str, member: str) -> bool:
     return any(
-        os.path.isfile(path) and os.path.getsize(path) > 0
+        is_plain_file_within(cache_dir, path) and os.path.getsize(path) > 0
         for path in _extract_paths_for(cache_dir, [member])
     )
 
 
 def _drop_member_files(cache_dir: str, member: str) -> None:
-    for path in _extract_paths_for(cache_dir, [member]):
-        try:
-            if os.path.isfile(path):
-                os.remove(path)
-        except OSError:
-            pass
+    for path in _lexical_extract_paths(cache_dir, [member]):
+        _unlink_in_cache(cache_dir, path)
 
 
 def _bsdtar_damaged_member(stderr: str, wanted: list[str]) -> str | None:
@@ -291,11 +385,16 @@ def _extract_members_via_bsdtar(
             if pending:
                 continue
             break
+        logger.warning(
+            'rom_archive: bsdtar extract failed for %s: %s',
+            os.path.basename(archive_path),
+            detail[:240],
+        )
         raise ArchiveRomError(
             'Failed to extract ROM with bsdtar',
             status_code=415,
             code='extract_failed',
-            hint=detail[:240] or 'Prefer re-packing as .zip or use 7z.',
+            hint='Archive may be corrupt or use an unsupported method; prefer re-packing as .zip or use 7z.',
         )
     if damaged:
         logger.warning(
@@ -304,19 +403,17 @@ def _extract_members_via_bsdtar(
             len(damaged),
             ', '.join(Path(name).name for name in damaged),
         )
-    # Flatten nested paths into cache_dir basenames.
+    # Flatten nested paths into cache_dir basenames. Every move is asserted to
+    # stay inside cache_dir (realpath), so a hostile member name or a link the
+    # archive planted cannot relocate a file from somewhere else.
     for member in members:
-        src = os.path.join(cache_dir, member.replace('/', os.sep))
-        dest = os.path.join(cache_dir, Path(member).name)
-        if os.path.isfile(src) and src != dest:
-            parent = os.path.dirname(src)
-            os.replace(src, dest)
-            while parent.startswith(cache_dir) and parent != cache_dir:
-                try:
-                    os.rmdir(parent)
-                except OSError:
-                    break
-                parent = os.path.dirname(parent)
+        safe = _safe_member_name(member)
+        if safe is None:
+            continue
+        src = os.path.join(cache_dir, safe.replace('/', os.sep))
+        dest = os.path.join(cache_dir, Path(safe).name)
+        if src != dest and _replace_in_cache(cache_dir, src, dest):
+            _prune_empty_dirs(cache_dir, os.path.dirname(src))
 
 
 def _extract_archive_via_cli(
@@ -362,7 +459,8 @@ def _extract_archive_via_cli(
     chosen = choose_rom_member(members, platform=platform, preferred_member=member)
     safe_name = _safe_basename(chosen)
     dest = os.path.join(cache_dir, safe_name)
-    if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+    _unlink_in_cache(cache_dir, dest, links_only=True)
+    if is_plain_file_within(cache_dir, dest) and os.path.getsize(dest) > 0:
         return dest
 
     targets = _cue_companion_targets(members, chosen)
@@ -417,14 +515,21 @@ def _extract_archive_via_cli(
         if extract_error is not None:
             raise extract_error
 
+    # A symlink member named like a ROM is not a ROM; never keep one around
+    # where a later cache hit or bundle could follow it out of cache_dir.
+    _remove_extracted_links(cache_dir, targets)
+
     # 7z -e already flattens; ensure companions land as basenames.
     for target in targets:
-        flat = os.path.join(cache_dir, Path(target).name)
-        nested = os.path.join(cache_dir, target.replace('/', os.sep))
-        if os.path.isfile(nested) and nested != flat:
-            os.replace(nested, flat)
+        safe = _safe_member_name(target)
+        if safe is None:
+            continue
+        flat = os.path.join(cache_dir, Path(safe).name)
+        nested = os.path.join(cache_dir, safe.replace('/', os.sep))
+        if nested != flat:
+            _replace_in_cache(cache_dir, nested, flat)
 
-    if not os.path.isfile(dest):
+    if not is_plain_file_within(cache_dir, dest):
         raise ArchiveRomError(
             f'Failed to extract ROM from {archive_kind} archive',
             code='extract_failed',
@@ -499,7 +604,9 @@ def _list_roms_in_rar(archive_path: str) -> list[tuple[str, int]]:
             return [
                 (info.filename, int(getattr(info, 'file_size', 0) or 0))
                 for info in archive.infolist()
-                if not info.is_dir() and _is_rom_name(info.filename)
+                if not info.is_dir()
+                and _is_rom_name(info.filename)
+                and _safe_member_name(info.filename) is not None
             ]
     except ArchiveRomError:
         raise
@@ -534,7 +641,10 @@ def _list_roms_in_7z(archive_path: str) -> list[tuple[str, int]]:
         )
     try:
         with py7zr.SevenZipFile(archive_path, mode='r') as archive:
-            names = [name for name in archive.getnames() if _is_rom_name(name)]
+            names = [
+                name for name in archive.getnames()
+                if _is_rom_name(name) and _safe_member_name(name) is not None
+            ]
             # py7zr does not always expose reliable per-file sizes before extract; use 0.
             return [(name, 0) for name in names]
     except Bad7zFile as exc:
@@ -588,7 +698,8 @@ def extract_rom_from_7z(
     chosen = choose_rom_member(members, platform=platform, preferred_member=member)
     safe_name = _safe_basename(chosen)
     dest = os.path.join(cache_dir, safe_name)
-    if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+    _unlink_in_cache(cache_dir, dest, links_only=True)
+    if is_plain_file_within(cache_dir, dest) and os.path.getsize(dest) > 0:
         return dest
 
     targets = _cue_companion_targets(members, chosen)
@@ -603,22 +714,18 @@ def extract_rom_from_7z(
             code='corrupt_archive',
         ) from exc
 
+    # Nothing below may move a file that is not inside cache_dir, whatever the
+    # archive called its members (see _replace_in_cache).
+    _remove_extracted_links(cache_dir, targets)
     extracted = os.path.join(cache_dir, chosen)
-    if os.path.isfile(extracted) and extracted != dest:
-        os.replace(extracted, dest)
-        parent = os.path.dirname(extracted)
-        while parent.startswith(cache_dir) and parent != cache_dir:
-            try:
-                os.rmdir(parent)
-            except OSError:
-                break
-            parent = os.path.dirname(parent)
+    if extracted != dest and _replace_in_cache(cache_dir, extracted, dest):
+        _prune_empty_dirs(cache_dir, os.path.dirname(extracted))
     for companion_name in targets[1:]:
         companion_src = os.path.join(cache_dir, companion_name)
         companion_dest = os.path.join(cache_dir, Path(companion_name).name)
-        if os.path.isfile(companion_src) and companion_src != companion_dest:
-            os.replace(companion_src, companion_dest)
-    if not os.path.isfile(dest):
+        if companion_src != companion_dest:
+            _replace_in_cache(cache_dir, companion_src, companion_dest)
+    if not is_plain_file_within(cache_dir, dest):
         # Fall back to host 7z when py7zr wrote nothing useful.
         found = find_archive_extractors()
         if found.get('7z') or found.get('7za'):
@@ -680,7 +787,9 @@ def extract_rom_from_rar(
             members = [
                 (info.filename, int(getattr(info, 'file_size', 0) or 0))
                 for info in archive.infolist()
-                if not info.is_dir() and _is_rom_name(info.filename)
+                if not info.is_dir()
+                and _is_rom_name(info.filename)
+                and _safe_member_name(info.filename) is not None
             ]
             if not members:
                 raise ArchiveRomError(
@@ -691,7 +800,9 @@ def extract_rom_from_rar(
             chosen = choose_rom_member(members, platform=platform, preferred_member=member)
             safe_name = _safe_basename(chosen)
             dest = os.path.join(cache_dir, safe_name)
-            if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+            # open(dest, 'wb') would write through a link sitting at dest.
+            _unlink_in_cache(cache_dir, dest, links_only=True)
+            if is_plain_file_within(cache_dir, dest) and os.path.getsize(dest) > 0:
                 return dest
             expected = next((size for name, size in members if name == chosen), 0)
             with archive.open(chosen) as src, open(dest, 'wb') as out:
@@ -712,7 +823,8 @@ def extract_rom_from_rar(
                 )
             for companion_name in _cue_companion_targets(members, chosen)[1:]:
                 companion_dest = os.path.join(cache_dir, Path(companion_name).name)
-                if os.path.isfile(companion_dest) and os.path.getsize(companion_dest) > 0:
+                _unlink_in_cache(cache_dir, companion_dest, links_only=True)
+                if is_plain_file_within(cache_dir, companion_dest) and os.path.getsize(companion_dest) > 0:
                     continue
                 with archive.open(companion_name) as src, open(companion_dest, 'wb') as out:
                     while True:
@@ -792,16 +904,20 @@ def resolve_playable_rom_path(
         return path, os.path.basename(path)
 
     if os.path.isdir(path):
+        # A game folder is scanned content, not operator-authored: a
+        # ``game.bin -> /etc/whatever`` link in it must not be served as the ROM
+        # (nor a ``game.zip`` link be unpacked), so links and anything whose
+        # realpath leaves the folder are not candidates.
         archives = [
             os.path.join(path, name)
             for name in os.listdir(path)
             if Path(name).suffix.lower() in (ARCHIVE_EXTENSIONS | GZIP_EXTENSIONS)
-            and os.path.isfile(os.path.join(path, name))
+            and is_plain_file_within(path, os.path.join(path, name))
         ]
         roms = [
             os.path.join(path, name)
             for name in os.listdir(path)
-            if _is_rom_name(name) and os.path.isfile(os.path.join(path, name))
+            if _is_rom_name(name) and is_plain_file_within(path, os.path.join(path, name))
         ]
         if len(roms) == 1:
             return roms[0], os.path.basename(roms[0])

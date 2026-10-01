@@ -13,6 +13,7 @@ import type { AuthStore } from './auth.js'
 import { isTauriRuntime } from './config-store.js'
 import { isPathUnderRoot } from './path-guard.js'
 import { loadInstallsFromDisk } from './install-store.js'
+import { checkModSourceUrl } from './transport-policy.js'
 
 export interface GameModRow {
   id: string
@@ -345,9 +346,23 @@ export async function stageModFromUrl(opts: {
   if (!url) {
     return { ok: false, error: `Mod ${opts.mod.name} has no source URL` }
   }
+  // The archive is unpacked into a game folder: refuse a source that can be
+  // rewritten in transit (plain http:// to a host outside the local network).
+  const sourceCheck = checkModSourceUrl(url)
+  if (!sourceCheck.ok) {
+    return { ok: false, error: `${opts.mod.name}: ${sourceCheck.message}` }
+  }
   const fetchFn = opts.fetchImpl || fetch
   try {
     const response = await fetchFn(url)
+    // An https source may redirect; the hop it lands on has to pass the same check.
+    // (Mocks and some runtimes leave `url` empty — nothing to check then.)
+    if (response.url) {
+      const finalCheck = checkModSourceUrl(response.url)
+      if (!finalCheck.ok) {
+        return { ok: false, error: `${opts.mod.name}: ${finalCheck.message}` }
+      }
+    }
     if (!response.ok) {
       return { ok: false, error: `mod download ${response.status} (${opts.mod.name})` }
     }

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 import { createAuthStore } from './auth.js'
-import { kickoffDownload, resolveArchivePath } from './download.js'
+import {
+  downloadGameArchive,
+  kickoffDownload,
+  resolveArchivePath,
+  resolveExtractPath,
+} from './download.js'
 import { postClientHeartbeat } from './heartbeat.js'
 import { createLifecycleRegistry } from './lifecycle.js'
 
@@ -127,6 +132,79 @@ describe('download kickoff helper', () => {
       'Missing scope',
     )
     expect(registry.get('game-42')).toBe('not_downloaded')
+  })
+
+  it.each(['.', '..', '../escape', 'a/b', 'a\\b', 'C:\\Windows', '', 'x'.repeat(65)])(
+    'refuses game id %j before any request, download, or write',
+    async (hostileId) => {
+      const auth = createAuthStore()
+      auth.setBaseUrl('https://example.com')
+      auth.setToken('gt_prefix_secret')
+
+      const registry = createLifecycleRegistry()
+      const initiate = vi.fn()
+      const fetchImpl = vi.fn()
+      const api = { downloads: { initiateGameDownload: initiate } }
+
+      await expect(
+        kickoffDownload(api as never, auth, registry, hostileId, { fetchImpl }),
+      ).rejects.toThrow(/Invalid game id/)
+      await expect(
+        downloadGameArchive(api as never, auth, hostileId, { fetchImpl }),
+      ).rejects.toThrow(/Invalid game id/)
+
+      expect(initiate).not.toHaveBeenCalled()
+      expect(fetchImpl).not.toHaveBeenCalled()
+      // Nothing was written, and no install record was persisted.
+      const commands = vi.mocked(invoke).mock.calls.map(([command]) => command)
+      expect(commands).not.toContain('write_file_bytes')
+      expect(commands).not.toContain('append_file_bytes')
+      expect(commands).not.toContain('save_installs')
+    },
+  )
+
+  it('never resolves the installs or downloads root as a game path', () => {
+    // `installs/.` is the installs root: the extract step wipes its destination.
+    expect(() => resolveExtractPath('/appdata/installs', '.')).toThrow(/Invalid game id/)
+    expect(() => resolveExtractPath('/appdata/installs/', '..')).toThrow(/Invalid game id/)
+    expect(() => resolveArchivePath('/appdata/downloads', '..')).toThrow(/Invalid game id/)
+    expect(resolveExtractPath('/appdata/installs/', 'game-42')).toBe('/appdata/installs/game-42')
+  })
+
+  it('keeps an update generation in its own archive and extract path', async () => {
+    const auth = createAuthStore()
+    auth.setBaseUrl('https://example.com')
+    auth.setToken('gt_prefix_secret')
+
+    const generation = 'update-11111111-1111-1111-1111-111111111111'
+    const api = {
+      downloads: {
+        initiateGameDownload: vi.fn().mockResolvedValue({
+          download_id: 9,
+          status: 'available',
+          stream_url: '/download_zip/9',
+        }),
+      },
+    }
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      arrayBuffer: async () => new Uint8Array([1]).buffer,
+      body: null,
+    })
+
+    const record = await downloadGameArchive(api as never, auth, 'game-42', {
+      fetchImpl,
+      generation,
+    })
+
+    expect(record.archivePath).toBe(`/appdata/downloads/game-42-${generation}.zip`)
+    expect(record.extractPath).toBe(`/appdata/installs/game-42-${generation}`)
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).not.toContain('save_installs')
+
+    await expect(
+      downloadGameArchive(api as never, auth, 'game-42', { fetchImpl, generation: '../x' }),
+    ).rejects.toThrow(/Invalid update generation/)
   })
 })
 

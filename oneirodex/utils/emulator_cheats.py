@@ -8,11 +8,31 @@ from typing import Any
 
 from flask import current_app
 from werkzeug.utils import secure_filename
+from oneirodex.utils.library_paths import library_dir
 
 _SAFE_UUID = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
     re.I,
 )
+
+#: A real RetroArch .cht is a few KB; 1 MB leaves room for the largest curated
+#: sets while stopping an upload that is really a disk-filling attempt.
+MAX_CHEAT_FILE_BYTES = 1024 * 1024
+#: Per game. The folder is listed on every details-page load.
+MAX_CHEAT_FILES_PER_GAME = 200
+
+
+class CheatLimitError(ValueError):
+    """A cheat file is over the size limit, or the game is at its file cap.
+
+    A ``ValueError`` so existing handlers still treat it as a refusal; routes
+    that know about it map ``code`` (an ``api_error`` code) to the right 4xx.
+    """
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
 
 # Capability-language dialects (form hint → code normalize into .cht). No Class A brands.
 CHEAT_DIALECTS = frozenset({
@@ -34,7 +54,7 @@ def cheats_root() -> str:
     root = current_app.config.get('EMULATOR_CHEATS_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'cheats')
+    return os.path.join(library_dir(), 'cheats')
 
 
 def _game_dir(game_uuid: str) -> str:
@@ -52,6 +72,47 @@ def _assert_under_game_dir(game_uuid: str, path: str) -> str:
     if resolved != folder and not resolved.startswith(folder + os.sep):
         raise ValueError('Invalid cheat path')
     return resolved
+
+
+def _too_large() -> CheatLimitError:
+    return CheatLimitError(
+        f'Cheat file is too large (limit {MAX_CHEAT_FILE_BYTES // (1024 * 1024)} MB)',
+        code='payload_too_large',
+    )
+
+
+def _ensure_room(folder: str, dest: str) -> None:
+    """Refuse a *new* cheat file once the game holds MAX_CHEAT_FILES_PER_GAME.
+
+    Replacing a file that already exists never counts against the cap.
+    """
+    if os.path.isfile(dest):
+        return
+    existing = sum(
+        1
+        for name in os.listdir(folder)
+        if name.lower().endswith('.cht') and os.path.isfile(os.path.join(folder, name))
+    )
+    if existing >= MAX_CHEAT_FILES_PER_GAME:
+        raise CheatLimitError(
+            f'This game already has the maximum of {MAX_CHEAT_FILES_PER_GAME} cheat files; '
+            'delete one before adding another',
+            code='conflict',
+        )
+
+
+def _write_atomic(dest: str, data: bytes) -> None:
+    tmp = f'{dest}.tmp-{os.getpid()}'
+    try:
+        with open(tmp, 'wb') as handle:
+            handle.write(data)
+        os.replace(tmp, dest)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def _cht_filename(name: str) -> str:
@@ -163,8 +224,16 @@ def store_cheat_file(game_uuid: str, file_storage) -> dict[str, Any]:
     safe = secure_filename(getattr(file_storage, 'filename', None) or '')
     if not safe.lower().endswith('.cht'):
         raise ValueError('Only .cht files are supported')
-    dest = _assert_under_game_dir(game_uuid, os.path.join(_game_dir(game_uuid), safe))
-    file_storage.save(dest)
+    folder = _game_dir(game_uuid)
+    dest = _assert_under_game_dir(game_uuid, os.path.join(folder, safe))
+    _ensure_room(folder, dest)
+    # Read one byte past the limit instead of trusting Content-Length: the body
+    # is never held (or written) beyond MAX_CHEAT_FILE_BYTES + 1.
+    stream = getattr(file_storage, 'stream', file_storage)
+    data = stream.read(MAX_CHEAT_FILE_BYTES + 1)
+    if len(data) > MAX_CHEAT_FILE_BYTES:
+        raise _too_large()
+    _write_atomic(dest, data)
     return {
         'name': safe,
         'size': os.path.getsize(dest),
@@ -183,9 +252,14 @@ def create_cheat_file(
     safe = _cht_filename(name)
     dialect = _normalize_dialect(dialect)
     body = build_cht_text(name=name, codes=codes, dialect=dialect)
-    dest = _assert_under_game_dir(game_uuid, os.path.join(_game_dir(game_uuid), safe))
-    with open(dest, 'w', encoding='utf-8', newline='\n') as handle:
-        handle.write(body)
+    encoded = body.encode('utf-8')
+    if len(encoded) > MAX_CHEAT_FILE_BYTES:
+        raise _too_large()
+    folder = _game_dir(game_uuid)
+    dest = _assert_under_game_dir(game_uuid, os.path.join(folder, safe))
+    _ensure_room(folder, dest)
+    # ``build_cht_text`` joins with newline='\n' already; write the bytes as-is.
+    _write_atomic(dest, encoded)
     row: dict[str, Any] = {
         'name': safe,
         'size': os.path.getsize(dest),

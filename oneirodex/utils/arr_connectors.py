@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from flask import current_app
@@ -20,6 +21,7 @@ from oneirodex.utils.indexer_registry import (
     indexer_status_summary,
     ready_native_indexers,
 )
+from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_connector_http_url, validate_outbound_http_url
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,38 @@ _HUB_KEYS = (
     'sabnzbd_url', 'sabnzbd_api_key',
     'nzbget_url', 'nzbget_username', 'nzbget_password',
 )
+
+
+# Query-string credentials as *arr indexers and Jackett take them (``?apikey=``).
+_SECRET_PARAM_RE = re.compile(r'(?i)\b(apikey|api_key|token|password|passwd|secret)=[^&\s\'")]+')
+
+
+def _url_for_log(url: str | None) -> str:
+    """``scheme://host:port/path`` -- no userinfo, no query, no fragment."""
+    try:
+        parsed = urlparse(str(url or ''))
+        host = parsed.hostname or ''
+        if ':' in host:
+            host = f'[{host}]'
+        port = f':{parsed.port}' if parsed.port else ''
+        return f'{parsed.scheme}://{host}{port}{parsed.path}' if host else ''
+    except ValueError:
+        return ''
+
+
+def _exc_for_log(exc: BaseException) -> str:
+    """What is safe to write to the log about a failed connector call.
+
+    ``requests`` exceptions carry the full request URL in their text, and
+    Jackett / Torznab take the API key as ``?apikey=...``, so ``%s`` of the
+    exception wrote the key to the log. Name the exception type and the URL
+    with its query stripped instead; for anything else, scrub credential
+    parameters out of the message.
+    """
+    if isinstance(exc, requests.RequestException):
+        where = _url_for_log(getattr(getattr(exc, 'request', None), 'url', None))
+        return f'{type(exc).__name__} ({where})' if where else type(exc).__name__
+    return _SECRET_PARAM_RE.sub(lambda m: f'{m.group(1)}=***', str(exc))
 
 
 @dataclass
@@ -187,19 +221,19 @@ def search_indexers(query: str, *, limit: int = 25) -> list[ArrHit]:
         try:
             hits.extend(_search_native_indexer(indexer, query, limit=limit))
         except Exception as exc:
-            logger.warning('Native indexer %s search failed: %s', indexer.get('name'), exc)
+            logger.warning('Native indexer %s search failed: %s', indexer.get('name'), _exc_for_log(exc))
 
     if cfg['prowlarr_url'] and cfg['prowlarr_api_key']:
         try:
             hits.extend(_search_prowlarr(cfg, query, limit=limit))
         except Exception as exc:
-            logger.warning('Prowlarr search failed: %s', exc)
+            logger.warning('Prowlarr search failed: %s', _exc_for_log(exc))
 
     if cfg['jackett_url'] and cfg['jackett_api_key']:
         try:
             hits.extend(_search_jackett(cfg, query, limit=limit))
         except Exception as exc:
-            logger.warning('Jackett search failed: %s', exc)
+            logger.warning('Jackett search failed: %s', _exc_for_log(exc))
 
     return _dedupe_hits(hits, limit=limit)
 
@@ -395,6 +429,9 @@ def _search_prowlarr(cfg: dict, query: str, *, limit: int) -> list[ArrHit]:
         params={'query': query, 'type': 'search', 'limit': limit},
         headers={'X-Api-Key': cfg['prowlarr_api_key']},
         timeout=DEFAULT_TIMEOUT,
+        # Admin-configured hub: the same LAN-aware policy it was saved under,
+        # now applied to the URL actually fetched and to every redirect hop.
+        validator=validate_connector_http_url,
     )
     if resp.status_code >= 400:
         raise RuntimeError(f'Prowlarr search failed ({resp.status_code})')
@@ -422,6 +459,7 @@ def _search_jackett(cfg: dict, query: str, *, limit: int) -> list[ArrHit]:
         url,
         params={'apikey': cfg['jackett_api_key'], 'Query': query},
         timeout=DEFAULT_TIMEOUT,
+        validator=validate_connector_http_url,
     )
     if resp.status_code >= 400:
         raise RuntimeError(f'Jackett search failed ({resp.status_code})')
@@ -451,8 +489,11 @@ def qbittorrent_add_url(download_url: str) -> dict[str, Any]:
         raise ValueError('download_url is required')
 
     session = requests.Session()
-    login = session.post(
+    login = safe_request(
+        'POST',
         urljoin(cfg['qbittorrent_url'] + '/', 'api/v2/auth/login'),
+        validator=validate_connector_http_url,
+        session=session,
         data={
             'username': cfg['qbittorrent_username'],
             'password': cfg['qbittorrent_password'],
@@ -462,8 +503,11 @@ def qbittorrent_add_url(download_url: str) -> dict[str, Any]:
     if login.status_code >= 400 or (login.text or '').strip().lower() == 'fails.':
         raise RuntimeError('qBittorrent login failed')
 
-    add = session.post(
+    add = safe_request(
+        'POST',
         urljoin(cfg['qbittorrent_url'] + '/', 'api/v2/torrents/add'),
+        validator=validate_connector_http_url,
+        session=session,
         data={'urls': download_url},
         timeout=DEFAULT_TIMEOUT,
     )
@@ -483,8 +527,11 @@ def transmission_add_url(download_url: str) -> dict[str, Any]:
         auth = (cfg['transmission_username'], cfg.get('transmission_password') or '')
     # Session id handshake
     session = requests.Session()
-    ping = session.post(
+    ping = safe_request(
+        'POST',
         urljoin(cfg['transmission_url'] + '/', 'transmission/rpc'),
+        validator=validate_connector_http_url,
+        session=session,
         json={'method': 'session-get'},
         auth=auth,
         timeout=DEFAULT_TIMEOUT,
@@ -493,8 +540,11 @@ def transmission_add_url(download_url: str) -> dict[str, Any]:
     session_id = ping.headers.get('X-Transmission-Session-Id')
     if session_id:
         headers['X-Transmission-Session-Id'] = session_id
-    add = session.post(
+    add = safe_request(
+        'POST',
         urljoin(cfg['transmission_url'] + '/', 'transmission/rpc'),
+        validator=validate_connector_http_url,
+        session=session,
         json={'method': 'torrent-add', 'arguments': {'filename': download_url}},
         headers=headers,
         auth=auth,
@@ -511,8 +561,10 @@ def sabnzbd_add_url(nzb_url: str) -> dict[str, Any]:
         raise RuntimeError('SABnzbd is not configured')
     if not nzb_url:
         raise ValueError('nzb_url is required')
-    resp = requests.get(
+    resp = safe_request(
+        'GET',
         urljoin(cfg['sabnzbd_url'] + '/', 'api'),
+        validator=validate_connector_http_url,
         params={
             'mode': 'addurl',
             'name': nzb_url,
@@ -553,8 +605,10 @@ def nzbget_add_url(nzb_url: str) -> dict[str, Any]:
         ],
         'id': 1,
     }
-    resp = requests.post(
+    resp = safe_request(
+        'POST',
         urljoin(cfg['nzbget_url'] + '/', 'jsonrpc'),
+        validator=validate_connector_http_url,
         json=payload,
         auth=auth,
         timeout=DEFAULT_TIMEOUT,

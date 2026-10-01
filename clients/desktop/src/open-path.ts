@@ -18,7 +18,10 @@ export interface OpenPathFailure {
   error: string
 }
 
-/** Absolute Windows drive, UNC, or Unix absolute path (no relative / bare names). */
+/**
+ * Absolute Windows drive, UNC, or Unix absolute path (no relative / bare names).
+ * Shape only: "absolute" is not "allowed" — `validateRevealPath` refuses UNC.
+ */
 export function isAbsoluteOsPath(path: string): boolean {
   const trimmed = path.trim()
   if (!trimmed) {
@@ -37,8 +40,23 @@ export function isAbsoluteOsPath(path: string): boolean {
 }
 
 /**
- * Reject empty, relative, traversal-only, null/control chars, and overlong paths
- * before handing off to the native reveal command.
+ * UNC shares (`\\host\share`, `//host/share`, mixed separators) and the Win32 / NT
+ * device namespaces (`\\?\`, `\\.\`, `\??\`). On Windows even an existence probe of
+ * one of these opens an SMB connection and leaks the user's NTLM hash to the named
+ * host — and the path of a queued `open_path` is chosen by the server.
+ * Mirrors `is_network_or_device_path` in `src-tauri/src/lib.rs`.
+ */
+export function isNetworkOrDevicePath(path: string): boolean {
+  return /^[\\/]{2}/.test(path) || path.startsWith('\\??\\') || path.startsWith('/??/')
+}
+
+/** Shown when a reveal path names a network share or a device. */
+export const NETWORK_PATH_REFUSED =
+  'Network (UNC) and device paths are blocked — map the share to a drive letter and use that path instead'
+
+/**
+ * Reject empty, relative, traversal-only, null/control chars, UNC / device, and
+ * overlong paths before handing off to the native reveal command.
  */
 export function validateRevealPath(
   raw: string,
@@ -56,8 +74,11 @@ export function validateRevealPath(
   if (/[\0\r\n]/.test(path)) {
     return { ok: false, error: 'Path contains invalid control characters' }
   }
+  if (isNetworkOrDevicePath(path)) {
+    return { ok: false, error: NETWORK_PATH_REFUSED }
+  }
   if (!isAbsoluteOsPath(path)) {
-    return { ok: false, error: 'Path must be absolute (drive letter, UNC, or /…)' }
+    return { ok: false, error: 'Path must be absolute (drive letter or /…)' }
   }
   // Reject "C:\.." style escapes that resolve outside a drive root when paired with roots.
   if (/(^|[\\/])\.\.([\\/]|$)/.test(path)) {

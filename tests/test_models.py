@@ -270,14 +270,15 @@ class TestUserModel:
         assert user.is_authenticated is True
         assert user.is_active is True
         assert user.is_anonymous is False
-        # get_id() returns string 'None' when id is None
-        assert user.get_id() == 'None'  # No ID until saved
+        # get_id() is "<id>:<password fingerprint>" (see utils/auth.load_user);
+        # the id part is 'None' until the row is saved.
+        assert user.get_id().split(':')[0] == 'None'  # No ID until saved
         
         user.set_password('password123')
         db_session.add(user)
         db_session.flush()
         
-        assert user.get_id() == str(user.id)
+        assert user.get_id() == f"{user.id}:{user.session_fingerprint()}"
     
     def test_username_reserved_validation(self):
         """Test reserved username validation."""

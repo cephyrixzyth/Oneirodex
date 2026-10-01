@@ -30,7 +30,10 @@ class User(db.Model):
     is_email_verified = db.Column(db.Boolean, default=False)
     email_verification_token = db.Column(db.String(256), nullable=True)
     password_reset_token = db.Column(db.String(256), nullable=True)
-    
+    # The OIDC provider's stable subject ("sub") this account signs in as; see
+    # utils/oidc.provision_or_update_user. NULL until the first OIDC sign-in.
+    oidc_subject = db.Column(db.String(255), nullable=True, unique=True, index=True)
+
     preferences = db.relationship(
         'UserPreference',
         back_populates='user',
@@ -58,14 +61,22 @@ class User(db.Model):
 
     @property
     def is_active(self):
-        return True
+        # A disabled account (state False) is not an active one; None predates the column.
+        return self.state is not False
 
     @property
     def is_anonymous(self):
         return False
 
+    def session_fingerprint(self) -> str:
+        """Changes whenever the password does, so every session and remember
+        cookie issued before a password change stops working."""
+        import hashlib
+        return hashlib.sha256((self.password_hash or '').encode('utf-8')).hexdigest()[:16]
+
     def get_id(self):
-        return str(self.id)
+        # Stored in the session and the remember cookie; see utils/auth.load_user.
+        return f'{self.id}:{self.session_fingerprint()}'
 
     @staticmethod
     def is_username_reserved(username):

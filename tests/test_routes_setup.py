@@ -66,6 +66,46 @@ def global_settings(db_session):
     return settings
 
 
+@pytest.fixture
+def client(client, request):
+    """Signed in as the wizard's admin whenever a test uses ``admin_user``:
+    steps 2-4 belong to the admin created in step 1 (routes_setup._require_setup_admin)."""
+    if 'admin_user' in request.fixturenames:
+        admin = request.getfixturevalue('admin_user')
+        with client.session_transaction() as sess:
+            sess['_user_id'] = admin.get_id()
+            sess['_fresh'] = True
+    return client
+
+
+def _park_wizard_at(db_session, step):
+    settings = db_session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
+    if settings is None:
+        settings = GlobalSettings()
+        db_session.add(settings)
+    settings.setup_in_progress = True
+    settings.setup_completed = False
+    settings.setup_current_step = step
+    db_session.commit()
+    return settings
+
+
+def test_a_signed_out_visitor_cannot_change_mail_settings_mid_wizard(app, db_session, admin_user):
+    """Steps 2-4 used to be open to anyone while the wizard ran: a visitor could
+    point the install's mail at their own server and collect reset links."""
+    settings = _park_wizard_at(db_session, 2)
+    settings.smtp_server = 'mail.household.lan'
+    db_session.commit()
+    visitor = app.test_client()
+    resp = visitor.post('/setup/smtp', data={'smtp_server': 'evil.example', 'smtp_enabled': 'true'})
+    assert resp.status_code == 302 and '/login' in resp.location
+    db_session.expire_all()
+    assert db_session.get(GlobalSettings, settings.id).smtp_server == 'mail.household.lan'
+    for path in ('/setup/features', '/setup/igdb'):
+        _park_wizard_at(db_session, 3 if path.endswith('features') else 4)
+        assert '/login' in visitor.get(path).location
+
+
 @pytest.fixture(autouse=True)
 def _leave_the_wizard_closed(db_session):
     """Put the setup wizard away after every test in this file.
@@ -221,7 +261,7 @@ class TestSetupSubmitRoute:
                     assert response.status_code == 302
                     assert '/setup' in response.location
                     mock_rollback.assert_called_once()
-                    mock_flash.assert_called_with('Error during setup: Database error', 'error')
+                    mock_flash.assert_called_with('The admin account could not be saved. Check the server log for details.', 'error')
     
     @patch('oneirodex.routes_setup.SetupForm')
     def test_setup_submit_form_validation_failed(self, mock_form_class, client, db_session):
@@ -358,7 +398,7 @@ class TestSetupSmtpRoute:
                     
                     assert response.status_code == 200  # Should render template again
                     mock_rollback.assert_called_once()
-                    mock_flash.assert_called_with('Error saving SMTP settings: Database error', 'error')
+                    mock_flash.assert_called_with('SMTP settings could not be saved. Check the server log for details.', 'error')
 
 
 class TestSetupIgdbRoute:
@@ -465,7 +505,7 @@ class TestSetupIgdbRoute:
                     
                     assert response.status_code == 200  # Should render template again
                     mock_rollback.assert_called_once()
-                    mock_flash.assert_called_with('Error saving IGDB settings: Database error', 'error')
+                    mock_flash.assert_called_with('IGDB settings could not be saved. Check the server log for details.', 'error')
     
     @patch('oneirodex.routes_setup.IGDBSetupForm')
     def test_setup_igdb_post_form_validation_failed(self, mock_form_class, client, db_session, admin_user):

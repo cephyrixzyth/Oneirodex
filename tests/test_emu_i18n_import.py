@@ -149,11 +149,11 @@ def test_playnite_import_matches(app, db_session, member):
             [{'Name': unique, 'Id': f'abc-{uuid4().hex[:8]}'}],
         )
         assert result.imported == 1
-        assert result.matched == 1
+        assert result.matched == 0
         row = db_session.query(UserOwnedTitle).filter_by(
             user_id=member.id,
             store='playnite',
             name=unique,
         ).first()
         assert row is not None
-        assert row.matched_game_uuid == game.uuid
+        assert row.matched_game_uuid is None

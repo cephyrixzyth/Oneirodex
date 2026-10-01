@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from flask import current_app
-from oneirodex.utils.security import is_safe_path, get_allowed_base_directories
+from oneirodex.utils.security import get_allowed_base_directories, is_path_within, is_plain_file_within, is_safe_path
 from oneirodex.utils.functions import sanitize_string_input
 
 logger = logging.getLogger(__name__)
@@ -17,13 +17,17 @@ LEGACY_METADATA_FILENAME = 'oneirodex.json'
 
 
 def _resolve_metadata_path(full_disk_path, filename):
-    """Return path to existing metadata file, falling back to legacy name if needed."""
+    """Return path to existing metadata file, falling back to legacy name if needed.
+
+    A sidecar that is a symlink (or resolves outside the game folder) is treated
+    as absent: the folder's contents are scanned, not trusted.
+    """
     primary = os.path.join(full_disk_path, filename)
-    if os.path.exists(primary):
+    if is_plain_file_within(full_disk_path, primary):
         return primary
     if filename != LEGACY_METADATA_FILENAME:
         legacy = os.path.join(full_disk_path, LEGACY_METADATA_FILENAME)
-        if os.path.exists(legacy):
+        if is_plain_file_within(full_disk_path, legacy):
             return legacy
     return None
 
@@ -157,6 +161,13 @@ def write_local_metadata(full_disk_path, igdb_id, game_title=None, manually_veri
         metadata_path = os.path.join(full_disk_path, filename)
         logger.info(f"💾 [LOCAL METADATA] Full metadata path: {metadata_path}")
 
+        # open(..., 'w') follows a link, so a planted ``oneirodex.json -> /x``
+        # would overwrite /x with this JSON. Refuse to write through one, and
+        # refuse a target that would land outside the game folder.
+        if os.path.islink(metadata_path) or not is_path_within(full_disk_path, metadata_path):
+            logger.error(f"🚫 [LOCAL METADATA] Refusing to write metadata through a link or outside {full_disk_path}")
+            return False
+
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
@@ -253,7 +264,9 @@ def get_local_cover_path(full_disk_path):
 
         for filename in cover_filenames:
             cover_path = os.path.join(full_disk_path, filename)
-            if os.path.exists(cover_path) and os.path.isfile(cover_path):
+            # ``cover.jpg -> /etc/whatever`` would otherwise be served by
+            # send_file to any member who may see the game.
+            if is_plain_file_within(full_disk_path, cover_path):
                 logger.info(f"📷 Found local cover: {cover_path}")
                 return cover_path
 
@@ -289,7 +302,7 @@ def get_local_screenshots(full_disk_path):
             for ext in ['.jpg', '.png']:
                 filename = f'screenshot-{i}{ext}'
                 screenshot_path = os.path.join(full_disk_path, filename)
-                if os.path.exists(screenshot_path) and os.path.isfile(screenshot_path):
+                if is_plain_file_within(full_disk_path, screenshot_path):
                     screenshots.append(screenshot_path)
                     break  # Found jpg or png, don't check other extension
 

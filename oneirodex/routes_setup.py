@@ -20,6 +20,32 @@ from oneirodex.utils.event_logging import log_system_event
 
 setup_bp = Blueprint('setup', __name__)
 
+
+def _require_setup_admin():
+    """Steps 2-4 belong to the admin created in step 1, who is signed in by it.
+
+    They used to be open to anyone while the wizard was in progress, so any
+    visitor could point the install's mail at their own SMTP server (and so
+    receive the admin's password-reset links) before the admin got there.
+    """
+    from flask_login import current_user
+    from oneirodex.utils.rbac import normalize_role
+
+    if current_user.is_authenticated and normalize_role(getattr(current_user, 'role', None)) == 'admin':
+        return None
+    flash('Sign in with the admin account you just created to finish setup.', 'warning')
+    return redirect(url_for('login.login', next=request.path))
+
+
+def _setup_failed(what: str, exc: Exception):
+    """Log the detail; show the visitor a fixed message (no exception text)."""
+    from flask import current_app
+
+    db.session.rollback()
+    # The app log, not the database: the database is usually what just failed.
+    current_app.logger.error('%s failed during setup: %s', what, type(exc).__name__)
+    flash(f'{what} could not be saved. Check the server log for details.', 'error')
+
 @setup_bp.route('/setup', methods=['GET'])
 def setup():
     from oneirodex.utils.setup import is_setup_in_progress, get_setup_redirect_url
@@ -73,16 +99,18 @@ def setup_submit():
             db.session.add(user)
             _stage_setup_step(2)  # same session, no intermediate commit
             db.session.commit()
+            # The rest of the wizard requires this admin (_require_setup_admin).
+            from flask_login import login_user
+            login_user(user)
             log_system_event("Admin account created during setup", event_type='setup', event_level='information')
             flash('Admin account created successfully! Please configure your SMTP settings.', 'success')
             return redirect(url_for('setup.setup_smtp'))
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error during setup: {str(e)}', 'error')
+            _setup_failed('The admin account', e)
             return redirect(url_for('setup.setup'))
     else:
-        print(f"Form contents: {form.data}")
-        print(f"Form validation failed: {form.errors}")
+        # Field names only: form.data holds the password and the CSRF token.
+        print(f"Setup form validation failed for: {sorted(form.errors)}")
         return render_template('setup/setup.html', form=form, is_setup_mode=True)
 
 @setup_bp.route('/setup/smtp', methods=['GET', 'POST'])
@@ -97,6 +125,9 @@ def setup_smtp():
     if current_step != 2:
         flash('Please complete the admin account setup first.', 'warning')
         return redirect(url_for('setup.setup'))
+    refusal = _require_setup_admin()
+    if refusal is not None:
+        return refusal
 
     if request.method == 'POST':
         # Check if skip button was clicked
@@ -122,8 +153,7 @@ def setup_smtp():
             flash('SMTP settings saved. Choose which features to keep enabled.', 'success')
             return redirect(url_for('setup.setup_features'))
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error saving SMTP settings: {str(e)}', 'error')
+            _setup_failed('SMTP settings', e)
 
     return render_template('setup/setup_smtp.html', is_setup_mode=True)
 
@@ -137,6 +167,9 @@ def setup_features():
     if current_step != 3:
         flash('Please complete the previous setup steps first.', 'warning')
         return redirect(url_for('setup.setup'))
+    refusal = _require_setup_admin()
+    if refusal is not None:
+        return refusal
 
     defaults = {
         'enable_game_updates': True,
@@ -164,8 +197,7 @@ def setup_features():
             flash('Feature preferences saved. Configure IGDB next.', 'success')
             return redirect(url_for('setup.setup_igdb'))
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error saving features: {str(e)}', 'error')
+            _setup_failed('Feature preferences', e)
 
     return render_template(
         'setup/setup_features.html',
@@ -181,6 +213,9 @@ def setup_igdb():
     if current_step != 4:
         flash('Please complete the previous setup steps first.', 'warning')
         return redirect(url_for('setup.setup'))
+    refusal = _require_setup_admin()
+    if refusal is not None:
+        return refusal
 
     form = IGDBSetupForm()
     if form.validate_on_submit():
@@ -203,7 +238,6 @@ def setup_igdb():
             initialize_allowed_file_types()
             return redirect(url_for('library.libraries'))
         except Exception as e:
-            db.session.rollback()
-            flash(f'Error saving IGDB settings: {str(e)}', 'error')
+            _setup_failed('IGDB settings', e)
 
     return render_template('setup/setup_igdb.html', form=form, is_setup_mode=True)

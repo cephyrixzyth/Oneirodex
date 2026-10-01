@@ -133,6 +133,8 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'user_game_status',
         'user_notifications',
         'user_owned_titles',
+        # A member's match history for those titles; cascades with the title.
+        'ownership_match_decisions',
         'user_taste_facets',
         'user_content_filters',
         'user_attract_mode_settings',
@@ -147,6 +149,8 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'play_sessions',
         'emulator_saves',
         'store_accounts',
+        # Per-member store sync runs (LIB-04); meaningless without the account.
+        'store_sync_jobs',
         'api_tokens',
         'client_devices',
         'invite_tokens',

@@ -6,6 +6,7 @@ play has no rcheevos runtime, so a set is *shown*, never *played for*, here.
 
 from __future__ import annotations
 
+from flask import current_app
 from flask_login import current_user, login_required
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -65,7 +66,9 @@ def retroachievements_match(body: MatchBody):
         return api_error(str(exc), code='forbidden')
     except Exception as exc:  # noqa: BLE001 — a provider outage is a 502-class answer, not a trace
         db.session.rollback()
-        return api_error(f'RetroAchievements lookup failed: {exc}', code='upstream')
+        # Not the exception text: the request URL carries the API key.
+        current_app.logger.warning('RetroAchievements lookup failed: %s', type(exc).__name__)
+        return api_error('RetroAchievements lookup failed. Try again later.', code='upstream')
     return api_ok(summary)
 
 

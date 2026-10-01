@@ -63,6 +63,69 @@ export function filtersFromSearchParams(searchParams: URLSearchParams): LibraryF
   if (filterTree) {
     next.filter_tree = filterTree
   }
+  // LIB-02: store / ownership filters live in the URL, so a filtered view can
+  // be linked and survives a reload. `store` may repeat or be a comma list.
+  const stores = searchParams
+    .getAll('store')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+  if (stores.length) {
+    next.store = Array.from(new Set(stores)).join(',')
+  }
+  const storeMatch = (searchParams.get('store_match') || '').trim().toLowerCase()
+  if (storeMatch) {
+    next.store_match = storeMatch
+  }
+  const ownership = (searchParams.get('ownership') || '').trim().toLowerCase()
+  if (ownership) {
+    next.ownership = ownership
+  }
+  return next
+}
+
+/** Ownership filters mirrored into the URL (the rest persist in the cookie, as before). */
+export const OWNERSHIP_FILTER_KEYS = ['store', 'store_match', 'ownership'] as const
+
+/** Library filter params a URL may carry, with the older alias each one also answers to. */
+const URL_FILTER_PARAMS: [key: string, alias?: string][] = [
+  ['library_platform'],
+  ['play_mode'],
+  ['genre'],
+  ['theme'],
+  ['game_mode'],
+  ['player_perspective'],
+  ['item_kind', 'content_kind'],
+  ['name', 'q'],
+  ['filter_tree'],
+  ...BADGE_FILTER_PARAMS.map((param): [string] => [param]),
+]
+
+/**
+ * The URL to show for `filters`. Ownership params are always written, so a
+ * store-filtered view can be linked. Any other filter param the URL already
+ * carries (a deep link's genre, a Systems page's platform, a smart collection's
+ * tree) is updated to the applied value or dropped. Otherwise the URL would
+ * still hold the old value, and the next URL read would put it back.
+ * Filters the URL never carried are not added: those persist in the cookie.
+ */
+export function withLibraryParams(
+  current: URLSearchParams,
+  filters: LibraryFilters,
+): URLSearchParams {
+  const next = new URLSearchParams(current)
+  for (const key of OWNERSHIP_FILTER_KEYS) {
+    const value = filters[key]
+    if (value) next.set(key, value)
+    else next.delete(key)
+  }
+  for (const [key, alias] of URL_FILTER_PARAMS) {
+    if (!next.has(key) && !(alias && next.has(alias))) continue
+    const value = filters[key]
+    if (alias) next.delete(alias)
+    if (value) next.set(key, value)
+    else next.delete(key)
+  }
   return next
 }
 
@@ -78,7 +141,10 @@ export function searchParamsHaveLibraryFilters(searchParams: URLSearchParams): b
     searchParams.has('content_kind') ||
     searchParams.has('name') ||
     searchParams.has('q') ||
-    searchParams.has('filter_tree')
+    searchParams.has('filter_tree') ||
+    searchParams.has('store') ||
+    searchParams.has('store_match') ||
+    searchParams.has('ownership')
   ) {
     return true
   }

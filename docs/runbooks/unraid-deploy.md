@@ -9,7 +9,7 @@ Do these **before** and **after** every Unraid `git pull` / image rebuild. Agent
 | Gate | Operator step | Why |
 |---|---|---|
 | **Free host disk** | Unraid Main / Shares: free space until the array is **well under ~99% full** (target: tens of GB free on the cache/array used by Docker) | Pull + `docker compose build` fail or evict other containers when the host is full |
-| **Workspace path** | Edit the live checkout: Unraid `/mnt/user/infernal-data-streams/_projects/Oneirodex`, Windows `Z:\_projects\Oneirodex` | This tree **is** the Compose Manager stack. `/mnt/user/isos/oneirodex/` is retired. Games stay on `/mnt/user/infernal-data-streams/_software/_games` (scan root), not the repo |
+| **Workspace path** | Edit the live checkout: Unraid `/mnt/user/example-share/_projects/Oneirodex`, Windows `Z:\_projects\Oneirodex` | This tree **is** the Compose Manager stack. `/mnt/user/isos/oneirodex/` is retired. Games stay on `/mnt/user/example-share/_software/_games` (scan root), not the repo |
 | **Disk hygiene (dev caches)** | Optional: wipe regenerable local caches only — [workspace-disk-hygiene.md](workspace-disk-hygiene.md) | Shrinks build context; does **not** free Unraid array capacity by itself |
 
 ### After deploy (every code image)
@@ -51,7 +51,9 @@ Exact steps: [libraries-and-scans.md — After A0–A14](../admin/libraries-and-
 | `DATABASE_URL` | Yes (Compose builds it) | Host is always `db` — do not use `@localhost` |
 | `DATA_FOLDER_GAMES` | Yes | **Host** games path in `.env` (Compose mounts → `/storage:ro`). Container env hard-sets `/storage`. |
 | `LIBRARY_HOST_PATH` | Yes | **Host** appdata library path → `/app/oneirodex/static/library` RW |
-| `POSTGRES_*` | If using bundled db | Match Compose `db` service |
+| `POSTGRES_PASSWORD` | If using bundled db | **Set a strong value** (`python -c "import secrets; print(secrets.token_hex(24))"`). Compose still falls back to `postgres` when it is unset so old stacks start, but that is a known superuser password. Read only when the `db_data` volume is first created — rotate an existing one per [docker-compose-deploy.md](docker-compose-deploy.md#rotating-the-password-on-an-existing-database). |
+| `POSTGRES_HOST_BIND` / `POSTGRES_HOST_PORT` | No | Host publish of Postgres. Defaults to `127.0.0.1:5432` (this Unraid box only). Set `POSTGRES_HOST_BIND=<Unraid LAN IP>` to reach it from another machine; see [Postgres exposure](docker-compose-deploy.md#postgres-exposure-and-password). |
+| other `POSTGRES_*` | If using bundled db | Match Compose `db` service |
 
 Template: [`.env.unraid.example`](../../.env.unraid.example) (also `.env.nas.example` / `.env.docker.example`).
 
@@ -150,8 +152,8 @@ This household’s Unraid stack **is** the git checkout (not a copy under `isos`
 
 | Field | Path |
 |---|---|
-| External ENV File Path | `/mnt/user/infernal-data-streams/_projects/Oneirodex/.env` |
-| Indirect Compose File | `/mnt/user/infernal-data-streams/_projects/Oneirodex/docker-compose.yml` |
+| External ENV File Path | `/mnt/user/example-share/_projects/Oneirodex/.env` |
+| Indirect Compose File | `/mnt/user/example-share/_projects/Oneirodex/docker-compose.yml` |
 | Indirect Path | leave empty |
 
 Windows mapping of the same tree: `Z:\_projects\Oneirodex`. Short copy notes: [NAS-DEPLOY.md](../../NAS-DEPLOY.md).
@@ -161,14 +163,14 @@ Windows mapping of the same tree: `Z:\_projects\Oneirodex`. Short copy notes: [N
 Copy template (only if `.env` is missing):
 
 ```bash
-cp .env.unraid.example /mnt/user/infernal-data-streams/_projects/Oneirodex/.env
+cp .env.unraid.example /mnt/user/example-share/_projects/Oneirodex/.env
 # set SECRET_KEY + host volume paths, then Compose Manager → Update Stack
 ```
 
 This household’s volume binds (inside `.env`, not as the compose-file path):
 
 ```bash
-DATA_FOLDER_GAMES=/mnt/user/infernal-data-streams/_software/_games
+DATA_FOLDER_GAMES=/mnt/user/example-share/_software/_games
 LIBRARY_HOST_PATH=/mnt/cache/appdata/oneirodex/library
 ```
 
@@ -178,14 +180,15 @@ Sidecars are **opt-in** — not started with bare `app` + `db`.
 
 | Profile | Enable | App env |
 |---|---|---|
-| `livekit` | `docker compose --profile livekit up -d` | `ENABLE_LIVEKIT=true` + `LIVEKIT_URL` / keys — [livekit-unraid.md](livekit-unraid.md) |
+| `livekit` | `docker compose --profile livekit up -d` | `ENABLE_LIVEKIT=true` + `LIVEKIT_URL` + **your own** `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` (no `--dev`, no built-in pair; empty keys = container refuses to start) — [livekit-unraid.md](livekit-unraid.md) |
 | `clamav` | `docker compose --profile clamav up -d` | `ENABLE_MALWARE_SCAN=true`, `CLAMAV_HOST=clamav` |
 | `challenge` | `docker compose --profile challenge up -d` | `ENABLE_CHALLENGE_SOLVER=true`, `CHALLENGE_SOLVER_URL=http://trawl:8191` — [challenge-solver-unraid.md](challenge-solver-unraid.md) |
 | `artwork` | `docker compose --profile artwork up -d` | `ENABLE_AI_ARTWORK=true`, `AI_ARTWORK_URL=http://sdnext:7860` — **CPU-only here**, see below |
 
 **`artwork` has no GPU on this box.** The SD.Next sidecar runs on CPU, which is
 extremely slow rather than broken — usually a reason not to enable the profile
-here at all. Put the generator on the Windows 2080 workstation with
+here at all. It has no login, so its UI is published on `127.0.0.1:7860` only
+(`SDNEXT_HOST_BIND`); the app reaches it as `http://sdnext:7860` over the Compose network. Put the generator on the Windows 2080 workstation with
 [`docker-compose.artwork-local.yml`](../../docker-compose.artwork-local.yml)
 and point `AI_ARTWORK_URL` at that LAN IP — [artwork-gpu-workstation.md](artwork-gpu-workstation.md).
 Do **not** merge `docker-compose.gpu.yml` into Unraid `COMPOSE_FILE`. If a stack
@@ -201,7 +204,7 @@ docker compose --profile livekit --profile clamav --profile challenge up -d --bu
 
 This household’s Unraid `.env` pins `COMPOSE_FILE=docker-compose.yml` so Compose Manager does not merge `docker-compose.override.yml` (NVIDIA `deploy` on `sdnext` fails the whole stack when the driver is not loaded). Product flags that are on in that file still leave **`ENABLE_AI_AUTO_APPLY=false`** and **`ALLOW_HARDLINK_APPLY=false`**. Artwork stays on the Windows 2080 box (`AI_ARTWORK_URL`), not `--profile artwork`. `ONEIRODEX_LIBRARY_WATCH` stays off on `/mnt/user` FUSE.
 
-SSO is **Authentik** already installed via Dockerman (`authentik` / `authentik-worker` on `authentik-net`, UI `http://192.168.50.116:9000`). Oneirodex OAuth slug **`oneirodex`**, redirect `http://192.168.50.116:5006/login/oidc/callback`. Env `OIDC_ENABLED=true` is not enough — also set `global_settings.oidc_enabled` (Admin → Integrations → OIDC, or SQL after rebuild). LAN HTTP cookies: `SESSION_COOKIE_SECURE=false`, `TRUSTED_PROXIES=0`. Walkthrough: [oidc-authentik-unraid.md](oidc-authentik-unraid.md) Appendix A.
+SSO is **Authentik** already installed via Dockerman (`authentik` / `authentik-worker` on `authentik-net`, UI `http://192.0.2.10:9000`). Oneirodex OAuth slug **`oneirodex`**, redirect `http://192.0.2.10:5006/login/oidc/callback`. Env `OIDC_ENABLED=true` is not enough — also set `global_settings.oidc_enabled` (Admin → Integrations → OIDC, or SQL after rebuild). LAN HTTP cookies: `SESSION_COOKIE_SECURE=false`, `TRUSTED_PROXIES=0`. Walkthrough: [oidc-authentik-unraid.md](oidc-authentik-unraid.md) Appendix A.
 
 **Observability / Grafana:** not bundled. Prefer Admin → Ops + probes. Commented Compose stub only — [observability-profile.md](observability-profile.md).
 
@@ -241,7 +244,7 @@ docker inspect oneirodex-db --format '{{json .Mounts}}' | python3 -m json.tool
 3. **Confirm the app points at that DB** (Compose default host is `db`, not an external URL):
 
 ```bash
-docker exec oneirodex-app printenv DATABASE_URL DATABASE_HOST
+docker exec oneirodex-app python -c "import os; from sqlalchemy.engine import make_url; u=make_url(os.environ['DATABASE_URL']); print('host:', u.host, 'database:', u.database)"
 # Expect host `db` (or the compose service name). If host is a LAN IP / other container → external DB; wiping compose db_data will not clear login.
 ```
 

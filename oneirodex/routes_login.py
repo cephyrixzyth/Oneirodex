@@ -10,7 +10,7 @@ from oneirodex.utils.public_origin import (
     site_url_is_configured,
 )
 from oneirodex.forms import LoginForm, RegistrationForm, ResetPasswordRequestForm, InviteForm, UserPasswordForm
-from oneirodex.utils.auth import _authenticate_and_redirect, safe_next_url
+from oneirodex.utils.auth import burn_password_check, safe_next_url, sign_in_and_redirect
 from oneirodex.utils.accounts import is_placeholder_email
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.smtp import send_email, send_password_reset_email, send_invite_email
@@ -39,7 +39,7 @@ from oneirodex.utils.login_rate_limit import (
 )
 from oneirodex import cache
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from urllib.parse import urlparse
 from itsdangerous import SignatureExpired, BadSignature
 from uuid import uuid4
@@ -91,48 +91,45 @@ def login():
 
         user = db.session.execute(select(User).filter_by(name=username)).scalar_one_or_none()
 
-        if user:
-            # Accounts an admin created without an email carry an unroutable
-            # `no-email.invalid` placeholder and are never marked verified —
-            # there is nothing to verify. The activation gate is about real
-            # addresses that have not been confirmed yet, so skip it for them.
-            if not user.is_email_verified and not is_placeholder_email(user.email):
-                flash('Your account is not activated, check your email.', 'warning')
-                log_system_event(f"User {username} attempted to log in with an unverified account.", event_type='login', event_level='warning')
-                record_failure(rate_key)
-                return redirect(url_for('login.login'))
-
-            if not user.state:
-                flash('Your account has been banned.', 'error')
-                log_system_event(f"User {username} attempted to log in with a banned account.", event_type='login', event_level='warning')
-                record_failure(rate_key)
-                return redirect(url_for('login.login'))
-
-            if not user.check_password(password):
-                flash(_INVALID_CREDS, 'error')
+        # Password first, for every account: telling a visitor "not activated"
+        # or "banned" before checking the password confirms the username
+        # exists, and skipping the hash for unknown names showed in the timing.
+        if user is None:
+            burn_password_check(password)
+        if user is None or not user.check_password(password):
+            flash(_INVALID_CREDS, 'error')
+            if user is None:
+                log_system_event(f"Failed login for unknown user from {ip}", event_type='login', event_level='warning')
+            else:
                 log_system_event(
                     f"User {username} attempted to log in with invalid credentials.",
                     event_type='login',
                     event_level='warning',
                 )
-                record_failure(rate_key)
-                record_failure(login_rate_key(ip, None))
-                return redirect(url_for('login.login'))
-
-            clear_failures(rate_key)
-            clear_failures(login_rate_key(ip, None))
-            log_system_event(f"User {username} logged in successfully.", event_type='login', event_level='information')
-            return _authenticate_and_redirect(username, password)
-        else:
-            flash(_INVALID_CREDS, 'error')
-            log_system_event(
-                f"Failed login for unknown user from {ip}",
-                event_type='login',
-                event_level='warning',
-            )
             record_failure(rate_key)
             record_failure(login_rate_key(ip, None))
             return redirect(url_for('login.login'))
+
+        # Accounts an admin created without an email carry an unroutable
+        # `no-email.invalid` placeholder and are never marked verified —
+        # there is nothing to verify. The activation gate is about real
+        # addresses that have not been confirmed yet, so skip it for them.
+        if not user.is_email_verified and not is_placeholder_email(user.email):
+            flash('Your account is not activated, check your email.', 'warning')
+            log_system_event(f"User {username} attempted to log in with an unverified account.", event_type='login', event_level='warning')
+            record_failure(rate_key)
+            return redirect(url_for('login.login'))
+
+        if not user.state:
+            flash('Your account has been banned.', 'error')
+            log_system_event(f"User {username} attempted to log in with a banned account.", event_type='login', event_level='warning')
+            record_failure(rate_key)
+            return redirect(url_for('login.login'))
+
+        clear_failures(rate_key)
+        clear_failures(login_rate_key(ip, None))
+        log_system_event(f"User {username} logged in successfully.", event_type='login', event_level='information')
+        return sign_in_and_redirect(user)
 
     settings_record = global_settings_row()
     oidc_config = build_oidc_config(settings_record)
@@ -296,7 +293,10 @@ def register():
                     flash('Your email is not whitelisted.')
                     return redirect(url_for('login.register'))
 
-            existing_user = db.session.execute(select(User).filter_by(name=form.username.data)).scalar_one_or_none()
+            # Case-insensitive: "Admin" next to "admin" made login pick either row.
+            existing_user = db.session.execute(
+                select(User).filter(func.lower(User.name) == (form.username.data or '').lower())
+            ).scalars().first()
             if existing_user is not None:
                 flash('User already exists. Please Log in.')
                 return redirect(url_for('login.register'))
@@ -318,15 +318,24 @@ def register():
                 created=datetime.now(timezone.utc)
             )
             user.set_password(form.password.data)
+            if invite:
+                # Claim the invite in the same transaction as the account, and
+                # only if nobody else has: one link, one account. It used to be
+                # marked used after the commit, and never saved at all when no
+                # mail went out, so one link could register many accounts.
+                claimed = db.session.execute(
+                    update(InviteToken)
+                    .where(InviteToken.id == invite.id, InviteToken.used.is_(False))
+                    .values(used=True, used_by=user_uuid, used_at=datetime.now(timezone.utc))
+                ).rowcount
+                if claimed != 1:
+                    db.session.rollback()
+                    flash('The invite is invalid or has expired.', 'warning')
+                    return redirect(url_for('login.register'))
             db.session.add(user)
             db.session.commit()
-            
+
             log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
-            
-            if invite:
-                invite.used = True
-                invite.used_by = user.user_id
-                invite.used_at = datetime.now(timezone.utc)
 
             # Verification email
             verification_token = user.email_verification_token

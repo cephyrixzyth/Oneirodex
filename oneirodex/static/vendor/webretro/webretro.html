@@ -516,9 +516,10 @@
                     }
                     var reqId = 'gt-' + (++reqSeq);
                     pending[reqId] = { resolve: resolve, reject: reject };
+                    // Own origin only: the bridge refuses others (od-bridge.js isTrustedOrigin).
                     emuFrame.contentWindow.postMessage(
                         Object.assign({ source: 'oneirodex', type: type, reqId: reqId }, payload || {}),
-                        '*',
+                        window.location.origin,
                     );
                     window.setTimeout(function () {
                         if (!pending[reqId]) return;
@@ -959,7 +960,7 @@
                 frame.src = path + '?core=' + encodeURIComponent(queries.core || '') +
                     '&rom=' + encodeURIComponent(apiUrl + queries.guid) +
                     '&nobundle=1' +
-                    '&_gt=save-states-4';
+                    '&_gt=save-states-5';
                 node.appendChild(frame);
                 return frame;
             }

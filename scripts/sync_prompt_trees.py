@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mirror .cursor/{skills,agents} → .claude/{skills,agents}.
+"""Mirror canonical .cursor prompts to Claude and Codex discovery trees.
 
 Canonical edit surface is ``.cursor/``. Claude Code still loads ``.claude/``,
 so this script copies the trees. ``--check`` exits 1 if they differ (CI and
@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[1]
 PAIRS = (
     (REPO / ".cursor" / "skills", REPO / ".claude" / "skills"),
     (REPO / ".cursor" / "agents", REPO / ".claude" / "agents"),
+    (REPO / ".cursor" / "skills", REPO / ".agents" / "skills"),
 )
 
 
@@ -29,6 +30,9 @@ def _rel_files(root: Path) -> set[str]:
 def check() -> list[str]:
     problems: list[str] = []
     for src, dst in PAIRS:
+        if not src.is_dir():
+            problems.append(f"missing canonical directory: {src.relative_to(REPO)}")
+            continue
         src_files = _rel_files(src)
         dst_files = _rel_files(dst)
         src_label = src.relative_to(REPO).as_posix()
@@ -45,6 +49,21 @@ def check() -> list[str]:
 
 def sync() -> int:
     copied = 0
+    # Validate all resolved targets before touching any generated tree. Refuse
+    # links/junctions and missing source trees instead of deleting a mirror.
+    for src, dst in PAIRS:
+        if not src.is_dir():
+            raise ValueError(f"Missing canonical tree: {src}")
+        for root in (src, dst):
+            if not root.resolve().is_relative_to(REPO.resolve()):
+                raise ValueError(f"Prompt tree escapes repository: {root}")
+            for path in [root, *root.parents][:len(root.relative_to(REPO).parts)]:
+                if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
+                    raise ValueError(f"Linked prompt directory: {path}")
+            if root.exists():
+                for path in root.rglob('*'):
+                    if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
+                        raise ValueError(f"Linked prompt entry: {path}")
     for src, dst in PAIRS:
         if dst.exists():
             shutil.rmtree(dst)
@@ -58,7 +77,7 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 if .claude/ drifted from .cursor/",
+        help="exit 1 if generated .claude/ or .agents/ skills drifted",
     )
     args = parser.parse_args()
     if args.check:
@@ -76,7 +95,7 @@ def main() -> int:
     # U+2192 that used to be here raised UnicodeEncodeError *after* the mirror
     # had already succeeded — so the script exited non-zero on a clean run and
     # made `--check` look like drift.
-    print(f"mirrored {count} files .cursor/ -> .claude/")
+    print(f"mirrored {count} files .cursor/ -> .claude/ and .agents/skills/")
     return 0
 
 

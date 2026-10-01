@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 echo "🚀 Oneirodex container starting up..."
 
@@ -109,4 +110,4 @@ except Exception as e:
 wait_for_postgres
 
 echo "🎮 Starting Oneirodex Docker container..."
-/app/startweb-docker.sh "$@"
+exec /app/startweb-docker.sh "$@"

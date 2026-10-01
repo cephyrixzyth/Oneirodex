@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import socket
 from pathlib import Path
@@ -106,6 +107,38 @@ def sanitize_path_for_logging(path, max_length=100):
     return sanitized
 
 
+def is_path_within(base, path) -> bool:
+    """True when *path* resolves to somewhere strictly below *base*.
+
+    Both sides go through ``realpath``, so a symlink anywhere in *path* that
+    leaves *base* makes this False, and ``..`` segments cannot talk their way
+    out. *base* is not "within" itself: callers ask about files.
+    """
+    try:
+        real_base = Path(os.path.realpath(base))
+        real_path = Path(os.path.realpath(path))
+        return real_path != real_base and real_path.is_relative_to(real_base)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def is_plain_file_within(base, path) -> bool:
+    """True for a regular file under *base* that is not itself a symlink.
+
+    Game folders are scanned, not authored by the operator: a
+    ``game.bin -> /etc/whatever`` link inside one must not be hashed, bundled,
+    zipped or served. Symlinks are skipped outright (a link to another file in
+    the same folder is not worth the ambiguity) and the realpath check catches
+    the case where a parent directory is the link.
+    """
+    try:
+        if os.path.islink(path) or not os.path.isfile(path):
+            return False
+    except (OSError, ValueError):
+        return False
+    return is_path_within(base, path)
+
+
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """True for any address an outbound fetch has no business reaching."""
     # An IPv4-mapped IPv6 literal (``::ffff:127.0.0.1``) reports False for
@@ -120,6 +153,13 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        # Shared address space (RFC 6598, 100.64.0.0/10) is neither private nor
+        # reserved to the ipaddress module, yet it is where Tailscale peers and
+        # Alibaba's metadata service (100.100.100.200) live. Anything that is
+        # not globally routable is not somewhere a public-facing fetch belongs;
+        # the homelab flag reopens it for admin connectors the same way it
+        # reopens RFC1918.
+        or not ip.is_global
     )
 
 
@@ -192,6 +232,18 @@ def is_blocked_outbound_host(hostname: str | None, *, resolve: bool = True) -> b
     return any(_is_blocked_ip(ip) for ip in resolved)
 
 
+#: Instance-metadata endpoints that are not link-local, so the ``is_link_local``
+#: test misses them: Alibaba's sits in the shared address space that
+#: ``_is_blocked_ip`` now refuses, and AWS's IPv6 endpoint is a ULA. Both would
+#: otherwise come back when ``ALLOW_PRIVATE_LAN_URLS`` reopens private ranges.
+_CLOUD_METADATA_HOSTS = frozenset({
+    'metadata.google.internal',
+    '169.254.169.254',
+    '100.100.100.200',
+    'fd00:ec2::254',
+})
+
+
 def is_cloud_metadata_host(hostname: str | None) -> bool:
     """True for a cloud instance-metadata endpoint, by name or by resolution.
 
@@ -204,7 +256,7 @@ def is_cloud_metadata_host(hostname: str | None) -> bool:
     host = hostname.strip().lower().rstrip('.')
     if host.startswith('[') and host.endswith(']'):
         host = host[1:-1]
-    if host in {'metadata.google.internal', '169.254.169.254'}:
+    if host in _CLOUD_METADATA_HOSTS:
         return True
 
     literal = _parse_ip_literal(host)
@@ -213,7 +265,7 @@ def is_cloud_metadata_host(hostname: str | None) -> bool:
         mapped = getattr(ip, 'ipv4_mapped', None)
         if mapped is not None:
             ip = mapped
-        if ip.is_link_local:
+        if ip.is_link_local or str(ip) in _CLOUD_METADATA_HOSTS:
             return True
     return False
 

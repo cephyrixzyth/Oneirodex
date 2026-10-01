@@ -48,6 +48,8 @@
 
     "allow-save-installs",
 
+    "allow-retain-install-files",
+
     "allow-get-app-subdir",
 
     "allow-write-file-bytes",

@@ -5,12 +5,9 @@ import type { OneirodexClient } from './api.js'
 import { isTauriRuntime } from './config-store.js'
 import { downloadGameArchive } from './download.js'
 import { extractInstallArchive, getInstallRecord } from './install.js'
-import {
-  loadInstallsFromDisk,
-  saveInstallsToDisk,
-  type GameInstallRecord,
-} from './install-store.js'
+import { loadInstallsFromDisk, saveInstallsToDisk } from './install-store.js'
 import type { GameLifecycleState, LifecycleRegistry } from './lifecycle.js'
+import { assertValidGameUuid } from './paths.js'
 
 async function removeLocalPath(path: string | undefined | null): Promise<void> {
   if (!path || !isTauriRuntime()) {
@@ -19,18 +16,12 @@ async function removeLocalPath(path: string | undefined | null): Promise<void> {
   await invoke('remove_path', { path })
 }
 
-async function renameLocalPath(from: string, to: string): Promise<void> {
-  if (!isTauriRuntime()) {
-    return
-  }
-  await invoke('rename_path', { from, to })
-}
-
 export async function kickoffUninstall(
   registry: LifecycleRegistry,
   gameUuid: string,
   options: { removeArchive?: boolean } = {},
 ): Promise<GameLifecycleState> {
+  assertValidGameUuid(gameUuid)
   const state = registry.get(gameUuid)
   if (state !== 'downloaded' && state !== 'installed' && state !== 'update_available') {
     throw new Error(`Game ${gameUuid} cannot be uninstalled from state ${state}`)
@@ -39,7 +30,17 @@ export async function kickoffUninstall(
   const removeArchive = options.removeArchive ?? true
   const record = await getInstallRecord(gameUuid)
   if (record) {
-    await removeLocalPath(record.extractPath)
+    // Preserve the complete merged install, including game-local saves. Archive
+    // retention alone cannot reconstruct a base game plus later patch packs.
+    const retainedPath =
+      state === 'downloaded' || record.pendingUninstall
+        ? record.retainedPath
+        : isTauriRuntime()
+          ? await invoke<string | null>('preserve_install_files', {
+              path: record.extractPath,
+              backupPath: `${record.extractPath}.uninstalled-${crypto.randomUUID()}`,
+            })
+          : record.retainedPath
     // Update staging dirs may remain after a failed rename — clean them too.
     if (record.extractPath) {
       await removeLocalPath(`${record.extractPath}.staging`)
@@ -49,11 +50,17 @@ export async function kickoffUninstall(
     }
 
     const installs = await loadInstallsFromDisk()
-    delete installs[gameUuid]
+    if (removeArchive) {
+      delete installs[gameUuid]
+    } else {
+      installs[gameUuid] = { ...record, retainedPath, pendingUninstall: true, exePath: null }
+    }
     await saveInstallsToDisk(installs)
+    if (state !== 'downloaded') await removeLocalPath(record.extractPath)
   }
 
-  let next = registry.apply(gameUuid, 'uninstall')
+  let next =
+    !removeArchive && state === 'downloaded' ? state : registry.apply(gameUuid, 'uninstall')
   // Default uninstall removes the archive — `downloaded` without files is a dead end.
   if (removeArchive && next === 'downloaded') {
     next = registry.apply(gameUuid, 'uninstall')
@@ -73,6 +80,7 @@ export async function kickoffUpdate(
     versionUuid?: string
   } = {},
 ): Promise<GameLifecycleState> {
+  assertValidGameUuid(gameUuid)
   const state = registry.get(gameUuid)
   const applyingPack =
     Boolean(options.versionUuid) || options.kind === 'update' || options.kind === 'extra'
@@ -86,44 +94,35 @@ export async function kickoffUpdate(
   }
 
   const existing = await getInstallRecord(gameUuid)
+  if (!existing) throw new Error('No working install record found for update')
+  if (existing.pendingUninstall) throw new Error('Finish uninstall or reinstall before updating')
+  // Each attempt has its own files. The atomic registry replacement is the
+  // commit point; a crash before it leaves the previous install selected.
   const record = await downloadGameArchive(api, auth, gameUuid, {
     fetchImpl: options.fetchImpl,
     onProgress: options.onProgress,
     kind: options.kind,
     versionUuid: options.versionUuid,
+    generation: `update-${crypto.randomUUID()}`,
   })
 
-  const finalExtract = record.extractPath
-  const stagingExtract = `${finalExtract}.staging`
-
-  if (isTauriRuntime()) {
-    const stagingRecord: GameInstallRecord = {
-      ...record,
-      extractPath: stagingExtract,
-    }
-    const extracted = await extractInstallArchive(gameUuid, stagingRecord)
-    if (existing?.extractPath && existing.extractPath !== stagingExtract) {
-      await removeLocalPath(existing.extractPath)
-    }
-    if (finalExtract !== stagingExtract) {
-      await removeLocalPath(finalExtract)
-      await renameLocalPath(stagingExtract, finalExtract)
-    }
-    const remappedExe =
-      extracted.exePath && extracted.exePath.startsWith(stagingExtract)
-        ? `${finalExtract}${extracted.exePath.slice(stagingExtract.length)}`
-        : (extracted.exePath ?? null)
-    await saveInstallsToDisk({
-      ...(await loadInstallsFromDisk()),
-      [gameUuid]: {
-        archivePath: record.archivePath,
-        extractPath: finalExtract,
-        exePath: remappedExe,
-      },
+  const extracted = await extractInstallArchive(gameUuid, record, { persist: false })
+  if (isTauriRuntime() && state !== 'downloaded') {
+    // Carry files absent from the update (including saves and base files in
+    // patch packs). Colliding files remain recoverable in the old directory.
+    await invoke('retain_install_files', {
+      from: existing.extractPath,
+      to: extracted.extractPath,
     })
-  } else {
-    await extractInstallArchive(gameUuid, record)
+    if (!extracted.exePath && existing.exePath?.startsWith(`${existing.extractPath}/`)) {
+      extracted.exePath =
+        extracted.extractPath + existing.exePath.slice(existing.extractPath.length)
+    }
   }
+  await saveInstallsToDisk({
+    ...(await loadInstallsFromDisk()),
+    [gameUuid]: extracted,
+  })
 
   if (needsForcedUpdateState) {
     registry.signalUpdateAvailable(gameUuid)

@@ -48,7 +48,8 @@ def smtp_settings():
                     'SMTP username is required when SMTP is enabled',
                     code='bad_request',
                 )
-            if not data.get('smtp_password'):
+            # The page never shows the saved password; blank keeps it.
+            if not data.get('smtp_password') and not settings.smtp_password:
                 return api_error(
                     'SMTP password is required when SMTP is enabled',
                     code='bad_request',
@@ -74,7 +75,8 @@ def smtp_settings():
         settings.smtp_enabled = data.get('smtp_enabled', False)
         settings.smtp_server = data.get('smtp_server')
         settings.smtp_username = data.get('smtp_username')
-        settings.smtp_password = data.get('smtp_password')
+        if data.get('smtp_password'):
+            settings.smtp_password = data.get('smtp_password')
         settings.smtp_use_tls = data.get('smtp_use_tls', True)
         settings.smtp_default_sender = data.get('smtp_default_sender')
         settings.smtp_enabled = data.get('smtp_enabled', False)

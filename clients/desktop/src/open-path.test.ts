@@ -7,13 +7,15 @@ vi.mock('@tauri-apps/api/core', () => ({
 import { invoke } from '@tauri-apps/api/core'
 import {
   isAbsoluteOsPath,
+  isNetworkOrDevicePath,
   isRevealAllowedUnderRoots,
+  NETWORK_PATH_REFUSED,
   revealPathInOs,
   validateRevealPath,
 } from './open-path.js'
 
 describe('open-path validation', () => {
-  it('accepts Windows drive, UNC, and Unix absolute paths', () => {
+  it('recognises Windows drive, UNC, and Unix absolute shapes (UNC is refused by validateRevealPath)', () => {
     expect(isAbsoluteOsPath('C:\\Games\\Foo')).toBe(true)
     expect(isAbsoluteOsPath('Z:/games/bar')).toBe(true)
     expect(isAbsoluteOsPath('\\\\nas\\share\\games')).toBe(true)
@@ -39,6 +41,59 @@ describe('open-path validation', () => {
     expect(isRevealAllowedUnderRoots(`${root}\\game-1`, [root])).toBe(true)
     expect(isRevealAllowedUnderRoots('C:\\Windows\\System32', [root])).toBe(false)
     expect(isRevealAllowedUnderRoots('C:\\Windows\\System32', [])).toBe(true)
+  })
+})
+
+describe('UNC and device paths', () => {
+  // On Windows even probing one of these makes the OS answer an NTLM challenge
+  // from whichever host the path names. `open_path` paths come from the server.
+  const refused = [
+    '\\\\attacker\\x',
+    '\\\\attacker\\share\\game',
+    '//attacker/x',
+    '\\/attacker\\x',
+    '/\\attacker/x',
+    '\\\\?\\C:\\Windows',
+    '\\\\?\\UNC\\attacker\\x',
+    '\\\\.\\pipe\\x',
+    '\\??\\C:\\Windows',
+    '//?/C:/Windows',
+    '  \\\\attacker\\x  ',
+  ]
+
+  it('detects network and device paths but not local ones', () => {
+    for (const path of refused) {
+      expect(isNetworkOrDevicePath(path.trim()), path).toBe(true)
+    }
+    for (const path of [
+      'C:\\Games\\Foo',
+      'Z:/games/bar',
+      '/mnt/user/games/Foo',
+      '/home/me/games',
+      '\\single\\leading',
+      '/a//b',
+    ]) {
+      expect(isNetworkOrDevicePath(path), path).toBe(false)
+    }
+  })
+
+  it('validateRevealPath refuses them with the network-path message', () => {
+    for (const path of refused) {
+      expect(validateRevealPath(path), path).toEqual({ ok: false, error: NETWORK_PATH_REFUSED })
+    }
+    expect(validateRevealPath('Z:\\games\\Foo')).toEqual({ ok: true, path: 'Z:\\games\\Foo' })
+  })
+
+  it('revealPathInOs never calls the native command for them, with or without roots', async () => {
+    vi.mocked(invoke).mockReset()
+    for (const path of refused) {
+      expect(await revealPathInOs(path), path).toEqual({ ok: false, error: NETWORK_PATH_REFUSED })
+      expect(await revealPathInOs(path, { allowedRoots: ['\\\\attacker\\x'] }), path).toEqual({
+        ok: false,
+        error: NETWORK_PATH_REFUSED,
+      })
+    }
+    expect(invoke).not.toHaveBeenCalled()
   })
 })
 

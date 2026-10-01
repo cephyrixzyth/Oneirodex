@@ -523,11 +523,6 @@
     "any-annotation": 4,
     "any-generic": 2
   },
-  "frontend/member-app/src/pages/OwnershipPage.tsx": {
-    "any-annotation": 24,
-    "any-generic": 6,
-    "any-alias": 1
-  },
   "frontend/member-app/src/pages/PlaytimePage.tsx": {
     "any-annotation": 2
   },
@@ -627,9 +622,6 @@
   },
   "frontend/member-app/src/utils/recentTitles.ts": {
     "any-annotation": 5
-  },
-  "frontend/member-app/src/utils/safeUrl.ts": {
-    "any-annotation": 1
   },
   "frontend/member-app/src/utils/seatMode.ts": {
     "any-annotation": 1

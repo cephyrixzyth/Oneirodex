@@ -24,6 +24,7 @@ is on) for admin-configured connectors.
 
 from __future__ import annotations
 
+from copy import copy
 from typing import Callable
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -35,6 +36,46 @@ from oneirodex.utils import security
 DEFAULT_MAX_REDIRECTS = 5
 
 Validator = Callable[[str], tuple[bool, str]]
+
+# Unknown headers may be provider credentials (for example Nexus's `apikey`).
+_REDIRECT_HEADERS = frozenset({
+    'accept', 'accept-encoding', 'accept-language', 'user-agent', 'range',
+    'if-range', 'if-none-match', 'if-modified-since',
+    'content-type', 'content-length', 'transfer-encoding',
+})
+
+
+def _origin(url):
+    parsed = urlparse(url)
+    return parsed.scheme.lower(), parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)
+
+
+def _body_positions(kwargs):
+    """Record stream positions before the first send for method-preserving hops."""
+    values = [kwargs.get('data')]
+    files = kwargs.get('files') or {}
+    for _, value in (files.items() if hasattr(files, 'items') else files):
+        values.append(value[1] if isinstance(value, (tuple, list)) else value)
+    positions = []
+    for value in values:
+        if hasattr(value, 'read'):
+            try:
+                positions.append((value, value.tell()))
+            except (AttributeError, OSError):
+                positions.append((value, None))
+        elif value is not None and not isinstance(value, (str, bytes, bytearray, dict, list, tuple)):
+            positions.append((value, None))
+    return positions
+
+
+def _rewind_body(positions):
+    for stream, position in positions:
+        try:
+            if position is None:
+                raise OSError
+            stream.seek(position)
+        except (AttributeError, OSError, ValueError):
+            raise requests.exceptions.UnrewindableBodyError('Cannot replay redirect request body') from None
 
 
 class BlockedOutboundUrl(requests.RequestException):
@@ -208,6 +249,8 @@ def _request_loop(
     kwargs: dict,
     origin: str,
 ) -> requests.Response:
+    method = method.upper()
+    positions = _body_positions(kwargs)
     for _ in range(max_redirects + 1):
         connect_url, tls_name = _pin_checked_address(current, validator)
         req_kwargs = dict(kwargs)
@@ -228,16 +271,75 @@ def _request_loop(
         # Relative Location is legal and common; resolve against the hop we
         # were given (the hostname URL), then validate the absolute result.
         # Joining against the pinned IP would drop the name on the next hop.
-        current = _validated(urljoin(current, location), validator)
-        # A redirected GET must not replay the original body.
-        kwargs.pop('data', None)
-        kwargs.pop('json', None)
-        kwargs.pop('files', None)
-        method = 'GET' if response.status_code in (301, 302, 303) else method
+        try:
+            target = _validated(urljoin(current, location), validator)
+            cross_origin = _origin(current) != _origin(target)
+            if cross_origin and response.status_code in (307, 308) and any(
+                kwargs.get(key) is not None for key in ('data', 'json', 'files')
+            ):
+                # OAuth/device-auth bodies contain secrets too. Header stripping
+                # cannot make their replay to a new origin safe.
+                raise BlockedOutboundUrl(target, 'Cross-origin request body replay is not allowed')
+            # A Location must not inject new URL credentials, even with a permissive validator.
+            if urlparse(target).username is not None:
+                raise BlockedOutboundUrl(target, 'Redirect credentials are not allowed')
+            kwargs.pop('params', None)
+            headers = dict(kwargs.get('headers') or {})
+            if isinstance(caller, requests.Session):
+                # Detach request defaults, but keep caller-owned transport adapters open.
+                redirected = copy(caller)
+                redirected.params = {}
+                redirected.headers = caller.headers.copy()
+                if cross_origin:
+                    settings = caller.merge_environment_settings(target, kwargs.get('proxies') or {},
+                                                                 kwargs.get('stream'), kwargs.get('verify'), None)
+                    kwargs.setdefault('verify', settings['verify'])
+                    kwargs.setdefault('proxies', settings['proxies'])
+                    redirected.trust_env = False
+                    redirected.auth = None
+                    redirected.cert = None
+                    redirected.cookies = requests.cookies.RequestsCookieJar()
+                    redirected.hooks = requests.hooks.default_hooks()
+                    redirected.headers = requests.structures.CaseInsensitiveDict({
+                        k: v for k, v in redirected.headers.items() if k.lower() in _REDIRECT_HEADERS
+                    })
+                caller = redirected
+            if cross_origin:
+                headers = {k: v for k, v in headers.items() if k.lower() in _REDIRECT_HEADERS}
+                for key in ('auth', 'cookies', 'hooks', 'cert'):
+                    kwargs.pop(key, None)
+                # A module-level call must also suppress automatic netrc credentials.
+                kwargs['auth'] = _NoRedirectAuth()
+            if response.status_code not in (307, 308):
+                if method != 'HEAD' and (response.status_code in (302, 303) or
+                                         response.status_code == 301 and method == 'POST'):
+                    method = 'GET'
+                for key in ('data', 'json', 'files'):
+                    kwargs.pop(key, None)
+                body_headers = {'content-type', 'content-length', 'transfer-encoding'}
+                headers = {k: v for k, v in headers.items() if k.lower() not in body_headers}
+                if isinstance(caller, requests.Session):
+                    for key in list(caller.headers):
+                        if key.lower() in body_headers:
+                            del caller.headers[key]
+                positions = []
+            else:
+                _rewind_body(positions)
+            kwargs['headers'] = headers
+            current = target
+        finally:
+            # Release redirect responses, including rejected destinations.
+            if hasattr(response, 'close'):
+                response.close()
 
     raise requests.TooManyRedirects(
-        f'Exceeded {max_redirects} redirects starting from {origin}'
+        f'Exceeded {max_redirects} redirects'
     )
+
+
+class _NoRedirectAuth(requests.auth.AuthBase):
+    def __call__(self, request):
+        return request
 
 
 def safe_get(url: str, *, validator: Validator, **kwargs) -> requests.Response:

@@ -5,10 +5,36 @@ Provides memory-efficient streaming ZIP creation for multi-file games.
 
 import os
 import asyncio
-from typing import AsyncGenerator, Tuple, Optional, Dict, Any
+from typing import AsyncGenerator, Iterator, Tuple, Optional, Dict, Any
 import zipstream
-from oneirodex.utils.security import is_safe_path
+from oneirodex.utils.security import is_plain_file_within, is_safe_path
 from oneirodex.utils.event_logging import log_system_event
+
+
+def _iter_folder_files(source_path: str, excluded_folders) -> Iterator[str]:
+    """Yield the regular files of a game folder that may be downloaded.
+
+    A game folder is scanned content, so it can hold ``game.bin -> /etc/x``.
+    ``zs.write`` would follow that link and stream the target into the zip for
+    whoever asked for the download. Symlinks (to files or folders) are skipped,
+    and so is anything whose realpath is not under the folder itself.
+    """
+    excluded = {name.lower() for name in excluded_folders}
+    real_root = os.path.realpath(source_path)
+    for root, dirs, files in os.walk(source_path):
+        # Excluded folders are pruned, and so are linked folders: os.walk does
+        # not descend into them, but they should not look like content either.
+        dirs[:] = [
+            d for d in dirs
+            if d.lower() not in excluded and not os.path.islink(os.path.join(root, d))
+        ]
+        for file in files:
+            if file.lower() in ('oneirodex.json', 'oneirodex.json'):
+                continue
+            file_path = os.path.join(root, file)
+            if not is_plain_file_within(real_root, file_path):
+                continue
+            yield file_path
 
 
 async def async_generate_zipstream_chunks(
@@ -57,17 +83,10 @@ async def async_generate_zipstream_chunks(
             zs.write(source_path, arcname=file_name)
         else:
             # Directory - walk and add files while excluding certain folders
-            for root, dirs, files in os.walk(source_path):
-                # Filter out excluded directories
-                dirs[:] = [d for d in dirs if d.lower() not in [f.lower() for f in excluded_folders]]
-                
-                for file in files:
-                    if file.lower() in ('oneirodex.json', 'oneirodex.json'):
-                        continue
-                    file_path = os.path.join(root, file)
-                    # Create relative path for archive
-                    rel_path = os.path.relpath(file_path, source_path)
-                    zs.write(file_path, arcname=rel_path)
+            for file_path in _iter_folder_files(source_path, excluded_folders):
+                # Create relative path for archive
+                rel_path = os.path.relpath(file_path, source_path)
+                zs.write(file_path, arcname=rel_path)
         
         # Generate chunks asynchronously
         for chunk in zs:
@@ -148,20 +167,13 @@ def estimate_zip_size(source_path: str) -> Optional[int]:
             total_size = 0
             file_count = 0
             
-            for root, dirs, files in os.walk(source_path):
-                # Skip excluded folders
-                dirs[:] = [d for d in dirs if d.lower() not in ['updates', 'extras']]
-                
-                for file in files:
-                    if file.lower() in ('oneirodex.json', 'oneirodex.json'):
-                        continue
-                    file_path = os.path.join(root, file)
-                    try:
-                        total_size += os.path.getsize(file_path)
-                        file_count += 1
-                    except (OSError, IOError):
-                        # Skip files we can't read
-                        continue
+            for file_path in _iter_folder_files(source_path, ['updates', 'extras']):
+                try:
+                    total_size += os.path.getsize(file_path)
+                    file_count += 1
+                except (OSError, IOError):
+                    # Skip files we can't read
+                    continue
             
             if file_count == 0:
                 return None

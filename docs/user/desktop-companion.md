@@ -7,7 +7,7 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 1. Open **Account → API tokens** (`/tokens`) — or create via `POST /api/tokens` if you prefer the API.
 2. Create a token with the **Desktop companion** preset (`read:library` + `write:download`), or **Thin client** for connect-only seats.
 3. Copy the one-time secret (`gt_<hexprefix>_<urlsafe-secret>`) — it is shown only once. The secret uses URL-safe base64 (`A–Z`, `a–z`, `0–9`, `_`, `-`), so **hyphens and underscores in the secret are normal**. Paste the **entire** `gt_…` string into Connect. Truncating at a `-` (or any earlier character) always fails auth. On plain HTTP LAN, browser clipboard may be limited — use **Copy secret** (copies the raw token only) or select the one-time secret field and Ctrl+C / ⌘C.
-4. Open the companion, enter your Oneirodex **base URL** and token, Connect. Paste is normalized (whitespace/newlines, BOM/zero-width, wrapping quotes, first `gt_…` match from labeled/HTML junk) — hyphens inside the secret are kept. Status distinguishes invalid shape, 401 (wrong/truncated secret), network/TLS/CORS, and OS credential-store failures. Companion console logs `[Oneirodex:connect]` / `[Oneirodex:keyring]` (prefix only, never the secret) when the server log is empty.
+4. Open the companion, enter your Oneirodex **base URL** (**`https://`** — plain `http://` is accepted only for `localhost`/loopback, private LAN addresses such as `192.168.x.x`, `10.x.x.x` and `172.16–31.x.x`, link-local `169.254.x.x`, IPv6 `::1` / `fc00::/7` / `fe80::/10`, `*.local` names and bare single-word host names like `nas`; any other `http://` server is refused before the token is sent, with a message telling you to use `https://`) and token, Connect. Paste is normalized (whitespace/newlines, BOM/zero-width, wrapping quotes, first `gt_…` match from labeled/HTML junk) — hyphens inside the secret are kept. Status distinguishes invalid shape, 401 (wrong/truncated secret), network/TLS/CORS, and OS credential-store failures. Companion console logs `[Oneirodex:connect]` / `[Oneirodex:keyring]` (prefix only, never the secret) when the server log is empty.
 5. Library preview loads via search; local lifecycle syncs with the server when available.
 6. Status shows **Online** / **Offline (server unreachable)** / **Not connected**. After two failed heartbeats, Download and Update are disabled; Play, Install, and Uninstall still run locally. Web-queued Install/Update commands stay pending until heartbeat recovers (nack → retry).
 
@@ -40,12 +40,19 @@ The Friends webview is least-privilege (browse only); install/launch ACLs stay o
 
 ## Lifecycle
 
+Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected
+by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html).
+The advisory concerns string-variant iteration and is patched in glib 0.20+;
+upgrading glib alone does not replace Tauri's GTK3 dependency chain. The current
+Windows target does not include glib. Linux/Steam Deck release acceptance must
+retain this upstream dependency risk; Windows tests do not resolve it.
+
 | Action | Local effect |
 |---|---|
 | Download | Streams archive into the companion downloads folder (chunked append). When a title has more than one version, an in-window picker (arrow keys / Enter, Escape to cancel) chooses base vs. update/extra; a single version downloads straight away. |
 | Install | Extracts zip into installs folder |
-| Update | Downloads into a `.staging` folder, swaps into place, then marks installed |
-| Uninstall | Removes extract dir, leftover `.staging`, and archive (by default) |
+| Update | Prepares a separate generation, carries forward missing base/save files, then atomically selects the new install |
+| Uninstall | Preserves an install snapshot before removing the active directory; removes the archive by default |
 | Play | Launches detected / stored exe |
 | Cheat staging | Before RetroArch companion launch, downloads library `.cht` into `app_data/cheats/{gameUuid}/` **only when** launch/payload `cheat_surface=retroarch` (Wave 19 GM lock). Never stages for PCWIN/PCDOS/MAC/OTHER (`pc_wand` / soft-hide). Tauri ACL allows `downloads` + `cheats`. |
 | Translation patch apply | When `ENABLE_ROM_PATCH_APPLY=true` and `FLIPS_PATH` is set, stages `.ips`/`.bps` under `app_data/patches/` and runs Flips CLI — [translation-patches.md](translation-patches.md) |
@@ -57,6 +64,19 @@ The Friends webview is least-privilege (browse only); install/launch ACLs stay o
 
 When search marks `has_updates` (or `lifecycle_state=update_available`) and the title is locally **installed**, Connect flips it to **Update available**.
 
+Updates retain the previous install and archive. A failed download, extraction,
+copy or registry replacement leaves that working install selected. After restart,
+the registry selects either the old or fully prepared new generation. Save files
+absent from the update are carried forward; files replaced by the archive remain
+recoverable in the previous directory. No game-specific save-conflict merge is attempted.
+
+Uninstall copies the complete install (including local saves) to a sibling
+`.uninstalled-…` snapshot before removing active files. Retaining the archive also
+retains that snapshot's record, so Install restores the complete game and patch
+packs without downloading again. A failed restore can be retried into a new directory.
+Snapshots and previous update generations consume disk space and are not automatically
+deleted; review and back up saves before manually removing any obsolete copies.
+
 Browser WebRetro still applies cheats via the in-page Emscripten FS bridge when `cheat_surface=retroarch`; use the companion path for heavy/native RetroArch systems when the browser FS cannot write. Author or upload `.cht` files on game details → **Cheats** (same library the play bar lists). PC / native (`PCWIN`/`PCDOS`/`MAC`/`OTHER`): notes or BYO trainer only — companion never stages `.cht`.
 
 ## Open path (Explorer / Finder)
@@ -64,7 +84,7 @@ Browser WebRetro still applies cheats via the in-page Emscripten FS bridge when 
 The browser cannot open Unraid/host paths. When the companion is Online:
 
 1. **Local install** — use **Show in Explorer** in the companion (no server command).
-2. **Member library / admin unmatched** — queue `action: "open_path"` with an absolute `path` the companion machine can see (mapped drive / UNC / local mount). Heartbeat delivers it; companion validates (absolute, no `..`, no control chars, path exists) then opens Explorer / Finder.
+2. **Member library / admin unmatched** — queue `action: "open_path"` with an absolute `path` the companion machine can see (mapped drive letter / local mount — **not** a UNC `\\host\share` path). Heartbeat delivers it; companion validates (absolute, not UNC / device, no `..`, no control chars, path exists) then opens Explorer / Finder.
 
 ### How UI should invoke
 
@@ -76,9 +96,9 @@ The browser cannot open Unraid/host paths. When the companion is Online:
 
 **Server allowlist:** enqueue rejects paths outside configured library roots (`DATA_FOLDER_GAMES` / `BASE_FOLDER_*`) and library `last_scan_folder` values — clear `400` with the validation message. `open_path` is allowlisted in `client_commands`. `GET /api/path/open` remains path-info only (admin).
 
-**Safe path checks (companion):** absolute only · reject `..` segments · reject null/CR/LF · max 4096 chars · must exist on the companion host · local-install reveal also under `app_data/installs`.
+**Safe path checks (companion):** absolute only · reject UNC (`\\host\share`, `//host/share`) and device paths (`\\?\…`, `\\.\…`, `\??\…`) before any file-system lookup — on Windows even checking whether such a path exists makes Windows authenticate to that host and leak the user's NTLM hash, and a queued `open_path` is chosen by the server · reject `..` segments · reject null/CR/LF · max 4096 chars · must exist on the companion host · local-install reveal also under `app_data/installs`. The companion does not know the server's library roots (the server never tells it, and the same folder has a different path on each PC), so queued `open_path` commands are not restricted to a root list on this side; the server allowlist above plus the checks in this paragraph are the guards.
 
-**Mount caveat:** Docker/Unraid paths like `/mnt/user/games/…` will fail unless that exact path exists on the companion PC. Send the Windows/macOS-visible path (e.g. `Z:\games\…` or UNC).
+**Mount caveat:** Docker/Unraid paths like `/mnt/user/games/…` will fail unless that exact path exists on the companion PC. Send the Windows/macOS-visible path (e.g. `Z:\games\…` — map a network share to a drive letter; UNC paths are refused).
 
 ## Limits (this polish pass)
 
@@ -99,10 +119,13 @@ The browser cannot open Unraid/host paths. When the companion is Online:
 | Download / Update buttons disabled | Companion Offline banner | Re-Connect or wait for heartbeat; Play/Install/Uninstall still work |
 | Friends window permission errors on install | Social webview has no FS ACL (by design) | Use lifecycle actions in the **main** companion window |
 | Update button missing | Server didn’t flag updates | Refresh Connect; check freshness inbox on web |
-| Staging folder left behind | Failed update mid-swap | Uninstall the title (cleans `.staging`) or delete `…/<uuid>.staging` |
+| Extra update / uninstall directories | Recovery copies or an interrupted preparation | Keep the selected install and save backups; retry the operation. Review obsolete copies before manual cleanup |
 | Cheat not applied in native RetroArch | Missing `cheat_surface=retroarch`, PC platform, or core needs Quick Menu load | Confirm browse/launch payload has `cheat_surface=retroarch` (not PCWIN/PCDOS/MAC/OTHER). Then Quick Menu → Cheats → Load Cheat File from companion `cheats/{uuid}/` |
 | Apply patch fails / button missing | Flag off or Flips missing | Set `ENABLE_ROM_PATCH_APPLY` + `FLIPS_PATH`, or apply manually with Flips |
 | Apply mods disabled / fails | Companion offline, no install, or empty mod list | Re-Connect (Online); install locally first; librarian must add enabled mods with BYO URLs. WebRetro cannot load PC mods. |
-| Open path / Show in Explorer fails | Path missing on this PC, relative path, or companion offline for queued open | Use a mapped/UNC path the companion can see; for local installs use **Show in Explorer**; keep clipboard / Auto Scan fallback on admin unmatched when companion is offline |
+| Open path / Show in Explorer fails | Path missing on this PC, relative path, or companion offline for queued open | Use a mapped-drive or local path the companion can see (UNC `\\host\share` paths are refused — map the share to a drive letter); for local installs use **Show in Explorer**; keep clipboard / Auto Scan fallback on admin unmatched when companion is offline |
+| Connect / thin client says *Refusing http://… your API token would be sent unencrypted* | Server URL is plain `http://` to a host outside your local network | Use the server's `https://` URL; for a home server use its LAN address, `.local` name or bare host name, which are allowed over `http://` |
+| *Invalid game id from server* | The server sent a game id that is not letters / digits / `_` / `-` (1–64 chars) | Nothing was written. Report it to the server admin — such an id cannot be used as a folder name |
+| *Refusing http:// mod source …* | A mod `source_url` is plain `http://` to a host outside your local network (or redirects to one) | The librarian should change the mod's source URL to `https://` |
 
 Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [translation-patches.md](translation-patches.md) · [social-and-voice.md](social-and-voice.md) — Friends window section mirrors web dock / pop-out / Big Picture **Y**

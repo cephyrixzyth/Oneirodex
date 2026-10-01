@@ -27,6 +27,7 @@ from oneirodex.utils.emulator_bios import (
     store_bios_file,
 )
 from oneirodex.utils.emulator_cheats import (
+    CheatLimitError,
     create_cheat_file,
     delete_cheat_file,
     list_cheat_files,
@@ -111,6 +112,8 @@ def upload_game_cheat(game_uuid):
     if upload is not None and (getattr(upload, 'filename', None) or '').strip():
         try:
             row = store_cheat_file(game_uuid, upload)
+        except CheatLimitError as exc:
+            return api_error(str(exc), code=exc.code)
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')
         return jsonify(row), 201
@@ -124,6 +127,8 @@ def upload_game_cheat(game_uuid):
                 codes=data.get('codes'),
                 dialect=data.get('dialect'),
             )
+        except CheatLimitError as exc:
+            return api_error(str(exc), code=exc.code)
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')
         return jsonify(row), 201

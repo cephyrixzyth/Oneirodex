@@ -43,6 +43,7 @@ from flask import current_app, has_app_context
 
 from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
+from oneirodex.utils.library_paths import library_dir
 
 logger = logging.getLogger(__name__)
 
@@ -96,18 +97,12 @@ def feed_url() -> str:
 
 
 def cache_path() -> str:
-    """``ANTICHEAT_CACHE_PATH`` or ``<app>/static/library/anticheat/games.json``
+    """``ANTICHEAT_CACHE_PATH`` or ``<library>/anticheat/games.json``
     (the RW library volume in Docker, so the file survives a rebuild)."""
     explicit = (os.environ.get('ANTICHEAT_CACHE_PATH') or '').strip()
     if explicit:
         return explicit
-    try:
-        root = current_app.root_path if has_app_context() else None
-    except Exception:  # noqa: BLE001
-        root = None
-    if not root:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(root, 'static', 'library', 'anticheat', 'games.json')
+    return os.path.join(library_dir(), 'anticheat', 'games.json')
 
 
 # --- parsing -----------------------------------------------------------------

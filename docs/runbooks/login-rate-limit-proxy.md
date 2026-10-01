@@ -8,6 +8,7 @@ Oneirodex already rate-limits `/login` and password-reset in-process when `ENABL
 |---|---|
 | `ENABLE_LOGIN_RATE_LIMIT` | Default `true` — see `.env.example` |
 | Keys | Per IP + username and per IP alone |
+| Client IP | The connection's address. A client-sent `X-Forwarded-For` is ignored, because anyone can set it. Behind a reverse proxy, set `TRUSTED_PROXIES` to the number of proxies in front of Oneirodex; the app then takes the client address from the hops those proxies added. Without it, every visitor shares the proxy's address and one bucket. |
 | Scope | In-memory per process — not shared across replicas |
 
 Disable only for local debugging. Keep it on in production even with proxy limits.

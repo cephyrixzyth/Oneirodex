@@ -13,7 +13,12 @@ from oneirodex.utils.game_core import get_game_by_uuid
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.local_metadata import get_local_cover_path, get_local_screenshots
 from oneirodex.utils.member_spa import render_member_spa
-from oneirodex.utils.security import get_allowed_base_directories, is_safe_path, sanitize_path_for_logging
+from oneirodex.utils.security import (
+    get_allowed_base_directories,
+    is_plain_file_within,
+    is_safe_path,
+    sanitize_path_for_logging,
+)
 
 # Re-export for older callers that imported get_path_size from this module.
 from oneirodex.utils.functions import get_path_size  # noqa: F401
@@ -119,6 +124,17 @@ def serve_local_image(game_uuid, image_type):
             event_level='warning',
         )
         abort(400, "Invalid image type")
+
+    # The helpers already skip links, but this is the last line before send_file
+    # follows whatever is on disk, so re-check: a regular file inside the game
+    # folder, nothing else.
+    if image_path and not is_plain_file_within(game.full_disk_path, image_path):
+        log_system_event(
+            f"Security: refused local {image_type} image that is a link or leaves the game folder for game {game.name}",
+            event_type='security',
+            event_level='warning',
+        )
+        image_path = None
 
     if not image_path or not os.path.exists(image_path):
         log_system_event(

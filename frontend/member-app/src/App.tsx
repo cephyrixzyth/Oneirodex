@@ -74,6 +74,9 @@ const NewsPage = lazy(() => import('./pages/NewsPage').then((m) => ({ default: m
 const OwnershipPage = lazy(() =>
   import('./pages/OwnershipPage').then((m) => ({ default: m.OwnershipPage })),
 )
+const WelcomePage = lazy(() =>
+  import('./pages/WelcomePage').then((m) => ({ default: m.WelcomePage })),
+)
 const PlaytimePage = lazy(() =>
   import('./pages/PlaytimePage').then((m) => ({ default: m.PlaytimePage })),
 )
@@ -464,6 +467,14 @@ export function App() {
           element={
             <LazyPage>
               <OwnershipPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/welcome"
+          element={
+            <LazyPage>
+              <WelcomePage />
             </LazyPage>
           }
         />

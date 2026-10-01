@@ -3,7 +3,7 @@
 import uuid
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import g, jsonify, request
+from flask import current_app, g, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
@@ -57,6 +57,12 @@ def client_capabilities_get():
 @apis_bp.route('/client/heartbeat', methods=['POST'])
 @login_required
 def client_heartbeat():
+    # CSRF-exempt for companion tokens only: a session-cookie caller (a
+    # browser) must pass the normal CSRF check, or any site could post here.
+    if not _has_companion_token() and current_app.config.get('WTF_CSRF_ENABLED', True):
+        from oneirodex import csrf
+
+        csrf.protect()
     data = request.get_json(silent=True) or {}
     device_id = (data.get('device_id') or '').strip()
     if not device_id:

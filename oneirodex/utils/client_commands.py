@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from oneirodex.utils.library_paths import library_dir
 
 _LOCK = threading.Lock()
 _VALID_ACTIONS = frozenset({
@@ -84,7 +85,7 @@ def _library_root() -> str:
             return upload
     except RuntimeError:
         pass
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'library')
+    return library_dir(os.path.dirname(os.path.dirname(__file__)))
 
 
 def _open_path_allowed_bases() -> list[str]:

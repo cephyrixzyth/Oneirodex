@@ -9,6 +9,7 @@ import {
 } from './install-store.js'
 
 import type { GameLifecycleState, LifecycleRegistry } from './lifecycle.js'
+import { assertValidGameUuid } from './paths.js'
 
 interface ExtractZipResult {
   extract_path: string
@@ -26,16 +27,22 @@ export async function extractInstallArchive(
   gameUuid: string,
 
   record: GameInstallRecord,
+  options: { persist?: boolean } = {},
 ): Promise<GameInstallRecord> {
   if (!isTauriRuntime()) {
     return record
   }
 
-  const result = await invoke<ExtractZipResult>('extract_zip_archive', {
-    archivePath: record.archivePath,
+  const result = record.retainedPath
+    ? await invoke<ExtractZipResult>('restore_install_snapshot', {
+        from: record.retainedPath,
+        to: `${record.extractPath}.reinstall-${crypto.randomUUID()}`,
+      })
+    : await invoke<ExtractZipResult>('extract_zip_archive', {
+        archivePath: record.archivePath,
 
-    destDir: record.extractPath,
-  })
+        destDir: record.extractPath,
+      })
 
   const updated: GameInstallRecord = {
     archivePath: record.archivePath,
@@ -43,13 +50,14 @@ export async function extractInstallArchive(
     extractPath: result.extract_path,
 
     exePath: result.exe_path ?? null,
+    ...(record.retainedPath ? { retainedPath: record.retainedPath } : {}),
   }
 
-  const installs = await loadInstallsFromDisk()
-
-  installs[gameUuid] = updated
-
-  await saveInstallsToDisk(installs)
+  if (options.persist !== false) {
+    const installs = await loadInstallsFromDisk()
+    installs[gameUuid] = updated
+    await saveInstallsToDisk(installs)
+  }
 
   return updated
 }
@@ -59,6 +67,8 @@ export async function kickoffInstall(
 
   gameUuid: string,
 ): Promise<GameLifecycleState> {
+  assertValidGameUuid(gameUuid)
+
   if (registry.get(gameUuid) !== 'downloaded') {
     throw new Error(`Game ${gameUuid} is not in downloaded state`)
   }

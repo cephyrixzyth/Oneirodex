@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import time
 
 import pytest
 
@@ -305,6 +306,15 @@ class TestCustomThemePreservation:
         assert not (themes_root / 'retrowave' / 'js').exists()
 
 
+def _age_tree(*roots):
+    """Backdate every file an hour, as a copy made on an earlier boot would be."""
+    old = time.time() - 3600
+    for root in roots:
+        for path in root.rglob('*'):
+            if path.is_file():
+                os.utime(path, (old, old))
+
+
 class TestContentAwareSync:
     def test_changed_source_file_propagates(self, source_tree, tmp_path):
         target = tmp_path / 'default'
@@ -330,6 +340,29 @@ class TestContentAwareSync:
         sync_theme_tree(str(source_tree), str(target))
 
         assert sync_theme_tree(str(source_tree), str(target)) == 0
+
+    def test_an_old_untouched_copy_is_matched_without_reading_it(self, source_tree, tmp_path, monkeypatch):
+        import oneirodex.utils.preset_themes as preset_themes
+
+        target = tmp_path / 'default'
+        sync_theme_tree(str(source_tree), str(target))
+        _age_tree(source_tree, target)
+
+        def no_reads(_path):
+            raise AssertionError('an unchanged copy should not be opened')
+
+        monkeypatch.setattr(preset_themes, 'file_digest', no_reads)
+        assert sync_theme_tree(str(source_tree), str(target)) == 0
+
+    def test_a_same_size_edit_is_still_caught(self, source_tree, tmp_path):
+        target = tmp_path / 'default'
+        sync_theme_tree(str(source_tree), str(target))
+        _age_tree(source_tree, target)
+        write(str(target / 'js' / 'app.js'), 'console.log("XX");\n')  # same length as "v1"
+        assert os.path.getsize(target / 'js' / 'app.js') == os.path.getsize(source_tree / 'js' / 'app.js')
+
+        assert sync_theme_tree(str(source_tree), str(target)) == 1
+        assert read(str(target / 'js' / 'app.js')) == 'console.log("v1");\n'
 
     def test_protected_files_are_not_overwritten(self, source_tree, tmp_path):
         target = tmp_path / 'preset'

@@ -6,6 +6,8 @@ export interface GameInstallRecord {
   archivePath: string
   extractPath: string
   exePath?: string | null
+  retainedPath?: string | null
+  pendingUninstall?: boolean
 }
 
 export interface InstallsFile {
@@ -16,6 +18,8 @@ interface RawInstallRecord {
   archive_path: string
   extract_path: string
   exe_path?: string | null
+  retained_path?: string | null
+  pending_uninstall?: boolean
 }
 
 interface RawInstallsFile {
@@ -32,6 +36,8 @@ function toRawInstalls(
         archive_path: record.archivePath,
         extract_path: record.extractPath,
         exe_path: record.exePath ?? null,
+        ...(record.retainedPath ? { retained_path: record.retainedPath } : {}),
+        ...(record.pendingUninstall ? { pending_uninstall: true } : {}),
       },
     ]),
   )
@@ -51,6 +57,8 @@ function fromRawInstalls(
         archivePath: record.archive_path,
         extractPath: record.extract_path,
         exePath: record.exe_path ?? null,
+        ...(record.retained_path ? { retainedPath: record.retained_path } : {}),
+        ...(record.pending_uninstall ? { pendingUninstall: true } : {}),
       },
     ]),
   )

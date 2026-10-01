@@ -1,0 +1,67 @@
+/* Store connection diagnostics (LIB-04). Tokens only. */
+
+.od-own-diag__household {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.od-own-diag__household div {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface);
+}
+
+.od-own-diag__household dt {
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+}
+
+.od-own-diag__household dd {
+  margin: 0;
+  color: var(--od-text);
+  font-weight: 600;
+}
+
+.od-own-diag__warn {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 3px solid var(--od-warning);
+  background: color-mix(in srgb, var(--od-warning) 10%, var(--od-surface));
+  color: var(--od-text);
+  font-size: var(--od-font-sm);
+}
+
+.od-own-diag__badge {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: var(--od-radius-pill, 999px);
+  background: color-mix(in srgb, currentColor 14%, var(--od-surface));
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.od-own-diag__badge[data-tone='good'] {
+  color: var(--od-success);
+}
+
+.od-own-diag__badge[data-tone='info'] {
+  color: var(--od-info);
+}
+
+.od-own-diag__badge[data-tone='warn'] {
+  color: var(--od-warning);
+}
+
+.od-own-diag__badge[data-tone='bad'] {
+  color: var(--od-danger);
+}
+
+.od-own-diag__fix {
+  color: var(--od-warning);
+  font-size: var(--od-font-xs);
+}

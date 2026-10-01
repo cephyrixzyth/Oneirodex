@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from oneirodex.utils.rom_archive import ARCHIVE_EXTENSIONS, PLATFORM_DUMP_SUFFIXES
+from oneirodex.utils.security import is_plain_file_within
 
 # Prefer single-file ROM dumps when a library path is a folder.
 _ROM_SUFFIXES = frozenset({
@@ -47,7 +48,9 @@ def resolve_hashable_file(path: str | Path) -> Path | None:
     candidates: list[Path] = []
     try:
         for child in root.iterdir():
-            if child.is_file() and child.suffix.lower() in _ROM_SUFFIXES:
+            # A link inside the folder is not the game: hashing it would read
+            # (and store a digest of) whatever it points at, wherever that is.
+            if is_plain_file_within(root, child) and child.suffix.lower() in _ROM_SUFFIXES:
                 candidates.append(child)
     except OSError:
         return None
@@ -197,6 +200,10 @@ def _hash_extracted_member(
                     archive_path, tmp, member=member, platform=platform,
                 )
             else:
+                return None
+            # Whatever the extractor reports, only hash a real file that sits
+            # inside the scratch directory we gave it.
+            if not is_plain_file_within(tmp, dest):
                 return None
             try:
                 with open(dest, 'rb') as handle:

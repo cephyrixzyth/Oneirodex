@@ -67,7 +67,7 @@ def test_layout_api_roundtrip(client, app, admin):
 
 
 def test_triage_parses_suggestions(app, monkeypatch):
-    def fake_post(url, json=None, timeout=None):
+    def fake_post(method, url, validator=None, json=None, timeout=None):
         class R:
             status_code = 200
             text = 'ok'
@@ -77,7 +77,7 @@ def test_triage_parses_suggestions(app, monkeypatch):
                 return {'message': {'content': '1. Celeste\n2. Celeste (2018)'}}
         return R()
 
-    monkeypatch.setattr('oneirodex.utils.ai_assist.requests.post', fake_post)
+    monkeypatch.setattr('oneirodex.utils.ai_assist.safe_request', fake_post)
     monkeypatch.setitem(app.config, 'ENABLE_AI_ASSIST', True)
     monkeypatch.setitem(app.config, 'OLLAMA_BASE_URL', 'http://ollama.test')
     with app.app_context():

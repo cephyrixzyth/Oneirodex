@@ -112,6 +112,48 @@ def test_ownership_flags():
     assert not_owned == {'owned': False, 'store_owned': False}
 
 
+def test_store_filters_postgres_preserve_child_acl(db_session, lib, user):
+    from oneirodex.models import UserLibraryAccess
+    from oneirodex.utils.library_acl import apply_game_access_filters
+    from oneirodex.utils.ownership_filters import apply_ownership_filters
+    hidden = Library(name=f'Hidden_{uuid4().hex[:6]}', platform=LibraryPlatform.PCWIN)
+    db_session.add(hidden)
+    db_session.flush()
+    visible_id, hidden_id, unknown_id = (str(uuid4()) for _ in range(3))
+    db_session.add_all([
+        Game(uuid=visible_id,name='Edition A',library_uuid=lib.uuid),
+        Game(uuid=hidden_id,name='Edition B',library_uuid=hidden.uuid),
+        Game(uuid=unknown_id,name='Unknown ownership',library_uuid=lib.uuid),
+        UserLibraryAccess(user_id=user.id,library_uuid=lib.uuid),
+    ])
+    user.role = 'child'
+    db_session.flush()
+    db_session.add_all([
+        UserOwnedTitle(user_id=user.id,store='steam',external_app_id='filter-a',matched_game_uuid=visible_id),
+        UserOwnedTitle(user_id=user.id,store='gog',external_app_id='filter-b',matched_game_uuid=visible_id),
+        UserOwnedTitle(user_id=user.id,store='steam',external_app_id='filter-c',matched_game_uuid=hidden_id),
+    ])
+    db_session.commit()
+    base = apply_game_access_filters(select(Game.uuid), user)
+    owned = apply_ownership_filters(base,{'store':'steam,gog','store_match':'all'},user=user)
+    assert set(db_session.execute(owned).scalars()) == {visible_id}
+    unknown = apply_ownership_filters(base,{'ownership':'unrecorded'},user=user)
+    assert set(db_session.execute(unknown).scalars()) == {unknown_id}
+
+
+def test_repeat_name_import_is_idempotent_and_requires_review(db_session, lib, user):
+    title = f'Edition ambiguity {uuid4().hex[:8]}'
+    db_session.add_all([Game(uuid=str(uuid4()),name=title,library_uuid=lib.uuid),
+                        Game(uuid=str(uuid4()),name=title,library_uuid=lib.uuid)])
+    db_session.commit()
+    upsert_owned_title(user.id,'gog','repeat-test',title)
+    db_session.commit()
+    upsert_owned_title(user.id,'gog','repeat-test',title)
+    db_session.commit()
+    rows = db_session.execute(select(UserOwnedTitle).filter_by(user_id=user.id,store='gog',external_app_id='repeat-test')).scalars().all()
+    assert len(rows) == 1 and rows[0].matched_game_uuid is None
+
+
 def test_upsert_owned_title_matches_library(db_session, lib, user):
     game_uuid = str(uuid4())
     app_id = _unique_steam_app_id()
@@ -170,7 +212,7 @@ def test_import_gog_csv_matches_by_name(db_session, lib, user):
         f'product_id,name\n1207658924,{title}\n9999999999,Unknown Game\n',
     )
     assert result['imported'] == 2
-    assert result['matched'] == 1
+    assert result['matched'] == 0
 
     matched = db_session.execute(
         select(UserOwnedTitle).filter_by(
@@ -180,7 +222,7 @@ def test_import_gog_csv_matches_by_name(db_session, lib, user):
         )
     ).scalars().first()
     assert matched is not None
-    assert matched.matched_game_uuid == game_uuid
+    assert matched.matched_game_uuid is None
 
 
 def test_import_meta_quest_csv_matches_by_name(db_session, lib, user):
@@ -196,7 +238,7 @@ def test_import_meta_quest_csv_matches_by_name(db_session, lib, user):
         f'meta_id,name\nquest-app-1,{title}\nquest-app-2,Unknown Quest Title\n',
     )
     assert result['imported'] == 2
-    assert result['matched'] == 1
+    assert result['matched'] == 0
     assert result['store'] == 'meta_quest'
 
     matched = db_session.execute(
@@ -207,7 +249,7 @@ def test_import_meta_quest_csv_matches_by_name(db_session, lib, user):
         )
     ).scalars().first()
     assert matched is not None
-    assert matched.matched_game_uuid == game_uuid
+    assert matched.matched_game_uuid is None
 
 
 def test_match_meta_quest_by_game_url(db_session, lib):
@@ -242,7 +284,7 @@ def test_import_epic_csv_matches_by_name(db_session, lib, user):
         f'catalog_item_id,name\nhades,{title}\norphan,Missing Game\n',
     )
     assert result['imported'] == 2
-    assert result['matched'] == 1
+    assert result['matched'] == 0
 
     matched = db_session.execute(
         select(UserOwnedTitle).filter_by(
@@ -252,7 +294,7 @@ def test_import_epic_csv_matches_by_name(db_session, lib, user):
         )
     ).scalars().first()
     assert matched is not None
-    assert matched.matched_game_uuid == game_uuid
+    assert matched.matched_game_uuid is None
 
 
 def test_disconnect_gog_clears_account_and_titles(db_session, user):
@@ -297,10 +339,13 @@ def test_browse_includes_gog_owned_when_matched(client, app, db_session, lib, us
         library_uuid=lib.uuid,
     )
     db_session.add(game)
-    upsert_owned_title(user.id, 'gog', '1456460669', title)
+    owned_title = upsert_owned_title(user.id, 'gog', '1456460669', title)
     db_session.commit()
 
     _login(client, app, user)
+    review = client.post(f'/api/ownership/titles/{owned_title.id}/match',
+                        json={'game_uuid': game_uuid, 'expected_revision': 0})
+    assert review.status_code == 200
     resp = client.get(f'/browse_games?per_page=50&library_uuid={lib.uuid}')
     assert resp.status_code == 200
     payload = resp.get_json()

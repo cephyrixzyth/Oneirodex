@@ -215,6 +215,10 @@ def social_friends_delete(friendship_id: int):
     row = db.session.get(UserFriendship, friendship_id)
     if not row or (row.user_id != current_user.id and row.friend_user_id != current_user.id):
         return api_error('Not found', code='not_found')
+    # A block belongs to the blocker (always user_id, see social_friends_block):
+    # the blocked member deleting it would lift the block.
+    if row.status == 'blocked' and row.user_id != current_user.id:
+        return api_error('Not found', code='not_found')
     db.session.delete(row)
     db.session.commit()
     return api_ok()

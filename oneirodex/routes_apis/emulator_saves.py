@@ -5,7 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import jsonify, request, send_file
+from flask import current_app, jsonify, request, send_file
 from flask_wtf.csrf import generate_csrf
 from flask_login import current_user, login_required
 from sqlalchemy import select
@@ -100,8 +100,13 @@ def download_game_save(game_uuid, slot_name):
         payload = read_save_bytes(row)
     except FileNotFoundError:
         return api_error('Save not found', code='not_found')
-    except Exception as exc:
-        return api_error(f'Failed to read save: {exc}', code='internal')
+    except Exception:
+        # An OSError's text carries the on-disk save path; the operator gets the
+        # traceback in the log, the member gets a fixed sentence.
+        current_app.logger.exception(
+            'Failed to read emulator save (game %s, slot %r)', game_uuid, slot_name,
+        )
+        return api_error('Failed to read save', code='internal')
 
     return send_file(
         BytesIO(payload),

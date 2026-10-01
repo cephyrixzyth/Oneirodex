@@ -16,6 +16,7 @@ See docs/strategy/security-legal-playbook.md (S2).
 from __future__ import annotations
 
 import ipaddress
+import io
 
 import pytest
 import requests
@@ -32,6 +33,11 @@ from oneirodex.utils.security import (
     validate_connector_http_url,
     validate_user_outbound_http_url,
 )
+
+
+@pytest.fixture(autouse=True)
+def no_real_dns(monkeypatch):
+    monkeypatch.setattr(security, '_resolve_host', lambda host: [])
 
 
 @pytest.fixture
@@ -312,3 +318,110 @@ def test_provider_cover_fetch_rejects_loopback():
 
     with pytest.raises(ValueError, match='Blocked'):
         fetch_outbound_image('http://127.0.0.1/cover.jpg', timeout=1)
+
+
+@pytest.mark.parametrize('status', [301, 302, 303, 307, 308])
+@pytest.mark.parametrize('method', ['POST', 'PUT', 'HEAD'])
+def test_redirect_method_and_body_matrix(status, method):
+    session = _FakeSession([_FakeResponse(status, '/done'), _FakeResponse()])
+    safe_request(method, 'https://good.example/start', validator=_allow_all,
+                 session=session, json={'payload': 1},
+                 headers={'Content-Type': 'application/json', 'Content-Length': '12'})
+    expected = 'GET' if method != 'HEAD' and (status in (302, 303) or status == 301 and method == 'POST') else method
+    assert session.calls[-1][0] == expected
+    assert ('json' in session.last_kwargs) == (status in (307, 308))
+    assert ('Content-Type' in session.last_kwargs['headers']) == (status in (307, 308))
+
+
+@pytest.mark.parametrize('target', ['https://foreign.example/done', 'http://good.example/done',
+                                  'https://good.example:444/done'])
+def test_real_session_redirect_credentials_do_not_cross_origin(monkeypatch, target, resolves):
+    resolves({'good.example': ['93.184.216.34'], 'foreign.example': ['93.184.216.34']})
+    calls = []
+    def send(adapter, request, **kwargs):
+        calls.append(request)
+        response = requests.Response()
+        response.status_code = 302 if len(calls) < 3 else 200
+        response.headers['Location'] = target if len(calls) == 1 else 'https://good.example/return'
+        response.request = request
+        response.url = request.url
+        response._content = b''
+        return response
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, 'send', send)
+    monkeypatch.setattr(requests.sessions, 'get_netrc_auth', lambda url: ('netrc', 'netrc-secret'))
+    session = requests.Session()
+    session.auth = ('session', 'session-secret')
+    session.headers.update({'apikey': 'header-secret', 'Cookie': 'cookie-secret'})
+    session.params = {'api_key': 'query-secret'}
+    session.cookies.set('session', 'jar-secret')
+    safe_get('https://good.example/start', validator=_allow_all, session=session,
+             headers={'X-Api-Key': 'explicit-secret'}, cookies={'extra': 'extra-secret'},
+             params={'key': 'explicit-query-secret'})
+    assert 'Authorization' in calls[0].headers
+    for request in calls[1:]:
+        assert 'secret' not in str(dict(request.headers)) + request.url
+        assert request.headers['Host'] == 'good.example' if request is calls[-1] else True
+    assert session.auth == ('session', 'session-secret')
+    assert session.headers['apikey'] == 'header-secret'
+    assert session.params == {'api_key': 'query-secret'}
+    assert session.cookies.get('session') == 'jar-secret'
+
+
+def test_same_origin_keeps_credentials_and_stream_position():
+    stream = io.BytesIO(b'prefix-payload')
+    stream.seek(7)
+    class Reader(_FakeSession):
+        def request(self, method, url, **kwargs):
+            assert kwargs['data'].read() == b'payload'
+            return super().request(method, url, **kwargs)
+    session = Reader([_FakeResponse(307, '/done'), _FakeResponse()])
+    safe_request('POST', 'https://good.example/start', validator=_allow_all, session=session,
+                 data=stream, headers={'Authorization': 'secret'}, auth=('user', 'pass'))
+    assert session.last_kwargs['headers']['Authorization'] == 'secret'
+    assert session.last_kwargs['auth'] == ('user', 'pass')
+
+
+def test_unrewindable_body_fails_instead_of_sending_empty_body():
+    session = _FakeSession([_FakeResponse(308, '/done')])
+    with pytest.raises(requests.exceptions.UnrewindableBodyError):
+        safe_request('POST', 'https://good.example/start', validator=_allow_all,
+                     session=session, data=iter([b'payload']))
+    assert len(session.calls) == 1
+
+
+def test_redirect_cannot_supply_url_credentials():
+    session = _FakeSession([_FakeResponse(302, 'https://user:secret@other.example/')])
+    with pytest.raises(BlockedOutboundUrl, match='credentials'):
+        safe_get('https://good.example/', validator=_allow_all, session=session)
+    assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize('status', [307, 308])
+@pytest.mark.parametrize('body', [{'data': {'secret': 'device-secret'}},
+                                 {'json': {'source_token': 'refresh-secret'}}])
+def test_credential_bodies_cannot_cross_origin(monkeypatch, status, body):
+    calls = []
+    def send(adapter, request, **kwargs):
+        calls.append(request)
+        response = requests.Response()
+        response.status_code = status
+        response.headers['Location'] = 'https://other.example/token'
+        response.request = request
+        response.url = request.url
+        response._content = b''
+        return response
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, 'send', send)
+    with pytest.raises(BlockedOutboundUrl, match='body replay'):
+        safe_request('POST', 'https://provider.example/token', validator=_allow_all, **body)
+    assert len(calls) == 1
+
+
+def test_multipart_file_rewound_on_same_origin_redirect():
+    stream = io.BytesIO(b'payload')
+    class Reader(_FakeSession):
+        def request(self, method, url, **kwargs):
+            assert kwargs['files']['upload'][1].read() == b'payload'
+            return super().request(method, url, **kwargs)
+    session = Reader([_FakeResponse(308, '/done'), _FakeResponse()])
+    safe_request('POST', 'https://good.example/start', validator=_allow_all, session=session,
+                 files={'upload': ('file.bin', stream)})

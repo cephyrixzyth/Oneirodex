@@ -1,6 +1,12 @@
 # Oneirodex agent locks
 
-Canonical product and engineering defaults. Apply them unless the user **explicitly** overrides in the same message — never re-ask what is settled here.
+Canonical product and engineering defaults. Current user instructions and previously accepted session decisions override historical defaults; never require the user to repeat them.
+
+## Rebuild brief accepted 2026-09-26
+
+Review and retain every researched feature regardless of build status or former stance. Research inclusion is not an implementation claim. New priorities are easy standalone Windows/macOS/Linux installation with a later household-server upgrade, Steam Deck usability, store connection/onboarding/repair, ownership deduplication and store/ownership filters, and launcher/runtime interoperability. Evaluate Lutris, ScummVM, Humble and additional major gaming services by actual capability and supported access method.
+
+The ownership-only/DRM-install non-goals below describe the **existing** implementation boundary, not a prohibition on this newly requested feasibility review. Installation and launch support must be explicit per provider; never promise universal access or bypass DRM. Keep historical rejected ideas in private research with their original stance and provenance. Other unmodified defaults remain in effect.
 
 This file replaces the old `.cursor/skills/prompt-brief/defaults.md` and the duplicate "Shared locks" list that used to live in `agent-team`. It is the single source; skills and agents link here rather than restating it.
 
@@ -81,7 +87,7 @@ Write **Oneirodex** in UI, Help, README, and operator docs. **P3b landed 2026-08
 | Branch | Stay on the current feature branch unless asked |
 | Secrets | Never commit `.env` / tokens; never stage `docs/_private/` |
 | Force-push | Never to `main`; no `--no-verify` unless the user demands it |
-| Commit author | Set via `git -c` flags only, never `git config` — `cephyrix_zyth` / `cephyrix_zyth@users.noreply.github.com` |
+| Commit author | Set via `git -c` flags only, never `git config` — `YOUR_USER` / `YOUR_USER@users.noreply.github.com` |
 
 ## External-facing scrub (always)
 
@@ -103,20 +109,14 @@ Policy: [scrub-shipped-bundles.md](../runbooks/scrub-shipped-bundles.md) (SCRUB-
 | App port | 5006 |
 | Support repo | `chrisjrovira/oneirodex` (`chrisjrovira/oneirodex` still redirects) (`SUPPORT_GITHUB_REPO`) |
 
-## This host (Windows)
+## Environment discovery
 
-| Fact | Value |
-|---|---|
-| Repo | `Z:\_projects\Oneirodex` — a NAS mapping, so filesystem work is slow |
-| Unraid Compose | Same tree: `/mnt/user/infernal-data-streams/_projects/Oneirodex`. `/mnt/user/isos/oneirodex/` is retired |
-| Games scan root | `/mnt/user/infernal-data-streams/_software/_games` (not the repo) |
-| Test database | `oneirodex-review-db` (postgres:17.6, published on 5432). Pytest DB name stays `oneirodextest` (must contain `test`) |
-| Local dev port | `ONEIRODEX_PORT=6120` or `ONEIRODEX_PORT` — Windows reserves 5041–5140, so 5099 will not bind |
-| GPU (art gen) | This Windows box has an RTX 2080. The NAS does not. Use `docker-compose.artwork-local.yml` here — not the full Oneirodex stack, not Unraid `--profile artwork` |
-
-Because the repo sits on a slow network mapping, prefer scoped test runs, run long suites in the background, and read the output file rather than trusting a backgrounded run's exit code.
-
-> Historical note: an earlier `Y:` mapping held the repo and agents were told never to touch `Z:`. That mapping no longer exists — `Z:` **is** the repo drive now. Ignore any leftover guidance that says otherwise.
+Discover the active checkout, isolated test database and available ports on each host.
+Local workstation and NAS checkouts are separate; edits do not automatically deploy.
+Keep machine-specific paths, hardware inventories and credentials in local operator
+notes outside tracked documentation. Use explicit staging configuration, read-only
+game mounts and separate database/library volumes. Confirm image identity, capacity,
+backup restoration and a rollback target before any release.
 
 ## Reply style
 

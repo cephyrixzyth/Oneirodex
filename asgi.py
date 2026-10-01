@@ -43,7 +43,8 @@ from oneirodex.utils.rom_archive import (
 )
 from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 from oneirodex.utils.security_headers import baseline_static_headers
-from oneirodex.utils.static_files import resolve_static_path
+from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.static_files import library_access, resolve_served_static
 from sqlalchemy import select
 
 
@@ -117,6 +118,23 @@ class LazyASGIApp:
             'restrict_child': False,
         },
     }
+
+    def _event_visible(self, event, user_id) -> bool:
+        """Per-viewer filter for the live streams (utils/event_visibility.py)."""
+        payload = getattr(event, 'payload', None) or {}
+        if payload.get('user_id') is None and not payload.get('game_uuid'):
+            return True  # about no member and no game: no lookup needed
+        try:
+            with self._flask_app.app_context():
+                from oneirodex import db
+                from oneirodex.utils.event_visibility import event_visible_to
+
+                try:
+                    return event_visible_to(event, user_id)
+                finally:
+                    db.session.remove()
+        except Exception:  # noqa: BLE001 — when in doubt, do not send it
+            return False
 
     async def _authorize_sse_user(self, user_id, *, restrict_child: bool) -> int | None:
         """Return HTTP error status, or None if the user may open SSE."""
@@ -211,7 +229,9 @@ class LazyASGIApp:
                         "more_body": True,
                     })
                     continue
-                if event_types is None or event.type in event_types:
+                if (event_types is None or event.type in event_types) and await asyncio.to_thread(
+                    self._event_visible, event, user_id,
+                ):
                     await send({
                         "type": "http.response.body",
                         "body": encode_sse(event),
@@ -245,7 +265,14 @@ class LazyASGIApp:
             await self._send_error(send, 500, "Static root not configured")
             return
 
-        candidate = resolve_static_path(root, path)
+        # Members' private files under /static/library/ are never static; BIOS
+        # needs a signed-in member. 404 either way, so nothing is confirmed.
+        access = library_access(path)
+        if access == 'private' or (access == 'member' and await self._get_user_from_session(scope) is None):
+            await self._send_error(send, 404, "Not Found")
+            return
+
+        candidate = resolve_served_static(root, path)
         if candidate is None:
             await self._send_error(send, 404, "Not Found")
             return
@@ -506,13 +533,7 @@ class LazyASGIApp:
                 await self._send_error(send, 403, "Access denied")
                 return
 
-            cache_dir = os.path.join(
-                self._flask_app.root_path,
-                'static',
-                'library',
-                'rom_cache',
-                game_uuid,
-            )
+            cache_dir = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache', game_uuid)
             platform_key = library_platform_key(game)
             try:
                 rom_path, filename = resolve_playable_rom_path(
@@ -600,7 +621,12 @@ class LazyASGIApp:
                 if session_data:
                     user_id = session_data.get('_user_id')
                     if user_id:
-                        return int(user_id)
+                        # The same check as Flask-Login's loader: a disabled
+                        # account or a changed password ends the session here too.
+                        from oneirodex.utils.auth import load_user
+
+                        user = load_user(user_id)
+                        return user.id if user is not None else None
                 return None
 
         except Exception as e:

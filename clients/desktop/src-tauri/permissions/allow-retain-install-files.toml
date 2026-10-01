@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-retain-install-files"
+description = "Copies missing base files and saves into a separate update generation."
+commands.allow = ["retain_install_files", "preserve_install_files", "restore_install_snapshot"]

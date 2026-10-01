@@ -6,6 +6,7 @@ Split out of ``rom_archive`` in the v11 cycle (H-D.4) as a pure move.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from oneirodex.utils.rom_archive_types import CUE_COMPANION_EXTENSIONS
 from oneirodex.utils.rom_archive_types import ROM_EXTENSIONS
@@ -59,6 +60,34 @@ def _safe_basename(member: str) -> str:
             code='invalid_member',
         )
     return safe_name
+
+
+_DRIVE_PREFIX_RE = re.compile(r'^[A-Za-z]:')
+
+
+def _safe_member_name(name: str | None) -> str | None:
+    """Return *name* with ``/`` separators, or None if it could leave the extract dir.
+
+    Archive member names are attacker-controlled. The 7z / bsdtar listing paths
+    used to hand them on verbatim, and the extract code then joined them onto the
+    ROM cache directory, so ``../../lib/victim.nes`` named a file *outside* the
+    cache that the flatten step would move into place (and a later serve or
+    cleanup would touch). A member is refused here, at list time, when its
+    normalised path is absolute, names a drive, is a UNC path, or has a ``..``
+    segment -- including the padded forms (``.. ``, ``...``) Windows folds back
+    into ``..``.
+    """
+    if not name or '\x00' in name:
+        return None
+    norm = name.replace('\\', '/')
+    if norm.startswith('/') or _DRIVE_PREFIX_RE.match(norm):
+        return None
+    for segment in norm.split('/'):
+        if segment in ('', '.'):
+            continue
+        if not segment.rstrip(' .'):
+            return None
+    return norm
 
 
 def _platform_key(platform: str | None) -> str | None:

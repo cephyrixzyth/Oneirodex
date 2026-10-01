@@ -224,6 +224,40 @@ def chat_attachment_upload(channel_id: int):
     }, status=201)
 
 
+@apis_bp.route('/chat/attachments/<file_name>', methods=['GET'])
+@login_required
+def chat_attachment_file(file_name: str):
+    """One chat attachment, for someone who can read its channel.
+
+    Attachments used to be plain static files, readable by anyone with the
+    link. A pending one (not yet sent) is visible to its uploader only.
+    """
+    import os
+
+    from flask import send_from_directory
+
+    from oneirodex.models import ChatMessageAttachment
+    from oneirodex.utils.chat_attachments import attachments_dir
+
+    row = db.session.execute(
+        select(ChatMessageAttachment).where(ChatMessageAttachment.file_name == file_name)
+    ).scalars().first()
+    if row is None or (row.message_id is None and row.uploaded_by_user_id != current_user.id):
+        return _refuse_not_found()
+    _ch, refusal = _visible_channel(row.channel_id)
+    if refusal is not None:
+        return refusal
+    folder = attachments_dir()
+    if not os.path.isfile(os.path.join(folder, row.file_name)):
+        return _refuse_not_found()
+    resp = send_from_directory(
+        folder, row.file_name, mimetype=row.mime, download_name=row.original_name,
+        as_attachment=not row.mime.startswith('image/'),
+    )
+    resp.headers['Cache-Control'] = 'private, max-age=3600'
+    return resp
+
+
 @apis_bp.route('/chat/channels/<int:channel_id>/messages', methods=['POST'])
 @login_required
 def chat_messages_post(channel_id: int):

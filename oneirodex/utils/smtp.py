@@ -150,7 +150,8 @@ def send_email(to, subject, template):
         print("=== SMTP Transaction Start ===")
         with smtplib.SMTP(mail_server, mail_port, timeout=30) as server:
             print("1. Server connection established")
-            server.set_debuglevel(1)  # Enable SMTP debug logging
+            # No smtplib debug output: it prints the AUTH exchange, which
+            # carries the base64 username and password.
             
             if smtp_settings['MAIL_USE_TLS']:
                 print("2. Starting TLS handshake")

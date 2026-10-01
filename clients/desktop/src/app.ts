@@ -36,6 +36,7 @@ import { loadStoredConfig, saveStoredConfig } from './config-store.js'
 import { openSocialCompanionWindow } from './social-window.js'
 import { keychainAdapter } from './keychain.js'
 import { buildLocalArchiveName } from './paths.js'
+import { checkServerUrl } from './transport-policy.js'
 import {
   hydrateLifecycleRegistry,
   pullLifecycleRegistryFromServer,
@@ -240,7 +241,14 @@ function renderLibrary(): void {
 }
 async function hydrateFromDisk(): Promise<void> {
   const stored = await loadStoredConfig()
-  auth.setBaseUrl(stored.baseUrl)
+  try {
+    auth.setBaseUrl(stored.baseUrl)
+  } catch (error) {
+    // A URL saved by an older build that the transport policy now refuses (plain
+    // http:// to a public host). It stays visible in the form so it can be
+    // corrected, but never reaches the auth store — so no request carries the token.
+    setStatus(error instanceof Error ? error.message : String(error), 'error')
+  }
   auth.setToken(stored.token)
   try {
     await auth.hydrateFromKeychain(keychainAdapter)
@@ -251,7 +259,7 @@ async function hydrateFromDisk(): Promise<void> {
     )
     setStatus(formatKeychainError(error), 'error')
   }
-  els.baseUrl.value = auth.getBaseUrl()
+  els.baseUrl.value = auth.getBaseUrl() || stored.baseUrl
   const token = auth.getToken()
   els.token.value = token ? normalizeOneirodexToken(token) : ''
   renderAuthSummary()
@@ -265,6 +273,13 @@ async function handleConnect(): Promise<void> {
   els.token.value = token
   if (!baseUrl) {
     setStatus('Enter a server base URL.', 'error')
+    return
+  }
+  // Before the token is attached to anything: plain http:// only for localhost /
+  // LAN hosts, https:// everywhere else.
+  const serverCheck = checkServerUrl(baseUrl)
+  if (!serverCheck.ok) {
+    setStatus(serverCheck.message, 'error')
     return
   }
   if (!token || !isOneirodexToken(token)) {
@@ -334,6 +349,12 @@ async function handleConnect(): Promise<void> {
     },
     onCommands: async (command) => {
       if (command.action === 'open_path') {
+        // No `allowedRoots` here, deliberately: the path is a *server* path for a
+        // library folder, and the companion cannot know which local mapping of it
+        // (a drive letter, a mount) this PC uses — the server never tells it the
+        // library roots. The guard for a hostile server is therefore the
+        // validation in `revealPathInOs` and `validate_reveal_path` (Rust), which
+        // refuse UNC and device paths before touching the filesystem.
         return runOpenPathCommand(command.path || '', { select: command.select })
       }
       if (isActionBlockedOffline(command.action, connectionMode)) {
@@ -750,6 +771,12 @@ export async function mountApp(root: HTMLElement): Promise<void> {
       setStatus(blocked, 'error')
       return
     }
+    // The Friends window signs in with the site account — same plain-http rule.
+    const serverCheck = checkServerUrl(base)
+    if (!serverCheck.ok) {
+      setStatus(serverCheck.message, 'error')
+      return
+    }
     void openSocialCompanionWindow(base, lastPlayedGameUuid)
       .then((how) => {
         const { message, tone } = friendsOpenStatus(how, connectionMode)
@@ -766,5 +793,8 @@ export async function mountApp(root: HTMLElement): Promise<void> {
   await ensureLifecycleRegistry()
   await hydrateFromDisk()
   renderLibrary()
-  setStatus('Enter credentials and click Connect.', 'info')
+  // Keep a hydrate failure (refused saved URL, keyring error) on screen.
+  if (els.status.dataset.tone !== 'error') {
+    setStatus('Enter credentials and click Connect.', 'info')
+  }
 }

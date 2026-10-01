@@ -14,6 +14,15 @@
 #   - generate in the SD.Next UI at http://127.0.0.1:7860
 #   - or on the NAS .env: AI_ARTWORK_URL=http://<this-pc-lan-ip>:7860
 #
+# SD.Next has NO login, and anyone who can reach its port can queue generation
+# jobs on this GPU. So the port is published on loopback only by default. The
+# NAS route needs one explicit opt-in on THIS machine, set before `up -d`:
+#   SDNEXT_HOST_BIND=<this-pc-lan-ip>     (preferred: only that adapter)
+#   SDNEXT_HOST_BIND=0.0.0.0              (every adapter, VPN included)
+# in the shell or in the .env next to this file, then recreate the container.
+# Scope the Windows Firewall rule for TCP 7860 to the NAS's address, not Any.
+# See docs/runbooks/artwork-gpu-workstation.md.
+#
 # Stop: docker compose -f docker-compose.artwork-local.yml down
 
 services:
@@ -36,7 +45,8 @@ services:
       - sdnext_models:/webui/data/models
       - sdnext_outputs:/webui/outputs
     ports:
-      - "${SDNEXT_HOST_PORT:-7860}:7860"
+      # Loopback unless SDNEXT_HOST_BIND says otherwise (see the header).
+      - "${SDNEXT_HOST_BIND:-127.0.0.1}:${SDNEXT_HOST_PORT:-7860}:7860"
     deploy:
       resources:
         reservations:

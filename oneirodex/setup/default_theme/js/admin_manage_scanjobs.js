@@ -3528,7 +3528,7 @@ function fetchFolders(path, folderContentsId, spinnerId, upButtonId, inputFieldI
             // Display warning if there were errors
             if (data.hasErrors) {
                 $(folderContentsId).append(
-                    $('<div class="alert alert-warning">').html(
+                    $('<div class="alert alert-warning">').text(
                         `⚠ Some items (${data.skippedItems}) could not be accessed and were skipped.`
                     )
                 );
@@ -3537,7 +3537,8 @@ function fetchFolders(path, folderContentsId, spinnerId, upButtonId, inputFieldI
             items.forEach(function(item) {
                 var itemElement;
                 if (item.isDir) {
-                    itemElement = $('<div>').html('📁 ' + item.name);
+                    // Folder and file names come from the filesystem: text, never markup.
+                    itemElement = $('<div>').text('📁 ' + item.name);
                     var fullPath = path + item.name + "/";
                     $(itemElement).addClass('folder-item').attr('data-path', fullPath);
                 } else {
@@ -3549,10 +3550,8 @@ function fetchFolders(path, folderContentsId, spinnerId, upButtonId, inputFieldI
                     var sizeText = formatFileSize(item.size);
                     
                     // Create file element with icon, name, and size
-                    itemElement = $('<div>').html(
-                        '' +  
-                        item.name + 
-                        '<span class="file-size">(' + sizeText + ')</span>'
+                    itemElement = $('<div>').text(item.name).append(
+                        $('<span class="file-size">').text('(' + sizeText + ')')
                     );
                     $(itemElement)
                         .addClass('file-item')

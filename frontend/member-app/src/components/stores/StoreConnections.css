@@ -1,0 +1,206 @@
+/* Shared store connection list (LIB-02): first-run and Settings. Tokens only. */
+
+.od-store-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  color: var(--od-text);
+}
+
+.od-store-list__title {
+  margin: 0 0 0.25rem;
+  font-size: var(--od-font-lg);
+  color: var(--od-text);
+}
+
+/* First-run nests the list under its numbered steps: one size down from them. */
+.od-store-list[data-variant='first-run'] .od-store-list__title {
+  font-size: var(--od-font-md);
+}
+
+.od-store-list__lede,
+.od-store-list__unavailable,
+.od-store-list__empty {
+  margin: 0 0 0.75rem;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}
+
+.od-store-list__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.od-store-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--od-border);
+  border-inline-start: 3px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface);
+}
+
+.od-store-card[data-tone='good'] {
+  border-inline-start-color: var(--od-success);
+}
+
+.od-store-card[data-tone='warn'] {
+  border-inline-start-color: var(--od-warning);
+}
+
+.od-store-card[data-tone='bad'] {
+  border-inline-start-color: var(--od-danger);
+}
+
+.od-store-card[data-tone='info'] {
+  border-inline-start-color: var(--od-info);
+}
+
+.od-store-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+}
+
+.od-store-card__name {
+  margin: 0;
+  font-size: var(--od-font-md);
+  font-weight: 600;
+  color: var(--od-text);
+}
+
+.od-store-card__badge {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--od-radius-pill, 999px);
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 14%, var(--od-surface));
+  font-size: var(--od-font-xs);
+  font-weight: 600;
+  color: var(--od-text-muted);
+}
+
+.od-store-card__badge[data-tone='good'] {
+  color: var(--od-success);
+}
+
+.od-store-card__badge[data-tone='warn'] {
+  color: var(--od-warning);
+}
+
+.od-store-card__badge[data-tone='bad'] {
+  color: var(--od-danger);
+}
+
+.od-store-card__badge[data-tone='info'] {
+  color: var(--od-info);
+}
+
+.od-store-card__counts {
+  margin-inline-start: auto;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+}
+
+.od-store-card__sentence {
+  margin: 0;
+  font-size: var(--od-font-sm);
+  color: var(--od-text);
+}
+
+.od-store-card__note {
+  margin: 0;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+}
+
+.od-store-card__message {
+  margin: 0;
+  font-size: var(--od-font-sm);
+  font-weight: 600;
+}
+
+.od-store-card__message[data-tone='bad'] {
+  color: var(--od-danger);
+}
+
+.od-store-card__message[data-tone='good'] {
+  color: var(--od-success);
+}
+
+.od-store-card__message[data-tone='info'] {
+  color: var(--od-text);
+}
+
+.od-store-card__progress {
+  width: 100%;
+  accent-color: var(--od-accent);
+}
+
+.od-store-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.od-store-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--od-border);
+}
+
+.od-store-card__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}
+
+.od-store-card__form input,
+.od-store-card__form textarea {
+  padding: 0.5rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-bg, var(--od-surface));
+  color: var(--od-text);
+  font: inherit;
+}
+
+.od-store-card :focus-visible {
+  outline: 2px solid var(--od-accent);
+  outline-offset: 2px;
+}
+
+/* Library first-run nudge (StoreSetupPrompt). */
+.od-store-setup-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--od-accent) 45%, var(--od-border));
+  border-radius: var(--od-radius-md);
+  background: color-mix(in srgb, var(--od-accent) 8%, var(--od-surface));
+  color: var(--od-text);
+}
+
+.od-store-setup-prompt p {
+  margin: 0;
+  font-size: var(--od-font-sm);
+}
+
+.od-store-setup-prompt__actions {
+  display: flex;
+  gap: 0.4rem;
+}

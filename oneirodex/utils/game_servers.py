@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import socket
 from typing import Any
-from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+
+import requests
+
+from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
+from oneirodex.utils.security import validate_connector_http_url
+
+logger = logging.getLogger(__name__)
 
 _CONNECT_RE = re.compile(
     r'^(?:(?:tcp|udp)://)?(?P<host>[^:\s]+)(?::(?P<port>\d+))?$',
@@ -47,22 +53,38 @@ def probe_server_health(
     url = (health_url or '').strip()
     if url.lower().startswith(('http://', 'https://')):
         try:
-            request = Request(url, method='GET')
-            with urlopen(request, timeout=timeout) as response:
-                status = getattr(response, 'status', None) or response.getcode()
-                reachable = 200 <= int(status) < 400
-                return {
-                    'reachable': reachable,
-                    'method': 'http',
-                    'status_code': int(status),
-                    'error': None if reachable else f'HTTP {status}',
-                }
-        except (URLError, OSError, ValueError, TimeoutError) as exc:
+            # Admin-set URL, member-triggered probe: every hop (the redirects
+            # ``urlopen`` used to follow unchecked) goes through the same
+            # LAN-aware policy the other admin connectors use. Household game
+            # servers live on the LAN, so private ranges stay reachable while
+            # ALLOW_PRIVATE_LAN_URLS is on; cloud metadata never is.
+            response = safe_request(
+                'GET', url, validator=validate_connector_http_url, timeout=timeout,
+            )
+            try:
+                status = int(response.status_code)
+            finally:
+                response.close()
+            reachable = 200 <= status < 400
+            return {
+                'reachable': reachable,
+                'method': 'http',
+                'status_code': status,
+                'error': None if reachable else f'HTTP {status}',
+            }
+        except (requests.RequestException, OSError, ValueError, TimeoutError) as exc:
+            # Fixed text: the exception string names hosts, ports and resolver
+            # failures, and this goes back to every member who asks for status.
+            logger.info('game server health probe failed: %s', type(exc).__name__)
             return {
                 'reachable': False,
                 'method': 'http',
                 'status_code': None,
-                'error': str(exc),
+                'error': (
+                    'Health URL is not allowed by the outbound policy'
+                    if isinstance(exc, BlockedOutboundUrl)
+                    else 'Health URL unreachable'
+                ),
             }
 
     host, port = parse_connect_string(connect_string)
@@ -84,9 +106,10 @@ def probe_server_health(
                 'error': None,
             }
     except OSError as exc:
+        logger.info('game server tcp probe failed: %s', type(exc).__name__)
         return {
             'reachable': False,
             'method': 'tcp',
             'status_code': None,
-            'error': str(exc),
+            'error': 'Connection failed',
         }

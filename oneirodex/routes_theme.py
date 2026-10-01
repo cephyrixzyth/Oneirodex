@@ -21,6 +21,7 @@ from pathlib import Path
 
 from flask import current_app, url_for
 from jinja2 import pass_context
+from oneirodex.utils.library_paths import library_dir
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ def theme_asset_filter(_ctx, path):
         current_theme = 'default'
 
     # Resolve against the app package root — not process CWD (Docker/uvicorn).
-    root = Path(current_app.root_path) / 'static' / 'library' / 'themes'
+    root = Path(library_dir()) / 'themes'
     themed = root / current_theme / path
     if themed.is_file():
         return url_for(

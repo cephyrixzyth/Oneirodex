@@ -51,10 +51,14 @@ def rate_limit_enabled() -> bool:
 
 
 def client_ip_from_request(request) -> str:
-    """Best-effort client IP (trust X-Forwarded-For first hop when behind a proxy)."""
-    forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
-    if forwarded:
-        return forwarded[:64]
+    """The client IP the rate limit keys on.
+
+    ``remote_addr`` only. It used to take the first ``X-Forwarded-For`` hop,
+    which any client can set, so a new header value per request meant a fresh
+    bucket every time and no limit at all. Behind a reverse proxy, set
+    ``TRUSTED_PROXIES`` and ProxyFix (utils/proxy.py) puts the real client
+    address in ``remote_addr`` from the hops that proxy added.
+    """
     return (request.remote_addr or 'unknown')[:64]
 
 

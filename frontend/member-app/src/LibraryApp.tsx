@@ -7,7 +7,12 @@ import { applyPlatformSkin, clearPlatformSkin } from './chrome/platformSkins'
 import { SystemBackdrop } from './chrome/SystemBackdrop'
 import { usesNewChrome } from './chrome/usesNewChrome'
 import { BADGE_FILTER_PARAMS, badgeFiltersFromSearchParams } from './components/BadgeFilterChips'
-import { filtersFromSearchParams, searchParamsHaveLibraryFilters } from './libraryQueryParams'
+import {
+  filtersFromSearchParams,
+  OWNERSHIP_FILTER_KEYS,
+  searchParamsHaveLibraryFilters,
+  withLibraryParams,
+} from './libraryQueryParams'
 import {
   ITEM_KIND_FILTER_CHIPS,
   itemKindFromSearchParams,
@@ -21,6 +26,7 @@ import { GameGridSkeleton } from './components/GameGridSkeleton'
 import { LibrarySelectionBar } from './components/LibrarySelectionBar'
 import { PageStatus } from './components/PageStatus'
 import { PaginationBar } from './components/PaginationBar'
+import { StoreSetupPrompt } from './components/stores/StoreSetupPrompt'
 import { createTranslator } from './i18n'
 import { useLibraryBatchActions } from './library/useLibraryBatchActions'
 import { useLibrarySelection } from './library/useLibrarySelection'
@@ -73,6 +79,12 @@ function EmptyState({ initialConfig, t }: LooseProps) {
   }
 
   return <p>{t('No games match the current filters.')}</p>
+}
+
+/** Same keys, same values: a URL read that changes nothing keeps the filter object. */
+function sameFilters(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
 }
 
 export function LibraryApp({ initialConfig }: LooseProps = {}) {
@@ -143,11 +155,18 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
         current.player_perspective === fromUrl.player_perspective &&
         current.item_kind === fromUrl.item_kind &&
         current.name === fromUrl.name &&
+        current.filter_tree === fromUrl.filter_tree &&
+        OWNERSHIP_FILTER_KEYS.every((key) => current[key] === fromUrl[key]) &&
         BADGE_FILTER_PARAMS.every((param) => current[param] === fromUrl[param])
       if (same) {
         return current
       }
       const next = cleanFilters({ ...current, ...fromUrl })
+      if (sameFilters(next, current)) {
+        // The URL was written from these filters (syncOwnershipUrl); keeping
+        // the same object avoids a second browse request for the same view.
+        return current
+      }
       writeLibraryFilters(next)
       return next
     })
@@ -216,11 +235,24 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
     setRetryCount((count) => count + 1)
   }
 
+  /**
+   * Store / ownership filters are mirrored into the URL (LIB-02) so the view
+   * can be linked. Other filter params already in the URL follow the applied
+   * filters, so the URL read below cannot bring back a value the member changed.
+   */
+  const syncOwnershipUrl = (nextFilters: Record<string, string | undefined>) => {
+    const next = withLibraryParams(searchParams, nextFilters)
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }
+
   const applyFilters = (nextFilters: any) => {
     writeLibraryFilters(nextFilters)
     setPage(1)
     setFilters(nextFilters)
     clearSelection()
+    syncOwnershipUrl(nextFilters)
   }
 
   /** Live title search — same filter apply, keep mobile LHN open while typing. */
@@ -229,6 +261,7 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
     setPage(1)
     setFilters(nextFilters)
     clearSelection()
+    syncOwnershipUrl(nextFilters)
   }
 
   const clearFilters = () => {
@@ -350,6 +383,7 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
             t={t}
           />
         )}
+        <StoreSetupPrompt t={t} />
         <div className={showRefreshing ? 'library-grid-loading' : undefined}>
           {games.length === 0 ? (
             <>
@@ -409,7 +443,9 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
   // narrowing anything. Counting those showed "Filters 2" on an untouched
   // library, which is worse than no badge — it sends people hunting for a
   // filter they never set.
-  const NOT_A_FILTER = new Set(['item_kind', 'sort_by', 'sort_order'])
+  // store_match only qualifies the store filter; counting it would make one
+  // ownership choice read as two filters.
+  const NOT_A_FILTER = new Set(['item_kind', 'sort_by', 'sort_order', 'store_match'])
   const activeFilterCount = Object.entries(cleanFilters(filters)).filter(
     ([key]) => !NOT_A_FILTER.has(key),
   ).length

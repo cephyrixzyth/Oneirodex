@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { NewsPage } from './NewsPage'
@@ -388,4 +388,73 @@ test('the Free now tab fills the stage rather than a half column', async () => {
   expect(container.querySelector('.od-news--fill')?.getAttribute('data-tab')).toBe('free')
   expect(container.querySelector('.od-news__stage')).toBeTruthy()
   expect(container.querySelector('.od-news__headlines')).toBeNull()
+})
+
+describe('claim assist only opens http(s) and store launcher URLs', () => {
+  async function claimWith(claim: LooseProps, itemHttps = 'https://example.test/claim') {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.mocked(announcementsApi.fetchAnnouncements).mockResolvedValue({ announcements: [] })
+    vi.mocked(freeGamesApi.fetchFreeGames).mockResolvedValue({
+      items: [
+        {
+          id: 9,
+          store: 'steam',
+          external_id: 'abc',
+          title: 'Free Space Adventure',
+          links: { https: itemHttps },
+          connected: true,
+        },
+      ],
+    })
+    vi.mocked(freeGamesApi.claimFreeGameAssist).mockResolvedValue({ ok: true, ...claim })
+
+    const user = userEvent.setup()
+    render(
+      <ShellHarness>
+        <NewsPage />
+      </ShellHarness>,
+      { wrapper: MemoryRouter },
+    )
+    await user.click(await screen.findByRole('button', { name: 'Free now' }))
+    await user.click(await screen.findByRole('button', { name: /Claim & sync/ }))
+    await waitFor(() => expect(freeGamesApi.claimFreeGameAssist).toHaveBeenCalledWith(9))
+    return open
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('opens the store deeplink the server built', async () => {
+    const open = await claimWith({
+      links: { protocol: 'steam://openurl/https://example.test/claim', https: null },
+    })
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith(
+        'steam://openurl/https://example.test/claim',
+        '_blank',
+        'noopener,noreferrer',
+      ),
+    )
+  })
+
+  test('skips a javascript: claim URL and falls back to the next safe one', async () => {
+    const open = await claimWith({
+      links: { protocol: 'javascript:alert(document.domain)', https: 'https://example.test/ok' },
+    })
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith('https://example.test/ok', '_blank', 'noopener,noreferrer'),
+    )
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  test('opens nothing when every candidate is hostile', async () => {
+    const open = await claimWith(
+      { links: { protocol: 'data:text/html,<script>alert(1)</script>', https: 'javascript:1' } },
+      'vbscript:msgbox(1)',
+    )
+    // The status line still appears, so the click was handled, just not opened.
+    expect(await screen.findByText('Ownership updated.')).toBeInTheDocument()
+    expect(open).not.toHaveBeenCalled()
+  })
 })

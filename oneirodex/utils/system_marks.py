@@ -29,6 +29,7 @@ from oneirodex.utils.preset_themes import (
     era_for_theme,
     preset_tokens,
 )
+from oneirodex.utils.library_paths import library_dir
 
 MARK_SIZE = 256
 # Generate larger then downscale — SD reads hardware shape better at 512.
@@ -153,14 +154,7 @@ def _validate_slug(value: str, *, kind: str) -> str:
 
 
 def marks_root(package_root: str | Path | None = None) -> Path:
-    if package_root is not None:
-        return Path(package_root) / 'static' / 'library' / 'system-marks'
-    try:
-        from flask import current_app
-
-        return Path(current_app.root_path) / 'static' / 'library' / 'system-marks'
-    except RuntimeError:
-        return Path(__file__).resolve().parents[1] / 'static' / 'library' / 'system-marks'
+    return Path(library_dir(package_root)) / 'system-marks'
 
 
 def theme_dir(theme: str, package_root: str | Path | None = None) -> Path:

@@ -22,6 +22,15 @@ from oneirodex.utils.store_ownership_common import (
     _any_account_credential,
     _outbound,
     _parse_credential_json,
+    household_fp,
+    stale_household_copy,
+)
+from oneirodex.utils.store_sync_errors import StoreSyncError, StoreSyncPermissionError, rejected_reason
+from oneirodex.utils.store_sync_jobs import checkpoint, mark_partial
+
+_REJECTED = (
+    'GOG rejected the saved token (unofficial Galaxy client). Paste a '
+    'new refresh token; CSV import still works.'
 )
 
 
@@ -49,24 +58,36 @@ def _gog_client_pair() -> tuple[str, str]:
 
 
 def _gog_tokens_for(account: StoreAccount) -> dict:
+    """The tokens a sync would use, with ``origin='household'`` when they are
+    the operator's. The household sign-in is used only when the member saved
+    nothing of their own; a member's own (even incomplete) credential is never
+    mixed with or silently replaced by the household one."""
     data = _parse_credential_json(account.credential)
-    if not data.get('access_token') and not data.get('refresh_token'):
-        env_access = (os.getenv('GOG_ACCESS_TOKEN') or '').strip()
-        env_refresh = (
-            (os.getenv('GOG_REFRESH_TOKEN') or os.getenv('GOG_API_TOKEN') or '')
-            .strip()
-        )
-        if env_access:
-            data['access_token'] = env_access
-        if env_refresh:
-            data['refresh_token'] = env_refresh
-        if env_refresh and not env_access and 'token' in data:
-            data.pop('token', None)
-        elif not data.get('refresh_token') and data.get('token'):
+    env_access = (os.getenv('GOG_ACCESS_TOKEN') or '').strip()
+    env_refresh = (os.getenv('GOG_REFRESH_TOKEN') or os.getenv('GOG_API_TOKEN') or '').strip()
+    env_value = env_refresh or env_access
+    if stale_household_copy(data, env_value):
+        data = {}
+    if data:
+        if data.get('token') and not data.get('refresh_token'):
             data['refresh_token'] = data['token']
-    elif data.get('token') and not data.get('refresh_token'):
-        data['refresh_token'] = data['token']
+        return data
+    if not env_value:
+        return {}
+    data = {'origin': 'household', 'household_fp': household_fp(env_value)}
+    if env_access:
+        data['access_token'] = env_access
+    if env_refresh:
+        data['refresh_token'] = env_refresh
     return data
+
+
+def credential_source(account: StoreAccount) -> str:
+    """member | household | none, by the same selection the sync makes."""
+    tokens = _gog_tokens_for(account)
+    if not (tokens.get('access_token') or tokens.get('refresh_token')):
+        return 'none'
+    return 'household' if tokens.get('origin') == 'household' else 'member'
 
 
 def _refresh_gog_access(account: StoreAccount, tokens: dict) -> str:
@@ -75,9 +96,10 @@ def _refresh_gog_access(account: StoreAccount, tokens: dict) -> str:
     if not refresh and access:
         return access
     if not refresh:
-        raise ValueError(
+        raise StoreSyncError(
             'GOG live sync needs a refresh token — paste one from Heroic/Galaxy '
-            'or set GOG_REFRESH_TOKEN. CSV import still works without it.'
+            'or set GOG_REFRESH_TOKEN. CSV import still works without it.',
+            'credential_missing',
         )
     client_id, client_secret = _gog_client_pair()
     resp = _outbound(
@@ -90,21 +112,21 @@ def _refresh_gog_access(account: StoreAccount, tokens: dict) -> str:
             'refresh_token': refresh,
         },
     )
-    if resp.status_code == 401:
-        raise ValueError(
-            'GOG rejected the saved token (unofficial Galaxy client). Paste a '
-            'new refresh token; CSV import still works.'
-        )
+    # OAuth answers an expired or revoked refresh token with 400 invalid_grant
+    # as often as 401; both mean "sign in again", not "try later".
+    if resp.status_code in (400, 401):
+        raise StoreSyncError(_REJECTED, rejected_reason(tokens.get('origin')))
     resp.raise_for_status()
     payload = resp.json() if resp.content else {}
     new_access = (payload.get('access_token') or '').strip()
     new_refresh = (payload.get('refresh_token') or refresh).strip()
     if not new_access:
-        raise ValueError('GOG token refresh returned no access token')
-    account.credential = json.dumps({
-        'refresh_token': new_refresh,
-        'access_token': new_access,
-    })
+        raise StoreSyncError('GOG token refresh returned no access token', 'invalid_response')
+    stored = {'refresh_token': new_refresh, 'access_token': new_access}
+    if tokens.get('origin') == 'household':
+        stored['origin'] = 'household'
+        stored['household_fp'] = tokens.get('household_fp')
+    account.credential = json.dumps(stored)
     db.session.commit()
     return new_access
 
@@ -113,6 +135,9 @@ def _gog_product_names(ids: list[str]) -> dict[str, str]:
     names: dict[str, str] = {}
     chunk_size = 50
     for index in range(0, len(ids), chunk_size):
+        # Outside the try below: a cancel must stop the sync, not be swallowed
+        # as a failed name lookup.
+        checkpoint(pages=1)
         chunk = ids[index:index + chunk_size]
         try:
             resp = _outbound(
@@ -123,6 +148,8 @@ def _gog_product_names(ids: list[str]) -> dict[str, str]:
             resp.raise_for_status()
             payload = resp.json() if resp.content else None
         except Exception:
+            # IDs are still recorded; only these names are missing.
+            mark_partial('names_incomplete')
             continue
         rows = payload if isinstance(payload, list) else (
             payload.values() if isinstance(payload, dict) else []
@@ -164,25 +191,24 @@ def sync_gog_owned_games(user_id: int) -> dict:
     Register-only: records IDs and names; does not download anything.
     """
     if not is_ownership_sync_enabled():
-        raise PermissionError('Store ownership sync is disabled by administrator')
+        raise StoreSyncPermissionError('Store ownership sync is disabled by administrator', 'sync_disabled')
 
     account = db.session.execute(
         select(StoreAccount).filter_by(user_id=user_id, store='gog')
     ).scalars().first()
     if not account:
-        raise ValueError('GOG account not connected')
+        raise StoreSyncError('GOG account not connected', 'not_connected')
 
-    access = _refresh_gog_access(account, _gog_tokens_for(account))
+    tokens = _gog_tokens_for(account)
+    access = _refresh_gog_access(account, tokens)
+    checkpoint(pages=1)
     resp = _outbound(
         'GET',
         _GOG_OWNED_URL,
         headers={'Authorization': f'Bearer {access}'},
     )
     if resp.status_code == 401:
-        raise ValueError(
-            'GOG rejected the saved token (unofficial Galaxy client). Paste a '
-            'new refresh token; CSV import still works.'
-        )
+        raise StoreSyncError(_REJECTED, rejected_reason(tokens.get('origin')))
     resp.raise_for_status()
     payload = resp.json() if resp.content else {}
     owned = payload.get('owned') or payload.get('games') or []
@@ -196,6 +222,7 @@ def sync_gog_owned_games(user_id: int) -> dict:
             continue
         ids.append(str(pid))
 
+    checkpoint(pages=1, items=len(ids))
     names = _gog_product_names(ids) if ids else {}
     matched = 0
     for product_id in ids:

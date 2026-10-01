@@ -18,6 +18,7 @@ from oneirodex.utils.rom_archive_types import CUE_COMPANION_EXTENSIONS
 from oneirodex.utils.rom_archive_select import choose_rom_member
 from oneirodex.utils.rom_archive_select import _safe_basename
 from oneirodex.utils.rom_archive_types import MAX_NEST_DEPTH
+from oneirodex.utils.security import is_plain_file_within
 
 
 def _list_roms_with_sizes_in_zip(zip_path: str) -> list[tuple[str, int]]:
@@ -49,6 +50,9 @@ def _extract_zip_member(archive: zipfile.ZipFile, member: str, dest: str) -> Non
     parent = os.path.dirname(dest)
     if parent:
         os.makedirs(parent, exist_ok=True)
+    # open(dest, 'wb') writes *through* a link sitting at dest; replace it instead.
+    if os.path.islink(dest):
+        os.unlink(dest)
     with archive.open(member) as src, open(dest, 'wb') as out:
         while True:
             chunk = src.read(1024 * 1024)
@@ -193,6 +197,8 @@ def extract_rom_from_gz(gz_path: str, cache_dir: str) -> str:
         return dest
 
     try:
+        if os.path.islink(dest):
+            os.unlink(dest)
         with gzip.open(gz_path, 'rb') as src, open(dest, 'wb') as out:
             while True:
                 chunk = src.read(1024 * 1024)
@@ -257,12 +263,14 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
         ) from exc
 
     resolved_cue = path.resolve()
+    # Only real files that live in the disc folder: a ``disc.bin`` link pointing
+    # at some other readable file would otherwise be zipped into the download.
     companions = [
         candidate
         for name in sibling_names
         if Path(name).suffix.lower() in CUE_COMPANION_EXTENSIONS
         for candidate in (source_dir / name,)
-        if candidate.is_file() and candidate.resolve() != resolved_cue
+        if is_plain_file_within(source_dir, candidate) and candidate.resolve() != resolved_cue
     ]
 
     if not companions:

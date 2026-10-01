@@ -7,11 +7,12 @@ from werkzeug.utils import secure_filename
 from oneirodex.models import UserPreference
 from oneirodex import db
 from sqlalchemy import update
+from oneirodex.utils.library_paths import library_dir
 
 class ThemeManager:
     def __init__(self, app):
         self.app = app
-        self.theme_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static/library/themes')
+        self.theme_folder = os.path.join(library_dir(os.path.dirname(os.path.dirname(__file__))), 'themes')
 
     def get_default_theme(self):
         default_theme_path = os.path.join(self.theme_folder, 'default', 'theme.json')

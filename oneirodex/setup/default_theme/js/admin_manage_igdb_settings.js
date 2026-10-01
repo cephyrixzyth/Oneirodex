@@ -18,8 +18,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const clientId = document.getElementById('igdb_client_id').value;
         const clientSecret = document.getElementById('igdb_client_secret').value;
 
-        // Basic validation
-        if (clientId.length < 20 || clientSecret.length < 20) {
+        // Basic validation. A saved secret is not sent back to the page: blank keeps it.
+        const secretInput = document.getElementById('igdb_client_secret');
+        const keepSavedSecret = clientSecret === '' && secretInput && secretInput.dataset.saved === '1';
+        if (clientId.length < 20 || (!keepSavedSecret && clientSecret.length < 20)) {
             $.notify("Client ID and Secret must be at least 20 characters long", "error");
             return;
         }

@@ -22,7 +22,9 @@ def igdb_settings():
         settings = global_settings_row_or_create()
         
         settings.igdb_client_id = data.get('igdb_client_id')
-        settings.igdb_client_secret = data.get('igdb_client_secret')
+        # The page never shows the saved secret; blank keeps it.
+        if data.get('igdb_client_secret'):
+            settings.igdb_client_secret = data.get('igdb_client_secret')
         
         try:
             db.session.commit()

@@ -1,0 +1,34 @@
+.od-welcome {
+  color: var(--od-text);
+}
+
+.od-welcome__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.od-welcome__step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.od-welcome__step > h2 {
+  margin: 0;
+  font-size: var(--od-font-lg);
+}
+
+.od-welcome__step > .od-store-list {
+  align-self: stretch;
+}
+
+.od-welcome__text {
+  margin: 0;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}

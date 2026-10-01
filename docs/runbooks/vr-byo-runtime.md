@@ -58,5 +58,5 @@ Oneirodex never applies, distributes or bundles any of these, and never injects 
 ## Related
 
 - [user/controllers-and-vr.md](../user/controllers-and-vr.md) — headsets, PSVR2 steps, `vr_compat`, the headset record
-- [strategy/headset-vr.md](../strategy/headset-vr.md) — the VR seat model and rider R3
+- strategy/headset-vr.md (local-only reference) — the VR seat model and rider R3
 - [user/faq.md](../user/faq.md) — *VR / headsets* rows

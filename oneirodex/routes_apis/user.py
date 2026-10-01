@@ -20,6 +20,7 @@ from oneirodex.utils.browse_filters import apply_item_kind_filter, apply_name_fi
 from oneirodex.utils.client_lifecycle import load_lifecycle_map
 from oneirodex.utils.local_metadata import has_local_images, has_local_metadata
 from oneirodex.utils.lifecycle import web_lifecycle_fields
+from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.game_details_payload import browse_trailer_fields
 from oneirodex.utils.play_url import browse_play_fields, library_platform_key
 from oneirodex.utils.secondary_scrapers import game_card_flags
@@ -298,7 +299,9 @@ def favorites():
 def get_game_status(game_uuid):
     """Get the current user's completion status for a game"""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
-    if not game:
+    # The library ACL too: a restricted (e.g. child) account must not learn
+    # that a game exists, or record a status for it, outside its libraries.
+    if not game or not user_can_access_game(current_user, game):
         return api_error('Game not found', code='not_found')
 
     # Query the status
@@ -324,7 +327,9 @@ def get_game_status(game_uuid):
 def set_game_status(game_uuid):
     """Set or update the user's completion status for a game"""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
-    if not game:
+    # The library ACL too: a restricted (e.g. child) account must not learn
+    # that a game exists, or record a status for it, outside its libraries.
+    if not game or not user_can_access_game(current_user, game):
         return api_error('Game not found', code='not_found')
 
     data = request.get_json()

@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from oneirodex import db
 from oneirodex.models import GlobalSettings, User
+from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
 from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.security import validate_connector_http_url
 
@@ -41,6 +42,32 @@ def _next_tan() -> int:
 def _set_last_error(message: str | None) -> None:
     global _LAST_ERROR
     _LAST_ERROR = message
+
+
+def _failure_text(exc: BaseException) -> str:
+    """Fixed wording for transport failures; our own RuntimeErrors pass through.
+
+    ``requests`` exception strings carry the request URL and resolver detail, and
+    ``last_error`` is surfaced on the admin status payload.
+    """
+    if isinstance(exc, BlockedOutboundUrl):
+        return 'Lighting URL is not allowed by the outbound policy'
+    if isinstance(exc, requests.RequestException):
+        return 'Lighting bridge unreachable'
+    return str(exc)
+
+
+def _post(session, url: str, **kwargs) -> requests.Response:
+    """POST to an admin-configured bridge, revalidating every redirect hop.
+
+    The base URL is validated once at save time; a bridge that later answers
+    ``302 Location: http://169.254.169.254/`` used to be followed blindly.
+    ``validate_connector_http_url`` is the policy these URLs were saved under
+    (LAN allowed while ALLOW_PRIVATE_LAN_URLS is on, cloud metadata never).
+    """
+    return safe_request(
+        'POST', url, validator=validate_connector_http_url, session=session, **kwargs,
+    )
 
 
 def _settings_row() -> GlobalSettings | None:
@@ -275,7 +302,8 @@ class HyperionClient:
         headers = {'Content-Type': 'application/json'}
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'
-        resp = self._session.post(
+        resp = _post(
+            self._session,
             self.rpc_url,
             json=payload,
             headers=headers,
@@ -324,7 +352,8 @@ class HomeAssistantClient:
 
     def _call_service(self, domain: str, service: str, body: dict[str, Any]) -> None:
         url = urljoin(self.base_url + '/', f'api/services/{domain}/{service}')
-        resp = self._session.post(
+        resp = _post(
+            self._session,
             url,
             json=body,
             headers=self._headers(),
@@ -448,8 +477,9 @@ def _run_async(fn, *args) -> None:
             try:
                 fn(*args)
             except Exception as exc:
-                _set_last_error(str(exc))
-                logger.warning('Ambient lighting async failed: %s', exc)
+                text = _failure_text(exc)
+                _set_last_error(text)
+                logger.warning('Ambient lighting async failed: %s', text)
 
     threading.Thread(target=worker, daemon=True, name='oneirodex-ambient-lighting').start()
 
@@ -501,7 +531,7 @@ def ambient_lighting_status(*, probe: bool = False) -> dict[str, Any]:
                         probe_ok = True
                         _set_last_error(None)
                 except Exception as exc:
-                    error = str(exc)
+                    error = _failure_text(exc)
                     _set_last_error(error)
         elif provider == 'homeassistant' and cfg.get('ha_url'):
             ok, _ = validate_connector_http_url(cfg['ha_url'])
@@ -523,7 +553,7 @@ def ambient_lighting_status(*, probe: bool = False) -> dict[str, Any]:
                         probe_ok = True
                         _set_last_error(None)
                 except Exception as exc:
-                    error = str(exc)
+                    error = _failure_text(exc)
                     _set_last_error(error)
     return {
         'enabled': cfg.get('enabled'),

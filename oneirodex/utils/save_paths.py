@@ -32,6 +32,7 @@ from flask import current_app, has_app_context
 
 from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
+from oneirodex.utils.library_paths import library_dir
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +86,7 @@ def cache_dir() -> str:
     explicit = (os.environ.get('SAVE_PATHS_CACHE_DIR') or '').strip()
     if explicit:
         return explicit
-    try:
-        root = current_app.root_path if has_app_context() else None
-    except Exception:  # noqa: BLE001
-        root = None
-    if not root:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(root, 'static', 'library', 'save_paths')
+    return os.path.join(library_dir(), 'save_paths')
 
 
 def manifest_path() -> str:
