@@ -5,13 +5,18 @@ from __future__ import annotations
 from flask import jsonify, request
 from flask_login import current_user, login_required
 
+from oneirodex import db
+from oneirodex.models import Genre
 from oneirodex.routes_discover import (
     build_discover_feed,
     build_discover_row,
     build_discover_zone,
+    serialize_discover_game,
 )
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.discover_hubs import build_genre_hub
+from oneirodex.utils.discover_hydrate import DiscoverHydration
+from oneirodex.utils.discover_ml.surprise import pick_surprise, taste_genres
 from oneirodex.utils.discover_feed import MAX_MEMBER_PINS
 from oneirodex.utils.discover_pins import (
     PinnedByAdmin,
@@ -96,6 +101,51 @@ def discover_genre_hub(genre: str):
             code='not_found',
         )
     return api_ok(payload)
+
+
+@apis_bp.route('/discover/surprise', methods=['GET'])
+@login_required
+def discover_surprise():
+    """One title from the top of this member's ranking, and the genres to steer it.
+
+    ``genre`` narrows the draw to one of the member's genres; ``exclude`` is a
+    comma-separated list of uuids just shown, so pressing again moves on. An
+    empty draw is a normal answer (``game: null`` with a reason), not an error:
+    a member who has tried everything in a genre has not made a bad request.
+    """
+    genre = None
+    raw_genre = (request.args.get('genre') or '').strip()
+    if raw_genre:
+        try:
+            genre_id = int(raw_genre)
+        except ValueError:
+            return api_error('Genre must be a genre id.', code='bad_request')
+        genre = db.session.get(Genre, genre_id)
+        if genre is None:
+            return api_error('That genre is not in this library.', code='not_found')
+
+    exclude = [part for part in (request.args.get('exclude') or '').split(',') if part]
+    pick = pick_surprise(current_user, genre=genre, exclude=exclude)
+
+    card = None
+    if pick.game is not None:
+        hydration = DiscoverHydration(current_user)
+        hydration.prime([pick.game])
+        card = serialize_discover_game(
+            pick.game,
+            hydration.cover_for(pick.game),
+            **hydration.serializer_kwargs(pick.game),
+        )
+
+    return api_ok({
+        'game': card,
+        'reason': pick.reason,
+        'genre': {'id': genre.id, 'name': genre.name} if genre is not None else None,
+        'genres': [
+            {'id': taste.id, 'name': taste.name}
+            for taste in taste_genres(current_user.id)
+        ],
+    })
 
 
 @apis_bp.route('/discover/pins', methods=['GET', 'PUT'])

@@ -5,6 +5,7 @@ import { fetchDiscoverPins, saveDiscoverPins } from './api/discoverPins'
 import { ContextBar } from './chrome/ContextBar'
 import { DiscoverShelf, formatEventEnds, rowItems } from './components/DiscoverShelf'
 import { DiscoverRowSettings } from './components/DiscoverRowSettings'
+import { DiscoverSurprise } from './components/DiscoverSurprise'
 import { DiscoverZoneStrip } from './components/DiscoverZoneStrip'
 import { PageStatus } from './components/PageStatus'
 
@@ -255,6 +256,11 @@ export function DiscoverApp() {
     <>
       {bar}
       <DiscoverZoneStrip zones={zones} />
+      <DiscoverSurprise
+        isAdmin={isAdmin}
+        showPlayStatus={Boolean(shellConfig.showPlayStatus)}
+        enableDeleteOnDisk={Boolean(shellConfig.enableDeleteOnDisk)}
+      />
       {visible.map((section: any) => {
         const identifier = String(section.identifier || section.title || 'section')
         return (
