@@ -54,6 +54,9 @@ Fixed. The status was recorded but nothing read it, so the recommendations never
 
 _One "won’t play" only removes that title — it is not read as a verdict on its whole genre, so saying no to one platformer will not empty the shelf of platformers._
 
+**What does Surprise me on Discover pick from?**  
+The top of your own taste ranking — the dozen or so titles Discover would most stand behind for you — minus anything you have already favourited, played or said no to. It is deliberately not the whole library, which would mostly land on things nobody in the house wanted. The genre chips beside it are your strongest genres; tap one to draw only from that genre. Pressing the button does not change what Discover thinks you like.
+
 **What is a smart collection?**  
 A saved filter that also shows up as a shelf on **Collections**. A normal shelf holds the games you put in it; a smart one holds whatever currently matches its filter, so it stays current on its own as titles come and go. Tick **Show on Collections** when you save a filter. It is yours — it does not appear for anyone else in the household.
 

@@ -325,6 +325,17 @@ every member's pins below the fold on their own home page.
 Forcing composes with scheduling — a forced shelf outside its event window is
 still hidden, because visibility and schedule are checked first.
 
+### Surprise me (INSP-4b)
+
+`GET /api/discover/surprise` returns one card drawn at random from the top
+`DRAW_WIDTH` (12) of the member's ranking over their unengaged titles, plus up to
+six of their strongest profile genres as `genres`. Optional `genre=<id>` narrows the
+draw (400 for a non-integer, 404 for an unknown id); `exclude=<uuid,...>` skips
+recent picks, and an exhausted band starts over rather than returning empty.
+An empty draw is `game: null` with a reason, not an error. It is not a
+`DiscoverySection` — nothing to arrange, hide or pin — and it writes nothing:
+not an impression, not a taste signal. Code: `utils/discover_ml/surprise.py`.
+
 ### Members pin their own rows
 
 `GET`/`PUT /api/discover/pins` stores up to three row identifiers per member, in

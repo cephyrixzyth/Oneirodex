@@ -322,7 +322,12 @@ test('pinning a row moves it to the top of the feed immediately', async () => {
   await user.click(screen.getAllByRole('button', { name: 'Pin' })[1])
 
   await waitFor(() => {
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((node) => node.textContent)
+    // Shelf headings only: the Surprise me panel above the feed is not a row
+    // and does not take part in pin order.
+    const headings = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((node) => node.textContent)
+      .filter((text) => text !== 'Surprise me')
     expect(headings[0]).toContain('Highest Rated')
   })
 })
