@@ -133,9 +133,15 @@ export interface SurprisePick {
  * One title from the top of this member's ranking (INSP-4b), plus the genres
  * the picker offers. `exclude` is what was just shown, so "another" moves on.
  */
-export async function fetchSurprise(
-  { genre = null, exclude = [], signal }: { genre?: number | null; exclude?: string[]; signal?: AbortSignal } = {},
-): Promise<SurprisePick> {
+export async function fetchSurprise({
+  genre = null,
+  exclude = [],
+  signal,
+}: {
+  genre?: number | null
+  exclude?: string[]
+  signal?: AbortSignal
+} = {}): Promise<SurprisePick> {
   const params = new URLSearchParams()
   if (genre != null) params.set('genre', String(genre))
   if (exclude.length) params.set('exclude', exclude.join(','))
