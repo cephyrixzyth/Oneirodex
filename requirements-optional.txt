@@ -6,7 +6,7 @@
 # the package the plugin reads "available" and the sync button says which
 # package to install. CSV import needs neither.
 xbox-webapi>=2.0
-psnawp>=2.0
+psnawp>=3.0.3
 
 # INSP-44 (v11 H4c): NVIDIA management library bindings for the Ops GPU tile.
 # Only useful where the container can see an NVIDIA device; without it the
