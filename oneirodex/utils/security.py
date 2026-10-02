@@ -64,6 +64,26 @@ def is_safe_path(user_path, allowed_bases):
         return False, "Invalid path format"
 
 
+def is_safe_path_strict(user_path, allowed_bases):
+    """``is_safe_path`` for destructive operations: the path must sit *below* a base.
+
+    ``is_safe_path`` accepts an allowed base itself, which is right for reads
+    but fatal for a delete: a ``folder_path`` equal to a library root would
+    ``rmtree`` the whole library.
+    """
+    is_safe, error_message = is_safe_path(user_path, allowed_bases)
+    if not is_safe:
+        return is_safe, error_message
+    try:
+        resolved = Path(user_path.strip()).resolve(strict=False)
+        for base in allowed_bases:
+            if base and resolved == Path(base).resolve(strict=False):
+                return False, "Access denied - path is a library root, not an item inside it"
+    except (OSError, ValueError):
+        return False, "Invalid path format"
+    return True, None
+
+
 def get_allowed_base_directories(app):
     """Get allowed base directories from app configuration.
 

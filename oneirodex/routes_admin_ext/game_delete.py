@@ -29,7 +29,7 @@ from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.game_core import delete_game
 from oneirodex.utils.scanning import is_scan_job_running
-from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+from oneirodex.utils.security import get_allowed_base_directories, is_safe_path_strict
 from oneirodex.utils.validation import validate_body
 
 from . import admin2_bp
@@ -68,8 +68,15 @@ def delete_folder():
     if not folder_path:
         return api_error('Path is required.', code='bad_request', body_status='error')
 
+    if is_scan_job_running():
+        return api_error(
+            'A scan is running. Deleting is available again as soon as it finishes.',
+            code='forbidden',
+            body_status='error',
+        )
+
     allowed_bases = get_allowed_base_directories(current_app)
-    is_safe, error_message = is_safe_path(folder_path, allowed_bases)
+    is_safe, error_message = is_safe_path_strict(folder_path, allowed_bases)
     if not is_safe:
         logger.warning(f"Security error: delete_folder path validation failed for {folder_path}: {error_message}")
         return api_error('Access denied.', code='forbidden', body_status='error')
@@ -148,7 +155,7 @@ def delete_full_game(body: DeleteFullGameBody):
 
         if on_disk:
             allowed_bases = get_allowed_base_directories(current_app)
-            is_safe, error_message = is_safe_path(full_path, allowed_bases)
+            is_safe, error_message = is_safe_path_strict(full_path, allowed_bases)
             if not is_safe:
                 logger.warning(f"Security error: delete_full_game path validation failed for {full_path}: {error_message}")
                 return api_error('Access denied.', code='forbidden')

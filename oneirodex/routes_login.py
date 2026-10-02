@@ -416,7 +416,13 @@ def reset_password(token):
         return redirect(url_for('login.login'))
 
     user = db.session.execute(select(User).filter_by(password_reset_token=token)).scalar_one_or_none()
-    if not user or user.token_creation_time + timedelta(minutes=15) < datetime.now(timezone.utc):
+    # The column is a plain DateTime, so Postgres hands the stored UTC value
+    # back naive; comparing that with an aware "now" raised a TypeError and
+    # turned every reset link into a 500.
+    issued_at = user.token_creation_time if user else None
+    if issued_at is not None and issued_at.tzinfo is None:
+        issued_at = issued_at.replace(tzinfo=timezone.utc)
+    if not user or issued_at is None or issued_at + timedelta(minutes=15) < datetime.now(timezone.utc):
         flash('The password reset link is invalid or has expired.')
         return redirect(url_for('login.login'))
 
