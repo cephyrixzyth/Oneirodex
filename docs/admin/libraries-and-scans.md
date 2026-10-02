@@ -29,12 +29,34 @@ root) is unaffected; keep real files, or hardlinks, inside the folder.
 
 The same rule covers the other files the scanner reads out of a game folder. A
 `.nfo` that is a link is not read (so it cannot end up in the NFO text every member
-sees), and a firmware file that is a link inside a collection folder is not copied
-by **Scan collection** / **Install matching firmware**, the `BIOS_IMPORT_SOURCE`
-boot import or `scripts/import_bios.py`. The check is made on the file that is
-actually opened, not only when the folder is listed, so a file swapped for a link
-while a folder download is already streaming stops that download instead of
-sending the link's target. An NFO is read up to 256 KB.
+sees); nor is a `version.txt` (or `version`, `VERSION`, `build.txt`, `Build.txt`,
+`product_version.txt`) that is a link, which the freshness check would otherwise show
+every member as the game's local version; and a firmware file that is a link inside a
+collection folder is not copied by **Scan collection** / **Install matching
+firmware**, the `BIOS_IMPORT_SOURCE` boot import or `scripts/import_bios.py`. The
+check is made on the file that is actually opened, not only when the folder is
+listed, so a file swapped for a link while a folder download is already streaming
+stops that download instead of sending the link's target. An NFO is read up to
+256 KB and a version file up to 4 KB. The `oneirodex.json` sidecar is never written
+through a link either: the server writes a temporary file in the game folder and
+renames it over the old sidecar, so a link planted under that name is replaced, not
+followed.
+
+Folder downloads, single-file downloads, WebRetro play (including the `play.zip` built
+for a `.cue` disc) and the local cover / screenshot images are served from the file
+the server opened and vetted, not from a path it checked a moment earlier, and the
+game folder is resolved once, when the request begins. Swapping a file, or the whole
+folder, for a link while one of those requests is running therefore cannot change what
+is sent: a file swapped before it is opened is refused, and a file that was already
+open keeps serving its own bytes. A folder download that fails after it has started (a file
+deleted, unreadable or swapped part-way) is cut off, so the browser reports a failed or
+incomplete download instead of saving a damaged zip as if it had finished; start it
+again once the share has settled. A file dated before 1980 (extracted dumps often carry
+a 1970 date) is zipped as 1980-01-01 instead of failing the whole download. The check
+that the open file is where it should be asks the operating system about the file
+itself: `/proc` on Linux, `fcntl(F_GETPATH)` on macOS and `GetFinalPathNameByHandleW`
+on Windows (standalone installs). A system with none of those falls back to a weaker
+check made after the open.
 
 A location that is configured but not currently mounted is still listed, marked
 *not mounted* — see [../runbooks/remote-scan-locations.md](../runbooks/remote-scan-locations.md)

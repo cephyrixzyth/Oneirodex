@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -196,5 +198,22 @@ describe('revealPathInOs', () => {
     })
     expect(result).toEqual({ ok: false, error: 'Path is outside allowed roots' })
     expect(invoke).not.toHaveBeenCalled()
+  })
+})
+
+describe('NETWORK_PATH_REFUSED parity with the native side', () => {
+  it('is the very string src-tauri/src/lib.rs refuses a network or device path with', () => {
+    // Both only said "keep in step"; this makes a one-sided edit fail instead.
+    const rust = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf-8')
+    const match = /const NETWORK_PATH_REFUSED: &str =\s*"((?:[^"\\]|\\.)*)";/.exec(rust)
+    expect(match, 'NETWORK_PATH_REFUSED is declared in lib.rs').not.toBeNull()
+    // The Rust literal is read as JSON text: the escapes both use (\" and \\) agree.
+    expect(JSON.parse(`"${match![1]}"`)).toBe(NETWORK_PATH_REFUSED)
+  })
+
+  it('is what a device path is refused with here too', () => {
+    for (const path of ['\\\\?\\C:\\Windows', '\\\\.\\pipe\\x', '\\??\\C:\\Windows']) {
+      expect(validateRevealPath(path)).toEqual({ ok: false, error: NETWORK_PATH_REFUSED })
+    }
   })
 })

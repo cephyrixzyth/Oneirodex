@@ -127,7 +127,41 @@ fn installs_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     resolve_subdir(app, "installs")
 }
 
-fn canonicalize_path(path: &Path) -> Result<PathBuf, String> {
+/// Said when a containment helper is handed a path it must not even look at.
+const PATH_NOT_PROBEABLE: &str = "Path must be an absolute local path inside an app directory";
+
+/// The text-only half of containment: may `path` be touched on disk at all?
+///
+/// `canonicalize_path`, and every `ensure_path_*` built on it, starts with
+/// `path.exists()`. On Windows that probe of a UNC path opens an SMB connection
+/// and answers the named host's NTLM challenge, handing it the user's credential
+/// hash (the leak `is_network_or_device_path` keeps out of `open_path`). The
+/// strings that reach these helpers come from the webview and from
+/// `installs.json`, so they are screened as text first: UNC and device paths and
+/// non-absolute ones (which would resolve against the working directory) are
+/// refused before any filesystem call.
+///
+/// One exception, string-compared only: a Windows profile redirected to a file
+/// server puts the app's own folders on a UNC path, so a UNC path at or below the
+/// `root` the app itself supplied is the app's own folder, not a stranger's host.
+/// A `..` segment takes a path out of that prefix (see `is_under_trusted_share`).
+fn check_path_text_before_probe(path: &Path, root: &Path) -> Result<(), String> {
+    let text = path.to_string_lossy();
+    if is_network_or_device_path(&text) {
+        let root_text = root.to_string_lossy();
+        if trusted_shares::is_under_trusted_share(&text, &[&*root_text]) {
+            return Ok(());
+        }
+        return Err(PATH_NOT_PROBEABLE.into());
+    }
+    if !path.is_absolute() {
+        return Err(PATH_NOT_PROBEABLE.into());
+    }
+    Ok(())
+}
+
+fn canonicalize_path(path: &Path, root: &Path) -> Result<PathBuf, String> {
+    check_path_text_before_probe(path, root)?;
     if path.exists() {
         return path.canonicalize().map_err(|error| error.to_string());
     }
@@ -153,8 +187,9 @@ fn canonicalize_path(path: &Path) -> Result<PathBuf, String> {
 /// would make the target the whole installs directory. `strict` closes that by
 /// refusing the root itself.
 fn check_path_under_root(path: &Path, root: &Path, strict: bool) -> Result<(), String> {
+    check_path_text_before_probe(path, root)?;
     let canonical_root = root.canonicalize().map_err(|error| error.to_string())?;
-    let canonical_path = canonicalize_path(path)?;
+    let canonical_path = canonicalize_path(path, root)?;
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Path is outside allowed app directory".into());
     }
@@ -301,8 +336,9 @@ fn check_process_running(pid: u32) -> bool {
 /// Is this IPv4 address on the local machine or local network?
 /// 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 and the shared address space
 /// 100.64/10 (RFC 6598), where Tailscale puts every peer. Tailscale encrypts the
-/// hop, and the backend already treats that range as home-lab space
-/// (`_is_blocked_ip` in `oneirodex/utils/security.py`, `trusted_host.py`).
+/// hop. Accepting that range is the companion's own call; the backend's rule for
+/// it is the SSRF filter (`_is_blocked_ip` in `oneirodex/utils/security.py`),
+/// which counts it as non-public home-lab space.
 fn is_private_or_loopback_ipv4(ip: &Ipv4Addr) -> bool {
     let [a, b, _, _] = ip.octets();
     ip.is_loopback()
@@ -322,9 +358,9 @@ fn is_private_or_loopback_ipv6(ip: &Ipv6Addr) -> bool {
     ip.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
 }
 
-/// House-network host suffixes a router hands out. Same list as
-/// `_PRIVATE_SUFFIXES` in `oneirodex/utils/trusted_host.py`, so the server, the
-/// app and the companion agree on what "my own network" means.
+/// House-network host suffixes a router hands out. The same suffixes as
+/// `_PRIVATE_SUFFIXES` in `oneirodex/utils/trusted_host.py`; the address ranges
+/// above are the companion's own list.
 const PRIVATE_HOST_SUFFIXES: [&str; 5] =
     [".local", ".lan", ".home.arpa", ".internal", ".localdomain"];
 
@@ -361,7 +397,8 @@ fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
 /// private-LAN hosts; every other scheme is refused. An empty string clears the
 /// saved URL and is allowed. The TypeScript client applies the same policy before
 /// it ever sends a request — this is the backstop for anything that reaches
-/// `save_config` without going through it.
+/// `save_config` without going through it. `fixtures/server-urls.json` holds the
+/// URLs both implementations are tested against, so they cannot drift apart.
 fn validate_server_base_url(raw: &str) -> Result<(), String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -549,7 +586,7 @@ fn preserve_install_files(
         return Ok(None);
     }
     let source = source.canonicalize().map_err(|error| error.to_string())?;
-    let backup = canonicalize_path(&backup)?;
+    let backup = canonicalize_path(&backup, &root)?;
     if backup.exists()
         || source == root.canonicalize().map_err(|error| error.to_string())?
         || backup.starts_with(&source)
@@ -575,7 +612,7 @@ fn restore_install_snapshot(
     ensure_path_under_root(&source, &root)?;
     ensure_path_under_root(&destination, &root)?;
     let source = source.canonicalize().map_err(|error| error.to_string())?;
-    let destination = canonicalize_path(&destination)?;
+    let destination = canonicalize_path(&destination, &root)?;
     if destination.exists() || destination.starts_with(&source) || source.starts_with(&destination)
     {
         return Err("Restore destination must be a separate new directory".into());
@@ -1103,7 +1140,8 @@ fn effective_trusted_shares(app: &tauri::AppHandle) -> Result<Vec<String>, Strin
 }
 
 /// Shown when a reveal path names a network share or a device. Keep in step with
-/// `NETWORK_PATH_REFUSED` in `src/open-path.ts`.
+/// `NETWORK_PATH_REFUSED` in `src/open-path.ts`; a test in `src/open-path.test.ts`
+/// reads this file and fails when the two differ.
 const NETWORK_PATH_REFUSED: &str =
     "Network (UNC) paths only open for shares you list under Trusted network shares in the companion (or map the share to a drive letter); device paths are always blocked";
 
@@ -1210,6 +1248,61 @@ fn validate_reveal_path(
     Ok((target, revealed_as))
 }
 
+/// Does this folder's own name carry an extension (`Evil.app`, `Foo.xcodeproj`)?
+///
+/// On macOS `open <directory>` only opens a folder when the directory is an
+/// ordinary one. A *package* - a directory LaunchServices maps to a handler by
+/// its extension - is launched instead: `open Evil.app` runs the app. The set of
+/// package extensions is open-ended (`.app`, `.bundle`, `.prefPane`, `.saver`,
+/// `.workflow`, `.scptd`, `.xpc`, `.appex`, `.kext`, `.plugin`, `.mpkg`, and
+/// whatever a third-party app registers), so no list is kept: a name with an
+/// extension is never opened, only revealed.
+fn looks_like_package(folder: &Path) -> bool {
+    folder
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().contains('.'))
+}
+
+/// The arguments for `open` when the companion reveals `target` on macOS.
+///
+/// A queued `open_path` is written by the server, and it can ask for the folder
+/// to be opened rather than selected (`select == false`). `open <directory>`
+/// would then launch an `.app` the server had just had installed (a zip
+/// extraction sets no quarantine attribute), with no click from the user, so
+/// the companion never hands `open` a folder that could be a package:
+///
+/// * `select`: `open -R <target>`. `-R` reveals the item in Finder and never
+///   opens it, whatever it is;
+/// * otherwise the folder (the target, or a file's parent) is opened only when
+///   its name has no extension and it does not resolve (through a symbolic link)
+///   to one that has; anything else is revealed with `-R` instead.
+///
+/// `resolve` maps a folder to its symbolic-link-free form (`fs::canonicalize`
+/// in the command, injected so the choice stays a pure function). Every path is
+/// absolute (`validate_reveal_path`), so none can be read as an `open` option.
+/// Not `cfg(target_os = "macos")` so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn macos_open_args(
+    target: &Path,
+    target_is_file: bool,
+    select_item: bool,
+    resolve: impl Fn(&Path) -> PathBuf,
+) -> Vec<String> {
+    if select_item {
+        return vec!["-R".to_string(), target.to_string_lossy().into_owned()];
+    }
+    let folder = if target_is_file {
+        target.parent().unwrap_or(target)
+    } else {
+        target
+    };
+    let folder_arg = folder.to_string_lossy().into_owned();
+    if looks_like_package(folder) || looks_like_package(&resolve(folder)) {
+        return vec!["-R".to_string(), folder_arg];
+    }
+    vec![folder_arg]
+}
+
 /// Open `path` in Explorer (Windows), Finder (macOS), or the default file manager (Linux).
 /// When `select` is true and the path is a file, select it in the parent folder.
 #[tauri::command]
@@ -1255,25 +1348,13 @@ fn reveal_path_in_os(
 
     #[cfg(target_os = "macos")]
     {
-        let status = if select_item {
-            std::process::Command::new("open")
-                .args(["-R", trimmed])
-                .status()
-                .map_err(|error| format!("Failed to start Finder: {error}"))?
-        } else {
-            let open_target = if target.is_file() {
-                target
-                    .parent()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| trimmed.to_string())
-            } else {
-                trimmed.to_string()
-            };
-            std::process::Command::new("open")
-                .arg(&open_target)
-                .status()
-                .map_err(|error| format!("Failed to start Finder: {error}"))?
-        };
+        let args = macos_open_args(&target, target.is_file(), select_item, |path| {
+            fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        });
+        let status = std::process::Command::new("open")
+            .args(args)
+            .status()
+            .map_err(|error| format!("Failed to start Finder: {error}"))?;
         if !status.success() {
             return Err(format!("open exited with status {status}"));
         }
@@ -1960,9 +2041,217 @@ mod tests {
     }
 
     #[test]
+    fn containment_helpers_refuse_unc_and_device_strings_before_any_filesystem_probe() {
+        // The same shapes the reveal check refuses, aimed at the helpers every
+        // remove / write / extract / launch goes through. The exact refusal text
+        // - not an OS error from a lookup, nor the generic "outside" message -
+        // proves the text gate ran before `exists()`, which on Windows would
+        // open an SMB connection to the named host.
+        let base = tempdir().unwrap();
+        let root = base.path().join("installs");
+        fs::create_dir_all(&root).unwrap();
+        for raw in [
+            r"\\attacker.invalid\x",
+            "//attacker.invalid/x",
+            r"\\attacker.invalid\share\dir\file.txt",
+            r"\/attacker.invalid\x",
+            r"\\?\C:\Windows",
+            r"\\?\UNC\attacker.invalid\x",
+            r"\\.\pipe\x",
+            r"\??\C:\Windows",
+        ] {
+            let path = Path::new(raw);
+            assert_eq!(
+                ensure_path_under_root(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "path: {raw}"
+            );
+            assert_eq!(
+                ensure_path_strictly_under_root(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "strict path: {raw}"
+            );
+            assert_eq!(
+                canonicalize_path(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "canonicalize: {raw}"
+            );
+            assert!(ensure_path_under_any_root(path, &[root.as_path()]).is_err());
+            assert!(remove_path_within_roots(path, &[root.as_path()]).is_err());
+        }
+    }
+
+    #[test]
+    fn containment_helpers_refuse_a_relative_path_instead_of_resolving_it_against_the_working_directory(
+    ) {
+        // A root inside the working directory makes a relative path that lands
+        // in it: without the text gate the lookup resolves it through the cwd
+        // and the helper accepts a path nobody wrote as absolute.
+        let base = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let root = base.path().to_path_buf();
+        let relative = Path::new(root.file_name().unwrap()).join("game.zip");
+        assert!(!relative.is_absolute());
+        assert_eq!(
+            ensure_path_under_root(&relative, &root).unwrap_err(),
+            PATH_NOT_PROBEABLE
+        );
+        assert_eq!(
+            ensure_path_strictly_under_root(&relative, &root).unwrap_err(),
+            PATH_NOT_PROBEABLE
+        );
+        assert!(ensure_path_under_any_root(&relative, &[root.as_path()]).is_err());
+        // The same file by its absolute path is still fine.
+        assert!(ensure_path_under_root(&root.join("game.zip"), &root).is_ok());
+    }
+
+    #[test]
+    fn text_gate_lets_a_redirected_profiles_own_unc_folders_through_and_nothing_else() {
+        // Windows Folder Redirection puts app data on a file server, which the OS
+        // reports as a plain UNC path. Paths below that root are the app's own
+        // folders; string compare only, so a host nobody named is still never
+        // looked up.
+        let root =
+            Path::new(r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs");
+        for path in [
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game\run.exe",
+            "//FS01/profiles$/chris/AppData/Roaming/com.oneirodex.desktop/installs/game",
+        ] {
+            assert_eq!(
+                check_path_text_before_probe(Path::new(path), root),
+                Ok(()),
+                "path: {path}"
+            );
+        }
+        for path in [
+            r"\\attacker\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\other\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs.evil\game",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\..\..\..\other",
+            r"\\?\UNC\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\chris",
+        ] {
+            assert_eq!(
+                check_path_text_before_probe(Path::new(path), root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "path: {path}"
+            );
+        }
+        // With an ordinary local root no UNC string is ever the app's own.
+        assert!(check_path_text_before_probe(
+            Path::new(r"\\fs01\profiles$\chris"),
+            Path::new(r"C:\Users\chris\AppData\Roaming\app")
+        )
+        .is_err());
+    }
+
+    #[test]
     fn reveal_still_accepts_a_local_absolute_path() {
         let base = tempdir().unwrap();
         assert!(validate_reveal_path(base.path().to_str().unwrap()).is_ok());
+    }
+
+    // ---------------------------------------------------------------
+    // macOS reveal arguments - a package is revealed, never opened
+    // ---------------------------------------------------------------
+
+    fn mac_args(target: &str, is_file: bool, select: bool) -> Vec<String> {
+        macos_open_args(Path::new(target), is_file, select, |path| {
+            path.to_path_buf()
+        })
+    }
+
+    #[test]
+    fn macos_selecting_always_reveals_and_never_opens() {
+        for (target, is_file) in [
+            ("/Users/me/games/Evil.app", false),
+            ("/Users/me/games/Doom 3", false),
+            ("/Users/me/games/Doom 3/base.pk4", true),
+        ] {
+            assert_eq!(mac_args(target, is_file, true), ["-R", target], "{target}");
+        }
+    }
+
+    #[test]
+    fn macos_opens_an_ordinary_folder_and_a_files_parent() {
+        assert_eq!(
+            mac_args("/Users/me/games/Doom 3", false, false),
+            ["/Users/me/games/Doom 3"]
+        );
+        assert_eq!(
+            mac_args("/Users/me/games/Doom 3/base.pk4", true, false),
+            ["/Users/me/games/Doom 3"]
+        );
+        assert_eq!(mac_args("/", false, false), ["/"]);
+        assert_eq!(mac_args("/file.bin", true, false), ["/"]);
+    }
+
+    #[test]
+    fn macos_reveals_a_directory_named_like_a_package_instead_of_opening_it() {
+        // `open Evil.app` would run the app. Every one of these is a directory
+        // LaunchServices hands to a handler, so each is revealed (`-R`), not opened.
+        for name in [
+            "Evil.app",
+            "Evil.APP",
+            "Evil.bundle",
+            "Evil.prefPane",
+            "Evil.saver",
+            "Evil.workflow",
+            "Evil.scptd",
+            "Evil.xpc",
+            "Evil.appex",
+            "Evil.kext",
+            "Evil.plugin",
+            "Evil.mpkg",
+            "Evil.xcodeproj",
+            "Evil.app.",
+            ".hidden",
+        ] {
+            let dir = format!("/Users/me/installs/{name}");
+            assert_eq!(mac_args(&dir, false, false), ["-R", dir.as_str()], "{name}");
+            // A trailing separator does not hide the extension.
+            let slashed = format!("{dir}/");
+            assert_eq!(
+                mac_args(&slashed, false, false),
+                ["-R", slashed.as_str()],
+                "{name}/"
+            );
+        }
+    }
+
+    #[test]
+    fn macos_reveals_the_package_when_the_file_asked_for_sits_directly_inside_it() {
+        // The open target of `Evil.app/Info.plist` is its parent, the bundle.
+        assert_eq!(
+            mac_args("/Users/me/installs/Evil.app/Info.plist", true, false),
+            ["-R", "/Users/me/installs/Evil.app"]
+        );
+    }
+
+    #[test]
+    fn macos_resolves_symbolic_links_before_it_decides() {
+        // installs/shortcut -> /Applications/Evil.app: the name is innocent, the
+        // folder it opens is a package.
+        let resolve = |path: &Path| {
+            if path.ends_with("shortcut") {
+                PathBuf::from("/Applications/Evil.app")
+            } else {
+                path.to_path_buf()
+            }
+        };
+        assert_eq!(
+            macos_open_args(
+                Path::new("/Users/me/installs/shortcut"),
+                false,
+                false,
+                resolve
+            ),
+            ["-R", "/Users/me/installs/shortcut"]
+        );
+        assert_eq!(
+            macos_open_args(Path::new("/Users/me/installs/plain"), false, false, resolve),
+            ["/Users/me/installs/plain"]
+        );
     }
 
     // ---------------------------------------------------------------
@@ -2091,118 +2380,56 @@ mod tests {
     // validate_server_base_url — http:// only on the local network
     // ---------------------------------------------------------------
 
+    /// The URL cases `src/transport-policy.test.ts` reads too: one JSON file, so
+    /// the TypeScript check the UI runs and this backstop cannot drift apart.
+    fn shared_url_cases() -> Vec<(String, bool)> {
+        #[derive(Deserialize)]
+        struct Case {
+            url: String,
+            ok: bool,
+        }
+        #[derive(Deserialize)]
+        struct Fixture {
+            cases: Vec<Case>,
+        }
+        let fixture: Fixture =
+            serde_json::from_str(include_str!("../../fixtures/server-urls.json")).unwrap();
+        fixture
+            .cases
+            .into_iter()
+            .map(|case| (case.url, case.ok))
+            .collect()
+    }
+
     #[test]
-    fn server_url_accepts_https_anywhere_and_blank() {
-        for url in [
-            "https://games.example.com",
-            "https://games.example.com:8443/prefix/",
-            "https://8.8.8.8",
-            "HTTPS://Games.Example.Com",
-            "",
-            "   ",
-        ] {
+    fn server_url_policy_matches_the_shared_fixture() {
+        let cases = shared_url_cases();
+        // A fixture that quietly emptied would pass vacuously.
+        assert!(cases.len() > 50, "only {} cases", cases.len());
+        assert!(cases.iter().any(|(_, ok)| *ok) && cases.iter().any(|(_, ok)| !*ok));
+        for (url, expected) in &cases {
+            match validate_server_base_url(url) {
+                Ok(()) => assert!(*expected, "accepted, fixture says refuse: {url:?}"),
+                Err(message) => {
+                    assert!(
+                        !*expected,
+                        "refused, fixture says accept: {url:?}: {message}"
+                    );
+                    // Whatever the reason, the message points at the fix.
+                    assert!(
+                        message.contains("https://"),
+                        "no https hint for {url:?}: {message}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn server_url_blank_clears_the_saved_url() {
+        // Not in the shared fixture: the TypeScript check refuses a blank URL.
+        for url in ["", "   "] {
             assert!(validate_server_base_url(url).is_ok(), "rejected: {url:?}");
-        }
-    }
-
-    #[test]
-    fn server_url_accepts_http_for_loopback_and_private_hosts() {
-        for url in [
-            "http://localhost:5000",
-            "http://127.0.0.1:5000",
-            "http://127.255.0.3",
-            "http://[::1]:5000",
-            "http://10.1.2.3",
-            "http://172.16.0.1",
-            "http://172.31.255.254",
-            "http://192.168.1.50:8080",
-            "http://169.254.10.10",
-            "http://[fd12:3456:789a::1]",
-            "http://[fc00::1]",
-            "http://[fe80::1]",
-            "http://[::ffff:192.168.1.5]",
-            "http://nas.local",
-            "http://NAS.LOCAL:8080/app",
-            "http://nas.local./",
-            "http://nas",
-            "http://nas:5000",
-            // The rest of the backend's `_PRIVATE_SUFFIXES`: router-assigned names.
-            "http://tower.lan:5006",
-            "http://NAS.LAN/",
-            "http://nas.home.arpa",
-            "http://nas.internal",
-            "http://nas.localdomain",
-            "http://a.b.lan",
-            // Shared address space 100.64.0.0/10 - Tailscale peers.
-            "http://100.64.0.1",
-            "http://100.100.100.100:5006",
-            "http://100.127.255.255",
-            "http://[fd7a:115c:a1e0::1]",
-            // WHATWG host parsing folds these to 127.0.0.1 / 192.168.0.1.
-            "http://0x7f.1/",
-            "http://2130706433/",
-            "http://0300.0250.0.1/",
-            // The host is 192.168.1.1; `evil.com` is only userinfo.
-            "http://evil.com@192.168.1.1/",
-        ] {
-            assert!(validate_server_base_url(url).is_ok(), "rejected: {url}");
-        }
-    }
-
-    #[test]
-    fn server_url_refuses_http_for_public_hosts() {
-        for url in [
-            "http://games.example.com",
-            "http://games.example.com:5000/app",
-            "http://8.8.8.8",
-            "http://172.15.0.1",
-            "http://172.32.0.1",
-            "http://192.169.1.1",
-            "http://11.0.0.1",
-            "http://0.0.0.0",
-            // Just outside 100.64.0.0/10.
-            "http://100.63.255.255",
-            "http://100.128.0.1",
-            "http://[2001:db8::1]",
-            "http://[::ffff:8.8.8.8]",
-            "http://[fec0::1]",
-            // Looks local, is a public name.
-            "http://192.168.1.1.evil.com",
-            "http://10.0.0.1.nip.io",
-            "http://localhost.evil.com",
-            "http://nas.local.evil.com",
-            "http://.local",
-            // A suffix is a whole label, never a substring or a bare suffix.
-            "http://nas.lan.evil.com",
-            "http://evil-lan.com",
-            "http://lan.example.com",
-            "http://.lan",
-            "http://home.arpa",
-            "http://nas.internal.evil.com",
-            "http://nas.home.arpa.evil.com",
-            // Hex-encoded public address.
-            "http://0x08080808/",
-            // The host is evil.com; 192.168.1.1 is only userinfo.
-            "http://192.168.1.1@evil.com/",
-        ] {
-            let err = validate_server_base_url(url).unwrap_err();
-            assert!(err.contains("https://"), "no https hint for {url}: {err}");
-        }
-    }
-
-    #[test]
-    fn server_url_refuses_other_schemes_and_junk() {
-        for url in [
-            "ftp://games.example.com",
-            "file:///etc/passwd",
-            "ws://localhost:5000",
-            "javascript:alert(1)",
-            "games.example.com",
-            "localhost:5000",
-            "https://",
-            "//games.example.com",
-        ] {
-            assert!(validate_server_base_url(url).is_err(), "accepted: {url}");
         }
     }
 

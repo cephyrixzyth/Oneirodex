@@ -1,103 +1,57 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
   checkDownloadRedirectUrl,
   checkModSourceUrl,
   checkServerUrl,
+  hasAcceptableDnsLabels,
   isPrivateOrLoopbackHost,
   savedServerUrlProblem,
 } from './transport-policy.js'
 
-// The Rust twin is `validate_server_base_url` in src-tauri/src/lib.rs; the host
-// lists below mirror its tests so the two stay in step.
+// The Rust twin is `validate_server_base_url` in src-tauri/src/lib.rs. Both test
+// suites read their URLs and verdicts from the one file below, so a rule changed
+// on one side only fails a test instead of drifting.
+interface UrlCase {
+  url: string
+  ok: boolean
+  why?: string
+}
 
-const allowedHttp = [
-  'http://localhost:5000',
-  'http://127.0.0.1:5000',
-  'http://127.255.0.3',
-  'http://[::1]:5000',
-  'http://10.1.2.3',
-  'http://172.16.0.1',
-  'http://172.31.255.254',
-  'http://192.168.1.50:8080',
-  'http://169.254.10.10',
-  'http://[fd12:3456:789a::1]',
-  'http://[fc00::1]',
-  'http://[fe80::1]',
-  'http://[::ffff:192.168.1.5]',
-  'http://nas.local',
-  'http://NAS.LOCAL:8080/app',
-  'http://nas.local./',
-  'http://nas',
-  'http://nas:5000',
-  // The rest of the backend's `_PRIVATE_SUFFIXES` (oneirodex/utils/trusted_host.py):
-  // names a household router hands out.
-  'http://tower.lan:5006',
-  'http://NAS.LAN/',
-  'http://nas.home.arpa',
-  'http://nas.internal',
-  'http://nas.localdomain',
-  'http://a.b.lan',
-  // Shared address space 100.64.0.0/10 — where Tailscale puts every peer; the
-  // backend already treats it as home-lab space.
-  'http://100.64.0.1',
-  'http://100.100.100.100:5006',
-  'http://100.127.255.255',
-  'http://[fd7a:115c:a1e0::1]',
-  // WHATWG host parsing folds these to 127.0.0.1 / 192.168.0.1.
-  'http://0x7f.1/',
-  'http://2130706433/',
-  'http://0300.0250.0.1/',
-  // The host is 192.168.1.1; `evil.com` is only userinfo.
-  'http://evil.com@192.168.1.1/',
-]
+const fixture = JSON.parse(
+  readFileSync(new URL('../fixtures/server-urls.json', import.meta.url), 'utf-8'),
+) as { cases: UrlCase[] }
 
-const refusedHttp = [
-  'http://games.example.com',
-  'http://games.example.com:5000/app',
-  'http://8.8.8.8',
-  'http://172.15.0.1',
-  'http://172.32.0.1',
-  'http://192.169.1.1',
-  'http://11.0.0.1',
-  'http://0.0.0.0',
-  // Just outside 100.64.0.0/10.
-  'http://100.63.255.255',
-  'http://100.128.0.1',
-  'http://[2001:db8::1]',
-  'http://[::ffff:8.8.8.8]',
-  'http://[fec0::1]',
-  // Looks local, is a public name.
-  'http://192.168.1.1.evil.com',
-  'http://10.0.0.1.nip.io',
-  'http://localhost.evil.com',
-  'http://nas.local.evil.com',
-  'http://.local',
-  // A suffix is a whole label, never a substring or a bare suffix.
-  'http://nas.lan.evil.com',
-  'http://evil-lan.com',
-  'http://lan.example.com',
-  'http://.lan',
-  'http://home.arpa',
-  'http://nas.internal.evil.com',
-  'http://nas.home.arpa.evil.com',
-  // Hex-encoded public address.
-  'http://0x08080808/',
-  // The host is evil.com; 192.168.1.1 is only userinfo.
-  'http://192.168.1.1@evil.com/',
-]
+const cases = fixture.cases
+const isHttp = (url: string) => /^http:/i.test(url)
+const isHttps = (url: string) => /^https:/i.test(url)
+// Padded URLs only make sense for checkServerUrl; the mod-source tests append a path.
+const unpadded = (c: UrlCase) => c.url === c.url.trim()
+
+const allowedHttp = cases.filter((c) => c.ok && isHttp(c.url) && unpadded(c)).map((c) => c.url)
+const refusedHttp = cases.filter((c) => !c.ok && isHttp(c.url) && unpadded(c)).map((c) => c.url)
 
 describe('checkServerUrl', () => {
-  it('accepts https:// for any host, unchanged', () => {
-    for (const url of [
-      'https://games.example.com',
-      'https://games.example.com:8443/prefix',
-      'https://8.8.8.8',
-      'HTTPS://Games.Example.Com',
-      'https://nas.local',
-    ]) {
+  it('gives the verdict the shared fixture records, for every URL in it', () => {
+    // Same file, same verdicts as the Rust `validate_server_base_url` test.
+    expect(cases.length).toBeGreaterThan(50)
+    for (const { url, ok } of cases) {
       const result = checkServerUrl(url)
-      expect(result.ok, url).toBe(true)
+      expect(result.ok, url).toBe(ok)
+      if (!result.ok) {
+        // Whatever the reason, the message points at the fix.
+        expect(result.message, url).toMatch(/https:\/\//)
+      }
+    }
+  })
+
+  it('accepts https:// for any host that parses, unchanged', () => {
+    const accepted = cases.filter((c) => c.ok && isHttps(c.url))
+    expect(accepted.length).toBeGreaterThan(3)
+    for (const { url } of accepted) {
+      expect(checkServerUrl(url).ok, url).toBe(true)
     }
   })
 
@@ -123,21 +77,41 @@ describe('checkServerUrl', () => {
     })
   })
 
-  it('refuses other schemes and things that are not URLs', () => {
-    for (const url of [
-      'ftp://games.example.com',
-      'file:///etc/passwd',
-      'ws://localhost:5000',
-      'javascript:alert(1)',
-      'games.example.com',
-      'localhost:5000',
-      'https://',
-      '//games.example.com',
-      '',
-      '   ',
-    ]) {
+  it('refuses a blank URL (Rust treats blank as "clear the saved URL", so it is not in the fixture)', () => {
+    for (const url of ['', '   ']) {
       expect(checkServerUrl(url).ok, JSON.stringify(url)).toBe(false)
     }
+  })
+
+  it('does not take a domain name that only reads like an address for the address', () => {
+    // WHATWG keeps `127.0.0.1..` a domain (one trailing dot would fold to the
+    // address); Rust's url crate does the same, so the dotted-quad rule must not
+    // strip dots first. The refusal is the generic https hint, not "invalid URL".
+    for (const url of ['http://127.0.0.1../', 'http://192.168.1.1../', 'http://10.0.0.1..:5006']) {
+      const result = checkServerUrl(url)
+      expect(result.ok, url).toBe(false)
+      expect(result.ok === false && result.message, url).toMatch(/API token/)
+    }
+    for (const url of ['http://127.0.0.1./', 'http://10.0.0.1./']) {
+      expect(checkServerUrl(url).ok, url).toBe(true)
+    }
+    expect(isPrivateOrLoopbackHost('127.0.0.1..')).toBe(false)
+    expect(isPrivateOrLoopbackHost('127.0.0.1')).toBe(true)
+  })
+
+  it('refuses a host with invalid punycode the way the url crate does, for https too', () => {
+    for (const url of [
+      'http://xn--nas-.lan/',
+      'https://xn--nas-.lan/',
+      'http://nas.xn--nas-.local/',
+    ]) {
+      const result = checkServerUrl(url)
+      expect(result, url).toEqual({
+        ok: false,
+        message: expect.stringMatching(/not a valid URL.*https:\/\//s),
+      })
+    }
+    expect(checkServerUrl('http://xn--mnchen-3ya.lan/').ok).toBe(true)
   })
 
   it('trims surrounding whitespace', () => {
@@ -166,6 +140,12 @@ describe('checkModSourceUrl', () => {
       expect(checkModSourceUrl(url).ok, url).toBe(false)
     }
   })
+
+  it('refuses an invalid-punycode host, which the url crate would refuse too', () => {
+    expect(checkModSourceUrl('https://xn--nas-.example.com/hd.zip').ok).toBe(false)
+    expect(checkDownloadRedirectUrl('https://xn--nas-.example.com/game.zip').ok).toBe(false)
+    expect(checkModSourceUrl('https://xn--mnchen-3ya.example.com/hd.zip').ok).toBe(true)
+  })
 })
 
 describe('isPrivateOrLoopbackHost', () => {
@@ -181,7 +161,7 @@ describe('isPrivateOrLoopbackHost', () => {
     expect(isPrivateOrLoopbackHost('[not-an-address]')).toBe(false)
   })
 
-  it('matches the backend: router suffixes and the Tailscale range are local', () => {
+  it('takes the router suffixes and the Tailscale range as local', () => {
     for (const host of [
       'tower.lan',
       'nas.home.arpa',
@@ -203,6 +183,39 @@ describe('isPrivateOrLoopbackHost', () => {
     ]) {
       // A bare `lan` is a dotless name, so it is local for that reason alone.
       expect(isPrivateOrLoopbackHost(host), host).toBe(host === 'lan')
+    }
+  })
+})
+
+describe('hasAcceptableDnsLabels', () => {
+  it('passes ordinary names, valid punycode and IP literals', () => {
+    for (const host of [
+      'example.com',
+      'nas',
+      'nas.local',
+      '127.0.0.1',
+      '[::1]',
+      'xn--mnchen-3ya.lan',
+      'XN--MNCHEN-3YA.lan',
+      'xn--e1afmkfd.lan',
+      'a.xn--fiq228c.local',
+    ]) {
+      expect(hasAcceptableDnsLabels(host), host).toBe(true)
+    }
+  })
+
+  it('fails an xn-- label that is not punycode, decodes to ASCII or to nothing', () => {
+    for (const host of [
+      'xn--nas-.lan', // "nas" is ASCII: it should not have been encoded
+      'xn--a-.lan',
+      'xn--nas.lan', // not valid punycode
+      'xn--.lan', // nothing after the prefix
+      'xn--zzzzzzzzzzzzzzzzzzzzzzzzzz.lan', // overflows
+      'xn--nas!.lan', // a character punycode has no digit for
+      'xn--mnchen-3y.lan', // runs out of digits
+      'nas.xn--nas-.local',
+    ]) {
+      expect(hasAcceptableDnsLabels(host), host).toBe(false)
     }
   })
 })

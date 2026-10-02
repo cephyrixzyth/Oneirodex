@@ -23,9 +23,12 @@ protected — the operator would have to fix Site URL *through* a login they can
 no longer reset. So the default posture is "private hosts only":
 
 * ``TRUSTED_LINK_HOSTS`` set   → exactly those hosts, nothing else.
-* ``TRUSTED_LINK_HOSTS`` unset → loopback, RFC1918 / CGNAT / link-local addresses,
-  ``localhost``, dotless LAN names, and ``.local`` / ``.lan`` / ``.home.arpa`` /
-  ``.internal`` / ``.localdomain`` suffixes.
+* ``TRUSTED_LINK_HOSTS`` unset → loopback, private (RFC1918 / unique-local) and
+  link-local addresses, ``localhost``, dotless LAN names, and ``.local`` /
+  ``.lan`` / ``.home.arpa`` / ``.internal`` / ``.localdomain`` suffixes. The shared
+  address space ``100.64.0.0/10`` (CGNAT, where Tailscale peers live) is **not**
+  in that set: :mod:`ipaddress` counts it as neither private nor link-local, so a
+  host reached by such an address needs ``TRUSTED_LINK_HOSTS``.
 
 Every realistic LAN install keeps working; ``attacker.example`` stops being a
 usable origin. An install genuinely published on a public hostname sets

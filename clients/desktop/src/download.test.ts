@@ -278,7 +278,7 @@ describe('archive download redirects', () => {
     expect(registry.get('game-7')).toBe('not_downloaded')
   })
 
-  it('checks the hop before it reads any of the body, even for an error response', async () => {
+  it('checks where the download ended up before it reads any of the body, even for an error response', async () => {
     const { auth, api, fetchImpl, text } = setup('http://cdn.example.com/game.zip', { ok: false })
     await expect(
       kickoffDownload(api as never, auth, createLifecycleRegistry(), 'game-7', { fetchImpl }),

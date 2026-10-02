@@ -202,6 +202,35 @@ def test_a_file_swapped_after_the_check_is_not_copied(tmp_path):
     assert dest.read_bytes() == b'checked'
 
 
+@pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='no named pipes here')
+def test_a_file_swapped_for_a_named_pipe_is_refused_not_waited_on(tmp_path):
+    """check_bundle refuses a pipe that is already in place; one swapped in after
+    it used to make the open wait for a writer that never comes."""
+    import threading
+
+    src, dest = tmp_path / 'db.dump', tmp_path / 'copy.dump'
+    os.mkfifo(src)
+    outcome = {}
+
+    def attempt():
+        try:
+            move._copy_checked(src, dest, move._sha256(b'dump'))
+        except BaseException as exc:  # noqa: BLE001 - the test reads what came out
+            outcome['error'] = exc
+
+    worker = threading.Thread(target=attempt, daemon=True)
+    worker.start()
+    worker.join(5)
+    hung = worker.is_alive()
+    if hung:  # let the blocked open return so the thread does not outlive the test
+        os.close(os.open(src, os.O_RDWR))
+        worker.join(5)
+    assert not hung, 'the copy waited for a writer on the pipe'
+    assert isinstance(outcome.get('error'), Refused)
+    assert 'regular file' in str(outcome['error'])
+    assert not dest.exists() and not list(tmp_path.glob('*.moving'))
+
+
 # -- the dump pg_restore runs is the dump that was checked -----------------------
 
 def _importable_bundle(tmp_path, monkeypatch):

@@ -27,10 +27,11 @@ from __future__ import annotations
 import logging
 from copy import copy
 from typing import Callable
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import quote, urljoin, urlparse, urlunparse
 
 import requests
 from requests.adapters import HTTPAdapter
+from requests.utils import select_proxy
 
 from oneirodex.utils import security
 
@@ -79,14 +80,32 @@ def _userinfo(url: str):
     return parsed.username, parsed.password
 
 
+#: What may stay unescaped in URL userinfo (RFC 3986 sub-delims, ``:``, ``@``, and
+#: the ``%`` of an escape that is already there).
+_USERINFO_SAFE = "%!$&'()*+,;=:@"
+
+
+def _userinfo_text(username, password) -> str:
+    """``user[:password]`` ready to go in front of a host.
+
+    ``urlparse`` hands userinfo back as written, and ``requests`` parses the URL
+    again with different rules (it ends the authority at a backslash, which
+    Python does not). Anything RFC 3986 keeps out of userinfo is therefore
+    percent-encoded rather than copied, so what was a credential cannot turn
+    into part of the host; existing ``%XX`` escapes are kept.
+    """
+    text = quote(username or '', safe=_USERINFO_SAFE)
+    if password is not None:
+        text += ':' + quote(password, safe=_USERINFO_SAFE)
+    return text
+
+
 def _with_userinfo(url: str, info) -> str:
     """*url* with the userinfo *info* put back in front of its host."""
     username, password = info
     parsed = urlparse(url)
     hostport = parsed.netloc.rpartition('@')[2]
-    auth = username or ''
-    if password is not None:
-        auth += f':{password}'
+    auth = _userinfo_text(username, password)
     return urlunparse((parsed.scheme, f'{auth}@{hostport}', parsed.path, parsed.params, parsed.query, parsed.fragment))
 
 
@@ -169,6 +188,13 @@ def _validated(url: str, validator: Validator) -> str:
     ok, result = validator(url)
     if not ok:
         raise BlockedOutboundUrl(url, result)
+    # Whatever the validator thought of the host, the URL that goes to
+    # ``requests`` must name the same host to it as it does to ``urlparse`` (a
+    # backslash in the userinfo or a ``%31`` in the host splits them). Applies to
+    # every hop, including a redirect ``Location``, and to a validator that does
+    # not check it itself.
+    if not security.url_authority_is_unambiguous(result):
+        raise BlockedOutboundUrl(url, 'Invalid URL')
     return result
 
 
@@ -191,10 +217,7 @@ def _replace_host_with_ip(url: str, ip: str) -> str:
     if parsed.port is not None:
         hostport = f'{hostport}:{parsed.port}'
     if parsed.username is not None:
-        auth = parsed.username
-        if parsed.password is not None:
-            auth += f':{parsed.password}'
-        hostport = f'{auth}@{hostport}'
+        hostport = f'{_userinfo_text(parsed.username, parsed.password)}@{hostport}'
     return urlunparse((
         parsed.scheme,
         hostport,
@@ -236,6 +259,68 @@ def _pin_checked_address(url: str, validator: Validator) -> tuple[str, str | Non
             return cleaned, host
         last_reason = cleaned
     raise BlockedOutboundUrl(url, last_reason)
+
+
+def _proxy_rules(caller):
+    """The Session whose proxy rules *caller* sends with, or None for a stand-in that has none.
+
+    ``requests.request`` builds a fresh Session for every call, so the module
+    itself means a default one (environment trusted, no proxies of its own).
+    """
+    if isinstance(caller, requests.Session):
+        return caller
+    if caller is requests:
+        return requests.Session()
+    return None
+
+
+def _proxies_for(rules, explicit: dict, url: str) -> dict:
+    """The ``proxies`` mapping ``requests`` would settle on for *url*.
+
+    Asks ``Session.merge_environment_settings``, the call ``Session.request``
+    itself makes, so ``HTTP(S)_PROXY``, ``ALL_PROXY`` and ``NO_PROXY`` (host
+    names, suffixes and CIDR ranges) behave exactly as they do for any other
+    ``requests`` caller, honouring the session's ``trust_env`` and ``proxies``
+    and an explicit ``proxies=`` argument.
+    """
+    proxies = dict(explicit)
+    if rules is not None:
+        return rules.merge_environment_settings(url, proxies, None, None, None)['proxies']
+    return {key: value for key, value in proxies.items() if value is not None}
+
+
+def _without_proxy(proxies: dict, url: str) -> dict:
+    """*proxies* with every entry ``requests`` would match to *url* switched off."""
+    parsed = urlparse(url)
+    off = dict(proxies)
+    for key in (f'{parsed.scheme}://{parsed.hostname}', parsed.scheme, f'all://{parsed.hostname}', 'all'):
+        off[key] = None
+    return off
+
+
+def _plan_hop(url: str, validator: Validator, rules, explicit: dict) -> tuple[str, str | None, dict | None]:
+    """How to send one hop: ``(connect_url, original_hostname, proxies)``.
+
+    Whether a proxy applies is decided on the name the URL carries. Through a
+    proxy the hostname is sent as it is: the proxy resolves and dials it, a TLS
+    tunnel needs it for SNI, and the name is the only thing ``NO_PROXY`` can
+    match. The name still passed the validator before this point, but pinning
+    cannot protect a hop that the proxy, not this process, connects, so
+    protection against DNS rebinding then rests with the proxy.
+
+    Without a proxy the hop is pinned to the address the validator accepted. A
+    proxy variable set for the environment would otherwise be applied to that
+    address (``NO_PROXY=nas.lan`` does not match ``10.0.0.5``), so in that case
+    ``proxies`` switches it off for the pinned URL. ``proxies`` is None when
+    ``requests`` should be left to its own devices.
+    """
+    proxies = _proxies_for(rules, explicit, url)
+    if select_proxy(url, proxies) is not None:
+        return url, None, proxies
+    connect_url, tls_name = _pin_checked_address(url, validator)
+    if connect_url != url and select_proxy(connect_url, _proxies_for(rules, explicit, connect_url)) is not None:
+        return connect_url, tls_name, _without_proxy(proxies, connect_url)
+    return connect_url, tls_name, None
 
 
 def _ensure_pin_adapter(session: requests.Session) -> None:
@@ -296,9 +381,15 @@ def _request_loop(
 ) -> requests.Response:
     method = method.upper()
     positions = _body_positions(kwargs)
+    # Proxy rules come from the caller as it was handed in: a cross-origin hop
+    # below sends with a stripped copy, but still follows the same environment.
+    proxy_rules = _proxy_rules(caller)
+    explicit_proxies = dict(kwargs.get('proxies') or {})
     for _ in range(max_redirects + 1):
-        connect_url, tls_name = _pin_checked_address(current, validator)
+        connect_url, tls_name, hop_proxies = _plan_hop(current, validator, proxy_rules, explicit_proxies)
         req_kwargs = dict(kwargs)
+        if hop_proxies is not None:
+            req_kwargs['proxies'] = hop_proxies
         if tls_name:
             headers = dict(req_kwargs.get('headers') or {})
             headers = {k: v for k, v in headers.items() if k.lower() != 'host'}
@@ -348,10 +439,11 @@ def _request_loop(
                 redirected.params = {}
                 redirected.headers = caller.headers.copy()
                 if cross_origin:
-                    settings = caller.merge_environment_settings(target, kwargs.get('proxies') or {},
-                                                                 kwargs.get('stream'), kwargs.get('verify'), None)
+                    # Proxies are not frozen here: every hop asks again, by the
+                    # name it is going to (see _plan_hop).
+                    settings = caller.merge_environment_settings(target, {}, kwargs.get('stream'),
+                                                                 kwargs.get('verify'), None)
                     kwargs.setdefault('verify', settings['verify'])
-                    kwargs.setdefault('proxies', settings['proxies'])
                     redirected.trust_env = False
                     redirected.auth = None
                     redirected.cert = None
@@ -364,7 +456,10 @@ def _request_loop(
             if cross_origin:
                 dropped = sorted(
                     {k for k in headers if k.lower() not in _REDIRECT_HEADERS}
-                    | {k for k in ('auth', 'cookies', 'cert') if kwargs.get(k) is not None}
+                    # ``_NoRedirectAuth`` is what an earlier hop left behind, not
+                    # something the caller sent.
+                    | {k for k in ('auth', 'cookies', 'cert')
+                       if kwargs.get(k) is not None and not isinstance(kwargs.get(k), _NoRedirectAuth)}
                     | ({'URL credentials'} if current_info is not None else set())
                 )
                 if dropped:

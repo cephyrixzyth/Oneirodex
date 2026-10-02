@@ -177,7 +177,9 @@ def save_arr_config(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         ok, result = validate_connector_http_url(value)
         if not ok:
-            raise ValueError(f'{key}: {result} (set ALLOW_PRIVATE_LAN_URLS=true for RFC1918 *arr hosts)')
+            # The LAN flag only helps a host the policy refused, not a malformed URL.
+            hint = ' (set ALLOW_PRIVATE_LAN_URLS=true for RFC1918 *arr hosts)' if result == 'URL host is not allowed' else ''
+            raise ValueError(f'{key}: {result}{hint}')
         current[key] = result.rstrip('/')
     row.arr_settings = current
     db.session.commit()

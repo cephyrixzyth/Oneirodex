@@ -60,7 +60,9 @@ private temporary folder, hashing it as it writes, and runs `pg_restore` on that
 copy, never on the path in the move folder. A dump swapped on the share after the
 folder was checked (or a `db.dump` that is a symbolic link) is refused with
 `db.dump changed in the move folder while it was being copied`, before the
-database is touched. The copy needs free space equal to the dump in the server's
+database is touched. A file swapped for a named pipe (or anything else that is not
+a regular file) after the check is refused as `not a regular file` instead of the
+import waiting on it. The copy needs free space equal to the dump in the server's
 temporary folder, and is removed when the import ends.
 
 The folder holds your members' data (password hashes, settings and API keys

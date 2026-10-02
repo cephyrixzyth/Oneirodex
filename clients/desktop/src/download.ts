@@ -69,14 +69,18 @@ export async function initiateDownloadRequest(
 }
 
 /**
- * An https server may answer with a redirect, and `fetch` follows it. The hop it
- * landed on has to pass the same http://-only-on-your-own-network rule as the
- * server URL, or an on-path attacker on a plain `http://` leg could swap the
- * archive that is then extracted into `installs/` and launched. (`fetch` already
- * drops the Authorization header on a cross-origin hop, so the token is safe
- * either way.) Mocks and some runtimes leave `url` empty — nothing to check then.
+ * An https server may answer with a redirect, and `fetch` follows it on its own.
+ * What is checked is the URL it ended on (`response.url`), against the same
+ * http://-only-on-your-own-network rule as the server URL. A plain `http://` leg
+ * in the middle of a redirect chain is invisible here (`fetch` reports only the
+ * last URL, and `redirect: 'manual'` hides the Location header), so the server is
+ * expected to stream `/download_zip/<id>` itself or redirect straight to https:
+ * an archive rewritten in transit is extracted into `installs/` and launched.
+ * (`fetch` drops the Authorization header on a cross-origin hop, so the token is
+ * safe either way.) Mocks and some runtimes leave `url` empty — nothing to check
+ * then.
  */
-function assertDownloadHopAllowed(response: Response): void {
+function assertDownloadFinalUrlAllowed(response: Response): void {
   if (!response.url) {
     return
   }
@@ -113,7 +117,7 @@ export async function fetchDownloadStream(
       Authorization: authHeader,
     },
   })
-  assertDownloadHopAllowed(response)
+  assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()
@@ -175,7 +179,7 @@ export async function streamDownloadToFile(
       Authorization: authHeader,
     },
   })
-  assertDownloadHopAllowed(response)
+  assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()

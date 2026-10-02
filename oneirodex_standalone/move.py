@@ -37,6 +37,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -455,11 +456,22 @@ def _copy_checked(src: Path, dest: Path, sha256: str) -> None:
     after the bundle check cannot land in the library."""
     if src.is_symlink():
         raise Refused(f'{src.name} in the move folder is a symbolic link')
-    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+    # O_NONBLOCK keeps a FIFO swapped in after check_bundle from blocking the
+    # open until some writer shows up; the descriptor must be a regular file.
+    flags = (os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+             | getattr(os, 'O_NONBLOCK', 0))
     digest = hashlib.sha256()
     tmp = dest.with_name(dest.name + '.moving')
+    fd = os.open(src, flags)
     try:
-        with os.fdopen(os.open(src, flags), 'rb') as fin, open(tmp, 'wb') as fout:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Refused(f'{src.name} in the move folder is not a regular file')
+        fin = os.fdopen(fd, 'rb')
+    except BaseException:
+        os.close(fd)
+        raise
+    try:
+        with fin, open(tmp, 'wb') as fout:
             while block := fin.read(CHUNK):
                 digest.update(block)
                 fout.write(block)

@@ -355,7 +355,8 @@ export async function stageModFromUrl(opts: {
   const fetchFn = opts.fetchImpl || fetch
   try {
     const response = await fetchFn(url)
-    // An https source may redirect; the hop it lands on has to pass the same check.
+    // An https source may redirect; the URL it ended on has to pass the same check.
+    // A plain-http leg in the middle of the chain is not visible to `fetch`.
     // (Mocks and some runtimes leave `url` empty — nothing to check then.)
     if (response.url) {
       const finalCheck = checkModSourceUrl(response.url)

@@ -51,3 +51,12 @@ def test_save_arr_config_rejects_metadata_with_flag(app, db_session, monkeypatch
     with app.app_context():
         with pytest.raises(ValueError, match='not allowed|host'):
             save_arr_config({'qbittorrent_url': 'http://169.254.169.254/'})
+
+
+def test_save_arr_config_names_a_malformed_url_without_the_lan_hint(app, db_session, monkeypatch):
+    """The LAN flag cannot fix a URL two parsers read differently; the hint sent admins the wrong way."""
+    monkeypatch.setitem(app.config, 'ALLOW_PRIVATE_LAN_URLS', False)
+    with app.app_context():
+        with pytest.raises(ValueError, match='Invalid URL') as raised:
+            save_arr_config({'qbittorrent_url': 'http://192.168.1.50\\@example.com/'})
+    assert 'ALLOW_PRIVATE_LAN_URLS' not in str(raised.value)

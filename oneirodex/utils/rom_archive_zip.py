@@ -7,8 +7,10 @@ Split out of ``rom_archive`` in the v11 cycle (H-D.4) as a pure move. The
 from __future__ import annotations
 
 import gzip
+import io
 import os
 import re
+import shutil
 import zipfile
 from pathlib import Path
 from oneirodex.utils.rom_archive_select import _is_rom_name
@@ -18,7 +20,8 @@ from oneirodex.utils.rom_archive_types import CUE_COMPANION_EXTENSIONS
 from oneirodex.utils.rom_archive_select import choose_rom_member
 from oneirodex.utils.rom_archive_select import _safe_basename
 from oneirodex.utils.rom_archive_types import MAX_NEST_DEPTH
-from oneirodex.utils.security import is_plain_file_within
+from oneirodex.utils.security import is_plain_file_within, open_plain_file_within
+from oneirodex.utils.zipstream import zip_date_time
 
 
 def _list_roms_with_sizes_in_zip(zip_path: str) -> list[tuple[str, int]]:
@@ -237,7 +240,26 @@ def _rewrite_cue_file_paths(cue_text: str) -> str:
     return _CUE_FILE_LINE_RE.sub(_replace, cue_text)
 
 
-def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
+def _write_vetted_member(archive: zipfile.ZipFile, real_root: str, companion: Path) -> None:
+    """Add *companion* to *archive* from a vetted open handle, not from its path.
+
+    ``archive.write(path)`` opens the path again, so a companion swapped for a
+    link after it was listed would put the link's target into the bundle that
+    goes to the member. Here the descriptor that passed
+    ``open_plain_file_within`` is the one that is read, and its own ``fstat``
+    gives the size and mtime.
+    """
+    with open_plain_file_within(real_root, companion, base_is_resolved=True) as source:
+        info = os.fstat(source.fileno())
+        member = zipfile.ZipInfo(companion.name, date_time=zip_date_time(info.st_mtime))
+        member.compress_type = zipfile.ZIP_STORED
+        member.external_attr = (info.st_mode & 0xFFFF) << 16
+        member.file_size = info.st_size
+        with archive.open(member, 'w') as target:
+            shutil.copyfileobj(source, target, 1024 * 1024)
+
+
+def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None = None) -> tuple[str, str]:
     """
     Bundle a resolved `.cue` sheet with its sibling disc images (.bin/.img/.iso/
     .raw/.wav) into one stored (uncompressed) zip named `play.zip`, so a single
@@ -248,6 +270,14 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
     Returns (rom_path, filename) unchanged when `rom_path` is not a `.cue` or
     has no companions next to it, so single-file `.iso`/`.chd`/`.bin` play is
     untouched.
+
+    The disc folder is a share someone else can write to, so nothing is read by
+    path after it has been vetted: the cue sheet and every companion go through
+    ``open_plain_file_within`` against *root* and are written from that handle.
+    *root* is the folder's already-resolved path (the caller vetted it when the
+    request began); without it the folder is resolved once, here, and every file
+    is compared against that string, so a folder swapped for a link afterwards
+    reads as "outside" instead of redefining "inside".
     """
     path = Path(rom_path)
     if path.suffix.lower() != '.cue':
@@ -262,6 +292,7 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
             code='extract_failed',
         ) from exc
 
+    real_root = root if root is not None else os.path.realpath(source_dir)
     resolved_cue = path.resolve()
     # Only real files that live in the disc folder: a ``disc.bin`` link pointing
     # at some other readable file would otherwise be zipped into the download.
@@ -270,7 +301,7 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
         for name in sibling_names
         if Path(name).suffix.lower() in CUE_COMPANION_EXTENSIONS
         for candidate in (source_dir / name,)
-        if is_plain_file_within(source_dir, candidate) and candidate.resolve() != resolved_cue
+        if is_plain_file_within(real_root, candidate, base_is_resolved=True) and candidate.resolve() != resolved_cue
     ]
 
     if not companions:
@@ -300,7 +331,12 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
             return zip_path, 'play.zip'
 
     try:
-        cue_text = path.read_text(encoding='utf-8', errors='replace')
+        with io.TextIOWrapper(
+            open_plain_file_within(real_root, path, base_is_resolved=True),
+            encoding='utf-8',
+            errors='replace',
+        ) as cue_file:
+            cue_text = cue_file.read()
     except OSError as exc:
         raise ArchiveRomError(
             'Failed to read .cue sheet for ROM bundling',
@@ -314,7 +350,7 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str) -> tuple[str, str]:
         with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_STORED) as zf:
             zf.writestr(path.name, rewritten_cue)
             for companion in companions:
-                zf.write(companion, arcname=companion.name)
+                _write_vetted_member(zf, real_root, companion)
         os.replace(tmp_path, zip_path)
     except OSError as exc:
         raise ArchiveRomError(

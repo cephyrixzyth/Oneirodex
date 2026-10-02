@@ -5,15 +5,25 @@ Implements Jellyfin-style metadata files for IGDB ID persistence.
 import os
 import json
 import logging
+import secrets
+import time
 from datetime import datetime, timezone
 from flask import current_app
-from oneirodex.utils.security import get_allowed_base_directories, is_path_within, is_plain_file_within, is_safe_path
+from oneirodex.utils.security import (
+    get_allowed_base_directories,
+    is_path_within,
+    is_plain_file_within,
+    is_safe_path,
+    open_plain_file_within,
+)
 from oneirodex.utils.functions import sanitize_string_input
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_METADATA_FILENAME = 'oneirodex.json'
 LEGACY_METADATA_FILENAME = 'oneirodex.json'
+#: A real sidecar is a few hundred bytes; the folder is share-writable.
+_MAX_SIDECAR_BYTES = 256 * 1024
 
 
 def _resolve_metadata_path(full_disk_path, filename):
@@ -78,9 +88,15 @@ def read_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
         if not metadata_path:
             return None
 
-        # Read and parse JSON
-        with open(metadata_path, 'r', encoding='utf-8') as f:
-            metadata = json.load(f)
+        # Read and parse JSON. The sidecar sits in a share-writable folder and
+        # may have been swapped for a link since _resolve_metadata_path vetted
+        # it, so the check runs again on the descriptor that is actually read.
+        with open_plain_file_within(full_disk_path, metadata_path) as f:
+            raw = f.read(_MAX_SIDECAR_BYTES + 1)
+        if len(raw) > _MAX_SIDECAR_BYTES:
+            logger.warning(f"Ignoring oversized metadata file {metadata_path}")
+            return None
+        metadata = json.loads(raw)
 
         # Validate required fields
         if not isinstance(metadata, dict):
@@ -100,6 +116,58 @@ def read_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
     except Exception as e:
         logger.error(f"Error reading local metadata from {full_disk_path}: {e}")
         return None
+
+
+def _replace_with_json(target, payload):
+    """Write *payload* as JSON so that *target* ends up a new plain file.
+
+    ``open(target, 'w')`` follows a link and truncates what it names, and
+    whoever can write to the game folder can plant that link between any check
+    and the open. This never opens *target*: the JSON goes to a new file made
+    with ``O_EXCL`` (which refuses an existing name, link or not) next to it,
+    and ``os.replace`` then swaps it in, replacing a link instead of following
+    it. A failed write leaves the previous sidecar as it was.
+
+    The game folder keeps its timestamps: creating and renaming the temporary
+    file would otherwise move the folder's mtime, which the freshness check
+    reads as "the game was updated locally".
+    """
+    folder, name = os.path.split(target)
+    try:
+        before = os.stat(folder)
+    except OSError:
+        before = None
+    temp = os.path.join(folder, f'.{name}.{secrets.token_hex(6)}.tmp')
+    # 0o666 is cut down by the umask, as it is for open(..., 'w').
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0), 0o666)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        _replace(temp, target)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+    if before is not None:
+        try:
+            os.utime(folder, ns=(before.st_atime_ns, before.st_mtime_ns))
+        except OSError:
+            pass
+
+
+def _replace(temp, target, attempts=5):
+    """``os.replace``, retried briefly on Windows, where a reader that has the
+    sidecar open (a scan, an antivirus) makes it fail with a sharing violation."""
+    for attempt in range(attempts):
+        try:
+            os.replace(temp, target)
+            return
+        except PermissionError:
+            if os.name != 'nt' or attempt == attempts - 1:
+                raise
+            time.sleep(0.05)
 
 
 def write_local_metadata(full_disk_path, igdb_id, game_title=None, manually_verified=False,
@@ -161,15 +229,15 @@ def write_local_metadata(full_disk_path, igdb_id, game_title=None, manually_veri
         metadata_path = os.path.join(full_disk_path, filename)
         logger.info(f"💾 [LOCAL METADATA] Full metadata path: {metadata_path}")
 
-        # open(..., 'w') follows a link, so a planted ``oneirodex.json -> /x``
-        # would overwrite /x with this JSON. Refuse to write through one, and
-        # refuse a target that would land outside the game folder.
+        # A planted ``oneirodex.json -> /x`` must not be overwritten with this
+        # JSON. Refuse a link that is already there, and a target that would
+        # land outside the game folder. The link can also appear after this
+        # check, so the write itself never follows one (see _replace_with_json).
         if os.path.islink(metadata_path) or not is_path_within(full_disk_path, metadata_path):
             logger.error(f"🚫 [LOCAL METADATA] Refusing to write metadata through a link or outside {full_disk_path}")
             return False
 
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        _replace_with_json(metadata_path, metadata)
 
         # Verify the file was created
         if os.path.exists(metadata_path):
@@ -355,7 +423,18 @@ def check_write_permissions(directory_path, test_filename='_oneirodex_write_test
         test_file_path = os.path.join(directory_path, test_filename)
 
         try:
-            with open(test_file_path, 'w') as f:
+            # The folder is somebody's share: a planted ``_oneirodex_write_test.tmp
+            # -> /x`` must not be opened for writing (it would truncate /x).
+            # O_EXCL refuses an existing name, link or not. A name that is
+            # already there is a leftover of an interrupted check, or a link;
+            # unlink removes either without following it.
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0)
+            try:
+                fd = os.open(test_file_path, flags, 0o666)
+            except FileExistsError:
+                os.unlink(test_file_path)
+                fd = os.open(test_file_path, flags, 0o666)
+            with os.fdopen(fd, 'w') as f:
                 f.write('test')
 
             # Clean up test file

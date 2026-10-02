@@ -1,0 +1,189 @@
+{
+  "about": "Server URL policy cases read by BOTH src/transport-policy.test.ts (checkServerUrl) and the validate_server_base_url tests in src-tauri/src/lib.rs, so the TypeScript check and the Rust backstop cannot drift apart. ok = accepted. An empty or blank URL is not here: the TypeScript check refuses it, Rust accepts it (it clears the saved URL).",
+  "cases": [
+    { "url": "https://games.example.com", "ok": true },
+    { "url": "https://games.example.com:8443/prefix/", "ok": true },
+    { "url": "https://8.8.8.8", "ok": true },
+    { "url": "HTTPS://Games.Example.Com", "ok": true },
+    { "url": "https://nas.local", "ok": true },
+    {
+      "url": "  https://games.example.com  ",
+      "ok": true,
+      "why": "surrounding whitespace is trimmed"
+    },
+    {
+      "url": "https://127.0.0.1../",
+      "ok": true,
+      "why": "https needs no local host, only a host that parses"
+    },
+    { "url": "http://localhost:5000", "ok": true },
+    { "url": "http://127.0.0.1:5000", "ok": true },
+    { "url": "http://127.255.0.3", "ok": true },
+    { "url": "http://[::1]:5000", "ok": true },
+    { "url": "http://10.1.2.3", "ok": true },
+    { "url": "http://172.16.0.1", "ok": true },
+    { "url": "http://172.31.255.254", "ok": true },
+    { "url": "http://192.168.1.50:8080", "ok": true },
+    { "url": "http://169.254.10.10", "ok": true },
+    { "url": "http://[fd12:3456:789a::1]", "ok": true },
+    { "url": "http://[fc00::1]", "ok": true },
+    { "url": "http://[fe80::1]", "ok": true },
+    { "url": "http://[::ffff:192.168.1.5]", "ok": true },
+    { "url": "http://nas.local", "ok": true },
+    { "url": "http://NAS.LOCAL:8080/app", "ok": true },
+    { "url": "http://nas.local./", "ok": true },
+    { "url": "http://nas", "ok": true },
+    { "url": "http://nas:5000", "ok": true },
+    {
+      "url": "http://tower.lan:5006",
+      "ok": true,
+      "why": "the rest of _PRIVATE_SUFFIXES in oneirodex/utils/trusted_host.py"
+    },
+    { "url": "http://NAS.LAN/", "ok": true },
+    { "url": "http://nas.home.arpa", "ok": true },
+    { "url": "http://nas.internal", "ok": true },
+    { "url": "http://nas.localdomain", "ok": true },
+    { "url": "http://a.b.lan", "ok": true },
+    {
+      "url": "http://100.64.0.1",
+      "ok": true,
+      "why": "shared address space 100.64.0.0/10, where Tailscale puts every peer"
+    },
+    { "url": "http://100.100.100.100:5006", "ok": true },
+    { "url": "http://100.127.255.255", "ok": true },
+    { "url": "http://[fd7a:115c:a1e0::1]", "ok": true },
+    { "url": "http://0x7f.1/", "ok": true, "why": "WHATWG host parsing folds this to 127.0.0.1" },
+    { "url": "http://2130706433/", "ok": true, "why": "folds to 127.0.0.1" },
+    { "url": "http://0300.0250.0.1/", "ok": true, "why": "folds to 192.168.0.1" },
+    {
+      "url": "http://evil.com@192.168.1.1/",
+      "ok": true,
+      "why": "the host is 192.168.1.1; evil.com is only userinfo"
+    },
+    {
+      "url": "http://127.0.0.1./",
+      "ok": true,
+      "why": "one trailing dot still parses as the IPv4 address 127.0.0.1"
+    },
+    {
+      "url": "http://10.0.0.1./",
+      "ok": true,
+      "why": "one trailing dot still parses as the IPv4 address 10.0.0.1"
+    },
+    {
+      "url": "http://localhost../",
+      "ok": true,
+      "why": "a name keeps its local-resolver meaning behind trailing dots"
+    },
+    {
+      "url": "http://nas.lan../",
+      "ok": true,
+      "why": "trailing dots after a house-network suffix are ignored"
+    },
+    {
+      "url": "http://xn--mnchen-3ya.lan/",
+      "ok": true,
+      "why": "valid punycode (muenchen) under a house-network suffix"
+    },
+    { "url": "http://münchen.lan/", "ok": true, "why": "the same name written as Unicode" },
+    { "url": "http://XN--MNCHEN-3YA.LAN/", "ok": true, "why": "upper-case punycode label" },
+    {
+      "url": "http://пример.lan/",
+      "ok": true,
+      "why": "Cyrillic name under a house-network suffix"
+    },
+    { "url": "http://中文.lan/", "ok": true, "why": "Chinese name under a house-network suffix" },
+    { "url": "http://xn--e1afmkfd.lan/", "ok": true, "why": "the Cyrillic name as punycode" },
+    { "url": "http://games.example.com", "ok": false },
+    { "url": "http://games.example.com:5000/app", "ok": false },
+    { "url": "http://8.8.8.8", "ok": false },
+    { "url": "http://172.15.0.1", "ok": false },
+    { "url": "http://172.32.0.1", "ok": false },
+    { "url": "http://192.169.1.1", "ok": false },
+    { "url": "http://11.0.0.1", "ok": false },
+    { "url": "http://0.0.0.0", "ok": false },
+    { "url": "http://100.63.255.255", "ok": false, "why": "just outside 100.64.0.0/10" },
+    { "url": "http://100.128.0.1", "ok": false, "why": "just outside 100.64.0.0/10" },
+    { "url": "http://[2001:db8::1]", "ok": false },
+    { "url": "http://[::ffff:8.8.8.8]", "ok": false },
+    { "url": "http://[fec0::1]", "ok": false },
+    { "url": "http://192.168.1.1.evil.com", "ok": false, "why": "looks local, is a public name" },
+    { "url": "http://10.0.0.1.nip.io", "ok": false },
+    { "url": "http://localhost.evil.com", "ok": false },
+    { "url": "http://nas.local.evil.com", "ok": false },
+    { "url": "http://.local", "ok": false },
+    {
+      "url": "http://nas.lan.evil.com",
+      "ok": false,
+      "why": "a suffix is a whole label, never a substring or a bare suffix"
+    },
+    { "url": "http://evil-lan.com", "ok": false },
+    { "url": "http://lan.example.com", "ok": false },
+    { "url": "http://.lan", "ok": false },
+    { "url": "http://home.arpa", "ok": false },
+    { "url": "http://nas.internal.evil.com", "ok": false },
+    { "url": "http://nas.home.arpa.evil.com", "ok": false },
+    { "url": "http://0x08080808/", "ok": false, "why": "hex-encoded public address" },
+    {
+      "url": "http://192.168.1.1@evil.com/",
+      "ok": false,
+      "why": "the host is evil.com; 192.168.1.1 is only userinfo"
+    },
+    {
+      "url": "http://8.8.8.8./",
+      "ok": false,
+      "why": "one trailing dot still parses as the public IPv4 address 8.8.8.8"
+    },
+    {
+      "url": "  http://games.example.com  ",
+      "ok": false,
+      "why": "surrounding whitespace is trimmed, then refused"
+    },
+    {
+      "url": "http://127.0.0.1../",
+      "ok": false,
+      "why": "two trailing dots make it a domain name, not the address 127.0.0.1"
+    },
+    {
+      "url": "http://127.0.0.1.../",
+      "ok": false,
+      "why": "a domain name that only reads like a loopback address"
+    },
+    {
+      "url": "http://192.168.1.1../",
+      "ok": false,
+      "why": "a domain name that only reads like a LAN address"
+    },
+    {
+      "url": "http://10.0.0.1..:5006",
+      "ok": false,
+      "why": "a domain name that only reads like a LAN address"
+    },
+    {
+      "url": "http://xn--nas-.lan/",
+      "ok": false,
+      "why": "invalid punycode: the url crate refuses the whole host"
+    },
+    { "url": "http://xn--nas.lan/", "ok": false, "why": "punycode that does not decode" },
+    { "url": "http://xn--a-.lan/", "ok": false, "why": "punycode that decodes to plain ASCII" },
+    {
+      "url": "http://nas.xn--nas-.local/",
+      "ok": false,
+      "why": "one bad label anywhere in the host"
+    },
+    {
+      "url": "https://xn--nas-.lan/",
+      "ok": false,
+      "why": "an invalid host is refused for https too"
+    },
+    { "url": "http://xn--/", "ok": false, "why": "an empty punycode label" },
+    { "url": "ftp://games.example.com", "ok": false },
+    { "url": "file:///etc/passwd", "ok": false },
+    { "url": "ws://localhost:5000", "ok": false },
+    { "url": "javascript:alert(1)", "ok": false },
+    { "url": "games.example.com", "ok": false },
+    { "url": "localhost:5000", "ok": false },
+    { "url": "https://", "ok": false },
+    { "url": "//games.example.com", "ok": false }
+  ]
+}

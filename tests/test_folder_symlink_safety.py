@@ -484,8 +484,8 @@ def test_a_file_swapped_for_a_link_after_the_walk_is_not_streamed(game_dir, secr
     (game_dir / 'ok.bin').write_bytes(b'ok-bytes')
     real_walk = zs._iter_folder_files
 
-    def walk_then_swap(source, excluded):
-        found = list(real_walk(source, excluded))   # the whole walk happens first
+    def walk_then_swap(source, excluded, **kwargs):
+        found = list(real_walk(source, excluded, **kwargs))   # the whole walk happens first
         (game_dir / 'big.bin').unlink()
         _link(game_dir / 'big.bin', secret)
         return iter(found)

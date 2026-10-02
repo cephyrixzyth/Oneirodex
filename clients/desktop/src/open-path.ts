@@ -62,7 +62,8 @@ export function isDevicePath(path: string): boolean {
 
 /**
  * Shown when a reveal path names a device, or a network share nobody trusted.
- * Keep in step with `NETWORK_PATH_REFUSED` in `src-tauri/src/lib.rs`.
+ * Keep in step with `NETWORK_PATH_REFUSED` in `src-tauri/src/lib.rs`;
+ * `open-path.test.ts` reads that file and fails when the two differ.
  */
 export const NETWORK_PATH_REFUSED =
   'Network (UNC) paths only open for shares you list under Trusted network shares in the companion (or map the share to a drive letter); device paths are always blocked'

@@ -156,3 +156,62 @@ def test_the_admin_download_route_no_longer_500s_or_leaks(signed_in, monkeypatch
     body = reply.get_json()
     assert body['error_code'] == 'bad_gateway'
     assert INTERNAL_IP not in reply.get_data(as_text=True)
+
+
+@pytest.mark.parametrize('exc', [
+    requests.exceptions.InvalidURL(f"Invalid URL 'http://u:{SAB_KEY}@qbit.lan/?apikey={SAB_KEY}': No host supplied"),
+    requests.exceptions.MissingSchema(f"Invalid URL 'qbit.lan/?apikey={SAB_KEY}': No scheme supplied"),
+    requests.exceptions.InvalidSchema(f"No connection adapters were found for 'ftp://qbit.lan/?apikey={SAB_KEY}'"),
+    requests.exceptions.InvalidHeader(f'Invalid return character or leading space in header: apikey={SAB_KEY}'),
+])
+def test_requests_value_errors_are_not_echoed_by_the_admin_download_route(signed_in, monkeypatch, exc):
+    """These subclass ValueError too, and ``except ValueError: api_error(str(exc))`` ran first."""
+    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+
+    def boom(_url):
+        raise exc
+
+    monkeypatch.setattr('oneirodex.routes_arr.qbittorrent_add_url', boom)
+    reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
+    assert reply.status_code == 502
+    assert reply.get_json()['error_code'] == 'bad_gateway'
+    assert SAB_KEY not in reply.get_data(as_text=True)
+
+
+def test_a_plain_value_error_is_still_a_bad_request_with_credential_parameters_scrubbed(signed_in, monkeypatch):
+    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+
+    def invalid(_url):
+        raise ValueError(f'download_url is required (apikey={SAB_KEY})')
+
+    monkeypatch.setattr('oneirodex.routes_arr.qbittorrent_add_url', invalid)
+    reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
+    assert reply.status_code == 400
+    assert reply.get_json()['error_code'] == 'bad_request'
+    assert 'download_url is required' in reply.get_json()['error']
+    assert SAB_KEY not in reply.get_data(as_text=True)
+
+
+def test_a_redirect_to_an_impossible_port_is_a_gateway_error_not_a_bad_request(signed_in, monkeypatch):
+    """The origin check raised a bare ValueError for ``:99999``, which the route answered as a 400."""
+    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr(
+        'oneirodex.utils.arr_connectors.get_arr_config',
+        lambda: {'qbittorrent_url': 'http://qbit.lan:8080', 'qbittorrent_username': 'admin', 'qbittorrent_password': 'pw'},
+    )
+    monkeypatch.setattr(security, 'allow_private_lan_urls_enabled', lambda: True)
+    monkeypatch.setattr(security, '_resolve_host', lambda host: [ipaddress.ip_address(INTERNAL_IP)])
+
+    def redirect(self, method, url, **kwargs):
+        response = requests.Response()
+        response.status_code = 302
+        response.headers['Location'] = 'http://qbit.lan:99999/x'
+        response._content = b''
+        response._content_consumed = True
+        return response
+
+    monkeypatch.setattr(requests.Session, 'request', redirect)
+    reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
+    assert reply.status_code == 502
+    assert reply.get_json()['error_code'] == 'bad_gateway'
+    assert '99999' not in reply.get_data(as_text=True)

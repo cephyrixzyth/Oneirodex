@@ -15,8 +15,8 @@ from oneirodex.utils.local_metadata import get_local_cover_path, get_local_scree
 from oneirodex.utils.member_spa import render_member_spa
 from oneirodex.utils.security import (
     get_allowed_base_directories,
-    is_plain_file_within,
     is_safe_path,
+    open_plain_file_within,
     sanitize_path_for_logging,
 )
 
@@ -100,7 +100,14 @@ def serve_local_image(game_uuid, image_type):
         )
         abort(500, "Server configuration error")
 
-    is_safe, error_message = is_safe_path(game.full_disk_path, allowed_bases)
+    # Resolved once, before anything is looked up under it. The checks and the
+    # open below all compare against this string, so a game folder swapped for a
+    # link afterwards reads as "outside" instead of moving the boundary with it.
+    try:
+        real_game = os.path.realpath(game.full_disk_path)
+    except (OSError, TypeError, ValueError):
+        real_game = game.full_disk_path  # is_safe_path refuses whatever this is
+    is_safe, error_message = is_safe_path(real_game, allowed_bases)
     if not is_safe:
         log_system_event(
             f"Security: User {current_user.name} attempted access to unsafe path {sanitize_path_for_logging(game.full_disk_path)}: {error_message}",
@@ -111,10 +118,10 @@ def serve_local_image(game_uuid, image_type):
 
     image_path = None
     if image_type == 'cover':
-        image_path = get_local_cover_path(game.full_disk_path)
+        image_path = get_local_cover_path(real_game)
     elif image_type == 'screenshot':
         index = request.args.get('index', 0, type=int)
-        screenshots = get_local_screenshots(game.full_disk_path)
+        screenshots = get_local_screenshots(real_game)
         if 0 <= index < len(screenshots):
             image_path = screenshots[index]
     else:
@@ -125,18 +132,24 @@ def serve_local_image(game_uuid, image_type):
         )
         abort(400, "Invalid image type")
 
-    # The helpers already skip links, but this is the last line before send_file
-    # follows whatever is on disk, so re-check: a regular file inside the game
-    # folder, nothing else.
-    if image_path and not is_plain_file_within(game.full_disk_path, image_path):
-        log_system_event(
-            f"Security: refused local {image_type} image that is a link or leaves the game folder for game {game.name}",
-            event_type='security',
-            event_level='warning',
-        )
-        image_path = None
+    # The helpers already skip links, but a share writer can still swap the file
+    # between their check and the read. So the file is opened here, once, and
+    # what is served is that descriptor: a regular file inside the game folder,
+    # nothing else, however the path changes after this line.
+    handle = None
+    if image_path:
+        try:
+            handle = open_plain_file_within(real_game, image_path, base_is_resolved=True)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            log_system_event(
+                f"Security: refused local {image_type} image that is a link or leaves the game folder for game {game.name}",
+                event_type='security',
+                event_level='warning',
+            )
 
-    if not image_path or not os.path.exists(image_path):
+    if handle is None:
         log_system_event(
             f"User {current_user.name} requested local image that doesn't exist: {image_type} for game {game.name}",
             event_type='game',
@@ -153,4 +166,17 @@ def serve_local_image(game_uuid, image_type):
         event_type='game',
         event_level='debug',
     )
-    return send_file(image_path, mimetype=mime_type)
+    try:
+        info = os.fstat(handle.fileno())
+        response = send_file(
+            handle,
+            mimetype=mime_type,
+            last_modified=info.st_mtime,
+            etag=f'{info.st_mtime_ns:x}-{info.st_size:x}',
+        )
+    except BaseException:
+        handle.close()
+        raise
+    if response.status_code == 200:
+        response.content_length = info.st_size
+    return response

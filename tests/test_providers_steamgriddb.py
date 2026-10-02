@@ -121,8 +121,17 @@ def test_search_covers_mocked(mock_get, monkeypatch):
     assert mock_get.call_count == 2
 
 
-@patch('oneirodex.utils.providers.steamgriddb.requests.get')
-def test_fetch_image_mocked(mock_get, monkeypatch):
+def test_fetch_image_mocked(monkeypatch):
+    """fetch_image goes through the SSRF-guarded safe_get (providers/base.py);
+    this test used to patch requests.get, which that path never calls, so it
+    reached the network. Mock the guarded fetch and resolve the reserved
+    `cdn.example` name instead of depending on the machine's resolver."""
+    import ipaddress
+
+    from oneirodex.utils import security
+    from oneirodex.utils.providers import base
+
+    monkeypatch.setattr(security, '_resolve_host', lambda host: [ipaddress.ip_address('93.184.216.34')])
     monkeypatch.setenv('STEAMGRIDDB_API_KEY', 'test-key')
     provider = SteamGridDBProvider()
 
@@ -131,10 +140,17 @@ def test_fetch_image_mocked(mock_get, monkeypatch):
         content = b'PNGDATA'
         headers = {'Content-Type': 'image/png'}
 
-    mock_get.return_value = FakeResponse()
+    fetched = []
+
+    def fake_safe_get(url, **kwargs):
+        fetched.append((url, kwargs.get('validator')))
+        return FakeResponse()
+
+    monkeypatch.setattr(base, 'safe_get', fake_safe_get)
     data, content_type = provider.fetch_image('https://cdn.example/grid.png')
     assert data == b'PNGDATA'
     assert content_type == 'image/png'
+    assert fetched and fetched[0][1] is not None, 'the redirect validator still applies'
 
 
 def test_registry_lists_steamgriddb(app, db_session, monkeypatch):

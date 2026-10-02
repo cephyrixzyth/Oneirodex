@@ -293,11 +293,13 @@ def arr_download(body: ArrDownloadBody):
         url = result
     try:
         result = qbittorrent_add_url(url)
-    except ValueError as exc:
-        return api_error(str(exc), code='bad_request')
     except (RuntimeError, requests.RequestException) as exc:
-        # A failed request's text carries the full URL; see client_error_message.
+        # First, because several requests errors (InvalidURL, MissingSchema,
+        # InvalidHeader, JSONDecodeError) are also ValueErrors and their text
+        # carries the full request URL; see client_error_message.
         return api_error(client_error_message(exc, noun='qBittorrent server'), code='bad_gateway')
+    except ValueError as exc:
+        return api_error(client_error_message(exc, noun='qBittorrent server'), code='bad_request')
     return api_ok(result, status=202)
 
 
