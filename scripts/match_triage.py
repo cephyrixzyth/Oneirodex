@@ -46,6 +46,10 @@ BUCKETS: tuple[tuple[str, re.Pattern], ...] = (
 )
 
 
+def out(text: str = '') -> None:
+    sys.stdout.write(text + '\n')
+
+
 def _load_names(path: Path) -> list[str]:
     text = path.read_text(encoding='utf-8-sig')
     if path.suffix.lower() == '.csv':
@@ -95,18 +99,18 @@ def main(argv: list[str] | None = None) -> int:
             counts[label] += 1
             examples.setdefault(label, []).append(row)
 
-    print(f'{len(rows)} folders triaged')
+    out(f'{len(rows)} folders triaged')
     for label, count in counts.most_common():
-        print(f'\n{label}: {count} ({count / max(len(rows), 1):.0%})')
+        out(f'\n{label}: {count} ({count / max(len(rows), 1):.0%})')
         for row in examples[label][: args.examples]:
-            print(f'  {row["folder"]!r} -> {row["cleaned"]!r}')
+            out(f'  {row["folder"]!r} -> {row["cleaned"]!r}')
     if args.csv:
         with args.csv.open('w', newline='', encoding='utf-8') as handle:
             writer = csv.writer(handle)
             writer.writerow(['folder', 'cleaned', 'residue'])
             for row in rows:
                 writer.writerow([row['folder'], row['cleaned'], ';'.join(row['residue'])])
-        print(f'\nwrote {args.csv}')
+        out(f'\nwrote {args.csv}')
     return 0
 
 

@@ -34,10 +34,13 @@ let remembered: DiscoverZone[] | null = null
 
 function clean(zones: unknown): DiscoverZone[] {
   if (!Array.isArray(zones)) return []
-  return zones
-    .filter((zone: any) => zone && typeof zone.slug === 'string' && zone.slug)
-    .map((zone: any) => ({
-      slug: zone.slug,
+  return (zones as Array<Record<string, unknown> | null>)
+    .filter(
+      (zone): zone is Record<string, unknown> =>
+        Boolean(zone) && typeof zone?.slug === 'string' && Boolean(zone.slug),
+    )
+    .map((zone) => ({
+      slug: String(zone.slug),
       title: String(zone.title || zone.slug),
       lede: zone.lede ? String(zone.lede) : undefined,
       href: zone.href ? String(zone.href) : undefined,

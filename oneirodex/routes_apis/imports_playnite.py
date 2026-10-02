@@ -68,8 +68,8 @@ def launcher_import_formats():
 def import_launcher():
     """Import a library export from Playnite, Heroic, Lutris, GOG Galaxy or a CSV.
 
-    Multipart ``file`` (.json/.csv) or a JSON body. ``launcher`` (form field,
-    query or JSON key) pins the format; otherwise it is detected. Register-only:
+    Multipart ``file`` (.json/.csv) or the export as the raw body. ``launcher``
+    (form field or query) pins the format; otherwise it is detected. Register-only:
     records ownership, never downloads. Unmatched titles go to the review queue.
     """
     from oneirodex.utils.launcher_imports import import_launcher_export
@@ -84,12 +84,10 @@ def import_launcher():
                 current_user.id, upload.read(), filename=upload.filename or '', launcher=launcher,
             )
         else:
-            data = request.get_json(silent=True)
-            if data is None:
+            body = request.get_data(as_text=True)
+            if not body.strip():
                 return api_error('JSON body or file upload required', code='bad_request')
-            if isinstance(data, dict) and 'launcher' in data and launcher is None:
-                launcher = str(data.get('launcher') or '').strip() or None
-            outcome = import_launcher_export(current_user.id, data, launcher=launcher)
+            outcome = import_launcher_export(current_user.id, body, launcher=launcher)
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     if outcome.errors and not (outcome.imported or outcome.updated):
