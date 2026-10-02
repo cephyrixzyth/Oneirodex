@@ -643,8 +643,8 @@ def test_rom_endpoint_serves_a_cue_bundle_from_the_cache(served):
         assert archive.read('disc.bin') == GAME
 
 
-def _get_zip(served, request_id) -> _Wire:
-    wire = _Wire()
+def _get_zip(served, request_id, wire=None) -> _Wire:
+    wire = wire or _Wire()
     path = f'/download_zip/{request_id}'
     asyncio.run(served.lazy._handle_zip_download({'path': path}, None, wire.send, path))
     return wire
@@ -714,6 +714,57 @@ def test_single_file_download_that_is_swapped_before_it_is_opened_is_not_served(
 
     assert _status(wire) in (403, 404)
     assert SECRET not in wire.body
+
+
+def test_a_locked_or_unreadable_download_is_unavailable_not_a_security_event(served, monkeypatch):
+    """A Windows sharing violation or EACCES is not a link or an escape: it was
+    logged as a security violation with a 403."""
+    import errno
+
+    package = served.root / 'game.7z'
+    package.write_bytes(GAME)
+    game = _make_game(served.db, package)
+    request_id = _download_request(served, game, package).id
+    events = []
+    monkeypatch.setattr(asgi_mod, 'log_system_event', lambda msg, **kw: events.append((msg, kw)))
+
+    def locked(*args, **kwargs):
+        raise PermissionError(errno.EACCES, 'Permission denied')
+
+    monkeypatch.setattr(asgi_mod, 'open_plain_file_within', locked)
+    assert _status(_get_zip(served, request_id)) == 503
+    assert not any(kw.get('event_type') == 'security' for _, kw in events)
+
+
+def test_the_helpers_own_refusals_are_still_security_events():
+    import errno
+
+    assert asgi_mod._is_link_or_escape_refusal(OSError(errno.ELOOP, 'path no longer names the file that was opened'))
+    assert asgi_mod._is_link_or_escape_refusal(OSError(errno.EINVAL, 'not a regular file'))
+    assert asgi_mod._is_link_or_escape_refusal(OSError(errno.EACCES, 'file is outside its folder'))
+    assert not asgi_mod._is_link_or_escape_refusal(PermissionError(errno.EACCES, 'Permission denied'))
+    assert not asgi_mod._is_link_or_escape_refusal(OSError(errno.EIO, 'Input/output error'))
+
+
+def test_a_client_closing_a_download_is_not_logged_as_an_error(served, monkeypatch):
+    package = served.root / 'game.7z'
+    package.write_bytes(b'x' * (5 * 1024 * 1024))
+    game = _make_game(served.db, package)
+    request_id = _download_request(served, game, package).id
+    events = []
+    monkeypatch.setattr(asgi_mod, 'log_system_event', lambda msg, **kw: events.append((msg, kw)))
+
+    class GoneWire(_Wire):
+        async def send(self, message):
+            if message['type'] == 'http.response.body' and self.messages:
+                raise ConnectionResetError('client went away')
+            await super().send(message)
+
+    with pytest.raises(ConnectionResetError):
+        _get_zip(served, request_id, wire=GoneWire())
+    levels = [kw.get('event_level') for msg, kw in events if 'ended early' in msg]
+    assert levels == ['information']
+    assert not any(kw.get('event_level') == 'error' for _, kw in events)
 
 
 def test_single_file_download_of_a_missing_file_is_a_404(served):

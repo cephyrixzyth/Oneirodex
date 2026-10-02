@@ -103,6 +103,21 @@ def _rom_location(rom_path, cache_dir, real_game, game_is_dir):
 
 
 # Proper ASGI application with lifespan protocol support
+#: A visitor cancelling a download, not a server fault.
+_CLIENT_GONE = (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
+
+
+def _is_link_or_escape_refusal(exc: OSError) -> bool:
+    """True when ``open_plain_file_within`` refused the file itself (a link,
+    not a regular file, or outside its folder), as opposed to the file being
+    locked, unreadable or failing with an I/O error."""
+    import errno
+
+    if exc.errno in (errno.ELOOP, errno.EINVAL):
+        return True
+    return exc.errno == errno.EACCES and exc.strerror == 'file is outside its folder'
+
+
 class LazyASGIApp:
     def __init__(self):
         self._app = None
@@ -525,7 +540,17 @@ class LazyASGIApp:
             except FileNotFoundError:
                 await self._send_error(send, 404, "File not found")
                 return
-            except OSError:
+            except OSError as exc:
+                if not _is_link_or_escape_refusal(exc):
+                    # Locked by another program (a Windows sharing violation),
+                    # unreadable, or an I/O error: not an attack, just unavailable.
+                    log_system_event(
+                        f"Download file could not be opened: {os.path.basename(file_path)} ({type(exc).__name__})",
+                        event_type='download',
+                        event_level='warning',
+                    )
+                    await self._send_error(send, 503, "File is temporarily unavailable")
+                    return
                 log_system_event(
                     f"Security violation - download file is not a plain file in place: {file_path[:100]}",
                     event_type='security',
@@ -788,9 +813,10 @@ class LazyASGIApp:
 
         except Exception as e:
             log_system_event(
-                f"Error streaming file {filename}: {str(e)}",
+                f"Download of {filename} ended early: the client closed the connection"
+                if isinstance(e, _CLIENT_GONE) else f"Error streaming file {filename}: {str(e)}",
                 event_type='download',
-                event_level='error',
+                event_level='information' if isinstance(e, _CLIENT_GONE) else 'error',
             )
             if started:
                 # Past the status line the only honest ending is an aborted
@@ -874,9 +900,10 @@ class LazyASGIApp:
                 # would give the client a corrupt zip with a clean 200; raising
                 # drops the connection, so the download shows as incomplete.
                 log_system_event(
-                    f"ZIP download aborted mid-stream: {error_filename}",
+                    f"ZIP download of {error_filename} ended early: the client closed the connection"
+                    if isinstance(e, _CLIENT_GONE) else f"ZIP download aborted mid-stream: {error_filename}",
                     event_type='download',
-                    event_level='error',
+                    event_level='information' if isinstance(e, _CLIENT_GONE) else 'error',
                 )
                 raise
             await self._send_error(send, 500, "Error streaming ZIP file")
