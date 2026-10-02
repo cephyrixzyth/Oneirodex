@@ -851,6 +851,16 @@ def test_local_cover_is_served_with_its_size_and_validators(client, cover_game):
     assert again.status_code == 304
 
 
+def test_local_cover_honours_a_range_request(client, cover_game):
+    """send_file only serves ranges from a file object when told its size."""
+    response = client.get(f'/game/{cover_game.game.uuid}/local_image/cover', headers={'Range': 'bytes=2-5'})
+    data = response.data
+    response.close()
+    assert response.status_code == 206
+    assert data == b'REAL'
+    assert response.headers['Content-Range'] == f'bytes 2-5/{len(b"""\xff\xd8REAL-COVER""")}'
+
+
 def test_local_cover_serves_what_was_vetted_when_the_file_is_swapped_while_logging(client, cover_game, secret, monkeypatch):
     from oneirodex.routes_games_ext import details
 

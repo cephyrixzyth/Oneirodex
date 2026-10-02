@@ -157,26 +157,25 @@ def serve_local_image(game_uuid, image_type):
         )
         abort(404, "Image not found")
 
-    mime_type, _ = mimetypes.guess_type(image_path)
-    if not mime_type:
-        mime_type = 'image/jpeg'
-
-    log_system_event(
-        f"Serving local {image_type} image for game '{game.name}' to user {current_user.name}",
-        event_type='game',
-        event_level='debug',
-    )
     try:
+        mime_type, _ = mimetypes.guess_type(image_path)
+        log_system_event(
+            f"Serving local {image_type} image for game '{game.name}' to user {current_user.name}",
+            event_type='game',
+            event_level='debug',
+        )
         info = os.fstat(handle.fileno())
         response = send_file(
             handle,
-            mimetype=mime_type,
+            mimetype=mime_type or 'image/jpeg',
             last_modified=info.st_mtime,
             etag=f'{info.st_mtime_ns:x}-{info.st_size:x}',
+            conditional=False,
         )
+        response.content_length = info.st_size
+        # With a file object Werkzeug cannot know the length, so the 304 /
+        # Range handling is applied here with the size from the descriptor.
+        return response.make_conditional(request.environ, accept_ranges=True, complete_length=info.st_size)
     except BaseException:
         handle.close()
         raise
-    if response.status_code == 200:
-        response.content_length = info.st_size
-    return response
