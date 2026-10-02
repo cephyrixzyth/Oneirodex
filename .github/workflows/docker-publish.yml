@@ -1,0 +1,73 @@
+# Publish the all-in-one image on a version tag (or by hand).
+#
+# GHCR needs nothing but the built-in GITHUB_TOKEN. Docker Hub is pushed only
+# when the DOCKERHUB_USERNAME variable and DOCKERHUB_TOKEN secret exist, so a fork
+# without them still publishes to its own GHCR namespace.
+# Unraid Community Apps template points at Docker Hub: unraid/oneirodex.xml.
+name: Docker publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: oneirodex
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker Hub available?
+        id: hub
+        env:
+          HUB_USER: ${{ vars.DOCKERHUB_USERNAME }}
+          HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$HUB_USER" ] && [ -n "$HUB_TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: docker/login-action@v3
+        if: steps.hub.outputs.enabled == 'true'
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ${{ steps.hub.outputs.enabled == 'true' && format('{0}/{1}', vars.DOCKERHUB_USERNAME, env.IMAGE_NAME) || '' }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONEIRODEX_BUILD_SHA=${{ github.sha }}
+            ONEIRODEX_BUILT_AT=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
