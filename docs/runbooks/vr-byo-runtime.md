@@ -1,5 +1,7 @@
 # BYO VR runtime matrix (INSP-41, VR-XR-1…4)
 
+> **Doc status:** Active
+
 **Status:** runbook, v11 H3b. **Scope:** what a household plugs together *around* Oneirodex so a headset seat can play — the OpenXR runtime, the OpenVR adapter, the streamer, the wire. **Oneirodex ships none of it.** It records how a title plays (`vr_compat`, the headset record — [user/controllers-and-vr.md](../user/controllers-and-vr.md)) and deep-links to where the community keeps its profiles; every runtime, adapter, streamer and tweak below is yours to install from its own project, and this page tells you which one does which job. Where a maintained community wiki already explains a step, this page cites it rather than copying it.
 
 ## The four layers

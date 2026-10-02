@@ -1,5 +1,7 @@
 # Architecture decision records
 
+> **Doc status:** Active
+
 One file per decision, numbered in the order they were taken. A superseded
 record keeps its number and gains a **Superseded** header pointing forward; it
 is never rewritten. Historical entries keep the former product string where

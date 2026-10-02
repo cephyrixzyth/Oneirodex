@@ -1,5 +1,7 @@
 # Controllers & VR / headset browse
 
+> **Doc status:** Active
+
 ## Controllers (Big Picture)
 
 Open **More → Big Picture** for a gamepad-first library rail.

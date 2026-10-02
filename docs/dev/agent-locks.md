@@ -1,5 +1,7 @@
 # Oneirodex agent locks
 
+> **Doc status:** Active
+
 Canonical product and engineering defaults. Current user instructions and previously accepted session decisions override historical defaults; never require the user to repeat them.
 
 ## Rebuild brief accepted 2026-09-26

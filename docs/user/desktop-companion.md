@@ -1,5 +1,7 @@
 # Desktop companion
 
+> **Doc status:** Active
+
 Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninstall / Play on your PC. The web UI still downloads archives to the browser; the companion extracts and launches locally.
 
 ## Connect

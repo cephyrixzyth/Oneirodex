@@ -1,5 +1,7 @@
 # Members & invites
 
+> **Doc status:** Active
+
 Two ways to add someone to the household, plus what to do when neither the
 person nor the server has an email address.
 

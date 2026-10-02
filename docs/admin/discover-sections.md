@@ -1,5 +1,7 @@
 # Discover sections (storefront shelves, zones & events)
 
+> **Doc status:** Active
+
 > 🎬 Watch (narrated): [shelves & events](../media/video/howto/howto-admin-discover.mp4) — [all how-to videos, with transcripts](../media/video/howto/README.md)
 
 Admin → **Discovery Sections Management** (`/admin/discovery_sections`) controls the shelves members see on `/discover`.

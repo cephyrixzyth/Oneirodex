@@ -1,5 +1,7 @@
 # Why 11 JSON sites stay off `api_ok`
 
+> **Doc status:** Active
+
 The SPA error component needs **one** failure shape. `api_ok` / `api_error` is that shape. A ratchet (`scripts/api_envelope_lint.py`) stops new `jsonify({error|message|status|success|ok})` call sites from growing.
 
 Eleven remaining hits are **not** leftover sloppiness. Wrapping them would change the meaning of a field the caller already treats as data.

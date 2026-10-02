@@ -1,5 +1,7 @@
 # ROM reference sets (No-Intro / Redump DAT)
 
+> **Doc status:** Active
+
 Oneirodex can report **set completeness** per library platform + region after you upload a DAT you obtained yourself. The app does **not** ship or download copyrighted DAT files.
 
 Related: [library-and-systems.md](../user/library-and-systems.md)

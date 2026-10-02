@@ -34,11 +34,10 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Maintainers / architecture | [dev/architecture.md](dev/architecture.md) · [adr/README.md](adr/README.md) — the ten decision records, with what each supersedes · [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — current marker selection, explicit exclusions and coverage gate. Replaces `ci-wishlist.md` |
 | Support triage (maintainers) | [dev/ui-debt-log.md](dev/ui-debt-log.md) · [dev/api-envelope-keeps.md](dev/api-envelope-keeps.md) |
-| Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers · [dev/test-harness-2026-08-07.md](dev/test-harness-2026-08-07.md) (lock-storm) · [dev/test-harness-failures.md](dev/test-harness-failures.md) (Aug re-baseline — counts stale) · **[dev/test-suite-failures-2026-09-16.md](dev/test-suite-failures-2026-09-16.md)** — the current failures, named and grouped |
+| Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers. Older harness notes and the 2026-09-16 failure list are in [dev/archive/](dev/archive/README.md) |
 | Admin Jinja → React (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — which admin pages still render server-side, their handlers and APIs, and the port order (H-D.5) |
 | Writing an API route (maintainers) | [dev/pydantic-adoption.md](dev/pydantic-adoption.md) — `@validate_body` request models · which routes are migrated · adoption backlog |
 | Maintainers / browser engines | [dev/browser-play-engines.md](dev/browser-play-engines.md) — WebRetro · Nostalgist/koin · EmulatorJS · webЯcade sidecar · [runbooks/emulatorjs.md](runbooks/emulatorjs.md) (install engine B) |
-| Reviewing the bundled W31 commit | [dev/w31-commit-attribution.md](dev/w31-commit-attribution.md) — which of `c6fd7bf7`'s 236 files are the security audit and which are the UI pass |
 | OIDC / Authentik SSO | [runbooks/oidc-sso.md](runbooks/oidc-sso.md), [runbooks/oidc-authentik-unraid.md](runbooks/oidc-authentik-unraid.md) |
 | API | [openapi/openapi.json](openapi/openapi.json) |
 | How-to videos | [media/video/howto/](media/video/howto/README.md) — 20 narrated clips (AI voice, captions, WebVTT + transcripts), one worked example per feature, members + admins |
@@ -62,7 +61,22 @@ docs/
   openapi/                  ← HTTP contract
   assets/readme/            ← root README icons & screenshots
   dev/                      ← engineering notes
+  */archive/                ← Archive-status docs (see below)
 ```
+
+## Doc status
+
+Every doc carries `> **Doc status:** Active | Reference | Archive` under its title.
+
+| Status | Meaning | Who reads it |
+|---|---|---|
+| **Active** | Maintained; matches current behavior | Agents and users, by default |
+| **Reference** | Stable background (design notes, baselines) | When the topic comes up |
+| **Archive** | Kept for provenance; superseded or finished | Nobody, unless directed. Agents skip `archive/` folders and the links below |
+
+Archive docs live in the area's `archive/` folder, each with a `README.md` listing what is there and why. To archive a doc: `git mv` it into `archive/`, set its status line, add a row to `archive/README.md`, and fix inbound links.
+
+Archives: [dev/archive](dev/archive/README.md) · [superpowers/archive](superpowers/archive/README.md)
 
 ## Naming
 

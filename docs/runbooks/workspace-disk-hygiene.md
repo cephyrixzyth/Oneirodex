@@ -1,5 +1,7 @@
 # Workspace disk hygiene
 
+> **Doc status:** Active
+
 **Audience:** maintainers / agents cleaning a large local clone before Unraid or Docker work.  
 **Not for:** operators on Unraid — image size ≠ workspace size; caches below never ship in the Hub image when `.dockerignore` is current.
 

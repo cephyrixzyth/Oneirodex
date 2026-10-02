@@ -1,5 +1,7 @@
 # PR #112 Review Fixes Implementation Plan
 
+> **Doc status:** Archive
+
 > **For agentic workers:** Implement phase-by-phase. After each phase: run targeted tests, do a focused bug/code scan of that phase's diff, only proceed when green. After Phase 5 green: commit, push, ship (mark PR ready).
 
 **Goal:** Close all P0/P1 findings from the PR #112 code review (and P2 polish that is cheap), then ship.

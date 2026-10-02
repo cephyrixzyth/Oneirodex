@@ -1,5 +1,7 @@
 # Privacy & data handling (operator notes)
 
+> **Doc status:** Active
+
 This is **not** a public privacy policy, **not** a terms-of-service, and **not** legal advice.
 Oneirodex is self-hosted: the machine you run it on holds the data, and **you** decide what to tell
 the household. Use this as a fact sheet to adapt, not as something to publish as if Oneirodex Inc.

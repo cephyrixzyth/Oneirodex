@@ -1,5 +1,7 @@
 # Libraries & scans — top-bar unfurls + Libraries DataTable
 
+> **Doc status:** Archive
+
 **Date:** 2026-08-31  
 **Status:** Approved — implementing / deploying  
 **Deploy:** Full Unraid rebuild + Reset Themes when implementation lands

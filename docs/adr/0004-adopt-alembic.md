@@ -1,5 +1,7 @@
 # ADR 0004: Adopt Alembic for schema migrations
 
+> **Doc status:** Active
+
 **Date:** 2026-09-09
 **Status:** Accepted — supersedes [ADR 0001](0001-schema-migrations-defer-alembic.md)
 **Owners:** `agent-backend` · `agent-ops`

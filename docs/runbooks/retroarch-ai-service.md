@@ -1,5 +1,7 @@
 # RetroArch AI Service (live OCR / MT overlay)
 
+> **Doc status:** Active
+
 **Status:** Operator-hosted · Oneirodex hints only (`ENABLE_ROM_AI_TRANSLATE`)  
 **Not:** a permanent ROM patch, browser WebRetro feature, or bundled OCR server
 

@@ -1,5 +1,7 @@
 # ADR 0008: npm workspaces with a single root lockfile
 
+> **Doc status:** Active
+
 **Date:** 2026-09-16 (records wave B1.1, 2026-09-09)
 **Status:** Accepted
 **Owners:** `agent-uiux` · `agent-ops` · `agent-desktop`

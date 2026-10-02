@@ -1,5 +1,7 @@
 # Docker Compose deploy — Oneirodex
 
+> **Doc status:** Active
+
 Concise local/NAS path using the repo `docker-compose.yml` (`oneirodex-app` + `oneirodex-db` by default; override with `APP_CONTAINER_NAME` / `DB_CONTAINER_NAME`). Preferred Hub image once published: `chrisjrovira/oneirodex` via `APP_IMAGE`. Live Unraid stacks that still run `oneirodex-app` should pin that name until the scan FIFO is idle.
 
 ## Prerequisites

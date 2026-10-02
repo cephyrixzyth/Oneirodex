@@ -32,7 +32,7 @@ python -m pytest tests/test_whatever.py
 
 The test database is the container **`oneirodex-review-db`**. `docker start oneirodex-review-db` if it is stopped; if it does not exist at all, `docker compose -f docker-compose.review.yml up -d db` and create `oneirodextest` — [local-postgres-pytest.md](docs/runbooks/local-postgres-pytest.md). A pytest run that produces no output for minutes is a refused connection, not a slow suite.
 
-Full-tree pytest is **not** all-green today — **42 failed / 4,450 passed** on 2026-09-16, every one named in [test-suite-failures-2026-09-16.md](docs/dev/test-suite-failures-2026-09-16.md). CI runs every test not marked `integration`, minus a named deselect list of known failures ([ci-gates.md](docs/dev/ci-gates.md)) — a new test file is gated by default. Passing CI is still not the full suite: the `integration` modules (live services, Unraid-shaped fixtures) run locally and at release.
+Full-tree pytest is **not** all-green today — **42 failed / 4,450 passed** on 2026-09-16, every one named in [test-suite-failures-2026-09-16.md](docs/dev/archive/test-suite-failures-2026-09-16.md). CI runs every test not marked `integration`, minus a named deselect list of known failures ([ci-gates.md](docs/dev/ci-gates.md)) — a new test file is gated by default. Passing CI is still not the full suite: the `integration` modules (live services, Unraid-shaped fixtures) run locally and at release.
 
 ## Ratchets — do not regress
 

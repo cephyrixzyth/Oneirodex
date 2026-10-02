@@ -1,5 +1,7 @@
 # Issue assess & fix (shared support workflow)
 
+> **Doc status:** Active
+
 Near-zero standing cost: tickets land on GitHub; maintainers run Cursor skills on demand. No LLM keys inside Flask.
 
 ## Flow

@@ -1,5 +1,7 @@
 # Preferences & themes
 
+> **Doc status:** Active
+
 > 🎬 Watch (narrated): [themes, rooms, icons & fonts](../media/video/howto/howto-preferences.mp4) — [all how-to videos, with transcripts](../media/video/howto/README.md)
 
 ## Open preferences

@@ -1,5 +1,7 @@
 # RetroAchievements (R1/R2)
 
+> **Doc status:** Active
+
 Matches cartridge ROMs to community achievement sets by hash, so game details can
 say a set exists and a member can see their own progress. **Read-only**: nothing
 played in the browser unlocks anything — there is no rcheevos runtime in the WASM

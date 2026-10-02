@@ -1,5 +1,7 @@
 # Troubleshooting (members)
 
+> **Doc status:** Active
+
 Quick checks before pinging an admin.
 
 ## Blank / broken UI

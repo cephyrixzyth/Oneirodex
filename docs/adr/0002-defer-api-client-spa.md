@@ -1,5 +1,7 @@
 # ADR: Defer `@oneirodex/api-client` in member SPA
 
+> **Doc status:** Active
+
 **Date:** 2026-07-27  
 **Status:** Superseded by [0005](0005-api-client-is-the-requester.md) (2026-09-09)  
 **Owners:** `agent-uiux` · `agent-backend` · `maintainer`

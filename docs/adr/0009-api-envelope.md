@@ -1,5 +1,7 @@
 # ADR 0009: One JSON envelope — `api_ok` / `api_error`
 
+> **Doc status:** Active
+
 **Date:** 2026-09-16 (records UID-018, 2026-08-27, and wave 0.1, 2026-09-08)
 **Status:** Accepted
 **Owners:** `agent-backend` · `agent-uiux`

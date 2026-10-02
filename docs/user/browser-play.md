@@ -1,5 +1,7 @@
 # Browser & companion play — platform matrix
 
+> **Doc status:** Active
+
 Oneirodex play modes for systems **below PS5 / Xbox Series**. Those two stay **catalog + download only**.
 
 **Browser engines (direction):** Play today uses **WebRetro** (RetroArch WASM). Browse payloads include `browser_player` / `browser_players_available` (always `webretro` until a second engine is wired). Admin stub: `GET`/`PUT /api/browser-player-settings`. Optional **NES Nostalgist pilot** (`nostalgist_nes_pilot`, default off) swaps only NES Play links to a vendored Nostalgist host that still loads household cores/ROMs from this box — see [browser-play-engines.md](../dev/browser-play-engines.md). That host has **no save/load/rewind bar yet**; leave the flag off for cabinet chrome. Planned next: EmulatorJS as engine B, optional **webЯcade** sidecar. SaaS hosts that require uploading household ROMs (e.g. Afterplay) are out of scope.

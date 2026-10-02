@@ -1,5 +1,7 @@
 # ADR 0005: `@oneirodex/api-client` is the one requester
 
+> **Doc status:** Active
+
 **Date:** 2026-09-09
 **Status:** Accepted
 **Supersedes:** [ADR 0002](0002-defer-api-client-spa.md) (deferred SPA adoption)

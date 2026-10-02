@@ -1,5 +1,7 @@
 # Challenge solver (TRAWL) on Unraid / Compose (CH-2 / CH-6)
 
+> **Doc status:** Active
+
 Optional BYO browser/captcha solver for household acquire (Prowlarr / Jackett / debrid HTTP). **Off by default** — enable only when indexers return Cloudflare or captcha challenge pages.
 
 ## Security stance

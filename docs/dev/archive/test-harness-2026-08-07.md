@@ -1,5 +1,7 @@
 # Test harness — why the suite never finished
 
+> **Doc status:** Archive
+
 **Date:** 2026-08-07 · **Status:** deadlock fixed, failures classified
 
 ## The symptom
@@ -148,7 +150,7 @@ a boot or Admin → Reset Default Themes rebuilds it).
   SAVEPOINT bound to one connection. This is the change this note said not to
   make *for the 23 failures* — those causes were fixed on their own — done
   later on its own merits. See
-  [test-harness-2026-09-10.md](test-harness-2026-09-10.md) for the SAVEPOINT
+  [test-harness-2026-09-10.md](../test-harness-2026-09-10.md) for the SAVEPOINT
   model, the savepoint-restart listener and exception-safe teardown it needs,
   and the per-clean-database fallout (`configured_install` / `global_settings`
   preconditions the suite used to inherit from an earlier file).

@@ -1,5 +1,7 @@
 # Emulator BIOS / firmware (operator-supplied)
 
+> **Doc status:** Active
+
 **Audience:** Operator · **Stance:** LOCKED
 
 ## What Oneirodex does and does not do

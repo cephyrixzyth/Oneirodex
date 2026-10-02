@@ -1,5 +1,7 @@
 # Admin Jinja → React inventory (H-D.5)
 
+> **Doc status:** Active
+
 Measured 2026-09-19 on `main` after #150. The admin surface is a *declared*
 hybrid: every admin template extends `base_admin.html` and states, through
 `{% block admin_render %}`, whether React owns the body (`spa`) or the Jinja

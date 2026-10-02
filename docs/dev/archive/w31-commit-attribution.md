@@ -1,5 +1,7 @@
 # Commit attribution — `c6fd7bf7` (W31)
 
+> **Doc status:** Archive
+
 `c6fd7bf7` bundles two independent bodies of work: a security/legal audit
 remediation and the W29/W30 UI pass. They were committed together because they
 were both uncommitted in the same tree at the same moment, not because they are
