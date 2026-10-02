@@ -18,7 +18,8 @@ from oneirodex.utils.rom_archive_types import ArchiveRomError
 from oneirodex.utils.rom_archive_select import _member_ext
 from oneirodex.utils.rom_archive_types import CUE_COMPANION_EXTENSIONS
 from oneirodex.utils.rom_archive_select import choose_rom_member
-from oneirodex.utils.rom_archive_select import _safe_basename
+from oneirodex.utils.rom_archive_select import _platform_key, _safe_basename
+from oneirodex.utils.rom_archive_types import PLATFORM_ROM_EXTENSIONS
 from oneirodex.utils.rom_archive_types import MAX_NEST_DEPTH
 from oneirodex.utils.security import is_plain_file_within, open_plain_file_within
 from oneirodex.utils.zipstream import zip_date_time
@@ -100,6 +101,35 @@ def _extract_cue_companions(
             continue
 
 
+_ARCHIVE_EXTS = ('.zip', '.7z')
+
+
+def _drop_archive_members(
+    members: list[tuple[str, int]],
+    platform: str | None,
+    keep: str | None = None,
+) -> list[tuple[str, int]]:
+    """Inner archives are the ROM only where the platform's dumps are archives.
+
+    Arcade and Neo Geo put ``.zip``/``.7z`` in ``PLATFORM_ROM_EXTENSIONS``,
+    which unions them into ``ROM_EXTENSIONS`` for every platform. Left in, a
+    GBA pack shaped ``outer.zip > inner.zip > Hero.gba`` handed the player
+    ``inner.zip`` and the nested search below never ran.
+
+    With no known platform the old behaviour stands, and an explicitly
+    requested member (*keep*) is never dropped.
+    """
+    key = _platform_key(platform)
+    if key not in PLATFORM_ROM_EXTENSIONS:
+        return members
+    if any(ext in PLATFORM_ROM_EXTENSIONS[key] for ext in _ARCHIVE_EXTS):
+        return members
+    return [
+        (name, size) for name, size in members
+        if name == keep or not name.lower().endswith(_ARCHIVE_EXTS)
+    ]
+
+
 def extract_rom_from_zip(
     zip_path: str,
     cache_dir: str,
@@ -115,7 +145,7 @@ def extract_rom_from_zip(
     When a .cue is selected, sibling disc images in the same folder are extracted too.
     """
     os.makedirs(cache_dir, exist_ok=True)
-    rom_members = _list_roms_with_sizes_in_zip(zip_path)
+    rom_members = _drop_archive_members(_list_roms_with_sizes_in_zip(zip_path), platform, keep=member)
 
     if rom_members:
         chosen = choose_rom_member(rom_members, platform=platform, preferred_member=member)

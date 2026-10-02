@@ -22,7 +22,8 @@ from oneirodex.schemas.library_tools import (
 )
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.security import is_safe_path, get_allowed_base_directories
-from oneirodex.utils.disk_rename import build_rename_plan, apply_rename_plan
+from oneirodex.utils.disk_rename import apply_rename_plan, build_rename_plan, validate_plan_for_game
+from oneirodex.utils.path_repoint import repoint_paths
 from oneirodex.utils.match_proposal import (
     resolve_proposal_path,
     remove_proposal_files,
@@ -178,26 +179,34 @@ def rename_apply():
     if not game:
         return api_error('Game not found', code='not_found')
 
-    results = apply_rename_plan(plan, _allowed_bases())
-    # Update DB path if root folder rename succeeded
-    for item, result in zip(plan, results):
-        if result.get('ok') and item.get('kind') == 'root_folder':
-            game.full_disk_path = result['to_path']
-            try:
-                from oneirodex.utils.rom_language import apply_rom_language_fields
+    problems = validate_plan_for_game(plan, game.full_disk_path or '')
+    if problems:
+        return api_error(
+            'That rename plan does not match this game. Preview it again and retry.',
+            code='bad_request',
+            problems=problems,
+        )
 
-                apply_rom_language_fields(game, result['to_path'])
-            except Exception:
-                pass
-            try:
-                db.session.commit()
-            except Exception as exc:
-                db.session.rollback()
-                return api_error(
-                    f'Disk renamed but DB update failed: {exc}',
-                    code='internal',
-                    results=results,
-                )
+    results = apply_rename_plan(plan, _allowed_bases())
+    root_moves = [r for r in results if r.get('ok') and r.get('kind') == 'root_folder']
+    if root_moves:
+        for result in root_moves:
+            repoint_paths(result['from_path'], result['to_path'])
+        try:
+            from oneirodex.utils.rom_language import apply_rom_language_fields
+
+            apply_rom_language_fields(game, game.full_disk_path)
+        except Exception:
+            pass
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            return api_error(
+                f'Disk renamed but DB update failed: {exc}',
+                code='internal',
+                results=results,
+            )
 
     return api_ok({'results': results, 'full_disk_path': game.full_disk_path})
 
@@ -337,7 +346,25 @@ def library_doctor_apply_renames(body: ApplyRenamesBody):
         if path and is_safe_path(path, _allowed_bases())[0]:
             filtered.append(row)
     results = doctor_apply_renames(filtered, _allowed_bases(), template=template)
-    return api_ok({'results': results})
+    # The doctor walks every folder, matched games included: a renamed folder
+    # must take its game, update, extra and unmatched rows with it, or those
+    # records point at a path that no longer exists.
+    moved = 0
+    for row in results:
+        for item in row.get('results') or []:
+            if item.get('ok') and item.get('kind') == 'root_folder':
+                moved += repoint_paths(item['from_path'], item['to_path'])
+    if moved:
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            return api_error(
+                f'Folders renamed but DB update failed: {exc}',
+                code='internal',
+                results=results,
+            )
+    return api_ok({'results': results, 'records_updated': moved})
 
 
 @apis_bp.route('/library_tools/backfill_steam_metadata', methods=['POST'])

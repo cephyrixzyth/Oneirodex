@@ -96,7 +96,6 @@ jobs:
           --deselect tests/test_member_chrome_css.py::test_tile_hover_has_no_accent_glow_and_grows_from_center
           --deselect tests/test_member_chrome_css.py::test_topbar_cluster_is_not_a_shared_outline
           --deselect tests/test_member_spa_assets.py::test_member_spa_links_member_app_css
-          --deselect tests/test_rom_archive.py::test_resolve_nested_zip_member
           --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterIntegration::test_newsletter_recipients_parsing
           --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterIntegration::test_newsletter_workflow_complete
           --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterRoute::test_newsletter_get_request_success
