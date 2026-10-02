@@ -246,7 +246,7 @@ export function StoreConnectionCard({
               disabled={working}
               onClick={() => toggle('import')}
             >
-              {can('import_file') ? 'Import Playnite export' : 'Import a list'}
+              {can('import_file') ? `Import ${connection.name} export` : 'Import a list'}
             </Button>
           ) : null}
           {can('disconnect') ? (
@@ -328,7 +328,9 @@ export function StoreConnectionCard({
             </label>
           ) : null}
           <label>
-            {can('import_file') ? 'Playnite export (.json or .csv)' : 'Or choose a CSV file'}
+            {can('import_file')
+              ? `${connection.name} export (.json or .csv)`
+              : 'Or choose a CSV file'}
             <input
               type="file"
               ref={fileRef}

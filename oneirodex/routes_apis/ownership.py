@@ -43,6 +43,7 @@ from oneirodex.utils.store_capabilities import provider_capabilities
 from oneirodex.utils.store_connection_status import member_connections
 from oneirodex.utils.store_ownership_common import unofficial_store_opt_in
 from oneirodex.utils.store_sync_errors import REASONS, SyncOutcomeError, reason_payload
+from oneirodex.utils.store_sync_all import sync_all_stores
 from oneirodex.utils.store_sync_jobs import (
     LIVE_SYNC_ADAPTERS,
     PROVIDER_NAMES,
@@ -184,6 +185,23 @@ def _connect_response(store, connect):
         'account': account.to_dict(),
         'summary': get_ownership_summary(current_user.id),
     }, status=201)
+
+
+@apis_bp.route('/ownership/sync-all', methods=['POST'])
+@login_required
+def sync_all_ownership():
+    """Sync every store the member has linked, one recorded job each.
+
+    One store failing does not stop the others; each result carries its own
+    status and redacted reason. Unlinked stores come back as ``skipped``.
+    """
+    if not is_ownership_sync_enabled():
+        return _feature_disabled_response()
+    results = sync_all_stores(current_user.id, trigger='member', actor_id=current_user.id)
+    return api_ok({
+        'results': results,
+        'summary': get_ownership_summary(current_user.id),
+    })
 
 
 @apis_bp.route('/ownership/<store>/sync/cancel', methods=['POST'])
