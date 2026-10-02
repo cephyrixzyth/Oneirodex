@@ -128,20 +128,15 @@
   overflow: visible;
 }
 
-/* View trigger + dropdown share one column the width of the View segment so
-   Tile/Rows/Grid flow down attached at the same size — not a second bar under
-   All. */
+/* View trigger and its options share one anchor so the options open under the
+   trigger, not under the strip's first view. No divider and no joined panel:
+   the strip's members are separate buttons 2px apart, so the options are too. */
 .od-seg__unfurl-anchor {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   flex: 0 0 auto;
-  border-left: 1px solid var(--od-border);
-}
-
-.od-seg > .od-seg__unfurl-anchor:first-child {
-  border-left: 0;
 }
 
 .od-seg__unfurl-anchor > .od-seg__item {
@@ -149,53 +144,33 @@
   text-align: center;
 }
 
-/* Let the stack escape the pill's overflow clip while open. Square the
-   trailing corner so the View trigger reads as one piece with the drop. */
-.od-seg.is-unfurled {
-  overflow: visible;
-  border-bottom-right-radius: 0;
-}
-
-.od-seg.is-unfurled .od-seg__unfurl-anchor > .od-seg__item {
-  border-bottom-right-radius: 0;
-}
-
-/* Vertical stack attached under View — continuation of the parent seg chrome,
-   not a second nested `.od-seg` pill floating over the page.
- *
- * Width follows the longest item label (`max-content`), not the short trigger
-   ("Scan" / "Libraries" / "View"). Pinning left+right to the anchor clipped
-   "Auto scan" / "Manual scan" to the trigger column. */
+/* Options drop as a stack of the same buttons the bar is made of — same
+   border, radius, fill and height — not a second old-theme box. The stack has
+   no chrome of its own; each option carries a shadow so it lifts off the page.
+   Width follows the longest label (`max-content`) so "Auto scan" / "Manual
+   scan" are not clipped to a short trigger. */
 .od-contextbar__views-unfurl {
   position: absolute;
-  top: 100%;
-  /* Overlap the parent seg border so the drop shares one outline. */
-  left: -1px;
+  top: calc(100% + 4px);
+  left: 0;
   right: auto;
   z-index: 40;
   display: flex;
   flex-direction: column;
+  gap: 2px;
   width: max-content;
-  min-width: calc(100% + 2px);
-  background: var(--od-surface-2);
-  border: 1px solid var(--od-border);
-  border-top: 0;
-  border-radius: 0 0 var(--od-radius-sm) var(--od-radius-sm);
-  box-shadow: var(--od-shadow-md, 0 8px 20px color-mix(in srgb, var(--od-bg) 55%, transparent));
+  min-width: 100%;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   overflow: visible;
 }
 
 .od-contextbar__views-unfurl .od-seg__item {
   width: 100%;
   text-align: left;
-  border-radius: 0;
   white-space: nowrap;
-  padding-inline: 0.75rem;
-}
-
-.od-contextbar__views-unfurl .od-seg__item + .od-seg__item {
-  border-left: 0;
-  border-top: 1px solid var(--od-border);
+  box-shadow: var(--od-shadow-md, 0 8px 20px color-mix(in srgb, var(--od-bg) 55%, transparent));
 }
 
 .od-contextbar__actions {

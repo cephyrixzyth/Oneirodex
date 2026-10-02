@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button } from '@oneirodex/ui'
 import { fetchSurprise, type SurpriseGenre } from '../api/discover'
 import { GameCard } from './GameCard'
 import './DiscoverSurprise.css'
@@ -17,7 +16,8 @@ interface DiscoverSurpriseProps {
  * *Surprise me* (INSP-4b): one title from the top of the member's own ranking,
  * steered by their strongest genres.
  *
- * Nothing is drawn until the member asks — a pick that changes on every visit
+ * Lives in a popover opened from Discover's top bar. Nothing is drawn until the
+ * member asks — a pick that changes on every visit
  * to Discover is noise, and a pick made on load is a request the member did
  * not make. The genre chips load up front because they are the offer.
  */
@@ -79,9 +79,14 @@ export function DiscoverSurprise({
         <h2 id="od-surprise-title" className="od-surprise__title">
           Surprise me
         </h2>
-        <Button size="sm" onClick={() => draw(genre)} disabled={busy}>
-          {drawn ? 'Another' : 'Pick something'}
-        </Button>
+        <button
+          type="button"
+          className="od-seg__item is-active"
+          onClick={() => draw(genre)}
+          disabled={busy}
+        >
+          {busy ? 'Picking…' : drawn ? 'Another' : 'Pick something'}
+        </button>
       </div>
 
       {genres.length ? (
@@ -92,7 +97,7 @@ export function DiscoverSurprise({
               <button
                 key={option.id}
                 type="button"
-                className={`od-surprise__genre${active ? ' is-active' : ''}`}
+                className={`od-seg__item${active ? ' is-active' : ''}`}
                 aria-pressed={active}
                 onClick={() => chooseGenre(option.id)}
               >
@@ -117,6 +122,11 @@ export function DiscoverSurprise({
           </div>
         ) : null}
         {!failed && drawn && !game ? <p className="od-surprise__note">{reason}</p> : null}
+        {!failed && !drawn ? (
+          <p className="od-surprise__note">
+            One title from the top of your own ranking. Steer it with a genre, or just pick.
+          </p>
+        ) : null}
       </div>
     </section>
   )

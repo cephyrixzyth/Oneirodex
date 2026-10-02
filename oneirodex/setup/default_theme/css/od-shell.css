@@ -44,7 +44,7 @@
    * so a long translation still cannot run away with the layout. */
   grid-template-columns: fit-content(var(--od-rail-w)) minmax(0, 1fr);
   /* One content row: the thin top bar overlays `.od-shell__main` in the same
-     grid cell so a hovered tile can paint *over* the bar (z-index flip below).
+     grid cell so the bar sits over the scroll pane at a constant z-index.
      Two stacked rows clipped the enlarge at the main/topbar boundary no matter
      how high the card's z-index went. */
   grid-template-rows: minmax(0, 1fr);
@@ -987,30 +987,16 @@ button.od-rail__link {
   border-bottom: 1px solid var(--od-border);
 }
 
-/* Enlarged tiles paint over the thin top bar. Lift the scroll pane above the
-   bar (z-index 40 > 30) so hover scale overlaps chrome. The pane background
-   must go transparent while lifted — an opaque main hid the entire top bar
-   (jarring “hiding mode”). Tiles stay opaque and paint locally over the bar;
-   the bar itself stays put in the gaps. */
-.od-shell:has(.game-card:hover) .od-shell__main,
-.od-shell:has(.game-card:focus-visible) .od-shell__main,
-.od-shell:has(.game-card :focus-visible) .od-shell__main,
-.od-shell:has(.od-news-card:hover) .od-shell__main,
-.od-shell:has(.od-news-card:focus-visible) .od-shell__main,
-.od-shell:has(.game-card:hover) > #content,
-.od-shell:has(.game-card:focus-visible) > #content,
-.od-shell:has(.game-card :focus-visible) > #content,
-.od-shell:has(.od-news-card:hover) > #content,
-.od-shell:has(.od-news-card:focus-visible) > #content,
-body.od-shell-host:has(.game-card:hover) .od-admin-main,
-body.od-shell-host:has(.game-card:focus-visible) .od-admin-main,
-body.od-shell-host:has(.game-card :focus-visible) .od-admin-main,
-body.od-shell-host:has(.game-card:hover) > #admin-legacy-content,
-body.od-shell-host:has(.game-card:focus-visible) > #admin-legacy-content,
-body.od-shell-host:has(.game-card :focus-visible) > #admin-legacy-content {
-  z-index: 40;
-  background: transparent;
-}
+/* Enlarged tiles do NOT paint over the top bar.
+ *
+ * This used to lift the whole scroll pane above the bar (z-index 40 > 30) via
+ * `:has(.game-card:hover)` and drop its background while lifted. The flip ran
+ * on every hover change, so moving the pointer across the gap between two
+ * tiles toggled it off and on again, and the pane — and everything scrolled
+ * under the bar — blinked over and under the bar ("top nav blips in and out"
+ * on Discover and Game Catalog). The bar now stays at a constant z-index; the
+ * content padding already reserves the bleed room below it, so a hovered tile
+ * in the first row grows into that room instead of over chrome. */
 
 /* Rail toggle + Filters as adjacent chromeless controls. The cluster must not
    be squeezed or stretched by the flexible `__start` group around it. */
