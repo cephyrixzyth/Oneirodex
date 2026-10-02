@@ -109,7 +109,6 @@ export async function kickoffApplyPatch(opts: {
   gameUuid: string
   patchPath: string
   romPath: string
-  flipsPath?: string
   outputPath?: string
 }): Promise<{ ok: true; outputPath: string } | { ok: false; error: string }> {
   if (!isTauriRuntime()) {
@@ -120,7 +119,6 @@ export async function kickoffApplyPatch(opts: {
   }
   try {
     const result = await invoke<{ output_path: string }>('run_flips_apply', {
-      flipsPath: opts.flipsPath || null,
       patchPath: opts.patchPath,
       romPath: opts.romPath,
       outputPath: opts.outputPath || null,

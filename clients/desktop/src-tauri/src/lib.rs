@@ -988,10 +988,13 @@ fn get_flips_path() -> Result<String, String> {
 }
 
 /// Apply an IPS/BPS patch with Flips. Paths must live under app_data/patches.
+///
+/// The Flips program comes only from the `FLIPS_PATH` environment variable.
+/// It used to accept a path from the webview too, which made this the one
+/// command that would run any program the page named.
 #[tauri::command]
 fn run_flips_apply(
     app: tauri::AppHandle,
-    flips_path: Option<String>,
     patch_path: String,
     rom_path: String,
     output_path: Option<String>,
@@ -1011,13 +1014,9 @@ fn run_flips_apply(
         return Err(format!("ROM not found: {rom_path}"));
     }
 
-    let flips = flips_path
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            std::env::var("FLIPS_PATH")
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-        })
+    let flips = std::env::var("FLIPS_PATH")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
         .ok_or_else(|| {
             "FLIPS_PATH not configured. Install Flips and set FLIPS_PATH, or apply manually."
                 .to_string()
