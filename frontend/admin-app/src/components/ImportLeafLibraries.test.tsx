@@ -96,9 +96,7 @@ describe('ImportLeafLibraries', () => {
           url: 'http://localhost/libraries',
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({}),
         }
       }

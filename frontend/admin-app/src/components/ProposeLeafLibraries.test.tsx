@@ -47,9 +47,7 @@ describe('ProposeLeafLibraries', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({
             status: 'ok',
             root: '/storage/games/_console-gaming',
@@ -73,9 +71,7 @@ describe('ProposeLeafLibraries', () => {
           url: 'http://localhost/libraries',
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({}),
         }
       }
@@ -85,9 +81,7 @@ describe('ProposeLeafLibraries', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => [{ uuid: 'lib-nes-1', name: 'NES ROMs' }],
         }
       }
@@ -102,9 +96,7 @@ describe('ProposeLeafLibraries', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({ status: 'queued', job_id: 'job-1' }),
         }
       }
@@ -113,9 +105,7 @@ describe('ProposeLeafLibraries', () => {
         status: 404,
         headers: new Headers({ 'content-type': 'application/json' }),
 
-        text: async function () {
-          return JSON.stringify(await this.json())
-        },
+        text: async () => JSON.stringify({}),
         json: async () => ({}),
       }
     })
@@ -158,9 +148,7 @@ describe('ProposeLeafLibraries', () => {
         status: 404,
         headers: new Headers({ 'content-type': 'application/json' }),
 
-        text: async function () {
-          return JSON.stringify(await this.json())
-        },
+        text: async () => JSON.stringify({}),
         json: async () => ({}),
       })),
     )
@@ -182,9 +170,7 @@ describe('ProposeLeafLibraries', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
 
-        text: async function () {
-          return JSON.stringify(await this.json())
-        },
+        text: async () => JSON.stringify({}),
         json: async () => ({
           status: 'ok',
           root: '/storage/games/_console-gaming',
@@ -214,9 +200,7 @@ describe('ProposeLeafLibraries', () => {
             status: 200,
             headers: new Headers({ 'content-type': 'application/json' }),
 
-            text: async function () {
-              return JSON.stringify(await this.json())
-            },
+            text: async () => JSON.stringify({}),
             json: async () => ({
               status: 'ok',
               root: '/r',
@@ -231,9 +215,7 @@ describe('ProposeLeafLibraries', () => {
           status: 404,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({}),
         }
       }),
@@ -258,9 +240,7 @@ describe('ProposeLeafLibraries', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
+          text: async () => JSON.stringify({}),
           json: async () => ({
             status: 'ok',
             root: '/r',
@@ -275,9 +255,7 @@ describe('ProposeLeafLibraries', () => {
         status: 404,
         headers: new Headers({ 'content-type': 'application/json' }),
 
-        text: async function () {
-          return JSON.stringify(await this.json())
-        },
+        text: async () => JSON.stringify({}),
         json: async () => ({}),
       }
     })
@@ -303,9 +281,7 @@ describe('ProposeLeafLibraries', () => {
         status: 403,
         headers: new Headers({ 'content-type': 'application/json' }),
 
-        text: async function () {
-          return JSON.stringify(await this.json())
-        },
+        text: async () => JSON.stringify({}),
         json: async () => ({ status: 'error', message: 'Unsafe path' }),
       })),
     )
