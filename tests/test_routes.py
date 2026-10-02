@@ -1008,7 +1008,7 @@ class TestMainBlueprint:
         assert 'A scan is running' in data['message']
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(True, None))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
     @patch('oneirodex.routes_admin_ext.game_delete.os.remove')
     def test_delete_folder_file(self, mock_remove, mock_exists, mock_safe_path, mock_current_user, 
@@ -1029,7 +1029,7 @@ class TestMainBlueprint:
             mock_remove.assert_called_once()
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(True, None))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
     @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
     def test_delete_folder_directory(self, mock_rmtree, mock_exists, mock_safe_path, mock_current_user, 
@@ -1051,7 +1051,7 @@ class TestMainBlueprint:
     @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True)
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(False, 'Access denied'))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(False, 'Access denied'))
     def test_delete_folder_rejects_unsafe_path(self, mock_safe, mock_exists, mock_rmtree,
                                                mock_current_user, client, app, db_session, admin_user):
         """Test delete_folder denies paths outside allowed base directories."""
@@ -1067,7 +1067,7 @@ class TestMainBlueprint:
     @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True)
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(True, None))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
     def test_delete_folder_allows_safe_path(self, mock_safe, mock_exists, mock_rmtree,
                                             mock_current_user, client, app, db_session, admin_user):
         """Test delete_folder proceeds when path is within allowed base directories."""
@@ -1099,7 +1099,7 @@ class TestMainBlueprint:
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.isdir')
     @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(True, None))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
     @patch('oneirodex.routes_admin_ext.game_delete.delete_game')
     def test_delete_full_game(self, mock_delete_game, mock_safe_path, mock_exists, mock_rmtree, 
                              mock_isdir, mock_is_scan_running, mock_current_user, 
@@ -1129,7 +1129,7 @@ class TestMainBlueprint:
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.isdir')
     @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
     @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(False, 'Access denied'))
+    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(False, 'Access denied'))
     @patch('oneirodex.routes_admin_ext.game_delete.delete_game')
     def test_delete_full_game_rejects_unsafe_path(self, mock_delete_game, mock_safe_path, mock_exists,
                                                   mock_rmtree, mock_isdir, mock_is_scan_running,
@@ -1328,7 +1328,7 @@ class TestErrorHandling:
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'
         
-        with patch('oneirodex.routes_admin_ext.game_delete.is_safe_path', return_value=(True, None)):
+        with patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None)):
             with patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True):
                 with patch('oneirodex.routes_admin_ext.game_delete.os.path.isfile', return_value=True):
                     with patch('oneirodex.routes_admin_ext.game_delete.os.remove', side_effect=PermissionError("Permission denied")):
