@@ -42,6 +42,7 @@ samples/free-roms/library/
   genesis/genmddj-v0.17.bin
   atari2600/atari2600-4paddle-tester.a26
   snes/SuperBossGaiden.sfc
+  n64/pong-oman.z64
 ```
 
 Suggested Unraid / Compose library folders (gamesTheca games mount is `/storage`):
@@ -54,6 +55,7 @@ Suggested Unraid / Compose library folders (gamesTheca games mount is `/storage`
 /storage/genesis/
 /storage/atari2600/
 /storage/snes/
+/storage/n64/
 ```
 
 Copy or symlink fetched files into those platform folders, then add libraries under Admin → Libraries pointing at `/storage/<platform>/`.
