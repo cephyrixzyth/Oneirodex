@@ -109,7 +109,7 @@ def app():
 # `_SCHEMA_READY` latch. `add_column_if_not_exists` issues a long series of
 # `ALTER TABLE`s, each wanting an ACCESS EXCLUSIVE lock; doing that once and
 # only once is what keeps the suite from the lock-storm deadlock recorded in
-# `docs/dev/test-harness-2026-08-07.md`.
+# `docs/dev/archive/test-harness-2026-08-07.md`.
 #
 # What changed: `db_session` no longer hands out `db.session` directly with no
 # teardown. Each test now runs inside a SAVEPOINT nested in an outer

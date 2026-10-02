@@ -1,5 +1,7 @@
 # Local Postgres for pytest
 
+> **Doc status:** Active
+
 Native Windows, with Docker Desktop running.
 
 **CI:** `.github/workflows/ci-tests.yml` spins up Postgres with

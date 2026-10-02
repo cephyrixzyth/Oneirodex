@@ -1,5 +1,7 @@
 # ADR 0007: Three React SPAs, one shared package, a Jinja hybrid underneath
 
+> **Doc status:** Active
+
 **Date:** 2026-09-16 (records decisions taken 2026-07 → 2026-09-11)
 **Status:** Accepted
 **Owners:** `agent-uiux` · `agent-backend` · `agent-docs`

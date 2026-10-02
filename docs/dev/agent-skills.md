@@ -1,5 +1,7 @@
 # Oneirodex agent skills and agents
 
+> **Doc status:** Active
+
 Token-efficient workflows for maintainers.
 
 | What | Canonical (edit here) | Mirror (generated) | Invoked |

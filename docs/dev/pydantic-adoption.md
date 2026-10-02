@@ -1,5 +1,7 @@
 # Pydantic request-validation adoption (wave A2.4)
 
+> **Doc status:** Active
+
 `oneirodex/utils/validation.py` adds `@validate_body(Model)`. It reads
 `request.get_json(silent=True)`, validates it against a `pydantic.BaseModel`
 from `oneirodex/schemas/`, and on failure returns **one** shape:

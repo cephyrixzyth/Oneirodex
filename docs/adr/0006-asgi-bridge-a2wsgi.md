@@ -1,5 +1,7 @@
 # ADR 0006: Flask behind an ASGI server, bridged by a2wsgi
 
+> **Doc status:** Active
+
 **Date:** 2026-09-16 (records decisions taken 2026-07 → 2026-09-06)
 **Status:** Accepted
 **Owners:** `agent-backend` · `agent-ops` · `agent-platform`

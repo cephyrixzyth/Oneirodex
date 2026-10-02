@@ -1,5 +1,7 @@
 # EmulatorJS — browser play engine B
 
+> **Doc status:** Active
+
 **Applies to:** 1.0.0-beta and later · **Status:** shipped 2026-09-17 (BP-2), off until installed
 
 Oneirodex ships one browser player in the image: WebRetro (libretro cores in

@@ -1,5 +1,7 @@
 # ADR: Product name Oneirodex
 
+> **Doc status:** Active
+
 **Date:** 2026-08-26  
 **Status:** Accepted — **Phase 1 (public string) landed 2026-08-26**. **Phase 2 (ops identifiers) started 2026-08-27**. **Phase 3a landed 2026-08-27.** **Phase 3b landed 2026-08-31.** **Clean break (env): `ONEIRODEX_*` is the only prefix; `GT_*` is not read; `RESET GAMETHECA` is not accepted.** Git history is not rewritten.  
 **Owners:** `maintainer` · `agent-docs`

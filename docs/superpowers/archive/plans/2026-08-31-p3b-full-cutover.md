@@ -1,5 +1,7 @@
 # P3b Full Cutover Implementation Plan
 
+> **Doc status:** Archive
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Remove remaining GameTheca / `oneirodex` / `.gt-*` / `--gt-*` identifiers; live Unraid runs `oneirodex-*` containers after redeploy.

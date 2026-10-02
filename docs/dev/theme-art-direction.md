@@ -1,5 +1,7 @@
 # Theme art direction
 
+> **Doc status:** Active
+
 > Human, 2026-08-31: *"themes are horrible; need full design with AI artwork, not
 > CSS-only."* This is the answer to the second half of that sentence — what a
 > theme **is**, so that art (drawn now, generated later) has somewhere to land.

@@ -1,5 +1,7 @@
 # Observability profile (optional)
 
+> **Doc status:** Active
+
 **Audience:** Unraid / Compose operators who want Prometheus later  
 **Status:** Stub — **not required** for Oneirodex 1.0
 

@@ -1,5 +1,7 @@
 # snes9x / genesis_plus_gx — operator notes (not counsel)
 
+> **Doc status:** Active
+
 This is **not legal advice**. Oneirodex’s authors are not your lawyer. These notes collect
 **quotes from the upstream licences** (as published on the projects’ own repositories) and
 **questions to take to a lawyer** if you host Oneirodex in a setting that might be commercial.

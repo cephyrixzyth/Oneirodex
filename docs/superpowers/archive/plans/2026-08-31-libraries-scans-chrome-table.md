@@ -1,5 +1,7 @@
 # Libraries & scans chrome + DataTable — Implementation Plan
 
+> **Doc status:** Archive
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Top-bar Libraries/Scan unfurls, remove in-page Add/Tools buttons, mount a themed DataTable with per-column filters and fixed thumbs on the Libraries pane; full Unraid rebuild + Reset Themes.

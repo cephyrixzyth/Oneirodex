@@ -1,5 +1,7 @@
 # UI debt changelog (archived)
 
+> **Doc status:** Archive
+
 **Archived:** 2026-08-26. Rows older than the last 30 in the living log.
 Living register: [../ui-debt-log.md](../ui-debt-log.md) (open table).
 

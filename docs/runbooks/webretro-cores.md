@@ -1,5 +1,7 @@
 # WebRetro cores — operator vendor guide
 
+> **Doc status:** Active
+
 **Status (changed 2026-08-25):** the **24** WebRetro 6.5 cores are **no longer committed**. They are
 fetched into this directory on first boot (`FETCH_WEBRETRO_CORES_ON_BOOT`, default on), or by the
 script below. PCE / VICE / DOSBox WASM remain operator-owned as before. Companion Play works without

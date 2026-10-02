@@ -1,5 +1,7 @@
 # ADR 0011: Standalone installs bundle a user-space PostgreSQL; SQLite is not offered
 
+> **Doc status:** Active
+
 **Date:** 2026-09-30
 **Status:** Accepted — 2026-09-30, on the human design review (H-STANDALONE: the owner asked for the option that casts the widest net for users). The rollout is separate work.
 **Owners:** `agent-platform` (decision), `agent-backend` / `agent-desktop` (follow-up)

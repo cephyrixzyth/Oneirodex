@@ -1,5 +1,7 @@
 # Loop prompt — PR #112 review-fix phases
 
+> **Doc status:** Archive
+
 Copy-paste this into a new agent turn (or re-invoke yourself) to drive the plan to completion.
 
 ---

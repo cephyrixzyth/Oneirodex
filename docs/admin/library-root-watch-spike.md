@@ -1,5 +1,7 @@
 # Library root-folder incremental watch (Wave 3 + path-health / per-lib)
 
+> **Doc status:** Active
+
 **Status:** Implemented (optional; **default off**).  
 **Owner:** Backend (+ Ops for Unraid mount-event honesty)
 

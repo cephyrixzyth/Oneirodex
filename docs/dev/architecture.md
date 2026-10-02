@@ -1,5 +1,7 @@
 # Architecture (maintainer map)
 
+> **Doc status:** Active
+
 Oneirodex is one Flask app (`oneirodex/`) plus three React SPAs and a typed HTTP client. This page is the map, not a rewrite of [ADR 0005](../adr/0005-api-client-is-the-requester.md) or [agent-locks.md](agent-locks.md).
 
 ## Runtime

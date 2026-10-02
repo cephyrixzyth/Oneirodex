@@ -1,5 +1,7 @@
 # Unraid deploy — Oneirodex
 
+> **Doc status:** Active
+
 ## Deploy gates (operator checklist)
 
 Do these **before** and **after** every Unraid `git pull` / image rebuild. Agents cannot free host disk or run a live NAS rescan without an explicit human ship.

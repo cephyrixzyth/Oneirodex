@@ -1,5 +1,7 @@
 # UI Wave 0 — design tokens (Oneirodex)
 
+> **Doc status:** Reference
+
 These CSS variables are the shared foundation for web + future desktop client.
 Tracked source: `oneirodex/setup/default_theme/css/od-tokens.css` (presets regenerated at **`GENERATOR_VERSION` 10**).
 

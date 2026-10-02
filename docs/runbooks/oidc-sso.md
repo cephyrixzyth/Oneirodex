@@ -1,5 +1,7 @@
 # OIDC / SSO Runbook (Oneirodex)
 
+> **Doc status:** Active
+
 Oneirodex supports OpenID Connect (OIDC) single sign-on with identity providers such as **Authentik**, **Authelia**, and **Keycloak**. Local username/password login remains available when SSO is enabled.
 
 **Unraid + Authentik walkthrough:** [oidc-authentik-unraid.md](oidc-authentik-unraid.md)

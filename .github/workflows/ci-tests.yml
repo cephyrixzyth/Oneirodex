@@ -76,7 +76,7 @@ jobs:
         # this runner (docs/dev/ci-gates.md). A new test file is now gated by
         # default; the only way to keep one out is a line below, with its ID.
         #
-        # The --deselect list is docs/dev/test-suite-failures-2026-09-16.md's
+        # The --deselect list is docs/dev/archive/test-suite-failures-2026-09-16.md's
         # known failures as they reproduce on the runner (three are runner-
         # only: the SPA dist is not built in this job, a Windows drive-letter
         # case, the font catalogue). Remove a line when its test is fixed;

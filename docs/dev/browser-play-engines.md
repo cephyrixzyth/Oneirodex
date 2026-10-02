@@ -1,5 +1,7 @@
 # Browser play engines — research & direction (2026-08-28)
 
+> **Doc status:** Active
+
 **Decision (operator):** dual engines + modernize WebRetro + optional webЯcade sidecar.
 
 | Choice | Meaning |

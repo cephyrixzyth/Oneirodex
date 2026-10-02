@@ -1,5 +1,7 @@
 # UI debt log (recurring defects)
 
+> **Doc status:** Active
+
 **Purpose:** Stop the UI seat from “fixing” the same human complaints without a durable register.  
 **Rule:** Before closing any `agent-uiux` Task that touches Library tiles, Filters, Admin Scans/Unmatched, Themes, Emulators, Settings, or Chat chrome — **read the open table**, tick related open debts. Do **not** append changelog novels. Mark `deferred` with a reason instead of closing a still-open human symptom.
 

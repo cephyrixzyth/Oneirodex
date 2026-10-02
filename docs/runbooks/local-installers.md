@@ -1,5 +1,7 @@
 # Building installers without GitHub
 
+> **Doc status:** Active
+
 Produce Windows, macOS and Linux desktop installers on your own machine. The
 CI workflow (`.github/workflows/desktop-build.yml`) is a convenience, not a
 requirement.

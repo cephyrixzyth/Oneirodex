@@ -1,5 +1,7 @@
 # Downloads
 
+> **Doc status:** Active
+
 ## Where
 
 - Top nav **Downloads** → `/downloads` (React page: queue + history).

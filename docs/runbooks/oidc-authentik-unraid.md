@@ -1,5 +1,7 @@
 # Authentik + Oneirodex on Unraid (OIDC)
 
+> **Doc status:** Active
+
 End-to-end steps for Unraid: install Authentik, create the Oneirodex OAuth app, set `OIDC_*` + `TRUSTED_PROXIES=1`, smoke-test SSO.
 
 Assume:

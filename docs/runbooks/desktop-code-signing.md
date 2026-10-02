@@ -1,5 +1,7 @@
 # Desktop distribution — unsigned only (Windows / macOS / Linux)
 
+> **Doc status:** Active
+
 ## Product stance — unsigned only
 
 **Code-signing certificates will never be pursued.** Unsigned desktop builds are the supported distribution path for Oneirodex.

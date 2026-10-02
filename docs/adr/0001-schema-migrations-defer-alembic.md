@@ -1,5 +1,7 @@
 # ADR: Schema migrations before official 1.0
 
+> **Doc status:** Active
+
 **Date:** 2026-07-27  
 **Status:** **Superseded 2026-09** by [ADR 0004 — Adopt Alembic](0004-adopt-alembic.md).
 Originally: Accepted for 1.0 — defer Alembic; keep `updateschema.py` + `create_all`  

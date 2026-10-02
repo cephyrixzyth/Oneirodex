@@ -1,5 +1,7 @@
 # ADR 0010: Request validation with pydantic `@validate_body`
 
+> **Doc status:** Active
+
 **Date:** 2026-09-16 (records wave A2.4, 2026-09-09, and PRs #81–#101, 2026-09-11/12)
 **Status:** Accepted
 **Owners:** `agent-backend`

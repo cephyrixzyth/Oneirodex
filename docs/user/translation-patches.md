@@ -1,5 +1,7 @@
 # Translation patches (IPS / BPS / UPS)
 
+> **Doc status:** Active
+
 Some ROMs ship in a region or language that does not match your preferred game language (Preferences → **Preferred game language**, default `en-US`). Oneirodex can detect No-Intro-style tags from filenames and catalog patch files in the game’s **extras** folder.
 
 ## Library filter

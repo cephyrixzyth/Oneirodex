@@ -1,5 +1,7 @@
 # Troubleshooting (admins)
 
+> **Doc status:** Active
+
 ## Container / boot
 
 See [container-wont-start.md](../runbooks/container-wont-start.md) for SECRET_KEY, bash, DB.

@@ -1,5 +1,7 @@
 # LiveKit on Unraid / Compose (Wave 16)
 
+> **Doc status:** Active
+
 Optional household voice. Oneirodex mints short-lived JWTs; the browser talks to the LiveKit SFU.
 
 ## Compose profile

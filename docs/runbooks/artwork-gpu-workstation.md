@@ -1,5 +1,7 @@
 # SD.Next on a Windows GPU box — not the NAS, not the full stack
 
+> **Doc status:** Active
+
 The Unraid/NAS Compose file **never** requests a GPU. Art generation wants one. This household’s accelerator is an **RTX 2080 (8 GB) on the Windows workstation** (the machine that also runs Cursor). Do **not** `compose up` the Oneirodex app/db stack on that PC just to draw covers. Do **not** batch FLUX.1 on this card — 8 GB is too tight; keep FLUX for a 4080-class box.
 
 ## Stability Matrix + SwarmUI (this GPU PC)

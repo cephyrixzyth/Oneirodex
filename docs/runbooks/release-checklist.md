@@ -1,5 +1,7 @@
 # Release checklist (Oneirodex)
 
+> **Doc status:** Active
+
 Use before tagging a release (example: **v0.1.0**).
 
 ## Version bump

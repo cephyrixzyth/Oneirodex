@@ -1,5 +1,7 @@
 # Theme fonts & bulk artwork upload
 
+> **Doc status:** Active
+
 Two admin surfaces that let you bring your own assets: **fonts** for theming and
 **batch image upload** for artwork you have already prepared.
 

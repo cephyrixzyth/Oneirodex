@@ -1,5 +1,7 @@
 # P3b — retire remaining `oneirodex` identifiers
 
+> **Doc status:** Archive
+
 **Date:** 2026-08-31  
 **Status:** Landed 2026-08-31 — package `oneirodex/`, `.od-*` / `--od-*`, Unraid `oneirodex-*`, Postgres `oneirodex`.  
 **Scope (user-approved):** Full P3b — package path, containers/images, docs, media

@@ -1,5 +1,7 @@
 # CI gates — what runs, and what is owed
 
+> **Doc status:** Active
+
 Replaces `ci-wishlist.md`, which was an append-only request queue between the
 modernization tracks (a track appended a line, the CI owner applied it). The
 tracks are gone; every applied item is now either in the workflow or in an ADR.
@@ -27,12 +29,12 @@ repo root — see [ADR 0008](../adr/0008-npm-workspaces-single-lockfile.md).
 
 **Measured:** the marker set is **3,792 tests in 11m24s** on `ubuntu-latest` (PR #118's timing job), 474 deselected by the marker. Flipped in the PR after it; `timeout-minutes` 20 → 30 for coverage overhead.
 
-**The discipline that replaces the hand list:** the `--deselect` lines in `ci-tests.yml` are the exception list — the known failures from [test-suite-failures-2026-09-16.md](test-suite-failures-2026-09-16.md) as they reproduce on the runner (31; three are runner-only). Remove a line when its test is fixed. **Never add one to turn a red PR green** — that is the hand list growing back under another name.
+**The discipline that replaces the hand list:** the `--deselect` lines in `ci-tests.yml` are the exception list — the known failures from [test-suite-failures-2026-09-16.md](archive/test-suite-failures-2026-09-16.md) as they reproduce on the runner (31; three are runner-only). Remove a line when its test is fixed. **Never add one to turn a red PR green** — that is the hand list growing back under another name.
 
 **Why it mattered, concretely:** the 2026-09-16 full run found **42 failures**,
 and **not one of their files is named in the hand list**. The list gates nothing
 it does not name, so a PR can break a file it never runs. See
-[test-suite-failures-2026-09-16.md](test-suite-failures-2026-09-16.md).
+[test-suite-failures-2026-09-16.md](archive/test-suite-failures-2026-09-16.md).
 
 **What is already done:** the `integration` marker is declared in `pytest.ini`
 and applied to **32 modules** (the scan pipeline, external provider adapters —

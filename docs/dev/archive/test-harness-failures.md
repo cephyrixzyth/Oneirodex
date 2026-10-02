@@ -1,5 +1,7 @@
 # Which pytest failures are real
 
+> **Doc status:** Archive
+
 **Re-baselined:** 2026-08-12 · Original classification: 2026-08-07
 
 > **Superseded as a status report (2026-09-16).** The "0 failed" below was true
@@ -124,7 +126,7 @@ and "fails against residue" are the same result.
 ## 2026-09-10: per-test isolation landed, so residue is no longer the variable
 
 `db_session` now wraps each test in a rolled-back SAVEPOINT (see
-[test-harness-2026-09-10.md](test-harness-2026-09-10.md)). "Fails alone" and
+[test-harness-2026-09-10.md](../test-harness-2026-09-10.md)). "Fails alone" and
 "fails in a full run" converge, because no file leaves rows for the next one.
 The classes above did not come back; what the empty-per-test database exposed
 instead was a set of `..._requires_login` and `..._database_error` tests that

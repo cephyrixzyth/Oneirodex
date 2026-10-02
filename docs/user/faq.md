@@ -1,5 +1,7 @@
 # FAQ (members)
 
+> **Doc status:** Active
+
 ## Navigation
 
 **How do I jump around quickly?**  

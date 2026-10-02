@@ -1,5 +1,7 @@
 # Themes & reset
 
+> **Doc status:** Active
+
 Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 41** in `oneirodex/utils/preset_themes.py` (41 = metadata-providers handler learns the hash-identify switch; 40 = six system-family presets; 39 = `.od-seg` wraps on narrow screens; 38 = per-console loading-motif colour; 37 = drawn room art per era; 36 = Library tools THN). **Reset Default Themes** after this bump — volume copies stay on the previous generator until you do.
 
 ## Default look

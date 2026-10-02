@@ -1,5 +1,7 @@
 # Thin client
 
+> **Doc status:** Active
+
 Connect-only shell for browse / social / Big Picture — **not** Download · Install · Play. Windows, macOS and Linux.
 
 ## When to use it

@@ -1,5 +1,7 @@
 # SteamGridDB artwork provider
 
+> **Doc status:** Active
+
 Enable community artwork from [SteamGridDB](https://www.steamgriddb.com/) for admin artwork search. Oneirodex uses SteamGridDB for **artwork only** — it never downloads games or DRM payloads.
 
 Supported **search** image types (SteamGridDB API): **cover** (grids), **logo**, **hero**.

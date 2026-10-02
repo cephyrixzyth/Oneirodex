@@ -1,5 +1,7 @@
 # Free games (News)
 
+> **Doc status:** Active
+
 Oneirodex polls major stores and a public giveaway aggregator so household members can **see what’s free right now**, get an in-app notification when something new appears, and **claim via store deeplinks**.
 
 This is **not** a DRM download client. Claiming always happens on Steam / Epic / GOG / Amazon / itch / Humble (browser or launcher).

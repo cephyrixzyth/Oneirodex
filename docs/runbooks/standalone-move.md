@@ -1,5 +1,7 @@
 # Move a standalone install to a household server
 
+> **Doc status:** Active
+
 For people who started with the standalone app on a laptop or desktop and now
 want Oneirodex on an always-on box: Docker Compose, Unraid or a NAS. The move
 takes the database and your members' files with it, checks them before

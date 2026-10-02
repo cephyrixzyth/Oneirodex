@@ -1,5 +1,7 @@
 # Scrub shipped bundles (SCRUB-7)
 
+> **Doc status:** Active
+
 Before publishing a Docker image or release tag, confirm Class A / competitive tokens do **not** leak into built SPA assets.
 
 ## Rebuild static dist

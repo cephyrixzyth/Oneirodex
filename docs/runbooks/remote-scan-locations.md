@@ -1,5 +1,7 @@
 # Scan locations beyond the server — Oneirodex
 
+> **Doc status:** Active
+
 Oneirodex scans **any path the service process can open**. That is not the same
 thing as "a path on the machine Oneirodex runs on": an SMB or NFS share, a
 second internal disk, an external drive, an Unraid user share — all of them are

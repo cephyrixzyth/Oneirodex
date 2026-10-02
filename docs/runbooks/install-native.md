@@ -1,5 +1,7 @@
 # Native install — Linux · macOS · Windows
 
+> **Doc status:** Active
+
 Running Oneirodex directly on the machine, without Docker. Pick this when you
 want the server to see the host's own disks and mounts with no bind-mount layer
 in between, or when Docker is not available.

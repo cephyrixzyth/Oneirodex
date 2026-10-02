@@ -1,5 +1,7 @@
 # Support inbox (admins)
 
+> **Doc status:** Active
+
 Teammate reports land in-app and optionally on GitHub. Discord is not used.
 
 ## Member path

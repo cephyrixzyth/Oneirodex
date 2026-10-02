@@ -1,5 +1,7 @@
 # The full-suite failures, named
 
+> **Doc status:** Archive
+
 **Run:** 2026-09-16, `main` @ `10aec59e` (+ the three fixes below) · **`pytest tests/`**
 **Result:** **42 failed · 4,450 passed · 5 skipped** in 48:34
 
@@ -103,6 +105,6 @@ drifted off the pin again: `pip install --no-deps pydantic-core==2.46.5`.
 
 ## Related
 
-- [test-harness-2026-09-10.md](test-harness-2026-09-10.md) — the SAVEPOINT model these run under
+- [test-harness-2026-09-10.md](../test-harness-2026-09-10.md) — the SAVEPOINT model these run under
 - [test-harness-failures.md](test-harness-failures.md) — the 2026-08-12 re-baseline (stale headline)
 - `docs/superpowers/plans/2026-09-16-v1-cycle.md` — Phase 2 owns the marker flip

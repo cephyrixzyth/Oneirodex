@@ -1,5 +1,7 @@
 # Getting started (web)
 
+> **Doc status:** Active
+
 Oneirodex is a self-hosted multi-user game library. Members browse and download DRM-free titles your admin has scanned.
 
 **Defaults (operators):** Most product modules ship **on** (`ENABLE_*` in `.env.example`). **OIDC / SSO stays off** until you set `OIDC_ENABLED=true` and enable it under Admin → Integrations. Optional ClamAV: `docker compose --profile clamav up -d` when you want daemon scans in addition to filename heuristics — [settings-modules.md](../admin/settings-modules.md).
