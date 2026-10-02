@@ -70,7 +70,7 @@ server bundled with it, started in user space inside the install's data folder.*
 |---|---|
 | Same engine, migrations and guarantees everywhere; no dialect branches in product code | ~71 MB larger download (less if built without ICU — an inference, not measured) |
 | No admin rights or services; a data folder you can back up or delete | The launcher must supervise a second process: start, stop, crash restart, port choice |
-| The move to a household server uses PostgreSQL's own tools plus verification | Windows and macOS server binaries were **not** measured. Only Linux was; EDB portable archives or a custom build are the candidates |
+| The move to a household server uses PostgreSQL's own tools plus verification | Linux measured (spike) and Windows proven on a real machine with the EDB portable archive (2026-10-02; unsigned binaries, so per-app firewalls may need a localhost rule); macOS **not** measured |
 | Offline start works; outbound features degrade to warnings | Dumps move between operating systems: create standalone clusters with an OS-independent collation (e.g. PostgreSQL 17 `builtin` provider, `C.UTF-8`) so indexes stay valid on the server. **To be verified** |
 
 Also required before rollout, and not done by the spike:

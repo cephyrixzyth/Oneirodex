@@ -34,6 +34,7 @@ from oneirodex_standalone.postgres import (
     port_is_free,
     write_private_text,
 )
+from oneirodex_standalone.winjob import tie_children_to_this_process
 
 logger = logging.getLogger('oneirodex_standalone')
 REPO_ROOT = Path(__file__).resolve().parents[1]  # where asgi.py lives
@@ -173,6 +174,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='[standalone] %(message)s', stream=sys.stdout)
 
+    # Before anything is started: on Windows the database and web server then
+    # end with the launcher even when it is killed outright (winjob.py).
+    tie_children_to_this_process()
     root = (args.data_dir or default_data_dir()).resolve()
     state = load_state(root)
     pg = BundledPostgres(pg_home=args.pg_home.resolve(), data_dir=root / 'pgdata', log_file=root / 'logs' / 'postgres.log',

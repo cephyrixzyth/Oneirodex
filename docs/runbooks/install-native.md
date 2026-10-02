@@ -26,9 +26,10 @@ reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-pr
 [ADR 0011](../adr/0011-standalone-bundled-postgres.md) adds a third way in:
 a standalone install carries its own PostgreSQL 17 and runs it in your user
 account. No administrator rights, no system service, nothing listening beyond
-`127.0.0.1`. **Status:** the launcher works and is proven end to end on Linux.
-Packaged downloads for Windows, macOS and Steam Deck do not exist yet, and each
-OS is called supported only after a run on a real machine.
+`127.0.0.1`. **Status:** the launcher is proven end to end on Linux and on a
+real Windows 11 machine (EDB PostgreSQL 17 archive, no admin rights). Packaged
+downloads do not exist yet; macOS and Steam Deck are called supported only after
+a run on a real machine.
 
 ```bash
 python -m oneirodex_standalone --pg-home /path/to/bundled-postgres [--data-dir DIR] [--port 5006]
@@ -41,7 +42,8 @@ python -m oneirodex_standalone --pg-home /path/to/bundled-postgres [--data-dir D
 | Install folder | Never written to, so it can be read-only (Program Files, a signed app bundle) |
 | First start | Creates the database cluster with an OS-independent collation, runs the normal startup (migrations, setup), then serves `http://127.0.0.1:5006` |
 | While running | If the database stops unexpectedly it is restarted; if it keeps stopping (more than 5 times in 10 minutes), everything shuts down |
-| Stopping | Ctrl+C or a normal terminate stops the server, then the database |
+| Stopping | Ctrl+C or a normal terminate stops the server, then the database. On Windows the database and server also end if the launcher is killed outright (Task Manager); the database then recovers on the next start |
+| Firewall | Everything is on `127.0.0.1`, but per-app firewalls (Portmaster, GlassWire, some antivirus suites) can still drop local connections to the bundled, unsigned `postgres.exe`: the first start then hangs and fails with a connection timeout. Allow that program's incoming and outgoing connections on `127.0.0.1`; the port is chosen at random, so a rule for one port is not enough |
 
 `--pg-home` takes either an archive with `bin/` (Windows/macOS style) or the
 relocated Linux layout (`usr/lib/postgresql/17/bin` plus `libs/`) built by
