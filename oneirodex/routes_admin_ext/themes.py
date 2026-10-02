@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Optional, Union
 from . import admin2_bp
+from oneirodex.utils.library_paths import library_dir
 
 # Configuration constants
 MAX_THEME_FILE_SIZE = 25 * 1024 * 1024  # 25MB in bytes
@@ -311,7 +312,7 @@ def reset_default_themes():
             )
             return redirect(url_for('admin2.manage_themes'))
 
-        default_theme_target = app_root / 'static' / 'library' / 'themes' / 'default'
+        default_theme_target = Path(library_dir(app_root)) / 'themes' / 'default'
 
         log_system_event(
             "Starting default themes reset...",

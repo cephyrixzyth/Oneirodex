@@ -20,6 +20,7 @@ from oneirodex.utils.notifications import notify_admins
 from oneirodex.utils.rbac import normalize_role
 
 from . import apis_bp
+from oneirodex.utils.rbac import is_admin
 
 VALID_AREAS = frozenset({
     'auth', 'library', 'download', 'webretro', 'companion', 'acquire',
@@ -110,9 +111,8 @@ def support_ticket_create(body: CreateSupportTicketBody):
 @apis_bp.route('/support/tickets', methods=['GET'])
 @login_required
 def support_tickets_list():
-    role = normalize_role(getattr(current_user, 'role', None))
     q = select(SupportTicket).order_by(SupportTicket.created_at.desc()).limit(100)
-    if role != 'admin':
+    if not is_admin(current_user):
         q = select(SupportTicket).where(
             SupportTicket.user_id == current_user.id,
         ).order_by(SupportTicket.created_at.desc()).limit(50)
@@ -129,8 +129,7 @@ def support_ticket_detail(ticket_id: int):
     ticket = db.session.get(SupportTicket, ticket_id)
     if not ticket:
         return api_error('Ticket not found', code='not_found')
-    role = normalize_role(getattr(current_user, 'role', None))
-    if role != 'admin' and ticket.user_id != current_user.id:
+    if not is_admin(current_user) and ticket.user_id != current_user.id:
         return api_error('That ticket belongs to someone else', code='forbidden')
     return jsonify({'ticket': ticket.to_dict()})
 

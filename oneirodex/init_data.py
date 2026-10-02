@@ -56,6 +56,7 @@ from oneirodex.utils.global_settings import (
     global_settings_row,
     global_settings_row_or_create,
 )
+from oneirodex.utils.library_paths import library_dir
 
 DEFAULT_GLOBAL_SETTINGS = {
     'showSystemLogo': True,
@@ -101,7 +102,7 @@ def initialize_default_settings():
 def initialize_library_folders():
     """Initialize the required folders and theme files for the application."""
     print("Initializing library folders...")
-    library_path = os.path.join(os.path.dirname(__file__), 'static', 'library')
+    library_path = library_dir(os.path.dirname(__file__))
     themes_path = os.path.join(library_path, 'themes')
     images_path = os.path.join(library_path, 'images')
     zips_path = os.path.join(library_path, 'zips')

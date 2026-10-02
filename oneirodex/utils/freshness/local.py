@@ -6,6 +6,8 @@ import os
 import re
 from datetime import datetime, timezone
 
+from oneirodex.utils.security import open_plain_file_within
+
 VERSION_PATTERNS = [
     re.compile(r'(?i)\bv(\d+(?:\.\d+){1,3})\b'),
     re.compile(r'(?i)(?:^|[_\s.-])(\d+\.\d+(?:\.\d+){0,2})(?:[_\s.-]|$)'),
@@ -20,6 +22,8 @@ VERSION_FILE_NAMES = (
     'Build.txt',
     'product_version.txt',
 )
+#: A version file is a line or two; never read more of a share-writable file.
+_VERSION_FILE_MAX_BYTES = 4096
 
 
 def _first_version(text: str | None) -> str | None:
@@ -42,17 +46,47 @@ def _folder_mtime(path: str | None) -> str | None:
         return None
 
 
+def _resolved_game_folder(folder: str) -> str | None:
+    """The game folder resolved once, or None when it is outside every library.
+
+    Resolving once and comparing against that fixed string means a folder
+    swapped for a link mid-check reads as outside, not as the link's target.
+    Without an app context (tools, tests) there are no library bases to check.
+    """
+    real = os.path.realpath(folder)
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+
+            bases = get_allowed_base_directories(current_app)
+            if bases and not is_safe_path(real, bases)[0]:
+                return None
+    except Exception:  # noqa: BLE001 -- a freshness hint must never break a scan
+        return None
+    return real
+
+
 def _read_version_file(folder: str) -> tuple[str | None, str | None]:
+    folder = _resolved_game_folder(folder)
+    if folder is None:
+        return None, None
     for name in VERSION_FILE_NAMES:
         path = os.path.join(folder, name)
-        if not os.path.isfile(path):
-            continue
         try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as handle:
-                content = handle.read(4096)
+            # The text becomes Game.local_version and the freshness payload,
+            # which every member can read, so ``version.txt -> /run/secrets/x``
+            # in a game folder must not be followed. The check runs on the
+            # opened descriptor (see open_plain_file_within); a link, a FIFO,
+            # a missing file or anything outside the folder is "no version
+            # file", not an error.
+            with open_plain_file_within(folder, path, base_is_resolved=True) as handle:
+                content = handle.read(_VERSION_FILE_MAX_BYTES).decode('utf-8', errors='ignore')
         except OSError:
             continue
-        version = _first_version(content) or content.strip().splitlines()[0].strip()[:80]
+        lines = content.strip().splitlines()
+        version = _first_version(content) or (lines[0].strip()[:80] if lines else '')
         if version:
             return version, name
     return None, None

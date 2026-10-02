@@ -60,15 +60,18 @@ def default_core_ids() -> frozenset[str]:
 
 def missing_cores(cores_dir: str | Path | None = None) -> frozenset[str]:
     """Default cores without both halves present on disk."""
-    root = Path(cores_dir) if cores_dir else default_cores_dir()
-    missing = set()
-    for core_id in default_core_ids():
+    from oneirodex.utils.webretro_cores import core_dirs
+
+    roots = core_dirs(cores_dir)
+
+    def _complete(root: Path, core_id: str) -> bool:
         for suffix in CORE_SUFFIXES:
             path = root / f'{core_id}{suffix}'
             if not path.is_file() or path.stat().st_size < MIN_CORE_BYTES:
-                missing.add(core_id)
-                break
-    return frozenset(missing)
+                return False
+        return True
+
+    return frozenset(c for c in default_core_ids() if not any(_complete(r, c) for r in roots))
 
 
 def _fetch(url: str) -> bytes:

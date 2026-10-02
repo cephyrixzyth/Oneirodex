@@ -13,7 +13,7 @@
   "oneirodex/routes_games_ext/add.py": 1,
   "oneirodex/routes_library.py": 6,
   "oneirodex/routes_settings.py": 7,
-  "oneirodex/routes_setup.py": 3,
+  "oneirodex/routes_setup.py": 2,
   "oneirodex/routes_site.py": 3,
   "oneirodex/routes_smtp.py": 1,
   "oneirodex/utils/clients/images.py": 9,

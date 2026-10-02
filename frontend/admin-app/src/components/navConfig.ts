@@ -196,11 +196,12 @@ export const INTEGRATION_CARDS = [
   {
     id: 'ownership',
     title: 'Ownership registers',
-    blurb: 'Store ownership sync is register-only — no DRM download queues.',
-    href: '/admin/integrations#ownership',
+    blurb:
+      'Register-only store links: each member’s connection state, last sync result and repair.',
+    href: '/admin/ownership',
     links: [
+      { href: '/admin/ownership', label: 'Store connections' },
       { href: '/admin/integrations#ownership', label: 'Ownership tab' },
-      { href: '/admin/integrations#ownership', label: 'Meta / Quest' },
     ],
   },
   {

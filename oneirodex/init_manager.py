@@ -16,6 +16,7 @@ from oneirodex.utils.preset_themes import (
     sync_theme_tree,
 )
 from oneirodex.utils.icon_themes import install_icon_themes
+from oneirodex.utils.library_paths import library_dir, seed_shipped_library
 
 # Everything the app ships or generates lives inside the package, so paths must
 # be resolved from here rather than from the process working directory (under
@@ -270,7 +271,7 @@ class InitializationManager:
             from config import Config
 
             # Create required directories
-            library_path = os.path.join(PACKAGE_ROOT, 'static', 'library')
+            library_path = library_dir(PACKAGE_ROOT)
             themes_path = os.path.join(library_path, 'themes')
             images_path = os.path.join(library_path, 'images')
             zips_path = os.path.join(library_path, 'zips')
@@ -297,6 +298,15 @@ class InitializationManager:
                 _safe_print(f"[OK] Icon packs ready: {', '.join(installed)}")
             except Exception as icon_err:
                 _safe_print(f"[WARN] Icon pack install skipped: {icon_err}")
+
+            # A library moved to a data folder (standalone) starts without the
+            # art the install ships inside static/library.
+            try:
+                seeded = seed_shipped_library()
+                if seeded:
+                    _safe_print(f"[OK] Copied {seeded} shipped library file(s) into the data folder")
+            except Exception as seed_err:
+                _safe_print(f"[WARN] Shipped library files not copied: {seed_err}")
 
             # Theme fonts, same reasoning as the icon packs above: the runtime
             # directory is a volume, so a fresh one starts empty and has to be

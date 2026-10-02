@@ -224,3 +224,39 @@ def test_font_install_is_configurable_and_off_the_boot_path():
     config = (ROOT / 'config.py').read_text(encoding='utf-8')
     assert 'FETCH_FONTS_ON_BOOT' in config
     assert 'BIOS_IMPORT_SOURCE' in config
+
+
+def _run_bios_script_alone(cwd, code, **env):
+    """Run Python in a fresh interpreter that has neither the oneirodex package
+    on its path nor SECRET_KEY, the way an operator runs the script."""
+    import subprocess
+    import sys
+
+    clean = {k: v for k, v in os.environ.items()
+             if k not in ('PYTHONPATH', 'SECRET_KEY', 'ONEIRODEX_LIBRARY_DIR', 'EMULATOR_BIOS_PATH')}
+    clean.update(env)
+    return subprocess.run([sys.executable, '-c', code], cwd=cwd, env=clean,
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_import_bios_script_starts_without_the_app_package(tmp_path):
+    """It loads its helpers by path so it runs without SECRET_KEY; a top-level
+    `from oneirodex...` import in one of them broke that unnoticed."""
+    script = ROOT / 'scripts' / 'import_bios.py'
+    done = _run_bios_script_alone(
+        tmp_path, f'import runpy, sys; sys.argv = ["import_bios.py", "--help"]; runpy.run_path({str(script)!r}, run_name="__main__")'
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert '--source' in done.stdout
+
+
+def test_import_bios_script_follows_a_moved_library(tmp_path):
+    script = ROOT / 'scripts' / 'import_bios.py'
+    load = (f'import importlib.util; spec = importlib.util.spec_from_file_location("s", {str(script)!r}); '
+            'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); print(m.DEFAULT_DEST)')
+    data = tmp_path / 'data'
+    moved = _run_bios_script_alone(tmp_path, load, ONEIRODEX_LIBRARY_DIR=str(data))
+    assert moved.returncode == 0, moved.stderr[-2000:]
+    assert moved.stdout.strip() == os.path.join(os.path.abspath(data), 'bios')
+    default = _run_bios_script_alone(tmp_path, load)
+    assert default.stdout.strip() == str(ROOT / 'oneirodex' / 'static' / 'library' / 'bios')

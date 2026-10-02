@@ -270,7 +270,9 @@ class ChatMessageAttachment(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     def public_url(self) -> str:
-        return f'/static/library/chat-attachments/{self.file_name}'
+        # Served by an authenticated route that checks the channel, never as a
+        # static file (routes_apis/chat.py chat_attachment_file).
+        return f'/api/chat/attachments/{self.file_name}'
 
     def to_dict(self) -> dict:
         return {

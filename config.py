@@ -28,6 +28,30 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
+def _env_int(name: str, default: int = 0) -> int:
+    """Parse a non-negative integer env var; ``default`` when unset or invalid.
+
+    For limits where 0 means "the built-in default": a typo such as ``256MB``
+    used to raise out of ``import config`` without naming the variable, so the
+    app did not start. It now logs which variable was ignored and carries on.
+    """
+    raw = (os.getenv(name) or '').strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = -1
+    if value < 0:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            '%s=%r is not a whole number of bytes; using the default', name, raw
+        )
+        return default
+    return value
+
+
 def _load_secret_key():
     """Load SECRET_KEY from env. Fail loudly if unset outside of test runs."""
     key = os.getenv('SECRET_KEY')
@@ -107,7 +131,11 @@ class Config(object):
     # Firmware upload ceiling. utils/emulator_bios.py already reads this from
     # config and documents the override, but nothing ever populated it, so the
     # env var silently did nothing and the 64MB default always won.
-    EMULATOR_BIOS_MAX_BYTES = int(os.getenv('EMULATOR_BIOS_MAX_BYTES', '0') or '0')
+    EMULATOR_BIOS_MAX_BYTES = _env_int('EMULATOR_BIOS_MAX_BYTES')
+
+    # Total .cht storage across every game (0 = the built-in 256 MB). Each game
+    # is separately capped at 200 files of 1 MB; this is the bound on the sum.
+    CHEAT_STORAGE_MAX_BYTES = _env_int('CHEAT_STORAGE_MAX_BYTES')
 
     # Global request-body ceiling. Every upload route already has its own,
     # tighter limit (firmware at 64MB is the largest); without this one, none of
@@ -326,6 +354,9 @@ class Config(object):
 
     # When true (default), OIDC JIT updates never overwrite an existing user's role.
     OIDC_LOCK_ROLES = _env_bool('OIDC_LOCK_ROLES', True)
+    # Link an existing account by email even when the provider does not mark
+    # the address verified. Only for a provider whose admins set users' emails.
+    OIDC_TRUST_PROVIDER_EMAIL = _env_bool('OIDC_TRUST_PROVIDER_EMAIL', False)
 
     # AGPL §13: a user interacting with this over a network must be offered the
     # Corresponding Source. README states the obligation; this is what actually

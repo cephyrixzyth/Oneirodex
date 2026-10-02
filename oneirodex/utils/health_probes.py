@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
+
 from flask import current_app
 from sqlalchemy import text
 
@@ -26,7 +28,10 @@ def check_database() -> tuple[bool, str | None]:
         db.session.execute(text('SELECT 1'))
         return True, None
     except Exception as exc:  # noqa: BLE001 — surface any DB failure to probes
-        return False, str(exc)
+        # The probe is unauthenticated: the class name only, never the driver's
+        # message, which names the database host, port, user and database.
+        logging.getLogger(__name__).warning('Readiness probe: database check failed: %s', exc)
+        return False, type(exc).__name__
 
 
 def build_readiness() -> tuple[dict[str, Any], int]:

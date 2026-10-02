@@ -63,11 +63,15 @@ LABEL org.opencontainers.image.title="Oneirodex" \
 # libarchive-tools (bsdtar) and p7zip-full (7z) give rarfile a working
 # extraction backend for .rar ROMs without needing Debian's non-free repo
 # (plain `unrar` lives there and isn't enabled on this base image).
+# postgresql-client gives `python -m oneirodex_standalone import` its
+# pg_restore, for moving a standalone install onto this server (ADR 0011);
+# Debian 13 ships PostgreSQL 17, the version standalone installs dump from.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     bash \
     libarchive-tools \
     p7zip-full \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .

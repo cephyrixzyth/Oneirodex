@@ -73,7 +73,7 @@ Play matrix: [browser-play.md](browser-play.md).
 - **Rows** in the bar is where you undo either: it lists every shelf your feed can show — hidden ones included — with **Show** to bring one back, and **↑ / ↓** to put your pinned shelves in the order you want them. Pins and hidden rows are stored **on your account**, so they follow you to the TV and the phone. Hiding only changes *your* feed; it never affects anyone else. A shelf an admin has pinned for everyone cannot be hidden.
 - **Favorites** (`/favorites`) is a library too: it carries the same **Filters** button beside the rail toggle, the same All / Games / Soft titles / Emulators / Utilities strip, and the same pager at the foot of the grid — so a large favourites collection can be narrowed by title or kind instead of only scrolled.
 - **Collections**, **Wishlist**, **Updates**, **Ownership**, **Big Picture**, **Ways to Play**, optional **VR** / **Trailers** / **Calendar** — under primary nav or **More**.
-- **Ownership** (`/ownership`) is a **register**, not a store client. Steam, GOG, Epic and Amazon Games can **live-sync** owned IDs and names when a token is saved (GOG Galaxy refresh token, Epic device-auth JSON, Amazon Nile/Heroic user.json; unofficial surfaces, honest 401). CSV still works. Oneirodex never downloads DRM titles.
+- **Ownership** (`/ownership`) is a **register**, not a store client. Steam, GOG, Epic and Amazon Games can **live-sync** owned IDs and names when a token is saved (GOG Galaxy refresh token, Epic device-auth JSON, Amazon Nile/Heroic user.json; unofficial surfaces). Xbox and PlayStation live sync is opt-in by the operator. CSV import works for every listed store, and a Playnite export can be imported. Oneirodex never downloads DRM titles and never asks for a store password. **First-time setup** (`/welcome`) shows the same store list in three steps: link or import, check the matches, open the library filtered to what you own. The Library shows a one-time invitation to it until something is linked or imported.
 - **Updates** (`/updates`) leads with the **freshness inbox** — the titles that look behind — across the full width, with **Search stores** and an **Upcoming releases** teaser paired beneath it. One refresh control, not two: the glyph on the inbox heading runs a real probe against store versions and re-reads the list when it finishes.
 - **Release calendar** (`/calendar`): **today** is ringed, a day carrying more than one release says how many, and picking a day opens its titles **beside** the month rather than under it on a wide screen — so the grid never moves when you click. A busy day's list scrolls inside its own panel instead of setting the page height.
 - **Adding to a collection** no longer means opening the shelf first: **Add to collection…** is on the tile menu in any grid, and on the game's details page. Pick a shelf and it is filed.
@@ -115,3 +115,82 @@ API: `GET`/`POST /api/games/<uuid>/related_media` ·
 `DELETE /api/games/<uuid>/related_media/<id>`.
 
 Related: [getting-started.md](getting-started.md) · [downloads.md](downloads.md) · [translation-patches.md](translation-patches.md) · [preferences-themes.md](preferences-themes.md)
+
+## Store capability status
+
+Store ownership records are separate from installed games and launch support.
+Imported records and activity-based lists are not proof of every title you own.
+Humble, EA, Battle.net, Ubisoft, itch.io and Nintendo have no adapter yet; the
+store list names them as **Not available yet** and offers no controls for them.
+
+**Connection status.** Each store shows one state, read from what the server has
+recorded (it never contacts the store just to draw the page):
+
+| State | Meaning | What you can do |
+|---|---|---|
+| Linked | Linked; the last sync worked (or none has run yet) | Sync now, Reconnect, Import, Disconnect |
+| Syncing | A sync is running; progress updates as pages arrive | **Stop sync** for GOG, Epic and Amazon only. Steam, Xbox and PlayStation make one request that cannot be interrupted, so no stop button is shown. |
+| Partly synced | The list is incomplete (too many pages, or some names could not be looked up) | Try again, or import the rest |
+| Reconnect needed | The store refused your saved sign-in (expired or revoked) | Reconnect with a fresh token |
+| Sync failed | Upstream trouble, rate limiting, or the household sign-in was refused | Try again later; an admin-fixable problem says so |
+| Sync cancelled | Stopped before anything was saved | Try again |
+| Needs a sign-in | Linked, but no token a sync could use | Reconnect |
+| Needs server setup | The operator has not set a Steam server key, not opted into Xbox/PlayStation live sync, or not installed its package | Import a list meanwhile. Steam still lets you save your Steam ID, so a free-game claim can record the game and open Steam |
+| Import only | Snapshot import (Meta Quest CSV, Playnite export) | Import again when your list changes |
+
+Error messages are fixed sentences; Oneirodex does not show the store's raw
+error text. Re-saving only a label does not count as reconnecting: only a new
+sign-in (or a different Steam ID) clears a refused sign-in. So **Reconnect**
+keeps your saved label and asks for a fresh token when the saved one was refused
+or is missing. An Amazon sign-in that lacks only its device serial is repaired
+by entering the serial alone. After saving, the card says whether the store can sync now or
+still needs a working sign-in. A link cannot be changed or disconnected while
+its sync runs.
+
+**Household sign-in.** If the operator configured a shared household token for a
+store and you link that store *without* a token of your own, syncs use the
+household account and its library is recorded as yours. Before you link, the
+card warns that a blank token means the household sign-in; once linked, it says
+"Syncing with the household sign-in…". Any token you save yourself is used
+instead, and a partial token of your own is never silently topped up with the
+household one.
+
+A sign-in saved before this version, on a server that has a household sign-in
+for that store, is shown as **of unknown origin**: older versions stored the
+household token on a member's account after a sync without marking it, so it may
+be the household account. Reconnect with your own sign-in to be sure the titles
+are yours.
+
+**Review matches** (`/ownership?view=review`). Titles from stores and imports
+link to library games only by exact provider ID (unique Steam app ID, Meta
+Quest ID). A matching *name* is a suggestion: the review lists candidates with
+their platform, and nothing is linked until you pick one and **Confirm**. You
+can also keep a title unmatched, and **Undo** your latest decision. If a sync or
+another tab changed the title meanwhile, your choice stays selected and
+**Reload title** lets you check it before confirming again. A title matched to
+a game in a library you cannot open reads **Matched · not in your libraries**;
+choosing **Remove this match** clears that link, and you cannot undo it, because
+you cannot link a game you cannot open. Undo applies only to
+your own latest decision: if the title changed after it, Undo is withdrawn and
+**Reload title** shows where it stands. Reviewed decisions survive later syncs
+and imports. Nothing is merged or deleted. Disconnect removes that store's
+records, review history and sync history.
+
+Arrow keys (and a controller D-pad) move through the store list and the review,
+including the candidate choices; Enter picks the focused choice. After Confirm,
+Save link or Import, focus returns to the button that opened the panel; a save
+that fails keeps focus in its form so the next press retries it. When Sync turns
+into Stop sync (or back), focus stays on the same store, and focus you moved
+elsewhere yourself is never pulled back.
+
+**Filter by ownership.** In the catalog Filters panel, **Ownership** offers
+**All games**, **Owned** and **Not recorded**, then the stores to consider.
+With two or more stores you choose **In any selected store** or **In every
+selected store**. **Not recorded** means no linked store or import lists the
+game; it is not proof that you do not own it. These choices are kept in the
+page address (`store=steam,gog`, `store_match=all`, `ownership=owned|unrecorded`),
+so a filtered view can be bookmarked or shared. Other filters already in the
+address, such as a genre from a link or a Systems page platform, follow what you
+apply, so a filter you changed never comes back when you pick an ownership
+option. The Grid layout's shelves use them too. Favorites does not apply these
+filters.

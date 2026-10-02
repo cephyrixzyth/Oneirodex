@@ -108,7 +108,7 @@ Both `OIDC_ENABLED=true` **and** the admin toggle must be on before the SSO butt
 }
 ```
 
-Unmapped users JIT-provision with role `user`. Existing local users match by **email**, then **username**.
+Unmapped users JIT-provision with role `user`. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten.
 
 ### 6. Reverse proxy and HTTPS
 
@@ -155,7 +155,7 @@ Same general requirements as Authentik:
 3. Enable **PKCE (S256)**.
 4. Redirect URI: `https://<oneirodex-host>/login/oidc/callback`
 5. Scopes: `openid`, `email`, `profile`, plus any claim scope needed for groups/roles.
-6. Ensure the IdP returns `email` and `preferred_username` (or `sub`).
+6. Ensure the IdP returns `sub`, `email` with `email_verified`, and `preferred_username`.
 
 ### Role mapping
 
@@ -175,7 +175,7 @@ Default JSON role map (also configurable in admin):
 }
 ```
 
-JIT provisioning creates users with role `user` unless a mapped claim is present. Existing users are matched by **email**, then **username**.
+JIT provisioning creates users with role `user` unless a mapped claim is present. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
 
 ## Flow
 

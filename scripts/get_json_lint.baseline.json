@@ -29,7 +29,7 @@
   "oneirodex/routes_apis/locale.py": 1,
   "oneirodex/routes_apis/metadata_providers.py": 1,
   "oneirodex/routes_apis/notifications.py": 2,
-  "oneirodex/routes_apis/ownership.py": 4,
+  "oneirodex/routes_apis/ownership.py": 2,
   "oneirodex/routes_apis/quality_stats.py": 3,
   "oneirodex/routes_apis/reference_sets.py": 1,
   "oneirodex/routes_apis/remote_play.py": 1,

@@ -51,4 +51,24 @@ describe('install helper', () => {
     expect(next).toBe('installed')
     expect(registry.get('game-42')).toBe('installed')
   })
+
+  it.each(['.', '..', 'a/b', 'a\\b', ''])(
+    'refuses game id %j before it can name an extract destination',
+    async (hostileId) => {
+      const registry = createLifecycleRegistry({
+        initial: [{ gameUuid: hostileId, state: 'downloaded' }],
+      })
+      vi.mocked(loadInstallsFromDisk).mockResolvedValue({
+        [hostileId]: {
+          archivePath: '/appdata/downloads/x.zip',
+          extractPath: '/appdata/installs/.',
+        },
+      })
+
+      await expect(kickoffInstall(registry, hostileId)).rejects.toThrow(/Invalid game id/)
+
+      expect(invoke).not.toHaveBeenCalled()
+      expect(saveInstallsToDisk).not.toHaveBeenCalled()
+    },
+  )
 })

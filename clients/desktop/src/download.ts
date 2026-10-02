@@ -13,11 +13,13 @@ import {
 } from './install-store.js'
 import type { GameLifecycleState, LifecycleRegistry } from './lifecycle.js'
 import {
+  assertValidGameUuid,
   buildDownloadStreamPath,
   buildLocalArchiveName,
   buildLocalInstallDirName,
   joinUrl,
 } from './paths.js'
+import { checkDownloadRedirectUrl } from './transport-policy.js'
 
 export interface DownloadProgress {
   bytesReceived: number
@@ -40,12 +42,22 @@ export async function getInstallsDir(): Promise<string> {
   return invoke<string>('get_app_subdir', { subdir: 'installs' })
 }
 
-export function resolveArchivePath(downloadsDir: string, gameUuid: string): string {
-  return `${downloadsDir.replace(/[/\\]+$/, '')}/${buildLocalArchiveName(gameUuid)}`
+/** Throws on a game id (or generation) that is not a plain path segment. */
+export function resolveArchivePath(
+  downloadsDir: string,
+  gameUuid: string,
+  generation?: string,
+): string {
+  return `${downloadsDir.replace(/[/\\]+$/, '')}/${buildLocalArchiveName(gameUuid, generation)}`
 }
 
-export function resolveExtractPath(installsDir: string, gameUuid: string): string {
-  return `${installsDir.replace(/[/\\]+$/, '')}/${buildLocalInstallDirName(gameUuid)}`
+/** Throws on a game id (or generation) that is not a plain path segment. */
+export function resolveExtractPath(
+  installsDir: string,
+  gameUuid: string,
+  generation?: string,
+): string {
+  return `${installsDir.replace(/[/\\]+$/, '')}/${buildLocalInstallDirName(gameUuid, generation)}`
 }
 
 export async function initiateDownloadRequest(
@@ -54,6 +66,35 @@ export async function initiateDownloadRequest(
   options: { kind?: 'base' | 'update' | 'extra'; versionUuid?: string } = {},
 ): Promise<InitiateDownloadResponse> {
   return api.downloads.initiateGameDownload(gameUuid, options)
+}
+
+/**
+ * An https server may answer with a redirect, and `fetch` follows it on its own.
+ * What is checked is the URL it ended on (`response.url`), against the same
+ * http://-only-on-your-own-network rule as the server URL. A plain `http://` leg
+ * in the middle of a redirect chain is invisible here (`fetch` reports only the
+ * last URL, and `redirect: 'manual'` hides the Location header), so the server is
+ * expected to stream `/download_zip/<id>` itself or redirect straight to https:
+ * an archive rewritten in transit is extracted into `installs/` and launched.
+ * (`fetch` drops the Authorization header on a cross-origin hop, so the token is
+ * safe either way.) Mocks and some runtimes leave `url` empty — nothing to check
+ * then.
+ */
+function assertDownloadFinalUrlAllowed(response: Response): void {
+  if (!response.url) {
+    return
+  }
+  const check = checkDownloadRedirectUrl(response.url)
+  if (check.ok) {
+    return
+  }
+  // Stop the transfer; nothing has been written to disk yet.
+  try {
+    void Promise.resolve(response.body?.cancel()).catch(() => undefined)
+  } catch {
+    // No stream to cancel (a stub response, or one already locked).
+  }
+  throw new Error(check.message)
 }
 
 export async function fetchDownloadStream(
@@ -76,6 +117,7 @@ export async function fetchDownloadStream(
       Authorization: authHeader,
     },
   })
+  assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()
@@ -137,6 +179,7 @@ export async function streamDownloadToFile(
       Authorization: authHeader,
     },
   })
+  assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
     const text = await response.text()
@@ -206,8 +249,13 @@ export async function downloadGameArchive(
     onProgress?: DownloadProgressCallback
     kind?: 'base' | 'update' | 'extra'
     versionUuid?: string
+    /** Isolated update generation; never overwrite the working archive/record. */
+    generation?: string
   } = {},
 ): Promise<GameInstallRecord> {
+  // The id becomes `{id}.zip` and `installs/{id}`; refuse anything that is not a
+  // plain path segment before the server is asked for anything.
+  assertValidGameUuid(gameUuid)
   const initiated = await initiateDownloadRequest(api, gameUuid, {
     kind: options.kind,
     versionUuid: options.versionUuid,
@@ -215,7 +263,7 @@ export async function downloadGameArchive(
   const streamPath = initiated.stream_url || buildDownloadStreamPath(initiated.download_id)
 
   const downloadsDir = await getDownloadsDir()
-  const archivePath = resolveArchivePath(downloadsDir, gameUuid)
+  const archivePath = resolveArchivePath(downloadsDir, gameUuid, options.generation)
 
   if (isTauriRuntime()) {
     await streamDownloadToFile(auth, streamPath, archivePath, options)
@@ -227,9 +275,9 @@ export async function downloadGameArchive(
   const installsDir = await getInstallsDir()
   const record: GameInstallRecord = {
     archivePath,
-    extractPath: resolveExtractPath(installsDir, gameUuid),
+    extractPath: resolveExtractPath(installsDir, gameUuid, options.generation),
   }
-  await persistInstallRecord(gameUuid, record)
+  if (!options.generation) await persistInstallRecord(gameUuid, record)
   return record
 }
 
@@ -245,6 +293,7 @@ export async function kickoffDownload(
     versionUuid?: string
   } = {},
 ): Promise<GameLifecycleState> {
+  assertValidGameUuid(gameUuid)
   if (registry.get(gameUuid) !== 'not_downloaded') {
     throw new Error(`Game ${gameUuid} is not in not_downloaded state`)
   }

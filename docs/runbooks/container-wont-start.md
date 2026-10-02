@@ -6,6 +6,8 @@
 - Logs stop immediately after start
 - Healthcheck fails forever
 - App unhealthy / restarting while **db is healthy**, logs show `no pg_hba.conf entry … no encryption` (see §3b)
+- App restarting after `.env` was edited, logs show `password authentication failed for user` (see §3c)
+- `livekit` container exits with `one of key-file or keys must be provided` (see §10)
 - GPU service never gets created, `nvml error: driver not loaded` (see 7)
 - Container serves fine but sits **unhealthy** forever (see 8)
 
@@ -23,6 +25,11 @@
 
 **Fix:** Rebuild from current Dockerfile (installs `bash`). Ensure `entrypoint.sh` has LF line endings (`sed -i 's/\r$//'` is in the Dockerfile).
 
+Startup exits when initialization fails, including a failed force-setup reset;
+workers start only after initialization succeeds. Resolve the initialization error
+before restarting. The entrypoint and startup script use `exec`, so Docker's
+shutdown signal reaches uvicorn directly.
+
 ### 3. Postgres not ready / wrong host
 
 **Log signature:** connection refused to `db` / timeout waiting for PostgreSQL
@@ -38,6 +45,8 @@ FATAL: no pg_hba.conf entry for host "172.x.x.x", user "postgres", database "one
 
 Postgres is reachable; it is **refusing non-SSL TCP** from the app container IP (common after a hardened / stale volume `pg_hba.conf`).
 
+The shipped `docker/postgres/pg_hba.conf` allows scram-sha-256 only from loopback and the private ranges `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7`, and has no `0.0.0.0/0` rule. If the logged address is **outside** those ranges (a custom Docker address pool, Tailscale `100.64.0.0/10`, a global IPv6 prefix), add one line for that CIDR to `docker/postgres/pg_hba.conf` and recreate `db`. Do not add `0.0.0.0/0`: together with a default password it hands every reachable network a superuser login.
+
 **Fix (preferred):** Pull current Compose (ships `docker/postgres/pg_hba.conf` + `hba_file=` override) and recreate **db** (keeps data volume):
 
 ```bash
@@ -50,13 +59,21 @@ Confirm active HBA: `docker compose exec db psql -U postgres -d oneirodex -c "SH
 **Fix (legacy stacks without `hba_file=`):** only when `SHOW hba_file` still points at `$PGDATA/pg_hba.conf`:
 
 ```bash
-docker compose exec db bash -c 'printf "\nhost all all 0.0.0.0/0 scram-sha-256\nhost all all ::/0 scram-sha-256\n" >> "$PGDATA/pg_hba.conf"'
+docker compose exec db bash -c 'printf "\nhost all all 10.0.0.0/8 scram-sha-256\nhost all all 172.16.0.0/12 scram-sha-256\nhost all all 192.168.0.0/16 scram-sha-256\nhost all all fc00::/7 scram-sha-256\n" >> "$PGDATA/pg_hba.conf"'
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT pg_reload_conf();"
 ```
 
 With current Compose, **do not** append to `$PGDATA/pg_hba.conf` — Postgres ignores it when `hba_file=/etc/oneirodex/pg_hba.conf` is set. Edit the host file `docker/postgres/pg_hba.conf` and `force-recreate db` instead.
 
 Then restart the app container. Do **not** wipe `db_data` unless you intend to lose the library DB. Intentional clean slate (still logging in after a partial wipe): [unraid-deploy.md — Factory wipe](unraid-deploy.md#factory-wipe-still-logging-in-after-wiped-volumes).
+
+### 3c. `password authentication failed` after changing `POSTGRES_PASSWORD`
+
+**Log signature:** `FATAL: password authentication failed for user "postgres"` from the app (or from a client on the host), right after `.env` was edited or a new `.env` was copied from a template.
+
+**Cause:** `POSTGRES_PASSWORD` is read only when Postgres first creates the `db_data` volume. The database keeps the password it was initialised with; the app now sends the new one.
+
+**Fix (keep the data):** either put the old value back in `.env`, or set the database to the new value. Both steps are in [docker-compose-deploy.md § Rotating the password](docker-compose-deploy.md#rotating-the-password-on-an-existing-database): `\password` inside `psql` (the in-container socket is trusted, no old password needed), then `docker compose up -d --force-recreate app`. Wiping `db_data` also clears the error but destroys the library database — see [unraid-deploy.md — Factory wipe](unraid-deploy.md#factory-wipe-still-logging-in-after-wiped-volumes) only if that is intended.
 
 ### 4. Database URL points at production during tests
 
@@ -104,7 +121,7 @@ No output means there is no GPU to reserve, and no driver work will help.
 Unraid Compose Manager’s working dir **is** this checkout (not a separate `isos` copy). Check the live tree, including the Windows GPU override:
 
 ```bash
-STACK=/mnt/user/infernal-data-streams/_projects/Oneirodex
+STACK=/mnt/user/example-share/_projects/Oneirodex
 grep -n -A6 reservations "$STACK/docker-compose.yml" "$STACK/docker-compose.override.yml"
 grep -n COMPOSE_FILE "$STACK/.env"
 ```
@@ -140,6 +157,12 @@ sidecar's healthcheck uses `wget`.
 **Cause:** the SPA tsconfigs `extends` repo-root `tsconfig.base.json`. The `frontend-build` stage must `COPY tsconfig.base.json` before the workspace builds.
 
 **Fix:** pull a tree whose Dockerfile stages that file, then `docker compose … up -d --build` again. Local `npm run build` can still pass when the file exists on the host — only the image stage was blind.
+
+### 10. `livekit` exits: `one of key-file or keys must be provided`
+
+**Cause:** the SFU no longer runs in `--dev` mode with a built-in `devkey` / `secret`. It reads `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` from `.env`, and refuses to start when either is empty (or is a number-only secret that LiveKit's YAML parser drops). Only the optional `livekit` profile is affected; the app, db and other profiles start normally.
+
+**Fix:** generate a pair and recreate the SFU and the app — [livekit-unraid.md](livekit-unraid.md#compose-profile). `Could not parse keys` means the value holds a colon, `$`, `#` or a quote. Voice that connects but carries no audio means a hand-copied `livekit` service lost `--udp-port 7882` (see the upgrade section of that runbook).
 
 ## Collect for support
 

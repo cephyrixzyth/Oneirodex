@@ -81,15 +81,11 @@ def import_playnite_json(user_id: int, payload: str | bytes | dict | list) -> Im
                 user_id=user_id,
                 store='playnite',
                 external_app_id=external_id,
-            ),
+            ).with_for_update().execution_options(populate_existing=True),
         ).scalars().first()
-        matched = _match_game_by_name(name)
         if existing:
-            if matched and existing.matched_game_uuid != matched.uuid:
-                existing.matched_game_uuid = matched.uuid
-                result.matched += 1
-            else:
-                result.skipped += 1
+            existing.name = name[:255]
+            result.skipped += 1
             continue
 
         row = UserOwnedTitle(
@@ -97,12 +93,10 @@ def import_playnite_json(user_id: int, payload: str | bytes | dict | list) -> Im
             store='playnite',
             external_app_id=external_id,
             name=name[:255],
-            matched_game_uuid=matched.uuid if matched else None,
+            matched_game_uuid=None,
         )
         db.session.add(row)
         result.imported += 1
-        if matched:
-            result.matched += 1
 
     db.session.commit()
     return result

@@ -4,12 +4,12 @@ The Unraid/NAS Compose file **never** requests a GPU. Art generation wants one. 
 
 ## Stability Matrix + SwarmUI (this GPU PC)
 
-Installed under `C:\Users\cephyrix_zyth\Apps` (not the NAS checkout):
+Installed under `C:\Users\YOUR_USER\Apps` (not the NAS checkout):
 
 | Tool | Path | Notes |
 |---|---|---|
-| **Stability Matrix** | `C:\Users\cephyrix_zyth\Apps\StabilityMatrix\StabilityMatrix.exe` | Portable zip from [LykosAI/StabilityMatrix](https://github.com/LykosAI/StabilityMatrix/releases/latest). Use **Package Manager → SwarmUI** for the supported install. |
-| **SwarmUI** (source) | `C:\Users\cephyrix_zyth\Apps\SwarmUI` | `git clone` + `launch-windows.bat` (http://127.0.0.1:7801). First run downloads Comfy + a starter checkpoint — do not pull FLUX fp8 here. |
+| **Stability Matrix** | `C:\Users\YOUR_USER\Apps\StabilityMatrix\StabilityMatrix.exe` | Portable zip from [LykosAI/StabilityMatrix](https://github.com/LykosAI/StabilityMatrix/releases/latest). Use **Package Manager → SwarmUI** for the supported install. |
+| **SwarmUI** (source) | `C:\Users\YOUR_USER\Apps\SwarmUI` | `git clone` + `launch-windows.bat` (http://127.0.0.1:7801). First run downloads Comfy + a starter checkpoint — do not pull FLUX fp8 here. |
 
 Oneirodex Art Studio still talks **A1111-compatible** `/sdapi/v1/txt2img`. Keep the SD.Next sidecar on **:7860** as `AI_ARTWORK_URL` until SwarmUI is wired as an engine (not this wave).
 
@@ -41,11 +41,22 @@ docker compose -f docker-compose.artwork-local.yml up -d
 
 UI: http://127.0.0.1:7860
 
+**The port is published on loopback only by default.** SD.Next has no login, and anyone who can reach its port can queue generation jobs on this GPU, so `docker-compose.artwork-local.yml` binds `127.0.0.1:7860` unless you set `SDNEXT_HOST_BIND`. Generating from the SD.Next UI on this PC needs nothing more. Serving the NAS needs the opt-in in the next section.
+
 The first pull of `saladtechnologies/sdnext` is large. Models live in the `sdnext_models` volume.
 
 ## Point the NAS app at this PC
 
-On the Unraid/NAS `.env` (the running Oneirodex stack):
+**1. Open SD.Next to the LAN on this PC (opt-in).** Set `SDNEXT_HOST_BIND` to this PC's LAN IP (preferred: only that adapter listens) before starting, in the shell or in the `.env` next to the compose file, then recreate the container:
+
+```powershell
+$env:SDNEXT_HOST_BIND = '192.168.50.42'    # this PC's LAN IP; '0.0.0.0' = every adapter, VPN included
+docker compose -f docker-compose.artwork-local.yml up -d --force-recreate
+```
+
+> **Upgrading:** before this default existed the file published `7860` on every interface, so the NAS reached it with no setting. After a `git pull`, the next `up -d` / recreate binds loopback only and the NAS gets connection refused until `SDNEXT_HOST_BIND` is set as above. A container that is already running keeps its old binding until it is recreated.
+
+**2. Point the NAS at it.** On the Unraid/NAS `.env` (the running Oneirodex stack):
 
 ```text
 ENABLE_AI_ARTWORK=true
@@ -65,7 +76,7 @@ docker compose --env-file .env up -d --force-recreate --no-deps app
 
 Compose Manager must point at **`_projects/Oneirodex`** (not the empty `_projects/Oneirodex` stub). Drop the `artwork` profile on the NAS when the GPU lives on this workstation.
 
-Allow inbound **TCP 7860** on the Windows firewall (Any profile). If the NAS still cannot reach the URL while `127.0.0.1:7860` works on this PC:
+Allow inbound **TCP 7860** on the Windows firewall (Any profile), with the remote address limited to the NAS's LAN IP rather than Any: SD.Next has no login, so the firewall rule is the access control. If the NAS still cannot reach the URL while `127.0.0.1:7860` works on this PC:
 
 1. **IVPN** — Firewall → Allow LAN (CLI: `ivpn firewall -lan_allow`). Hairpin to this PC’s own LAN IP often still times out; test from the Unraid shell, not from the GPU box.
 2. **Portmaster** — turn off **Force Block Incoming Connections** (`filter.blockInbound=false`). Keep Incoming/Service endpoints allowing `192.168.50.0/24`. With Block Incoming on, Unraid cannot open `:7860` even when IVPN Allow LAN is true and Windows Firewall allows the port. After the 2026-08-28 change on this workstation, `http://192.168.50.42:7860/sdapi/v1/sd-models` returns 200 from the LAN IP.
@@ -98,6 +109,8 @@ docker cp .\v1-5-pruned-emaonly.safetensors oneirodex-sdnext-local:/webui/data/m
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7860/sdapi/v1/refresh-checkpoints
 (Invoke-RestMethod -Uri http://127.0.0.1:7860/sdapi/v1/sd-models).title
 ```
+
+The review stack reaches SD.Next through `host.docker.internal`; Docker Desktop forwards that to the host's loopback, so it still works with the default loopback bind (checked on this workstation's Docker Desktop, engine 29.8.1) and needs no `SDNEXT_HOST_BIND`.
 
 Compose project name is shared with the review stack (`oneirodex`). Do **not** `compose … --remove-orphans` on one file or you may stop the other stack’s containers.
 

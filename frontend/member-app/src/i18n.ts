@@ -67,6 +67,29 @@ const STRINGS: Record<MemberLocale, Record<string, string>> = {
     Tile: 'Tile',
     Rows: 'Rows',
     Grid: 'Grid',
+    // LIB-02 ownership filters and first-run prompt
+    Ownership: 'Ownership',
+    'Show games by ownership': 'Show games by ownership',
+    'Ignore store ownership': 'Ignore store ownership',
+    Owned: 'Owned',
+    'Recorded as owned in your linked stores or imports':
+      'Recorded as owned in your linked stores or imports',
+    'Not recorded': 'Not recorded',
+    'No linked store or import lists it. This is not proof you do not own it.':
+      'No linked store or import lists it. This is not proof you do not own it.',
+    Stores: 'Stores',
+    'Match stores': 'Match stores',
+    'In any selected store': 'In any selected store',
+    'In every selected store': 'In every selected store',
+    'Games no selected store has recorded. Not proof you do not own them.':
+      'Games no selected store has recorded. Not proof you do not own them.',
+    'Games no linked store or import has recorded. Not proof you do not own them.':
+      'Games no linked store or import has recorded. Not proof you do not own them.',
+    'Store setup': 'Store setup',
+    'Link your game stores or import a list, and the library will mark what you already own.':
+      'Link your game stores or import a list, and the library will mark what you already own.',
+    'Set up stores': 'Set up stores',
+    'Not now': 'Not now',
   },
   es: {
     'No libraries found. Add a library to get started.':
@@ -133,6 +156,28 @@ const STRINGS: Record<MemberLocale, Record<string, string>> = {
     Tile: 'Portadas',
     Rows: 'Filas',
     Grid: 'Cuadrícula',
+    Ownership: 'Propiedad',
+    'Show games by ownership': 'Mostrar juegos por propiedad',
+    'Ignore store ownership': 'No filtrar por tiendas',
+    Owned: 'Comprados',
+    'Recorded as owned in your linked stores or imports':
+      'Registrados como tuyos en tus tiendas vinculadas o listas importadas',
+    'Not recorded': 'Sin registro',
+    'No linked store or import lists it. This is not proof you do not own it.':
+      'Ninguna tienda vinculada ni lista importada lo incluye. No prueba que no lo tengas.',
+    Stores: 'Tiendas',
+    'Match stores': 'Coincidencia de tiendas',
+    'In any selected store': 'En cualquier tienda elegida',
+    'In every selected store': 'En todas las tiendas elegidas',
+    'Games no selected store has recorded. Not proof you do not own them.':
+      'Juegos que ninguna tienda elegida ha registrado. No prueba que no los tengas.',
+    'Games no linked store or import has recorded. Not proof you do not own them.':
+      'Juegos que ninguna tienda vinculada ni lista importada ha registrado. No prueba que no los tengas.',
+    'Store setup': 'Configurar tiendas',
+    'Link your game stores or import a list, and the library will mark what you already own.':
+      'Vincula tus tiendas o importa una lista y la biblioteca marcará lo que ya tienes.',
+    'Set up stores': 'Configurar tiendas',
+    'Not now': 'Ahora no',
   },
 }
 

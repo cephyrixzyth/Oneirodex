@@ -91,6 +91,19 @@
   color: var(--od-text-muted);
 }
 
+/* LIB-02 ownership filters: show segment, store chips, any/every toggle. */
+.library-filters__ownership {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.library-filters__hint {
+  margin: 0;
+  font-size: var(--od-font-xs);
+  color: var(--od-text-muted);
+}
+
 /* Compact fused Signals row under Apply/Clear — one control, half height.
    Vertical rhythm matches the actions↔toolbar gap (`--od-space-3` on
    `.library-filters__actions`), so the strip is not pinched under Apply. */

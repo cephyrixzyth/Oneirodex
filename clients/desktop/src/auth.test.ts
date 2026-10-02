@@ -4,6 +4,7 @@ import {
   describeTokenPaste,
   isOneirodexToken,
   normalizeOneirodexToken,
+  requireSecureBaseUrl,
 } from './auth.js'
 
 describe('auth authorization header', () => {
@@ -19,6 +20,43 @@ describe('auth authorization header', () => {
   it('returns null when no token is configured', () => {
     const auth = createAuthStore({ baseUrl: 'https://oneirodex.local', token: null })
     expect(auth.authorizationHeader()).toBeNull()
+  })
+})
+
+describe('auth store transport policy', () => {
+  it('keeps https:// and local http:// base URLs, normalised', () => {
+    const auth = createAuthStore()
+    auth.setBaseUrl(' https://games.example.com/ ')
+    expect(auth.getBaseUrl()).toBe('https://games.example.com')
+    auth.setBaseUrl('http://192.168.1.50:5000//')
+    expect(auth.getBaseUrl()).toBe('http://192.168.1.50:5000')
+    auth.setBaseUrl('http://nas.local')
+    expect(auth.getBaseUrl()).toBe('http://nas.local')
+    expect(requireSecureBaseUrl('   ')).toBe('')
+    auth.setBaseUrl('')
+    expect(auth.getBaseUrl()).toBe('')
+  })
+
+  it('refuses plain http:// to a public host and keeps the previous base URL', () => {
+    const auth = createAuthStore({ baseUrl: 'https://games.example.com', token: 'gt_ab12cd34_x' })
+    expect(() => auth.setBaseUrl('http://games.example.com')).toThrow(/API token.*https:\/\//s)
+    expect(() => auth.setBaseUrl('ftp://games.example.com')).toThrow(/https:\/\//)
+    expect(() => auth.setBaseUrl('games.example.com')).toThrow(/valid URL/)
+    expect(auth.getBaseUrl()).toBe('https://games.example.com')
+  })
+
+  it('refuses to start with an insecure initial base URL', () => {
+    expect(() => createAuthStore({ baseUrl: 'http://8.8.8.8', token: 'gt_ab12cd34_x' })).toThrow(
+      /https:\/\//,
+    )
+  })
+
+  it('never leaves a refused server in the store the requests are built from', () => {
+    const auth = createAuthStore({ token: 'gt_ab12cd34_secretpart' })
+    expect(() => auth.setBaseUrl('http://games.example.com')).toThrow()
+    // The store still has no base URL, so nothing built from it can reach that host.
+    expect(auth.getBaseUrl()).toBe('')
+    expect(auth.snapshot()).toEqual({ baseUrl: '', hasToken: true })
   })
 })
 

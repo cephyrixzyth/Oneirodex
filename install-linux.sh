@@ -514,18 +514,18 @@ configure_postgresql_auth() {
         return 0
     }
 
-    # Add password authentication for oneirodex database
+    # Add password authentication for the oneirodex database (app role only).
+    # No rule is added for the `postgres` superuser: a password rule ahead of the
+    # default `local all postgres peer` line would take over its access to this
+    # database, and Oneirodex never needs a superuser login.
     print_verbose "Adding password authentication for oneirodex database..."
 
     # Add our rules at the top (before default rules)
     {
         echo "# Added by Oneirodex installer - $(date)"
         echo "local   oneirodex   oneirodexuser   md5"
-        echo "local   oneirodex   postgres         md5"
         echo "host    oneirodex   oneirodexuser   127.0.0.1/32   md5"
-        echo "host    oneirodex   postgres         127.0.0.1/32   md5"
         echo "host    oneirodex   oneirodexuser   ::1/128        md5"
-        echo "host    oneirodex   postgres         ::1/128        md5"
         echo ""
     } | sudo tee "$PG_HBA_CONF.new" >/dev/null
 
@@ -658,10 +658,11 @@ setup_postgresql() {
     print_verbose "Creating database and user..."
 
     # Create database user and database
+    # Only the dedicated app role is created here. This script never sets or
+    # changes the password of the `postgres` superuser: it keeps whatever
+    # authentication the host already has (peer over the local socket on most
+    # distros), and Oneirodex never connects as a superuser.
     sudo -u postgres psql << EOF
--- Set password for postgres user as fallback
-ALTER USER postgres WITH ENCRYPTED PASSWORD 'postgres';
-
 -- Create user
 DO \$\$
 BEGIN
@@ -678,9 +679,6 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'oneirodex')\gexec
 -- Grant privileges
 GRANT ALL PRIVILEGES ON DATABASE oneirodex TO oneirodexuser;
 GRANT CREATE ON SCHEMA public TO oneirodexuser;
-
--- Also grant postgres user access to oneirodex database as fallback
-GRANT ALL PRIVILEGES ON DATABASE oneirodex TO postgres;
 
 -- Exit without testing connection here (avoids peer auth issues)
 \q

@@ -145,9 +145,14 @@ clients/desktop/
     connect.ts            # Connection validation + library preview
     config-store.ts       # Tauri file persistence (base URL; migrates/scrubs plaintext token)
     keychain.ts           # KeychainAdapter → OS credential store
+    trusted-shares.ts     # Trusted network shares editor (UNC roots `open_path` may reach)
     app.ts                # Minimal UI
+  fixtures/
+    server-urls.json      # Server URL -> verdict cases read by BOTH the vitest and the cargo tests
   src-tauri/
     src/lib.rs            # Config, secure_store_*, lifecycle, installs, zip extract commands
+    src/trusted_shares.rs # UNC trust list matching (string-only, no filesystem probe)
+    src/install_recovery.rs # Atomic registry write; snapshot / update-generation copy (never follows links)
     tauri.conf.json       # Full companion
     tauri.thin.conf.json  # Thin flavor (stripped capabilities)
     capabilities/         # default + social (full); thin-main + thin-library + social (thin)
@@ -169,7 +174,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Unit tests mock `fetch`, Tauri `invoke`, and the download initiate API — no live Oneirodex server required. The `rust-checks` job in `desktop-build.yml` runs `cargo fmt --check` / `clippy -D warnings` / `cargo test` on every push that touches `clients/desktop/**`, `frontend/api-client/**`, or `frontend/shared/**`.
+Unit tests mock `fetch`, Tauri `invoke`, and the download initiate API — no live Oneirodex server required. Two pieces are checked from both languages so they cannot drift: `fixtures/server-urls.json` (the plain-`http://` server URL policy) is read by `src/transport-policy.test.ts` and by the `validate_server_base_url` tests in `src-tauri/src/lib.rs`, and `src/open-path.test.ts` reads `lib.rs` to compare the `NETWORK_PATH_REFUSED` message. The `rust-checks` job in `desktop-build.yml` runs `cargo fmt --check` / `clippy -D warnings` / `cargo test` on every push that touches `clients/desktop/**`, `frontend/api-client/**`, or `frontend/shared/**`.
 
 ## Out of scope (this track)
 

@@ -17,6 +17,9 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 zip = "2.2"
+# Host/scheme parsing for the http:// transport policy in `save_config` — same
+# WHATWG normalisation (0x7f.1, userinfo tricks) the webview's `new URL` applies.
+url = "2"
 # OS credential store (Windows Credential Manager / macOS Keychain / Linux Secret Service)
 keyring = { version = "3.6", default-features = false, features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
 

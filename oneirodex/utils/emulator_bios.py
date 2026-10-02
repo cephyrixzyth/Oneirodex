@@ -239,7 +239,11 @@ def bios_root() -> str:
     root = current_app.config.get('EMULATOR_BIOS_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'bios')
+    # Imported here: scripts/import_bios.py loads this module by path, without
+    # the oneirodex package, for BIOS_REQUIREMENTS alone.
+    from oneirodex.utils.library_paths import library_dir
+
+    return os.path.join(library_dir(), 'bios')
 
 
 def list_bios_files() -> list[dict[str, Any]]:

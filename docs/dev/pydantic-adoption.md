@@ -208,9 +208,14 @@ Leave these until the contract can be preserved; do not force them.
 
 ### `routes_apis/ownership.py`
 
-- `connect_gog`, `connect_epic`, `connect_amazon` — a bag of optional, aliased
-  fields (`gog_user_id` **or** `user_id`, `token` **or** `refresh_token`, ...)
-  with no rejection path. A model would need `AliasChoices` and buys nothing.
+- `connect_gog`, `connect_epic`, `connect_amazon` — **migrated (LIB-04,
+  2026-09-28)** to `GogConnectBody` / `EpicConnectBody` / `AmazonConnectBody`.
+  Each alias the route always read is a declared optional field rather than an
+  `AliasChoices`; what the model buys is `extra='forbid'` plus length limits,
+  because an unbounded note used to overflow `external_account_id` and the
+  logged `DataError` carried the credential in its parameters.
+- `_match_decision` (review / undo) stays on `get_json`: its documented contract
+  returns 400, not the decorator's 422, for a malformed decision.
 - `import_*_csv` routes — read form-data / file upload as well as JSON
   (`_read_csv_payload`). Not a JSON body.
 
@@ -401,7 +406,7 @@ Highest-count files still to do, roughly in priority order:
 - `routes_admin_ext/images.py` (4 remaining) — batch optional bags.
 - `routes_apis/quality_stats.py` (3 remaining), `routes_apis/client.py` (4),
   `routes_apis/chat_spaces_api.py` (4), `routes_apis/chat.py` (4),
-  `routes_apis/library.py` (4), `routes_apis/ownership.py` (4).
+  `routes_apis/library.py` (4), `routes_apis/ownership.py` (2).
 - `routes_apis/emulator_cheats.py` (3 remaining), `routes_apis/ai_assist.py`
   (3 remaining), `routes_apis/system.py` (3), `routes_apis/game_mods_api.py`
   (3).

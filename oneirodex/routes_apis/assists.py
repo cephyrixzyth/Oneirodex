@@ -20,6 +20,7 @@ from oneirodex.schemas.assists import AssistPackBody
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
+from oneirodex.utils.library_paths import library_dir
 
 _SAFE_UUID = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -37,7 +38,7 @@ def assists_root() -> str:
     root = current_app.config.get('GAME_ASSISTS_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'assists')
+    return os.path.join(library_dir(), 'assists')
 
 
 def _pack_path(game_uuid: str) -> str:

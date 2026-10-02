@@ -305,7 +305,11 @@ jobs:
       # gated nothing — run here because this job already has Node set up.
       - name: Run classic theme JS harnesses
         working-directory: .
-        run: node tests/js/preferences_modal_delegation.test.mjs
+        run: |
+          node tests/js/preferences_modal_delegation.test.mjs
+          node tests/js/od_dom_actions.test.mjs
+          node tests/js/od_bridge_origin.test.mjs
+          node tests/js/admin_html_injection.test.mjs
 
       - name: Run CSS token lint
         working-directory: .

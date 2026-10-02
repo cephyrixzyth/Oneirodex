@@ -168,16 +168,16 @@ Both must be on:
 
 ## Appendix A — LAN HTTP Authentik (no reverse proxy yet)
 
-Use this when Authentik is reachable only on the LAN, e.g. `http://192.168.50.116:9000`.
+Use this when Authentik is reachable only on the LAN, e.g. `http://192.0.2.10:9000`.
 
-HellfireNAS (this checkout): Dockerman `authentik` + `authentik-worker` (`ghcr.io/goauthentik/server`, network `authentik-net`, ports **9000** / **9443**). Application slug **`oneirodex`**, confidential client id **`oneirodex`**. Groups `oneirodex-admin` / `oneirodex-librarian` / `oneirodex-child` (and `oneirodex-*` aliases) map to product roles via the default `OIDC_ROLE_MAP`. Redirect must be exactly `http://192.168.50.116:5006/login/oidc/callback`.
+HellfireNAS (this checkout): Dockerman `authentik` + `authentik-worker` (`ghcr.io/goauthentik/server`, network `authentik-net`, ports **9000** / **9443**). Application slug **`oneirodex`**, confidential client id **`oneirodex`**. Groups `oneirodex-admin` / `oneirodex-librarian` / `oneirodex-child` (and `oneirodex-*` aliases) map to product roles via the default `OIDC_ROLE_MAP`. Redirect must be exactly `http://192.0.2.10:5006/login/oidc/callback`.
 
 ```env
 OIDC_ENABLED=true
-OIDC_ISSUER_URL=http://192.168.50.116:9000/application/o/oneirodex/
+OIDC_ISSUER_URL=http://192.0.2.10:9000/application/o/oneirodex/
 OIDC_CLIENT_ID=oneirodex
 OIDC_CLIENT_SECRET=<from Authentik — never commit>
-OIDC_REDIRECT_URI=http://192.168.50.116:5006/login/oidc/callback
+OIDC_REDIRECT_URI=http://192.0.2.10:5006/login/oidc/callback
 OIDC_SCOPES=openid email profile groups
 TRUSTED_PROXIES=0
 SESSION_COOKIE_SECURE=false

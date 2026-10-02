@@ -49,6 +49,7 @@ from oneirodex.utils.store_ownership_xbox import (  # noqa: F401
     xbox_live_ready,
 )
 from oneirodex.utils.store_ownership_common import (  # noqa: F401
+    EXTERNAL_APP_ID_MAX,
     connect_store_account,
     disconnect_store_account,
     get_amazon_api_token,
@@ -84,6 +85,8 @@ from oneirodex.utils.store_ownership_gog import (  # noqa: F401
     gog_live_ready,
     sync_gog_owned_games,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError, StoreSyncPermissionError
+from oneirodex.utils.store_sync_jobs import mark_warning
 
 
 def get_matched_owned_game_uuids(user_id: int) -> set[str]:
@@ -121,19 +124,20 @@ def sync_steam_owned_games(user_id: int) -> dict:
     Register-only: records app IDs and names; does not download anything.
     """
     if not is_ownership_sync_enabled():
-        raise PermissionError('Store ownership sync is disabled by administrator')
+        raise StoreSyncPermissionError('Store ownership sync is disabled by administrator', 'sync_disabled')
 
     api_key = get_steam_web_api_key()
     if not api_key:
-        raise ValueError(
-            'Steam Web API key not configured (set STEAM_WEB_API_KEY env or admin setting)'
+        raise StoreSyncError(
+            'Steam Web API key not configured (set STEAM_WEB_API_KEY env or admin setting)',
+            'server_key_missing',
         )
 
     account = db.session.execute(
         select(StoreAccount).filter_by(user_id=user_id, store='steam')
     ).scalars().first()
     if not account or not account.external_account_id:
-        raise ValueError('Steam account not connected')
+        raise StoreSyncError('Steam account not connected', 'not_connected')
 
     url = 'https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/'
     params = {
@@ -144,9 +148,19 @@ def sync_steam_owned_games(user_id: int) -> dict:
         'format': 'json',
     }
     resp = _outbound('GET', url, params=params)
+    # The request URL carries the server key, and requests' HTTPError text
+    # includes that URL, so no raw exception from here may reach a response.
+    if resp.status_code in (401, 403):
+        raise StoreSyncError('Steam refused the server key for this request', 'access_denied')
     resp.raise_for_status()
     data = resp.json()
-    games = (data.get('response') or {}).get('games') or []
+    response = data.get('response') if isinstance(data, dict) else None
+    response = response if isinstance(response, dict) else {}
+    games = response.get('games') or []
+    if 'games' not in response and 'game_count' not in response:
+        # Steam answers a private (or friends-only) game list with an empty
+        # object. That is not "owns nothing", so say so instead of implying it.
+        mark_warning('library_not_visible')
 
     matched = 0
     for game in games:
@@ -189,17 +203,21 @@ def import_store_csv(user_id: int, store: str, csv_text: str) -> dict:
     reader = csv.reader(io.StringIO(csv_text))
     count = 0
     matched = 0
+    skipped = 0
     for row in reader:
         parsed = _parse_store_csv_row(row, store)
         if not parsed:
             continue
         external_id, name = parsed
+        if len(external_id) > EXTERNAL_APP_ID_MAX:
+            skipped += 1
+            continue
         title_row = upsert_owned_title(user_id, store, external_id, name)
         count += 1
         if title_row.matched_game_uuid:
             matched += 1
     db.session.commit()
-    return {'imported': count, 'matched': matched, 'store': store}
+    return {'imported': count, 'matched': matched, 'skipped': skipped, 'store': store}
 
 
 def import_steam_csv(user_id: int, csv_text: str) -> dict:

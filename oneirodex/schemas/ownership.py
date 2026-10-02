@@ -1,10 +1,9 @@
 """Request models for ``oneirodex/routes_apis/ownership.py``.
 
-Only the routes with a genuine required-field check are modelled here. The
-``connect_gog`` / ``connect_epic`` / ``connect_amazon`` routes take a bag of
-optional, aliased fields with no rejection path, and the ``*/csv`` routes read
-form-data or a file upload as well as JSON — none of those fit ``@validate_body``
-and none are migrated (see docs/dev/pydantic-adoption.md).
+The GOG / Epic / Amazon connect bodies are a bag of optional, aliased fields;
+they are modelled with every alias declared so ``extra='forbid'`` and length
+limits apply (LIB-04). The ``*/csv`` routes read form-data or a file upload as
+well as JSON and are not migrated (see docs/dev/pydantic-adoption.md).
 """
 
 from __future__ import annotations
@@ -27,6 +26,53 @@ class ConnectSteamBody(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     steam_id: _RequiredSteamId
+
+
+_Id = Annotated[str, StringConstraints(max_length=120)]
+_Token = Annotated[str, StringConstraints(max_length=16384)]
+
+
+class GogConnectBody(BaseModel):
+    """``POST /api/ownership/gog``. Aliases are the names the route has always
+    read; tokens are stored on the member's account, never returned or logged."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    gog_user_id: _Id | None = None
+    user_id: _Id | None = None
+    note: _Id | None = None
+    refresh_token: _Token | None = None
+    token: _Token | None = None
+    access_token: _Token | None = None
+
+
+class EpicConnectBody(BaseModel):
+    """``POST /api/ownership/epic``. ``device_auth`` is Legendary/Heroic device-auth JSON."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    epic_account_id: _Id | None = None
+    user_id: _Id | None = None
+    note: _Id | None = None
+    device_auth: _Token | dict | None = None
+    token: _Token | dict | None = None
+
+
+class AmazonConnectBody(BaseModel):
+    """``POST /api/ownership/amazon``. ``credential`` is the Nile/Heroic user.json or a refresh token."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    amazon_user_id: _Id | None = None
+    user_id: _Id | None = None
+    note: _Id | None = None
+    credential: _Token | dict | None = None
+    token: _Token | dict | None = None
+    nile_json: _Token | dict | None = None
+    refresh_token: _Token | None = None
+    access_token: _Token | None = None
+    device_serial: _Id | None = None
+    device_serial_number: _Id | None = None
 
 
 class XboxConnectBody(BaseModel):

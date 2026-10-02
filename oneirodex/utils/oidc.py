@@ -380,17 +380,46 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
 
     username, email = extract_user_identity(claims)
     role = map_claims_to_role(claims, config.role_claim, config.role_map)
+    subject = str(claims.get('sub') or '').strip()[:255] or None
 
+    # Linking order. It used to match by email without asking whether the
+    # provider verified it, then by username, so an IdP account called "admin"
+    # (or claiming the admin's address) signed in as the local admin.
+    #   1. the provider subject stored on an earlier sign-in;
+    #   2. a local account whose email the provider says is verified, and
+    #      only one not yet linked to another subject;
+    #   3. an account this code created earlier for a provider that sends no
+    #      email (placeholder address), by name;
+    #   4. otherwise a new account.
     user = None
-    if email:
-        user = db_session.execute(
+    if subject:
+        user = db_session.execute(select(User).filter(User.oidc_subject == subject)).scalars().first()
+
+    if user is None and email and _email_verified(claims):
+        candidate_user = db_session.execute(
             select(User).filter(func.lower(User.email) == email)
         ).scalars().first()
+        if candidate_user is not None and candidate_user.oidc_subject in (None, subject):
+            user = candidate_user
 
-    if user is None:
-        user = db_session.execute(
+    if user is None and not email:
+        candidate_user = db_session.execute(
             select(User).filter(func.lower(User.name) == func.lower(username))
         ).scalars().first()
+        if (candidate_user is not None and candidate_user.oidc_subject in (None, subject)
+                and (candidate_user.email or '').endswith('@oidc.local')):
+            user = candidate_user
+
+    if user is None and email and db_session.execute(
+        select(User.id).filter(func.lower(User.email) == email)
+    ).first() is not None:
+        # The address belongs to a local account we may not link (the provider
+        # did not verify it, or it is already linked elsewhere). A second
+        # account cannot share it either.
+        raise ValueError(
+            'An account with this email already exists. Sign in with its password, '
+            'or ask your identity provider to verify the address.'
+        )
 
     if user is None:
         base_name = username[:64]
@@ -405,14 +434,17 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
             name=candidate,
             email=email or f'{candidate}@oidc.local',
             role=role,
+            # Explicit: the column default only applies at INSERT, so the
+            # disabled-account check below saw None and refused every new user.
+            state=True,
             is_email_verified=True,
             created=datetime.now(timezone.utc),
         )
         user.set_password(secrets.token_urlsafe(32))
         db_session.add(user)
     else:
-        if email and user.email != email:
-            user.email = email
+        # The local email is left alone: overwriting it from the provider let
+        # a linked IdP account take over password resets for the local account.
         # Sec-B: lock roles after first provision so IdP group churn cannot escalate/demote.
         roles_locked = True
         try:
@@ -428,8 +460,26 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
             user.is_email_verified = True
 
     user.lastlogin = datetime.now(timezone.utc)
-    if not user.state:
+    if user.state is False:
         raise ValueError('Account is disabled.')
+    if subject and not user.oidc_subject:
+        user.oidc_subject = subject
 
     db_session.commit()
     return user
+
+
+def _email_verified(claims: dict[str, Any]) -> bool:
+    """The provider vouches for the email (OIDC ``email_verified``), or the
+    operator vouches for the provider (``OIDC_TRUST_PROVIDER_EMAIL``)."""
+    value = claims.get('email_verified')
+    if isinstance(value, str):
+        value = value.strip().lower() == 'true'
+    if value is True:
+        return True
+    try:
+        from flask import current_app, has_app_context
+
+        return bool(has_app_context() and current_app.config.get('OIDC_TRUST_PROVIDER_EMAIL'))
+    except Exception:  # noqa: BLE001
+        return False

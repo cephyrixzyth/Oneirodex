@@ -8,6 +8,7 @@ import { IntegrationsPage } from '../pages/IntegrationsPage'
 import { InvitesPage } from '../pages/InvitesPage'
 import { LibrariesPage } from '../pages/LibrariesPage'
 import { OpsPage } from '../pages/OpsPage'
+import { OwnershipDiagnosticsPage } from '../pages/OwnershipDiagnosticsPage'
 import { PluginsPage } from '../pages/PluginsPage'
 import { QualityProfilesPage } from '../pages/QualityProfilesPage'
 import { RemotePlayPage } from '../pages/RemotePlayPage'
@@ -114,6 +115,7 @@ export function AdminRoutes() {
       <Route path="/admin/ops/*" element={<OpsPage />} />
       <Route path="/admin/announcements" element={<AnnouncementsPage />} />
       <Route path="/admin/integrations" element={<IntegrationsPage />} />
+      <Route path="/admin/ownership" element={<OwnershipDiagnosticsPage />} />
 
       {/* "Libraries & scans" — the merged nav item (UX-C2). Every legacy path
           the old resolver folded onto 'libraries' renders LibrariesPage. */}

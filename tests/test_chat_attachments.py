@@ -71,7 +71,7 @@ def test_upload_and_attach_on_message(app, db_session, member, tmp_path, monkeyp
         assert pending.message_id is None
         payload = pending.to_dict()
         assert payload['mime'] == 'image/png'
-        assert payload['url'].startswith('/static/library/chat-attachments/')
+        assert payload['url'].startswith('/api/chat/attachments/')
         assert payload['size'] > 0
 
         msg = post_message(
@@ -160,3 +160,72 @@ def test_message_requires_body_or_attachment(app, db_session, member):
         )
         with pytest.raises(ValueError, match='Message required'):
             post_message(ch, member, '')
+
+
+class _As:
+    """A test client signed in as one user. Flask-Login caches the user in
+    ``g``, which outlives a request while the test holds an app context, so
+    the cache is dropped before each request made as a different user."""
+
+    def __init__(self, app, user=None):
+        self.client = app.test_client()
+        if user is not None:
+            with self.client.session_transaction() as sess:
+                sess['_user_id'] = user.get_id()
+                sess['_fresh'] = True
+
+    def get(self, url):
+        from flask import g, has_app_context
+
+        if has_app_context():
+            g.pop('_login_user', None)
+        return self.client.get(url)
+
+
+def _signed_in(app, user):
+    return _As(app, user)
+
+
+def test_attachments_are_served_only_to_people_who_can_read_the_channel(app, db_session, member, tmp_path, monkeypatch):
+    from oneirodex.utils.chat_spaces import create_channel, create_space
+
+    other = _make_user(db_session, role='user', prefix='att_other')
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        space = create_space(name='Private room', created_by_user_id=member.id, visibility='invite')
+        ch = create_channel(space=space, name='secret', created_by_user_id=member.id)
+        pending = upload_attachment(channel=ch, user=member, file=_png_file())
+        post_message(ch, member, 'look', attachment_ids=[pending.id])  # sent: the channel decides now
+        url = pending.to_dict()['url']
+        file_name = pending.file_name
+
+    owner, outsider = _signed_in(app, member), _signed_in(app, other)
+    with owner.get(url) as resp:
+        assert resp.status_code == 200 and resp.mimetype == 'image/png'
+    with outsider.get(url) as resp:
+        assert resp.status_code == 404, 'not in the invite-only space'
+    with _As(app).get(url) as resp:
+        assert resp.status_code in (302, 401, 404), 'signed-out callers get nothing'
+    # The old static address is closed, for every spelling of it.
+    for spelling in (f'/static/library/chat-attachments/{file_name}',
+                     f'/static//library/chat-attachments/{file_name}',
+                     f'/static/LIBRARY/Chat-Attachments/{file_name}'):
+        with owner.get(spelling) as resp:
+            assert resp.status_code == 404, spelling
+
+
+def test_invite_only_space_channels_stay_private_through_the_channel_api(app, db_session, member):
+    from oneirodex.utils.chat import list_channels_for_user, user_can_access_channel
+    from oneirodex.utils.chat_spaces import create_channel, create_space
+
+    other = _make_user(db_session, role='user', prefix='att_other2')
+    with app.app_context():
+        space = create_space(name='Invite only', created_by_user_id=member.id, visibility='invite')
+        ch = create_channel(space=space, name='hidden', created_by_user_id=member.id)
+        assert user_can_access_channel(member, ch)
+        assert not user_can_access_channel(other, ch)
+        assert ch.id not in {c['id'] for c in list_channels_for_user(other)}
+        assert ch.id in {c['id'] for c in list_channels_for_user(member)}
+        channel_id = ch.id
+    with _signed_in(app, other).get(f'/api/chat/channels/{channel_id}/messages') as resp:
+        assert resp.status_code == 404

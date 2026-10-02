@@ -37,7 +37,7 @@
     <div class="form-group">
         <label for="igdb_client_secret">Client Secret</label>
         <div class="password-input-container">
-            <input type="password" id="igdb_client_secret" value="{{ settings.igdb_client_secret if settings else '' }}" class="form-control"
+            <input type="password" id="igdb_client_secret" value="" placeholder="{{ 'Saved. Leave blank to keep it' if settings and settings.igdb_client_secret else '' }}" data-saved="{{ '1' if settings and settings.igdb_client_secret else '' }}" class="form-control"
             minlength="20" maxlength="50" autocomplete="off">
             <button type="button" class="toggle-password" data-input="igdb_client_secret" aria-label="Toggle password visibility">
                 <span class="toggle-password-icon">{{ icons.icon('eye') }}</span>

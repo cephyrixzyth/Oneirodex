@@ -15,6 +15,7 @@ from PIL import Image as PILImage
 from werkzeug.utils import secure_filename
 
 from oneirodex.utils.functions import square_image
+from oneirodex.utils.library_paths import library_dir
 
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
 ALLOWED_AVATAR_EXTENSIONS = frozenset({'jpg', 'jpeg', 'png', 'gif', 'webp'})
@@ -112,7 +113,7 @@ def avatar_url(path: str | None, *, theme: str | None = None) -> str:
     if theme is None:
         theme = _current_theme()
 
-    root = os.path.join(current_app.root_path, 'static', 'library', 'themes')
+    root = os.path.join(library_dir(), 'themes')
     for candidate in (theme, 'default'):
         if not candidate:
             continue

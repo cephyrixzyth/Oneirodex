@@ -31,7 +31,7 @@ def test_score_penalizes_crack_marker():
     assert row['score'] < 50
 
 
-@patch('oneirodex.utils.arr_connectors.requests.post')
+@patch('oneirodex.utils.arr_connectors.safe_request')
 @patch('oneirodex.utils.arr_connectors.get_arr_config')
 def test_nzbget_add_url(mock_cfg, mock_post):
     mock_cfg.return_value = {
@@ -45,8 +45,11 @@ def test_nzbget_add_url(mock_cfg, mock_post):
     assert out['provider'] == 'nzbget'
     mock_post.assert_called_once()
     args, kwargs = mock_post.call_args
-    assert args[0].endswith('/jsonrpc')
+    # Routed through safe_request so every redirect hop is revalidated.
+    assert args[0] == 'POST'
+    assert args[1].endswith('/jsonrpc')
     assert kwargs['json']['method'] == 'append'
+    assert callable(kwargs['validator'])
 
 
 @patch('oneirodex.utils.arr_connectors.nzbget_add_url')

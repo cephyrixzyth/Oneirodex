@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from flask import g
 from flask_login import login_user
 from sqlalchemy import select
 
@@ -123,6 +124,21 @@ def test_thin_preset_via_tokens_api(client, db_session, user):
     assert body['scope_presets']['thin']['label'] == 'Thin client'
     assert 'write:download' not in body['scope_presets']['thin']['scopes']
 
+    # A token only mints tokens within its own scopes: this one lacks
+    # read:social and write:presence, so the thin preset is refused.
+    refused = client.post(
+        '/api/tokens',
+        headers=headers,
+        data=json.dumps({'name': 'Living room', 'preset': 'thin'}),
+    )
+    assert refused.status_code == 403
+    assert set(refused.get_json()['detail']['denied_scopes']) == {'read:social', 'write:presence'}
+
+    _, raw = generate_api_token(user, 'Bootstrap', TOKEN_SCOPE_PRESETS['thin']['scopes'])
+    headers['Authorization'] = f'Bearer {raw}'
+    # Requests here share one app context: drop the first token's cached caller.
+    g.pop('_login_user', None)
+    g.pop('api_token', None)
     created = client.post(
         '/api/tokens',
         headers=headers,

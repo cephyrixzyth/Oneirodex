@@ -17,6 +17,7 @@ they used it — do not scrub them.
 | [0008](0008-npm-workspaces-single-lockfile.md) | npm workspaces, one root lockfile (C:-worktree rule on SMB) | Accepted |
 | [0009](0009-api-envelope.md) | One JSON envelope — `api_ok` / `api_error`, eleven documented keeps | Accepted |
 | [0010](0010-pydantic-request-validation.md) | pydantic `@validate_body`, `extra='forbid'`, semantic checks stay in the view | Accepted |
+| [0011](0011-standalone-bundled-postgres.md) | Standalone installs bundle a user-space PostgreSQL; SQLite is not offered | Accepted |
 
 **Still frozen on purpose:** `oneirodex/updateschema.py` (1,700 lines) carries
 pre-Alembic installs to the baseline and takes no new columns — see 0004. Its

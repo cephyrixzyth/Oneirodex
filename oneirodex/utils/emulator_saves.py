@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from oneirodex import db
 from oneirodex.models import EmulatorSave, GlobalSettings
 from oneirodex.utils.save_crypto import maybe_decrypt, maybe_encrypt
+from oneirodex.utils.library_paths import library_dir
 
 MAX_SAVE_BYTES = 2 * 1024 * 1024  # 2 MiB
 MAX_SLOTS_PER_GAME = 10
@@ -86,7 +87,7 @@ def _saves_root() -> str:
     root = current_app.config.get('EMULATOR_SAVES_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'saves')
+    return os.path.join(library_dir(), 'saves')
 
 
 def list_saves(user_id: int, game_uuid: str) -> list[EmulatorSave]:

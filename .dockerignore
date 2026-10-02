@@ -35,6 +35,8 @@ logs/
 .github/
 .cursor/
 .claude/
+.agents/
+.artifacts/
 .codebuddy/
 .superpowers/
 .worktrees/
@@ -92,6 +94,28 @@ htmlcov/
 # Static uploads (these should be mounted as volumes)
 oneirodex/static/library/images/
 oneirodex/static/library/zips/
+
+# Runtime data — never baked into an image. `COPY . .` in the Dockerfile sends
+# whatever is in the build context, so a checkout that has been RUN from (local
+# `data/library`, saves, chat attachments, cheats, mods, ROM caches, client
+# lifecycle/command queues, BIOS staging, generated art ...) would otherwise
+# ship its owner's files in every layer. All of it is created at runtime on the
+# mounted LIBRARY_HOST_PATH volume instead.
+#
+# Root-anchored on purpose: `data/` here is the host library folder
+# (LIBRARY_HOST_PATH default ./data/library). It must NOT swallow
+# `oneirodex/data/`, which is package data read at runtime and has to ship.
+data/
+samples/free-roms/library/
+# Everything under static/library is runtime state EXCEPT the two directories
+# below. Excluding the parent and re-including those two (rather than listing
+# each runtime folder) fails closed: a new runtime folder is kept out by default.
+oneirodex/static/library/*
+# Shipped art, git-tracked (`git ls-files oneirodex/static/library`). The image
+# needs these. If you add another git-tracked directory under static/library,
+# re-include it here or it will be missing from the image.
+!oneirodex/static/library/system-marks/
+!oneirodex/static/library/stock/
 
 # OS
 .DS_Store

@@ -1,28 +1,7 @@
-# Local UI-review stack — not a deployment target.
-#
-# Why this exists rather than `docker compose up`:
-#   This checkout lives on a network share (Z: -> \\192.168.50.116\...). Docker
-#   Desktop resolves host bind mounts through /run/desktop/mnt/host, which is
-#   read-only for UNC paths, so every `./path:/container` mount in the main
-#   compose file fails with:
-#
-#     error while creating mount source path ... read-only file system
-#
-#   That kills the db before it starts. The main file is correct for a normal
-#   local checkout; it simply cannot bind-mount from here.
-#
-# What changes:
-#   * every host bind mount becomes a named volume
-#   * Postgres uses its default pg_hba instead of the mounted one (the mount
-#     existed to force a Compose-friendly HBA; the stock image config already
-#     accepts bridge-network connections without SSL, so nothing is lost here)
-#   * no games volume — this is for reviewing chrome and page layout, not
-#     library content. Point ENABLE_AI_ARTWORK at the workstation SD.Next
-#     sidecar (docker-compose.artwork-local.yml → host.docker.internal:7860).
-#
-# Usage:
-#   docker compose -f docker-compose.review.yml up -d --build
-#   docker compose -f docker-compose.review.yml down -v
+# Isolated local UI review; never a production deployment target.
+# Use an explicit staging env file and a distinct Compose project.
+# Ports bind to loopback; game data is read-only, uploads/database use separate volumes.
+# See docs/runbooks/docker-compose-deploy.md for setup and recovery.
 
 services:
   app:
@@ -30,12 +9,12 @@ services:
       context: .
       dockerfile: Dockerfile
     image: oneirodex:review
-    container_name: oneirodex-review-app
+    container_name: ${ONEIRODEX_REVIEW_PREFIX:-oneirodex-review}-app
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "5006:5006"
+      - "127.0.0.1:${ONEIRODEX_REVIEW_PORT:-6120}:5006"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/oneirodex
       - DATABASE_HOST=db
@@ -49,33 +28,38 @@ services:
       # Regenerates preset themes on boot, which this review needs: od-shell.css
       # and od-density.css are new files and only reach a theme folder on sync.
       - DEV_MODE=true
+      - ONEIRODEX_ENABLE_BACKGROUND_WORKERS=false
+      - FETCH_WEBRETRO_CORES_ON_BOOT=false
       - SESSION_COOKIE_SECURE=false
       - REMEMBER_COOKIE_SECURE=false
       # Local GPU SD.Next on this Windows box (docker-compose.artwork-local.yml).
       # host.docker.internal is the workstation, not another container.
-      - ENABLE_AI_ARTWORK=true
+      - ENABLE_AI_ARTWORK=false
       - AI_ARTWORK_ENGINE=a1111
       - AI_ARTWORK_URL=http://host.docker.internal:7860
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - review_storage:/storage
+      - review_storage:/storage:ro
       - review_library:/app/oneirodex/static/library
 
   db:
     image: postgres:17.6
-    container_name: oneirodex-review-db
+    container_name: ${ONEIRODEX_REVIEW_PREFIX:-oneirodex-review}-db
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=oneirodex
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
+      # The review app uses `oneirodex`; pytest uses its own `oneirodextest` in
+      # this container (created once: docs/runbooks/local-postgres-pytest.md),
+      # so a test run never wipes the review data.
       # Published so local pytest still has a database while this stack is up.
       # Without it, replacing the main db container silently breaks every test
       # that needs Postgres — which looked like 14 code failures, not a missing
       # port mapping.
-      - "5432:5432"
+      - "127.0.0.1:${ONEIRODEX_REVIEW_DB_PORT:-5432}:5432"
     volumes:
       - review_db:/var/lib/postgresql/data/pgdata
     healthcheck:

@@ -22,6 +22,7 @@ from oneirodex.utils.library_health import (
     PATH_STATUS_OK,
 )
 from oneirodex.utils.secondary_scrapers import VR_COMPAT_VALUES
+from oneirodex.utils.ownership_filters import apply_ownership_filters
 
 _PATH_STATUS_ALLOWED = frozenset({
     PATH_STATUS_OK,
@@ -144,12 +145,16 @@ def apply_badge_filters(query, args, *, user=None, now: datetime | None = None):
       path_missing=1      — MISSING badge chip (files gone from disk)
       path_status=…       — ok|missing|empty (comma list; admin/librarian tools)
       name=… / q=…        — case-insensitive title substring (Library type-to-search)
+      store=…            — current member's recorded ownership (comma/repeated IDs)
+      store_match=any|all — union/intersection of selected stores (default any)
+      ownership=owned|unrecorded — no record is not proof of non-ownership
     """
     clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None:
         clock = clock.replace(tzinfo=timezone.utc)
 
     query = apply_name_filter(query, args)
+    query = apply_ownership_filters(query, args, user=user)
 
     # Every chip is one leaf of the same vocabulary the filter tree speaks, so
     # both compile through `filter_tree.FIELDS` rather than keeping a second

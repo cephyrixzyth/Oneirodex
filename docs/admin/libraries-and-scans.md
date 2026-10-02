@@ -20,6 +20,44 @@ becomes a starting point in the **Scan location** picker on Auto Scan and Manual
 and a row in Ops path health. The picker only renders once there is more than
 one location, so single-location installs are unchanged.
 
+**Symlinks inside a game folder are ignored.** A link such as `game.bin ->
+/somewhere/else` is not hashed, bundled, zipped into a folder download, served as
+a ROM or used as `cover.jpg` / `screenshot-N.png` / the `oneirodex.json` sidecar —
+anything that resolves outside the game's own folder is skipped, because members can
+download what the server can read. Symlinking the game folder itself (or the library
+root) is unaffected; keep real files, or hardlinks, inside the folder.
+
+The same rule covers the other files the scanner reads out of a game folder. A
+`.nfo` that is a link is not read (so it cannot end up in the NFO text every member
+sees); nor is a `version.txt` (or `version`, `VERSION`, `build.txt`, `Build.txt`,
+`product_version.txt`) that is a link, which the freshness check would otherwise show
+every member as the game's local version; and a firmware file that is a link inside a
+collection folder is not copied by **Scan collection** / **Install matching
+firmware**, the `BIOS_IMPORT_SOURCE` boot import or `scripts/import_bios.py`. The
+check is made on the file that is actually opened, not only when the folder is
+listed, so a file swapped for a link while a folder download is already streaming
+stops that download instead of sending the link's target. An NFO is read up to
+256 KB and a version file up to 4 KB. The `oneirodex.json` sidecar is never written
+through a link either: the server writes a temporary file in the game folder and
+renames it over the old sidecar, so a link planted under that name is replaced, not
+followed.
+
+Folder downloads, single-file downloads, WebRetro play (including the `play.zip` built
+for a `.cue` disc) and the local cover / screenshot images are served from the file
+the server opened and vetted, not from a path it checked a moment earlier, and the
+game folder is resolved once, when the request begins. Swapping a file, or the whole
+folder, for a link while one of those requests is running therefore cannot change what
+is sent: a file swapped before it is opened is refused, and a file that was already
+open keeps serving its own bytes. A folder download that fails after it has started (a file
+deleted, unreadable or swapped part-way) is cut off, so the browser reports a failed or
+incomplete download instead of saving a damaged zip as if it had finished; start it
+again once the share has settled. A file dated before 1980 (extracted dumps often carry
+a 1970 date) is zipped as 1980-01-01 instead of failing the whole download. The check
+that the open file is where it should be asks the operating system about the file
+itself: `/proc` on Linux, `fcntl(F_GETPATH)` on macOS and `GetFinalPathNameByHandleW`
+on Windows (standalone installs). A system with none of those falls back to a weaker
+check made after the open.
+
 A location that is configured but not currently mounted is still listed, marked
 *not mounted* — see [../runbooks/remote-scan-locations.md](../runbooks/remote-scan-locations.md)
 for mounting recipes per OS and for the Docker host-path-vs-container-path trap.
@@ -228,7 +266,7 @@ Skip-dir is **defense-in-depth only** — still create per-leaf libraries; do no
 
 **Library:** Library A — platform **PCWIN**, folder = letter-bucket PC root under the games mount (container path under `/storage/.../_pc` with children `_a`…`_z` / `_#`).
 
-**Path rule:** Operators and agents edit the live checkout (`Z:\_projects\Oneirodex` / `/mnt/user/infernal-data-streams/_projects/Oneirodex`). Games stay on `/mnt/user/infernal-data-streams/_software/_games` — library `folder` paths and host mounts stay as configured. `/mnt/user/isos/oneirodex/` is retired.
+**Path rule:** Operators and agents edit the live checkout (`Z:\_projects\Oneirodex` / `/mnt/user/example-share/_projects/Oneirodex`). Games stay on `/mnt/user/example-share/_software/_games` — library `folder` paths and host mounts stay as configured. `/mnt/user/isos/oneirodex/` is retired.
 
 ### Exact operator steps
 
@@ -251,7 +289,7 @@ Never library-root: `_Emulators`, named emu installs, Pegasus/CRU/tools, archive
 
 **CSV/JSON bulk import (W20-1b):** Admin → **Libraries & scans → Library tools** → **Add many: import a list**. Paste JSON/CSV or upload `.json`/`.csv` → **Preview** → multi-select candidates (row `errors[]` shown separately) → **Confirm create**. API: `POST /api/library_tools/import_leaf_libraries/preview` (JSON body, multipart file, or form `csv`/`text`). Same candidate fields as propose (`path`, `suggested_name`/`name`, `platform`, `scan_mode`, `scan_depth`). Returns `{ auto_create: false, candidates[], errors[], count, error_count, create_hint }`. Hard rejects: family mega-lib parents (`NINTENDO`/`Sega`/`Sony`/…), invalid `LibraryPlatform`, path outside allowed bases. **Never auto-creates** — confirm-create reuses the propose path (`POST /admin/library/add` per selected row + first scan). Soft-degrade UI if the preview route 404s mid-rollout; UI refuses if `auto_create === true`.
 
-**Empty shelves (systems with no dumps yet):** Systems tiles come from Library rows, not from the enum list. A leaf with 0 games still shows. Household placeholders (VB / Wii / Wii U / 3DS / Pokémon Mini / Vita / Xbox siblings / Commodore 8-bit / CD-i / Pico / Jaguar CD / Amiga CD32 / MSX / ZX Spectrum / Amstrad CPC / Atari ST / Apple II / Atari 8-bit / X68000 / PC-98 / BBC Micro / Game & Watch) are on the games share as of 2026-08-30. Import [empty-shelf-import.csv](empty-shelf-import.csv) via **Add many: import a list**, then confirm create (never auto). Propose-from-tree is the secondary path. Do not point at a missing path and hope scan invents files. Full folder table + remaining enum-gap list: [console-gaming-libraries.md](../strategy/console-gaming-libraries.md#empty-shelves-systems-you-do-not-hold-yet). Oneirodex never fetches ROMs.
+**Empty shelves (systems with no dumps yet):** Systems tiles come from Library rows, not from the enum list. A leaf with 0 games still shows. Household placeholders (VB / Wii / Wii U / 3DS / Pokémon Mini / Vita / Xbox siblings / Commodore 8-bit / CD-i / Pico / Jaguar CD / Amiga CD32 / MSX / ZX Spectrum / Amstrad CPC / Atari ST / Apple II / Atari 8-bit / X68000 / PC-98 / BBC Micro / Game & Watch) are on the games share as of 2026-08-30. Import [empty-shelf-import.csv](empty-shelf-import.csv) via **Add many: import a list**, then confirm create (never auto). Propose-from-tree is the secondary path. Do not point at a missing path and hope scan invents files. Full folder table + remaining enum-gap list: console-gaming-libraries.md (local-only reference). Oneirodex never fetches ROMs.
 
 **Skip-dir (defense-in-depth, W20-7 handoff #4):** folder listing ignores built-in emu/FE/tool **prefix** globs (`_Emulators`, `yuzu*`, `ryujinx*`, `dolphin*`, `bsnes*`, `pegasus*`, `cru-*`, `GOD v*`, `xenia*`, `zinc*`, `mame0*`, …), emulator scaffolding (`Config`, `Lang`, `Plugin`, `ROMs`, `docs`), scan-root leaks (`_console-gaming`, `_pc`), walkthrough trees, MOD/VR-mod markers, and generic `[… Repack]` bracket-tag folder names (built-in regex). Patterns are mostly **prefix** globs so titles like *God of War* or *Ecco the Dolphin* are not skipped. Operators add extras via Admin → Scan management → **Scan Filters** — **Skip folder** (`dir:` fnmatch, e.g. `dir:_MyTools`) or **Skip folder (regex)** (`re:`, e.g. `re:\[Demo\s+Build\]`) — see [Scanning filters](#scanning-filters). No API route change; kind is encoded by the `dir:`/`re:` prefix on `filter_pattern`. This does **not** replace per-leaf libraries — do not point a lib at a family root and rely on skips. There is no `scan_depth=3` family walker.
 

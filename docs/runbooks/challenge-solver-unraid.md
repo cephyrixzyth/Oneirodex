@@ -124,12 +124,12 @@ Default Compose keeps `TRAWL_MITM_PROXY_ENABLED=false`.
 
 ## Unraid Compose Manager
 
-1. Indirect Compose File: `/mnt/user/infernal-data-streams/_projects/Oneirodex/docker-compose.yml`
-2. External ENV File: `/mnt/user/infernal-data-streams/_projects/Oneirodex/.env`
+1. Indirect Compose File: `/mnt/user/example-share/_projects/Oneirodex/docker-compose.yml`
+2. External ENV File: `/mnt/user/example-share/_projects/Oneirodex/.env`
 3. Add profile in stack UI or run once from terminal:
 
    ```bash
-   cd /mnt/user/infernal-data-streams/_projects/Oneirodex
+   cd /mnt/user/example-share/_projects/Oneirodex
    docker compose --profile challenge up -d
    ```
 

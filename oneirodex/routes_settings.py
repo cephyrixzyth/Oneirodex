@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app
-from flask_login import login_required, current_user
+from flask_login import login_required, current_user, login_user
 from oneirodex.forms import EditProfileForm, UserPasswordForm, UserPreferencesForm
 from oneirodex.models import User, InviteToken, UserPreference
 from sqlalchemy import select, func
@@ -103,6 +103,8 @@ def account_pw():
         try:
             user.set_password(form.password.data)
             db.session.commit()
+            # A new password ends every session (User.get_id); keep this one.
+            login_user(user, remember=True)
             flash('Password changed successfully!', 'success')
             print('Password changed successfully for user ID:', current_user.id)
             return redirect(url_for('settings.account_pw'))

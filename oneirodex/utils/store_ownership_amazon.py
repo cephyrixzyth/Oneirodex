@@ -22,7 +22,20 @@ from oneirodex.utils.store_ownership_common import (
     _any_account_credential,
     _outbound,
     _parse_credential_json,
+    household_fp,
+    stale_household_copy,
+    strip_internal_keys,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError, StoreSyncPermissionError, rejected_reason
+from oneirodex.utils.store_sync_jobs import checkpoint, mark_partial
+
+_REJECTED = (
+    'Amazon rejected the saved token (unofficial Nile/Heroic client). '
+    'Paste a new token blob; CSV import still works.'
+)
+#: Entitlement pages (50 each) read per sync. The provider loop had no bound;
+#: a repeated or endless nextToken now ends the sync as partial.
+_AMAZON_MAX_PAGES = 200
 
 
 # Amazon Games entitlements via the unofficial Nile / Heroic launcher surface.
@@ -38,8 +51,22 @@ _AMAZON_KEY_ID = 'd5dc8b8b-86c8-4fc4-ae93-18c0def5314d'
 _AMAZON_LAUNCHER_UA = 'com.amazon.agslauncher.win/3.0.9202.1'
 
 
+def _household_env() -> tuple[str, str, str]:
+    """(token, access token, device serial) the operator set for the household."""
+    return (
+        get_amazon_api_token() or '',
+        (os.getenv('AMAZON_ACCESS_TOKEN') or '').strip(),
+        (os.getenv('AMAZON_DEVICE_SERIAL') or '').strip(),
+    )
+
+
+def household_available() -> bool:
+    raw, access, _serial = _household_env()
+    return bool(raw or access)
+
+
 def amazon_live_ready() -> bool:
-    return bool(get_amazon_api_token()) or _any_account_credential('amazon')
+    return household_available() or _any_account_credential('amazon')
 
 
 def _flatten_amazon_credential(data: dict) -> dict:
@@ -81,21 +108,38 @@ def _flatten_amazon_credential(data: dict) -> dict:
 
 
 def _amazon_tokens_for(account: StoreAccount) -> dict:
+    """The tokens a sync would use, tagged ``origin='household'`` when they are
+    the operator's. Household values (token, access token, serial) are used only
+    when the member saved nothing, and are never mixed into a member's own
+    credential: a member token paired with the household device serial would
+    be neither account."""
     data = _flatten_amazon_credential(_parse_credential_json(account.credential))
-    env_serial = (os.getenv('AMAZON_DEVICE_SERIAL') or '').strip()
-    env_access = (os.getenv('AMAZON_ACCESS_TOKEN') or '').strip()
-    if not data.get('refresh_token') and not data.get('access_token'):
-        env_raw = get_amazon_api_token()
-        if env_raw:
-            if env_raw.lstrip().startswith('{'):
-                data = _flatten_amazon_credential(_parse_credential_json(env_raw))
-            else:
-                data['refresh_token'] = env_raw
-    if env_serial and not data.get('device_serial'):
-        data['device_serial'] = env_serial
+    env_raw, env_access, env_serial = _household_env()
+    env_value = env_raw or env_access
+    if stale_household_copy(data, env_value):
+        data = {}
+    if data:
+        return data
+    if not env_value:
+        return {}
+    if env_raw:
+        data = (_flatten_amazon_credential(_parse_credential_json(env_raw))
+                if env_raw.lstrip().startswith('{') else {'refresh_token': env_raw})
     if env_access and not data.get('access_token'):
         data['access_token'] = env_access
+    if env_serial and not data.get('device_serial'):
+        data['device_serial'] = env_serial
+    data['origin'] = 'household'
+    data['household_fp'] = household_fp(env_value)
     return data
+
+
+def credential_source(account: StoreAccount) -> str:
+    """member | household | none, by the same selection the sync makes."""
+    tokens = _amazon_tokens_for(account)
+    if not (tokens.get('refresh_token') or tokens.get('access_token')):
+        return 'none'
+    return 'household' if tokens.get('origin') == 'household' else 'member'
 
 
 def connect_amazon_account(
@@ -108,16 +152,23 @@ def connect_amazon_account(
     device_serial: str | None = None,
 ) -> StoreAccount:
     external_id = (amazon_user_id or note or '').strip() or None
-    payload: dict = {}
+    # A reconnect that adds one field (say, the serial) keeps the rest of the
+    # member's saved sign-in instead of replacing it. A saved household copy is
+    # not the member's, so it is not merged into their new credential.
+    current = db.session.execute(
+        select(StoreAccount.credential).filter_by(user_id=user_id, store='amazon')
+    ).scalar()
+    saved = _flatten_amazon_credential(_parse_credential_json(current))
+    payload: dict = {} if saved.get('origin') == 'household' else strip_internal_keys(saved)
     if isinstance(credential, dict) and credential:
-        payload = _flatten_amazon_credential(credential)
+        payload = strip_internal_keys(_flatten_amazon_credential(credential))
     elif isinstance(credential, str) and credential.strip():
         raw = credential.strip()
         if raw.startswith('{'):
             parsed = _parse_credential_json(raw)
-            payload = _flatten_amazon_credential(parsed) if parsed else {'refresh_token': raw}
+            payload = strip_internal_keys(_flatten_amazon_credential(parsed)) if parsed else {'refresh_token': raw}
         else:
-            payload = {'refresh_token': raw}
+            payload = {**payload, 'refresh_token': raw}
     if (refresh_token or '').strip():
         payload['refresh_token'] = refresh_token.strip()
     if (access_token or '').strip():
@@ -126,7 +177,8 @@ def connect_amazon_account(
         payload['device_serial'] = device_serial.strip()
     if payload.get('user_id') and not external_id:
         external_id = str(payload['user_id'])[:64]
-    cred_json = json.dumps(payload) if payload else None
+    changed = bool(credential or refresh_token or access_token or device_serial)
+    cred_json = json.dumps(payload) if payload and changed else None
     return connect_store_account(user_id, 'amazon', external_id, credential=cred_json)
 
 
@@ -140,17 +192,19 @@ def _refresh_amazon_access(account: StoreAccount, tokens: dict) -> tuple[str, st
     refresh = (tokens.get('refresh_token') or '').strip()
     serial = (tokens.get('device_serial') or '').strip()
     if not serial:
-        raise ValueError(
+        raise StoreSyncError(
             'Amazon live sync needs the Nile/Heroic device serial '
             '(extensions.device_info.device_serial_number) with the token. '
-            'CSV import still works without it.'
+            'CSV import still works without it.',
+            'device_serial_missing',
         )
     if not refresh and access:
         return access, serial
     if not refresh:
-        raise ValueError(
+        raise StoreSyncError(
             'Amazon live sync needs a Nile/Heroic refresh token, or '
-            'AMAZON_REFRESH_TOKEN. CSV import still works without it.'
+            'AMAZON_REFRESH_TOKEN. CSV import still works without it.',
+            'credential_missing',
         )
     resp = _outbound(
         'POST',
@@ -163,23 +217,25 @@ def _refresh_amazon_access(account: StoreAccount, tokens: dict) -> tuple[str, st
             'app_version': '1.0.0',
         },
     )
-    if resp.status_code == 401:
-        raise ValueError(
-            'Amazon rejected the saved token (unofficial Nile/Heroic client). '
-            'Paste a new token blob; CSV import still works.'
-        )
+    # An expired or revoked refresh token comes back as 400 as well as 401.
+    if resp.status_code in (400, 401):
+        raise StoreSyncError(_REJECTED, rejected_reason(tokens.get('origin')))
     resp.raise_for_status()
     payload = resp.json() if resp.content else {}
     new_access = (payload.get('access_token') or '').strip()
     if not new_access:
-        raise ValueError('Amazon token refresh returned no access token')
-    stored = _flatten_amazon_credential(_parse_credential_json(account.credential))
+        raise StoreSyncError('Amazon token refresh returned no access token', 'invalid_response')
+    household = tokens.get('origin') == 'household'
+    stored = {} if household else _flatten_amazon_credential(_parse_credential_json(account.credential))
     stored['refresh_token'] = refresh
     stored['access_token'] = new_access
     stored['device_serial'] = serial
+    if household:
+        stored['origin'] = 'household'
+        stored['household_fp'] = tokens.get('household_fp')
     account.credential = json.dumps(stored)
     user_id = (stored.get('user_id') or '').strip()
-    if user_id and not account.external_account_id:
+    if user_id and not account.external_account_id and not household:
         account.external_account_id = user_id[:64]
     db.session.commit()
     return new_access, serial
@@ -202,11 +258,13 @@ def _amazon_entitlement_id_name(item) -> tuple[str, str | None] | None:
     return str(pid), (str(name) if name else None)
 
 
-def _amazon_entitlements(access: str, serial: str) -> list[tuple[str, str | None]]:
+def _amazon_entitlements(access: str, serial: str, origin: str | None = None) -> list[tuple[str, str | None]]:
     hardware = hashlib.sha256(serial.encode('utf-8')).hexdigest().upper()
     items: list[tuple[str, str | None]] = []
     next_token = None
-    while True:
+    seen_tokens: set[str] = set()
+    for _ in range(_AMAZON_MAX_PAGES):
+        checkpoint()
         body = {
             'Operation': 'GetEntitlements',
             'clientId': 'Sonic',
@@ -230,19 +288,24 @@ def _amazon_entitlements(access: str, serial: str) -> list[tuple[str, str | None
             json=body,
         )
         if resp.status_code == 401:
-            raise ValueError(
-                'Amazon rejected the saved token (unofficial Nile/Heroic client). '
-                'Paste a new token blob; CSV import still works.'
-            )
+            raise StoreSyncError(_REJECTED, rejected_reason(origin))
         resp.raise_for_status()
         payload = resp.json() if resp.content else {}
-        for raw in payload.get('entitlements') or []:
+        page = payload.get('entitlements') or []
+        for raw in page:
             parsed = _amazon_entitlement_id_name(raw)
             if parsed:
                 items.append(parsed)
+        checkpoint(pages=1, items=len(page))
         next_token = payload.get('nextToken')
         if not next_token:
             break
+        if next_token in seen_tokens:
+            mark_partial('page_limit')
+            break
+        seen_tokens.add(next_token)
+    else:
+        mark_partial('page_limit')
     return items
 
 
@@ -252,16 +315,17 @@ def sync_amazon_owned_games(user_id: int) -> dict:
     Register-only: records IDs and names; does not download anything.
     """
     if not is_ownership_sync_enabled():
-        raise PermissionError('Store ownership sync is disabled by administrator')
+        raise StoreSyncPermissionError('Store ownership sync is disabled by administrator', 'sync_disabled')
 
     account = db.session.execute(
         select(StoreAccount).filter_by(user_id=user_id, store='amazon')
     ).scalars().first()
     if not account:
-        raise ValueError('Amazon account not connected')
+        raise StoreSyncError('Amazon account not connected', 'not_connected')
 
-    access, serial = _refresh_amazon_access(account, _amazon_tokens_for(account))
-    items = _amazon_entitlements(access, serial)
+    tokens = _amazon_tokens_for(account)
+    access, serial = _refresh_amazon_access(account, tokens)
+    items = _amazon_entitlements(access, serial, tokens.get('origin'))
     matched = 0
     for product_id, name in items:
         row = upsert_owned_title(user_id, 'amazon', product_id, name)

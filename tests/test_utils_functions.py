@@ -370,29 +370,36 @@ class TestReadFirstNfoContent:
                     assert result is None
                     assert any('No NFO file found' in str(call) for call in mock_print.call_args_list)
     
-    def test_read_first_nfo_content_success(self):
+    # The NFO is opened through open_plain_file_within (descriptor-level link
+    # check), so these use real files rather than a mocked ``open``.
+    def test_read_first_nfo_content_success(self, tmp_path):
         """Test read_first_nfo_content successfully reading NFO file."""
         nfo_content = "Game Name: Test Game\nRelease Date: 2023\nDescription: A test game"
-        
-        with patch('os.path.isfile', return_value=False):
-            with patch('os.listdir', return_value=['game.nfo', 'game.exe']):
-                with patch('builtins.open', mock_open(read_data=nfo_content)):
-                    with patch('builtins.print'):
-                        result = read_first_nfo_content('/path/to/game')
-                        assert result == nfo_content
-    
-    def test_read_first_nfo_content_with_null_bytes(self):
+        (tmp_path / 'game.nfo').write_bytes(nfo_content.encode('utf-8'))
+        (tmp_path / 'game.exe').write_bytes(b'MZ')
+
+        with patch('builtins.print'):
+            result = read_first_nfo_content(str(tmp_path))
+        assert result == nfo_content
+
+    def test_read_first_nfo_content_with_null_bytes(self, tmp_path):
         """Test read_first_nfo_content removes null bytes from content."""
-        nfo_content = "Game\x00Name: Test\x00Game"
-        expected_content = "GameName: TestGame"
-        
-        with patch('os.path.isfile', return_value=False):
-            with patch('os.listdir', return_value=['info.nfo']):
-                with patch('builtins.open', mock_open(read_data=nfo_content)):
-                    with patch('builtins.print'):
-                        result = read_first_nfo_content('/path/to/game')
-                        assert result == expected_content
-    
+        (tmp_path / 'info.nfo').write_bytes(b"Game\x00Name: Test\x00Game")
+
+        with patch('builtins.print'):
+            result = read_first_nfo_content(str(tmp_path))
+        assert result == "GameName: TestGame"
+
+    def test_read_first_nfo_content_is_capped(self, tmp_path):
+        """A huge NFO is read only up to the cap, not into memory whole."""
+        from oneirodex.utils.helpers.fs import _NFO_MAX_BYTES
+
+        (tmp_path / 'big.nfo').write_bytes(b'A' * (_NFO_MAX_BYTES + 5000))
+        with patch('builtins.print'):
+            result = read_first_nfo_content(str(tmp_path))
+        assert result == 'A' * _NFO_MAX_BYTES
+
+
     def test_read_first_nfo_content_read_error(self):
         """Test read_first_nfo_content handles file read errors."""
         with patch('os.path.isfile', return_value=False):

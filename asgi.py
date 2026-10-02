@@ -26,11 +26,12 @@ from pathlib import Path
 
 import aiofiles
 from a2wsgi import WSGIMiddleware
+from werkzeug.utils import secure_filename
 
 from oneirodex import create_app, db
 from oneirodex.async_streaming import (
     async_generate_zipstream_response,
-    create_async_streaming_response,
+    get_content_type_for_file,
 )
 from oneirodex.models import DownloadRequest, Game, User
 from oneirodex.utils.event_logging import log_system_event
@@ -41,13 +42,82 @@ from oneirodex.utils.rom_archive import (
     bundle_playable_rom_zip,
     resolve_playable_rom_path,
 )
-from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+from oneirodex.utils.security import get_allowed_base_directories, is_safe_path, open_plain_file_within
 from oneirodex.utils.security_headers import baseline_static_headers
-from oneirodex.utils.static_files import resolve_static_path
+from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.static_files import resolve_served_static, static_access
 from sqlalchemy import select
 
 
+#: How much of a served file each ``http.response.body`` message carries.
+_FILE_CHUNK_SIZE = 2 * 1024 * 1024
+
+
+def _file_headers(filename: str, size: int) -> list[tuple[bytes, bytes]]:
+    """Response headers for a file download of *size* bytes."""
+    secure_name = secure_filename(filename) or "download.zip"
+    return [
+        (b"content-type", get_content_type_for_file(filename, filename).encode()),
+        (b"content-disposition", f'attachment; filename="{secure_name}"'.encode()),
+        (b"content-length", str(size).encode()),
+        (b"cache-control", b"no-cache"),
+    ]
+
+
+async def _read_chunks(handle, size: int):
+    """Yield exactly *size* bytes of an open file, reading off the event loop.
+
+    *size* was announced in ``content-length``, so a file that shrank under us
+    is an error (the response then ends short and the client can tell) and one
+    that grew is cut off at the announced length instead of overrunning it.
+    """
+    loop = asyncio.get_running_loop()
+    remaining = size
+    while remaining > 0:
+        chunk = await loop.run_in_executor(None, handle.read, min(_FILE_CHUNK_SIZE, remaining))
+        if not chunk:
+            raise OSError('file ended before the size announced for the download')
+        remaining -= len(chunk)
+        yield chunk
+
+
+def _rom_location(rom_path, cache_dir, real_game, game_is_dir):
+    """Where a resolved ROM may be read from.
+
+    Returns ``(path to open, folder it must stay inside, whether that folder is
+    already resolved)``. A ROM extracted from an archive lives in the app's own
+    cache folder. A ROM in a game folder is held to the folder resolved when the
+    request began (*real_game*). A game that is a single file is the file
+    resolved at that moment, held to the folder it was in: the operator's own
+    link to a file keeps working, and a link swapped in later is refused.
+    """
+    try:
+        in_cache = Path(rom_path).is_relative_to(cache_dir)
+    except (TypeError, ValueError):
+        in_cache = False
+    if in_cache:
+        return rom_path, cache_dir, False
+    if game_is_dir:
+        return rom_path, real_game, True
+    return real_game, os.path.dirname(real_game), True
+
+
 # Proper ASGI application with lifespan protocol support
+#: A visitor cancelling a download, not a server fault.
+_CLIENT_GONE = (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
+
+
+def _is_link_or_escape_refusal(exc: OSError) -> bool:
+    """True when ``open_plain_file_within`` refused the file itself (a link,
+    not a regular file, or outside its folder), as opposed to the file being
+    locked, unreadable or failing with an I/O error."""
+    import errno
+
+    if exc.errno in (errno.ELOOP, errno.EINVAL):
+        return True
+    return exc.errno == errno.EACCES and exc.strerror == 'file is outside its folder'
+
+
 class LazyASGIApp:
     def __init__(self):
         self._app = None
@@ -117,6 +187,23 @@ class LazyASGIApp:
             'restrict_child': False,
         },
     }
+
+    def _event_visible(self, event, user_id) -> bool:
+        """Per-viewer filter for the live streams (utils/event_visibility.py)."""
+        payload = getattr(event, 'payload', None) or {}
+        if payload.get('user_id') is None and not payload.get('game_uuid'):
+            return True  # about no member and no game: no lookup needed
+        try:
+            with self._flask_app.app_context():
+                from oneirodex import db
+                from oneirodex.utils.event_visibility import event_visible_to
+
+                try:
+                    return event_visible_to(event, user_id)
+                finally:
+                    db.session.remove()
+        except Exception:  # noqa: BLE001 — when in doubt, do not send it
+            return False
 
     async def _authorize_sse_user(self, user_id, *, restrict_child: bool) -> int | None:
         """Return HTTP error status, or None if the user may open SSE."""
@@ -211,7 +298,9 @@ class LazyASGIApp:
                         "more_body": True,
                     })
                     continue
-                if event_types is None or event.type in event_types:
+                if (event_types is None or event.type in event_types) and await asyncio.to_thread(
+                    self._event_visible, event, user_id,
+                ):
                     await send({
                         "type": "http.response.body",
                         "body": encode_sse(event),
@@ -245,7 +334,14 @@ class LazyASGIApp:
             await self._send_error(send, 500, "Static root not configured")
             return
 
-        candidate = resolve_static_path(root, path)
+        # Members' private files under /static/library/ are never static; BIOS
+        # needs a signed-in member. 404 either way, so nothing is confirmed.
+        access = static_access(root, path)
+        if access == 'private' or (access == 'member' and await self._get_user_from_session(scope) is None):
+            await self._send_error(send, 404, "Not Found")
+            return
+
+        candidate = resolve_served_static(root, path)
         if candidate is None:
             await self._send_error(send, 404, "Not Found")
             return
@@ -355,28 +451,34 @@ class LazyASGIApp:
             await self._send_error(send, 405, "Method Not Allowed")
             return
 
+        response_started = False
+
+        async def tracked_send(message):
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
         try:
             await self._ensure_flask()
 
             if path.startswith('/download_zip/'):
-                await self._handle_zip_download(scope, receive, send, path)
+                await self._handle_zip_download(scope, receive, tracked_send, path)
             elif path.startswith('/api/downloadrom/'):
-                await self._handle_rom_download(scope, receive, send, path)
+                await self._handle_rom_download(scope, receive, tracked_send, path)
 
         except Exception as e:
             print(f"Error in async download handler: {str(e)}")
+            if response_started:
+                # Status and part of the body are already out. A second response
+                # cannot be sent, and ending the body cleanly would hand the
+                # client a truncated download that looks complete: let the
+                # server drop the connection so the transfer visibly fails.
+                raise
             try:
-                await self._send_error(send, 500, "Internal Server Error")
+                await self._send_error(tracked_send, 500, "Internal Server Error")
             except Exception as error_e:
                 print(f"Could not send error response (response may have already started): {str(error_e)}")
-                try:
-                    await send({
-                        "type": "http.response.body",
-                        "body": b"",
-                        "more_body": False
-                    })
-                except Exception:
-                    pass
 
     async def _handle_zip_download(self, scope, receive, send, path):
         """Handle ZIP file downloads"""
@@ -416,7 +518,14 @@ class LazyASGIApp:
                 await self._send_error(send, 500, "Server configuration error")
                 return
 
-            is_safe, error_message = is_safe_path(file_path, allowed_bases)
+            # Resolved once and vetted; the file is then opened pinned to that
+            # location and streamed from the open descriptor, so a link swapped
+            # in while the log rows below are written is refused, not followed.
+            try:
+                real_path = os.path.realpath(file_path)
+            except (OSError, ValueError):
+                real_path = file_path
+            is_safe, error_message = is_safe_path(real_path, allowed_bases)
             if not is_safe:
                 log_system_event(
                     f"Security violation - game file outside allowed directories: {file_path[:100]}",
@@ -426,17 +535,41 @@ class LazyASGIApp:
                 await self._send_error(send, 403, "Access denied")
                 return
 
-            if not os.path.exists(file_path):
+            try:
+                handle = open_plain_file_within(os.path.dirname(real_path), real_path, base_is_resolved=True)
+            except FileNotFoundError:
                 await self._send_error(send, 404, "File not found")
+                return
+            except OSError as exc:
+                if not _is_link_or_escape_refusal(exc):
+                    # Locked by another program (a Windows sharing violation),
+                    # unreadable, or an I/O error: not an attack, just unavailable.
+                    log_system_event(
+                        f"Download file could not be opened: {os.path.basename(file_path)} ({type(exc).__name__})",
+                        event_type='download',
+                        event_level='warning',
+                    )
+                    await self._send_error(send, 503, "File is temporarily unavailable")
+                    return
+                log_system_event(
+                    f"Security violation - download file is not a plain file in place: {file_path[:100]}",
+                    event_type='security',
+                    event_level='warning',
+                )
+                await self._send_error(send, 403, "Access denied")
                 return
 
             filename = os.path.basename(file_path)
-            log_system_event(
-                f"Async file download: {filename}",
-                event_type='download',
-                event_level='information',
-            )
-            await self._stream_file(send, file_path, filename)
+            try:
+                log_system_event(
+                    f"Async file download: {filename}",
+                    event_type='download',
+                    event_level='information',
+                )
+            except BaseException:
+                handle.close()
+                raise
+            await self._stream_file(send, handle, filename)
 
     async def _handle_rom_download(self, scope, receive, send, path):
         """Handle ROM file downloads for emulator"""
@@ -495,7 +628,14 @@ class LazyASGIApp:
                 return
 
             allowed_bases = get_allowed_base_directories(self._flask_app)
-            is_safe, error_message = is_safe_path(game.full_disk_path, allowed_bases)
+            # Resolved once, here. Every later check and the open compare against
+            # this string, so a game folder swapped for a link afterwards reads
+            # as "outside" instead of moving the boundary with it.
+            try:
+                real_game = os.path.realpath(game.full_disk_path)
+            except (OSError, ValueError):
+                real_game = game.full_disk_path
+            is_safe, error_message = is_safe_path(real_game, allowed_bases)
 
             if not is_safe:
                 log_system_event(
@@ -506,13 +646,8 @@ class LazyASGIApp:
                 await self._send_error(send, 403, "Access denied")
                 return
 
-            cache_dir = os.path.join(
-                self._flask_app.root_path,
-                'static',
-                'library',
-                'rom_cache',
-                game_uuid,
-            )
+            game_is_dir = os.path.isdir(real_game)
+            cache_dir = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache', game_uuid)
             platform_key = library_platform_key(game)
             try:
                 rom_path, filename = resolve_playable_rom_path(
@@ -520,9 +655,16 @@ class LazyASGIApp:
                     cache_dir=cache_dir,
                     platform=platform_key,
                 )
+                target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
                 # Multi-track discs (.cue + .bin/.img/...) need every file in one
                 # response — WebRetro never gets a second chance to fetch companions.
-                rom_path, filename = bundle_playable_rom_zip(rom_path, cache_dir)
+                bundled_path, bundled_name = bundle_playable_rom_zip(
+                    target, cache_dir, root=root if root_is_resolved else None
+                )
+                if bundled_path != target:
+                    # The bundle is the app's own file in its cache folder.
+                    target, root, root_is_resolved = bundled_path, cache_dir, False
+                    filename = bundled_name
             except ArchiveRomError as exc:
                 log_system_event(
                     f"ROM resolve failed for {game.name}: {exc.message}",
@@ -538,12 +680,33 @@ class LazyASGIApp:
                 )
                 return
 
-            log_system_event(
-                f"ROM file downloaded for WebRetro: {game.name}",
-                event_type='download',
-                event_level='information',
-            )
-            await self._stream_file(send, rom_path, filename)
+            # Open it now and stream from the descriptor: the checks above were
+            # about a path, and the share can change a path while the log rows
+            # below are written.
+            try:
+                handle = open_plain_file_within(root, target, base_is_resolved=root_is_resolved)
+            except FileNotFoundError:
+                await self._send_error(send, 404, "ROM file not found on disk")
+                return
+            except OSError:
+                log_system_event(
+                    f"ROM download refused, file is not a plain file in place: {game.name}",
+                    event_type='security',
+                    event_level='warning',
+                )
+                await self._send_error(send, 403, "Access denied")
+                return
+
+            try:
+                log_system_event(
+                    f"ROM file downloaded for WebRetro: {game.name}",
+                    event_type='download',
+                    event_level='information',
+                )
+            except BaseException:
+                handle.close()
+                raise
+            await self._stream_file(send, handle, filename)
 
     async def _get_user_id(self, scope):
         """Resolve user id from Bearer token (API clients) or Flask session cookie (web)."""
@@ -600,7 +763,12 @@ class LazyASGIApp:
                 if session_data:
                     user_id = session_data.get('_user_id')
                     if user_id:
-                        return int(user_id)
+                        # The same check as Flask-Login's loader: a disabled
+                        # account or a changed password ends the session here too.
+                        from oneirodex.utils.auth import load_user
+
+                        user = load_user(user_id)
+                        return user.id if user is not None else None
                 return None
 
         except Exception as e:
@@ -611,53 +779,75 @@ class LazyASGIApp:
             )
             return None
 
-    async def _stream_file(self, send, file_path, filename):
-        """Stream a file asynchronously"""
+    async def _stream_file(self, send, handle, filename):
+        """Stream an open file that ``open_plain_file_within`` already vetted.
+
+        The size is the descriptor's and so are the bytes, so what is announced
+        is what is sent whatever happens to the path meanwhile. *handle* is
+        closed here.
+        """
+        started = False
         try:
-            async_generator, headers = await create_async_streaming_response(file_path, filename)
+            with handle:
+                size = os.fstat(handle.fileno()).st_size
 
-            await send({
-                "type": "http.response.start",
-                "status": 200,
-                "headers": [(k.encode(), v.encode()) for k, v in headers.items()],
-            })
-
-            async for chunk in async_generator:
+                started = True
                 await send({
-                    "type": "http.response.body",
-                    "body": chunk,
-                    "more_body": True,
+                    "type": "http.response.start",
+                    "status": 200,
+                    "headers": _file_headers(filename, size),
                 })
 
-            await send({
-                "type": "http.response.body",
-                "body": b"",
-                "more_body": False,
-            })
+                async for chunk in _read_chunks(handle, size):
+                    await send({
+                        "type": "http.response.body",
+                        "body": chunk,
+                        "more_body": True,
+                    })
+
+                await send({
+                    "type": "http.response.body",
+                    "body": b"",
+                    "more_body": False,
+                })
 
         except Exception as e:
             log_system_event(
-                f"Error streaming file {filename}: {str(e)}",
+                f"Download of {filename} ended early: the client closed the connection"
+                if isinstance(e, _CLIENT_GONE) else f"Error streaming file {filename}: {str(e)}",
                 event_type='download',
-                event_level='error',
+                event_level='information' if isinstance(e, _CLIENT_GONE) else 'error',
             )
+            if started:
+                # Past the status line the only honest ending is an aborted
+                # transfer; see _handle_download.
+                raise
             await self._send_error(send, 500, "Error streaming file")
 
     async def _handle_streaming_download(self, send, download_request, source_path):
         """Handle zipstream downloads for multi-file games"""
+        started = False
         try:
             allowed_bases = get_allowed_base_directories(self._flask_app)
             if not allowed_bases:
                 await self._send_error(send, 500, "Server configuration error")
                 return
 
-            is_safe, error_message = is_safe_path(source_path, allowed_bases)
+            # Resolved once, here, and the resolved path is what gets checked and
+            # what the zip is built from. The generator compares every file
+            # against this string and never resolves the folder again, so a game
+            # folder swapped for a link after this point cannot widen "inside".
+            try:
+                real_root = os.path.realpath(source_path)
+            except (OSError, ValueError):
+                real_root = source_path
+            is_safe, error_message = is_safe_path(real_root, allowed_bases)
             if not is_safe:
                 print(f"Security violation - streaming source outside allowed directories: {source_path[:100]}")
                 await self._send_error(send, 403, "Access denied")
                 return
 
-            if not os.path.exists(source_path):
+            if not os.path.exists(real_root):
                 await self._send_error(send, 404, "Source path not found")
                 return
 
@@ -675,9 +865,11 @@ class LazyASGIApp:
             print(f"Starting zipstream download: {filename}")
 
             async_generator, headers = async_generate_zipstream_response(
-                source_path, filename, chunk_size, compression_level, enable_zip64
+                real_root, filename, chunk_size, compression_level, enable_zip64,
+                source_is_resolved=True,
             )
 
+            started = True
             await send({
                 "type": "http.response.start",
                 "status": 200,
@@ -702,17 +894,19 @@ class LazyASGIApp:
         except Exception as e:
             error_filename = locals().get('filename', 'unknown')
             print(f"Error streaming ZIP {error_filename}: {str(e)}")
-            try:
-                await self._send_error(send, 500, "Error streaming ZIP file")
-            except Exception:
-                try:
-                    await send({
-                        "type": "http.response.body",
-                        "body": b"",
-                        "more_body": False,
-                    })
-                except Exception:
-                    pass
+            if started:
+                # A member failed (or vanished, or was swapped for a link) after
+                # the archive was already on its way. Finishing the body here
+                # would give the client a corrupt zip with a clean 200; raising
+                # drops the connection, so the download shows as incomplete.
+                log_system_event(
+                    f"ZIP download of {error_filename} ended early: the client closed the connection"
+                    if isinstance(e, _CLIENT_GONE) else f"ZIP download aborted mid-stream: {error_filename}",
+                    event_type='download',
+                    event_level='information' if isinstance(e, _CLIENT_GONE) else 'error',
+                )
+                raise
+            await self._send_error(send, 500, "Error streaming ZIP file")
 
     async def _send_error(self, send, status_code, message, *, code=None, hint=None):
         """Send an HTTP error response (JSON). Optional code/hint for ROM extract failures."""

@@ -809,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = JSON.parse(event.data);
         if (data.status === 'connected') return;
         if (data.current_game) {
-          progressText.innerHTML = (data.message || 'Processing…') + '<br>' + data.current_game;
+          progressText.innerHTML = escapeHtml(data.message || 'Processing…') + '<br>' + escapeHtml(data.current_game);
         } else if (progressText) {
           progressText.textContent = data.message || 'Processing…';
         }
@@ -857,7 +857,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then((data) => {
           if (data.status === 'not_found') return;
           if (data.current_game) {
-            progressText.innerHTML = (data.message || 'Processing…') + '<br>' + data.current_game;
+            progressText.innerHTML = escapeHtml(data.message || 'Processing…') + '<br>' + escapeHtml(data.current_game);
           } else if (progressText) {
             progressText.textContent = data.message || 'Processing…';
           }

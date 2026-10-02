@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import current_app, url_for
+from oneirodex.utils.library_paths import library_dir
 
 # Semantic keys mirrored from icons.html / icons.tsx (subset for image overrides).
 CORE_ICON_KEYS = (
@@ -81,9 +82,7 @@ BUILTIN_PACKS: list[dict[str, Any]] = [
 
 
 def icon_themes_root(package_root: str | Path | None = None) -> Path:
-    if package_root is not None:
-        return Path(package_root) / 'static' / 'library' / 'icon-themes'
-    return Path(current_app.root_path) / 'static' / 'library' / 'icon-themes'
+    return Path(library_dir(package_root)) / 'icon-themes'
 
 
 def setup_icon_themes_source(package_root: str | Path | None = None) -> Path:

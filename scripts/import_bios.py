@@ -13,7 +13,8 @@ is written until you pass --apply.
     python scripts/import_bios.py --source E:\\_bios
     python scripts/import_bios.py --source E:\\_bios --apply
 
-The destination is `oneirodex/static/library/bios` (gitignored) unless
+The destination is `oneirodex/static/library/bios` (gitignored), or `bios` in
+the data folder when ONEIRODEX_LIBRARY_DIR moves the library, unless
 EMULATOR_BIOS_PATH is set or --dest is given. Firmware stays out of git.
 """
 
@@ -28,8 +29,8 @@ import shutil
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _load_bios_module():
-    """Load emulator_bios.py directly, without importing the app package.
+def _load_util(filename: str, alias: str):
+    """Load oneirodex/utils/<filename> by path, without importing the app package.
 
     `import oneirodex.utils.emulator_bios` runs `oneirodex/__init__`, which
     imports config and refuses to load without SECRET_KEY — a real requirement
@@ -38,18 +39,26 @@ def _load_bios_module():
     does not call at import time, so loading it by path is safe and keeps
     BIOS_REQUIREMENTS a single source of truth.
     """
-    path = os.path.join(REPO_ROOT, 'oneirodex', 'utils', 'emulator_bios.py')
-    spec = importlib.util.spec_from_file_location('_gt_emulator_bios', path)
+    path = os.path.join(REPO_ROOT, 'oneirodex', 'utils', filename)
+    spec = importlib.util.spec_from_file_location(alias, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-_bios = _load_bios_module()
+_bios = _load_util('emulator_bios.py', '_gt_emulator_bios')
+# The same link-refusing file checks the server's firmware import uses, so the
+# script cannot copy ``scph5501.bin -> /app/.env`` into the firmware volume.
+_security = _load_util('security.py', '_gt_security')
 BIOS_REQUIREMENTS = _bios.BIOS_REQUIREMENTS
 BIOS_HARD_REQUIRED_CORES = _bios.BIOS_HARD_REQUIRED_CORES
 
-DEFAULT_DEST = os.path.join(REPO_ROOT, 'oneirodex', 'static', 'library', 'bios')
+# The server's own rule (utils/library_paths): a library moved to a data folder
+# with ONEIRODEX_LIBRARY_DIR keeps its firmware there too.
+_paths = _load_util('library_paths.py', '_gt_library_paths')
+DEFAULT_DEST = os.path.join(
+    _paths.relocated_library_dir() or os.path.join(REPO_ROOT, 'oneirodex', 'static', 'library'), 'bios'
+)
 
 
 def wanted_names() -> dict[str, str]:
@@ -61,9 +70,9 @@ def wanted_names() -> dict[str, str]:
     return out
 
 
-def _digest(path: str) -> str:
+def _digest(path: str, base: str) -> str:
     h = hashlib.sha1()
-    with open(path, 'rb') as fh:
+    with _security.open_plain_file_within(base, path) as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
@@ -75,16 +84,36 @@ def scan(source: str, wanted: dict[str, str]) -> dict[str, list[str]]:
     for dirpath, _dirnames, filenames in os.walk(source):
         for filename in filenames:
             canonical = wanted.get(filename.lower())
-            if canonical:
-                found.setdefault(canonical, []).append(os.path.join(dirpath, filename))
+            if not canonical:
+                continue
+            path = os.path.join(dirpath, filename)
+            if _security.is_plain_file_within(source, path):  # links are skipped, not followed
+                found.setdefault(canonical, []).append(path)
     return found
+
+
+def _same_file(src: str, dest: str) -> bool:
+    try:
+        return os.path.samefile(src, dest)
+    except OSError:
+        return False
+
+
+def _copy(source: str, src: str, dest: str) -> None:
+    with _security.open_plain_file_within(source, src) as fin:
+        if os.path.exists(dest) and os.path.samestat(os.fstat(fin.fileno()), os.stat(dest)):
+            return  # already in place: opening dest for writing would truncate the source
+        with open(dest, 'wb') as fout:
+            shutil.copyfileobj(fin, fout, 1024 * 1024)
+        info = os.fstat(fin.fileno())
+    os.utime(dest, ns=(info.st_atime_ns, info.st_mtime_ns))
 
 
 def cores_for(name: str) -> list[str]:
     return [core for core, names in BIOS_REQUIREMENTS.items() if name in names]
 
 
-def _choose_source(sources: list[str]) -> tuple[str, str]:
+def _choose_source(sources: list[str], base: str) -> tuple[str | None, str]:
     """Pick which copy to import, and describe why.
 
     When several files share a firmware name and their contents differ, prefer
@@ -95,16 +124,28 @@ def _choose_source(sources: list[str]) -> tuple[str, str]:
     on directory order.
 
     The disagreement is still reported. A silent pick is the thing to avoid.
+
+    A copy that was replaced by a link (or became unreadable) since the scan is
+    not a candidate. When none is left the answer is ``None``: the caller reports
+    the firmware as not installed rather than handing back a path to follow.
     """
     if len(sources) == 1:
         return sources[0], ''
 
     by_digest: dict[str, list[str]] = {}
     for path in sources:
-        by_digest.setdefault(_digest(path), []).append(path)
+        try:
+            by_digest.setdefault(_digest(path, base), []).append(path)
+        except OSError:
+            continue
+    if not by_digest:
+        return None, ''
 
     if len(by_digest) == 1:
-        return sources[0], f'  [{len(sources)} identical copies]'
+        paths = next(iter(by_digest.values()))
+        if len(paths) == len(sources):
+            return paths[0], f'  [{len(sources)} identical copies]'
+        return paths[0], f'  [{len(paths)} of {len(sources)} copies readable]'
 
     # Most copies wins; ties fall back to the earliest path for stability.
     best = max(by_digest.values(), key=lambda paths: (len(paths), -sources.index(paths[0])))
@@ -113,6 +154,10 @@ def _choose_source(sources: list[str]) -> tuple[str, str]:
         f'  [{len(sources)} candidates, {len(by_digest)} differ — '
         f'using the {len(best)}-copy majority, {others} other version(s) ignored]'
     )
+
+
+def _not_installed(name: str, why: str) -> None:
+    print(f'  ! {name:<24} not installed: {why}')
 
 
 def main() -> int:
@@ -137,16 +182,24 @@ def main() -> int:
                    if os.path.isfile(os.path.join(args.dest, n))}
 
     to_copy: list[tuple[str, str]] = []
+    refused: list[str] = []  # firmware that could not be installed: not a clean run
     for name in sorted(found):
         sources = found[name]
         already = name.lower() in present
         # Distinct contents under one name is worth saying out loud — regional
         # dumps and bad rips share filenames, and picking silently would make
         # the choice invisible.
-        chosen, note = _choose_source(sources)
+        chosen, note = _choose_source(sources, args.source)
+        # A --dest inside --source (or a hard link) finds the installed file
+        # itself; --overwrite would then truncate it onto itself.
+        in_place = chosen is not None and _same_file(chosen, os.path.join(args.dest, name))
 
-        if already and not args.overwrite:
+        if (already and not args.overwrite) or in_place:
             print(f'  = {name:<24} already present{note}')
+            continue
+        if chosen is None:
+            _not_installed(name, 'no copy of it in the source can be read any more')
+            refused.append(name)
             continue
         print(f'  + {name:<24} {chosen}{note}')
         to_copy.append((chosen, os.path.join(args.dest, name)))
@@ -160,20 +213,38 @@ def main() -> int:
             flag = 'blocks play' if hard else 'optional'
             print(f'  - {name:<24} {", ".join(cores)} ({flag})')
 
+    status = 1 if refused else 0
     if not to_copy:
         print('\nNothing to copy.')
-        return 0
+        return status
 
     if not args.apply:
-        print(f'\nPreview only — {len(to_copy)} file(s) would be copied to {args.dest}')
-        print('Re-run with --apply to write them.')
-        return 0
+        print(f'\nPreview only — {len(to_copy)} file(s) would be copied to {args.dest}\n'
+              'Re-run with --apply to write them.')
+        return status
 
     os.makedirs(args.dest, exist_ok=True)
+    copied = 0
     for src, dest in to_copy:
-        shutil.copy2(src, dest)
-    print(f'\nCopied {len(to_copy)} file(s) to {args.dest}')
-    return 0
+        try:
+            # What the scan vetted can be replaced before it is copied (a link
+            # to /app/.env, say): _copy opens it through open_plain_file_within
+            # and refuses anything that is no longer a plain file under the
+            # source. shutil.copy2 would follow the link into the firmware
+            # volume, which every member can download.
+            _copy(args.source, src, dest)
+        except OSError as exc:
+            name = os.path.basename(dest)
+            _not_installed(name, f'{src} was not copied ({exc.strerror or type(exc).__name__})')
+            refused.append(name)
+            status = 1
+            continue
+        copied += 1
+    summary = f'\nCopied {copied} file(s) to {args.dest}'
+    if refused:
+        summary += f'\n{len(refused)} file(s) not installed: {", ".join(refused)}'
+    print(summary)
+    return status
 
 
 if __name__ == '__main__':

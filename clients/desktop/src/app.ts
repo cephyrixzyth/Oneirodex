@@ -35,7 +35,14 @@ import {
 import { loadStoredConfig, saveStoredConfig } from './config-store.js'
 import { openSocialCompanionWindow } from './social-window.js'
 import { keychainAdapter } from './keychain.js'
+import {
+  formatTrustedShares,
+  loadTrustedShares,
+  parseTrustedShares,
+  saveTrustedShares,
+} from './trusted-shares.js'
 import { buildLocalArchiveName } from './paths.js'
+import { checkServerUrl } from './transport-policy.js'
 import {
   hydrateLifecycleRegistry,
   pullLifecycleRegistryFromServer,
@@ -240,7 +247,14 @@ function renderLibrary(): void {
 }
 async function hydrateFromDisk(): Promise<void> {
   const stored = await loadStoredConfig()
-  auth.setBaseUrl(stored.baseUrl)
+  try {
+    auth.setBaseUrl(stored.baseUrl)
+  } catch (error) {
+    // A URL saved by an older build that the transport policy now refuses (plain
+    // http:// to a public host). It stays visible in the form so it can be
+    // corrected, but never reaches the auth store — so no request carries the token.
+    setStatus(error instanceof Error ? error.message : String(error), 'error')
+  }
   auth.setToken(stored.token)
   try {
     await auth.hydrateFromKeychain(keychainAdapter)
@@ -251,7 +265,7 @@ async function hydrateFromDisk(): Promise<void> {
     )
     setStatus(formatKeychainError(error), 'error')
   }
-  els.baseUrl.value = auth.getBaseUrl()
+  els.baseUrl.value = auth.getBaseUrl() || stored.baseUrl
   const token = auth.getToken()
   els.token.value = token ? normalizeOneirodexToken(token) : ''
   renderAuthSummary()
@@ -265,6 +279,13 @@ async function handleConnect(): Promise<void> {
   els.token.value = token
   if (!baseUrl) {
     setStatus('Enter a server base URL.', 'error')
+    return
+  }
+  // Before the token is attached to anything: plain http:// only for localhost /
+  // LAN hosts, https:// everywhere else.
+  const serverCheck = checkServerUrl(baseUrl)
+  if (!serverCheck.ok) {
+    setStatus(serverCheck.message, 'error')
     return
   }
   if (!token || !isOneirodexToken(token)) {
@@ -334,6 +355,12 @@ async function handleConnect(): Promise<void> {
     },
     onCommands: async (command) => {
       if (command.action === 'open_path') {
+        // No `allowedRoots` here, deliberately: the path is a *server* path for a
+        // library folder, and the companion cannot know which local mapping of it
+        // (a drive letter, a mount) this PC uses — the server never tells it the
+        // library roots. The guard for a hostile server is therefore the
+        // validation in `revealPathInOs` and `validate_reveal_path` (Rust), which
+        // refuse UNC and device paths before touching the filesystem.
         return runOpenPathCommand(command.path || '', { select: command.select })
       }
       if (isActionBlockedOffline(command.action, connectionMode)) {
@@ -701,6 +728,46 @@ function bindElements(root: HTMLElement): void {
     lifecyclePanel: root.querySelector('#lifecycle-panel')!,
   }
 }
+/**
+ * The "Trusted network shares" editor. The list is stored and enforced by the
+ * native side; this only reads it into the box and sends edits back, showing the
+ * native validation message (which names the entry that is not `\\server\share`).
+ */
+function bindTrustedShares(root: HTMLElement): void {
+  const box = root.querySelector<HTMLTextAreaElement>('#trusted-shares')!
+  const status = root.querySelector<HTMLElement>('#trusted-shares-status')!
+  const saveBtn = root.querySelector<HTMLButtonElement>('#trusted-shares-save')!
+  const show = (message: string, tone: 'info' | 'error' | 'success') => {
+    status.textContent = message
+    status.dataset.tone = tone
+  }
+  void loadTrustedShares()
+    .then((roots) => {
+      box.value = formatTrustedShares(roots)
+    })
+    .catch((error) => {
+      show(error instanceof Error ? error.message : String(error), 'error')
+    })
+  saveBtn.addEventListener('click', () => {
+    saveBtn.disabled = true
+    void saveTrustedShares(parseTrustedShares(box.value))
+      .then((stored) => {
+        box.value = formatTrustedShares(stored)
+        show(
+          stored.length
+            ? `Saved ${stored.length} trusted network share${stored.length === 1 ? '' : 's'}.`
+            : 'Saved. No network shares are trusted.',
+          'success',
+        )
+      })
+      .catch((error) => {
+        show(error instanceof Error ? error.message : String(error), 'error')
+      })
+      .finally(() => {
+        saveBtn.disabled = false
+      })
+  })
+}
 export async function mountApp(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <main class="shell">
@@ -724,6 +791,16 @@ export async function mountApp(root: HTMLElement): Promise<void> {
           <button id="friends-btn" type="button">Open friends window</button>
         </form>
         <p id="status" class="status" data-tone="info"></p>
+      </section>
+      <section class="panel">
+        <h2>Trusted network shares</h2>
+        <p class="muted">Network folders that Show in Explorer may open when your server asks for them, one per line (for example the library root of a Windows-hosted server). Opening a network path makes Windows sign in to that computer, so a share is never opened unless it is listed here.</p>
+        <label>
+          Shares
+          <textarea id="trusted-shares" rows="3" spellcheck="false" autocomplete="off" placeholder="&#92;&#92;nas&#92;roms"></textarea>
+        </label>
+        <button id="trusted-shares-save" type="button">Save shares</button>
+        <p id="trusted-shares-status" class="status" data-tone="info"></p>
       </section>
       <section class="panel">
         <h2>Library preview</h2>
@@ -750,6 +827,12 @@ export async function mountApp(root: HTMLElement): Promise<void> {
       setStatus(blocked, 'error')
       return
     }
+    // The Friends window signs in with the site account — same plain-http rule.
+    const serverCheck = checkServerUrl(base)
+    if (!serverCheck.ok) {
+      setStatus(serverCheck.message, 'error')
+      return
+    }
     void openSocialCompanionWindow(base, lastPlayedGameUuid)
       .then((how) => {
         const { message, tone } = friendsOpenStatus(how, connectionMode)
@@ -761,10 +844,14 @@ export async function mountApp(root: HTMLElement): Promise<void> {
         setStatus(message, 'error')
       })
   })
+  bindTrustedShares(root)
   els.library.addEventListener('click', handleLibraryClick)
   els.lifecyclePanel.addEventListener('click', handleLibraryClick)
   await ensureLifecycleRegistry()
   await hydrateFromDisk()
   renderLibrary()
-  setStatus('Enter credentials and click Connect.', 'info')
+  // Keep a hydrate failure (refused saved URL, keyring error) on screen.
+  if (els.status.dataset.tone !== 'error') {
+    setStatus('Enter credentials and click Connect.', 'info')
+  }
 }

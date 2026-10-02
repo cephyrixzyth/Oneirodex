@@ -7,6 +7,7 @@ import os
 from flask import current_app, url_for
 
 from oneirodex.utils.cover_art_studio import generated_root, render_cover_art
+from oneirodex.utils.library_paths import library_dir
 from oneirodex.utils.preset_themes import DEFAULT_ERA, era_for_theme
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,7 @@ def _normalize_remote_url(url):
 
 
 def _local_cover_path(filename):
-    static_folder = current_app.static_folder or ''
-    return os.path.join(static_folder, 'library', 'images', filename.lstrip('/\\'))
+    return os.path.join(library_dir(), 'images', filename.lstrip('/\\'))
 
 
 def _local_cover_exists(filename):

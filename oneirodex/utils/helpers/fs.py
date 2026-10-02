@@ -8,6 +8,7 @@ from flask import current_app
 from oneirodex.utils.security import (
     get_allowed_base_directories,
     is_safe_path,
+    open_plain_file_within,
 )
 from oneirodex.utils.global_settings import global_settings_row
 
@@ -25,6 +26,10 @@ __all__ = [
 
 # Default cap for recursive size walks (NAS/Unraid trees can take minutes otherwise).
 _DEFAULT_FOLDER_SIZE_TIMEOUT_SEC = 60
+
+#: Most bytes of an NFO that are read and stored. Real ones are tens of KB of
+#: ASCII art; the details page shows the first 10,000 characters anyway.
+_NFO_MAX_BYTES = 256 * 1024
 
 
 def _excluded_size_folder_names(settings) -> set[str]:
@@ -291,16 +296,22 @@ def read_first_nfo_content(full_disk_path):
         for file in os.listdir(full_disk_path):
             if file.lower().endswith('.nfo'):
                 nfo_path = os.path.join(full_disk_path, file)
-                
+
                 try:
-                    with open(nfo_path, 'r', encoding='utf-8', errors='ignore') as nfo_file:
-                        content = nfo_file.read()
-                        sanitized_content = content.replace('\x00', '')
-                        return sanitized_content
+                    # The text lands in Game.nfo_content and is shown to every
+                    # member, so a ``info.nfo -> /app/.env`` link inside a game
+                    # folder must not be followed. The check runs on the opened
+                    # descriptor (see open_plain_file_within); a link, a FIFO or
+                    # anything outside the folder is skipped, not read.
+                    with open_plain_file_within(full_disk_path, nfo_path) as nfo_file:
+                        raw = nfo_file.read(_NFO_MAX_BYTES)
+                    content = raw.decode('utf-8', errors='ignore')
+                    sanitized_content = content.replace('\x00', '')
+                    return sanitized_content
                 except Exception as e:
-                    print(f"Error reading NFO file {nfo_path}: {str(e)}")
+                    print(f"Skipping NFO file {nfo_path}: {str(e)}")
                     continue
-                    
+
     except Exception as e:
         print(f"Error accessing directory {full_disk_path}: {str(e)}")
     

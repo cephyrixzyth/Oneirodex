@@ -48,6 +48,8 @@
 
     "allow-save-installs",
 
+    "allow-retain-install-files",
+
     "allow-get-app-subdir",
 
     "allow-write-file-bytes",
@@ -63,6 +65,8 @@
     "allow-launch-game",
 
     "allow-reveal-path-in-os",
+
+    "allow-trusted-shares",
 
     "allow-is-process-running",
 

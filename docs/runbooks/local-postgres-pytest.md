@@ -41,8 +41,28 @@ Required in `.env`:
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/oneirodextest
 ```
 
-`conftest.py` hard-fails if that variable is missing, or if its database name
-does not contain `test`. That guard is deliberate and should not be relaxed.
+That `postgres:postgres` pair is deliberate and specific to this throwaway
+review database: it holds test data only and `docker-compose.review.yml` publishes it
+on `127.0.0.1` only. Never copy it to the main stack or any database that holds a real
+library; the main Compose `db` takes `POSTGRES_PASSWORD` from `.env` and is also
+published on loopback only by default ([docker-compose-deploy.md](docker-compose-deploy.md#postgres-exposure-and-password)).
+
+`conftest.py` validates the parsed PostgreSQL URL before importing the app and
+again before creating a test app. It requires a host and a database name containing
+`test` (case-insensitive); markers in the username, password or hostname do not
+count. Control characters (including NUL), percent-encoded database/host names,
+missing/malformed URLs and query options are rejected; driver options could
+otherwise override the validated target. Diagnostics withhold connection values.
+Confirm the host is your isolated test instance before running DB-backed tests.
+The name guard cannot establish that a server is safe by itself. Application creation
+also validates the configured test URI before initializing extensions or probing
+PostgreSQL, and connection diagnostics no longer include a URI.
+
+Run the guard regressions without loading the app, `.env`, or a database:
+
+```bash
+python -m pytest --noconftest -o addopts= tests/test_test_database_guard.py -q
+```
 
 ## Every test starts from an empty database
 

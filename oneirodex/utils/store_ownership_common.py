@@ -7,25 +7,31 @@ NEVER downloads games, DRM payloads or store clients (see ``store_ownership``).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from oneirodex import db
 from oneirodex.models import Game, GameURL, StoreAccount, UserOwnedTitle
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
+from oneirodex.utils.store_capabilities import REGISTER_ACCOUNT_STORES
 
 
 # meta_quest = register-only ownership (CSV); never downloads DRM titles.
 # amazon = live register via unofficial Nile/Heroic (IDs + names); never downloads.
 # xbox / psn = register-only, opt-in, unofficial (INSP-42): CSV always; live only
 #   when ENABLE_UNOFFICIAL_STORE_SYNC names the store. Never downloads.
-VALID_STORES = frozenset({'steam', 'gog', 'epic', 'amazon', 'meta_quest', 'xbox', 'psn'})
+VALID_STORES = REGISTER_ACCOUNT_STORES
 UNOFFICIAL_OPT_IN_STORES = frozenset({'xbox', 'psn'})
+#: Width of UserOwnedTitle.external_app_id. Xbox package family names and
+#: Amazon product IDs run well past the original 32.
+EXTERNAL_APP_ID_MAX = 128
 _CSV_ID_HEADERS = frozenset({
     'appid',
     'app_id',
@@ -175,6 +181,34 @@ def _any_account_credential(store: str) -> bool:
     return row is not None
 
 
+#: Keys Oneirodex writes into a stored credential; never accepted from a member.
+INTERNAL_CREDENTIAL_KEYS = frozenset({'origin', 'household_fp'})
+
+
+def household_fp(value: str | None) -> str | None:
+    """Short fingerprint of a household env token. A member row holding a
+    refreshed copy of the household sign-in records which env value it came
+    from, so replacing the env token (the operator's repair) supersedes it."""
+    if not value:
+        return None
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()[:16]
+
+
+def strip_internal_keys(data):
+    """Member-submitted credential JSON minus the tags only the server may set."""
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k not in INTERNAL_CREDENTIAL_KEYS}
+    return data
+
+
+def stale_household_copy(data: dict, env_value: str | None) -> bool:
+    """A stored household-origin credential no longer matches the operator's
+    current household token (replaced or removed), so it must not be used."""
+    return data.get('origin') == 'household' and (
+        not env_value or data.get('household_fp') != household_fp(env_value)
+    )
+
+
 def _parse_credential_json(raw: str | None) -> dict:
     if not raw:
         return {}
@@ -245,9 +279,10 @@ def match_title_to_library_game(
             app_id = int(external_app_id)
         except (TypeError, ValueError):
             return None
-        return db.session.execute(
-            select(Game.uuid).filter(Game.steam_app_id == app_id)
-        ).scalars().first()
+        matches = db.session.execute(
+            select(Game.uuid).filter(Game.steam_app_id == app_id).limit(2)
+        ).scalars().all()
+        return matches[0] if len(matches) == 1 else None
     if store == 'meta_quest':
         by_url = _match_meta_quest_by_url(external_app_id)
         if by_url:
@@ -265,19 +300,30 @@ def upsert_owned_title(
     name: str | None = None,
 ) -> UserOwnedTitle:
     """Insert or update a UserOwnedTitle row and attempt library matching."""
+    if len(str(external_app_id)) > EXTERNAL_APP_ID_MAX:
+        from oneirodex.utils.store_sync_errors import StoreSyncError
+        raise StoreSyncError('A store returned an ID longer than Oneirodex records', 'invalid_response')
+    name = str(name).strip()[:255] or None if name else None
     now = datetime.now(timezone.utc)
-    matched_uuid = match_title_to_library_game(store, external_app_id, name)
+    # Only exact provider identifiers may auto-link. A name is a review hint,
+    # never evidence that two editions/platforms are the same entitlement.
+    matched_uuid = match_title_to_library_game(store, external_app_id)
     existing = db.session.execute(
         select(UserOwnedTitle).filter_by(
             user_id=user_id,
             store=store,
             external_app_id=str(external_app_id),
         )
+        .with_for_update().execution_options(populate_existing=True)
     ).scalars().first()
     if existing:
         if name:
             existing.name = name
-        existing.matched_game_uuid = matched_uuid
+        # Sync refreshes source data, not a previous identity decision. A missing
+        # or changed candidate must not erase/reassign an established mapping.
+        # Explicit remapping and provenance require the pending review workflow.
+        if existing.matched_game_uuid is None and not existing.match_reviewed:
+            existing.matched_game_uuid = matched_uuid
         existing.last_synced_at = now
         return existing
     row = UserOwnedTitle(
@@ -301,23 +347,53 @@ def connect_store_account(
     """Link a register-only store account (optional external ID / note / secret)."""
     if store not in VALID_STORES:
         raise ValueError(f'Unsupported store: {store}')
-    external_account_id = (external_account_id or '').strip() or None
-    account = db.session.execute(
-        select(StoreAccount).filter_by(user_id=user_id, store=store)
-    ).scalars().first()
-    if account:
+    # The column holds 64 characters. An over-long note used to fail the INSERT,
+    # and the logged DataError carried the statement parameters, credential included.
+    external_account_id = (external_account_id or '').strip()[:64] or None
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def existing():
+        return db.session.execute(
+            select(StoreAccount).filter_by(user_id=user_id, store=store)
+        ).scalars().first()
+
+    def update(account):
+        # updated_at marks a real reconnect: a new sign-in, or (Steam, where the
+        # ID is what a sync uses) a different account. Re-saving a label does
+        # not, so it cannot make a refused sign-in look repaired.
+        if credential or (store == 'steam' and account.external_account_id != external_account_id):
+            account.updated_at = now
         account.external_account_id = external_account_id
         if credential:
             account.credential = credential
+
+    account = existing()
+    if account:
+        update(account)
     else:
         account = StoreAccount(
             user_id=user_id,
             store=store,
             external_account_id=external_account_id,
             credential=credential,
+            # Naive UTC like every LIB-04 time. The model's aware default is
+            # shifted to the session time zone by PostgreSQL on a non-UTC
+            # server, and status compares this with job start times.
+            created_at=now,
+            updated_at=now,
         )
         db.session.add(account)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Two connects raced (double submit). Update the row that won instead
+        # of surfacing an error whose logged text would carry the credential.
+        db.session.rollback()
+        account = existing()
+        if account is None:
+            raise
+        update(account)
+        db.session.commit()
     return account
 
 

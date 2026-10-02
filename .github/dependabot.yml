@@ -1,7 +1,7 @@
 # Dependabot — weekly dependency updates.
-# Each `directory` entry is grouped so it produces at most one PR per ecosystem
-# run (npm splits production vs development). Majors are off for npm — vite /
-# vitest / typescript majors need a deliberate upgrade PR, not a weekly grouper.
+# Each entry is grouped so it produces at most one PR per ecosystem run (npm
+# splits production vs development). Majors are off for npm — vite / vitest /
+# typescript / jsdom majors need a deliberate upgrade PR, not a weekly grouper.
 # Pip and GitHub Actions still allow majors (security / runner bumps).
 version: 2
 updates:
@@ -11,6 +11,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Pinned to exactly what pydantic requires (see requirements.txt): it
+      # moves only with a pydantic bump. Bumped alone, pydantic refuses to import.
+      - dependency-name: "pydantic-core"
     groups:
       python-all:
         patterns:
@@ -20,12 +24,20 @@ updates:
           - patch
           - major
 
-  # --- Frontend SPAs + shared packages (minor/patch only) ---
+  # --- npm workspaces: every SPA, the shared packages and the desktop client ---
+  # One entry at the root, where the workspace's only package-lock.json lives.
+  # Per-app entries changed a package.json without the root lockfile, so
+  # `npm ci` failed on every JS job and no such PR could ever merge.
   - package-ecosystem: npm
-    directory: "/frontend/member-app"
+    directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # The grouped update-types below only shape grouped PRs; an ungrouped
+      # major still opened its own PR. This is what actually turns majors off.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       production-dependencies:
         dependency-type: "production"
@@ -36,67 +48,6 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
-  - package-ecosystem: npm
-    directory: "/frontend/admin-app"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      production-dependencies:
-        dependency-type: "production"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-      development-dependencies:
-        dependency-type: "development"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: npm
-    directory: "/frontend/ops-glance"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      production-dependencies:
-        dependency-type: "production"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-      development-dependencies:
-        dependency-type: "development"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: npm
-    directory: "/frontend/api-client"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      production-dependencies:
-        dependency-type: "production"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-      development-dependencies:
-        dependency-type: "development"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: npm
-    directory: "/clients/desktop"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      production-dependencies:
-        dependency-type: "production"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-      development-dependencies:
-        dependency-type: "development"
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-
-  # --- GitHub Actions used by the workflows ---
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

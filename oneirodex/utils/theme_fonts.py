@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 
 from flask import current_app
+from oneirodex.utils.library_paths import library_dir
 
 # `stack` is a full CSS font-family value, so an absent file degrades to the
 # next family rather than to an unstyled fallback.
@@ -120,7 +121,7 @@ def fonts_dir() -> str:
     root = current_app.config.get('FONT_PATH')
     if root:
         return root
-    return os.path.join(current_app.root_path, 'static', 'library', 'fonts')
+    return os.path.join(library_dir(), 'fonts')
 
 
 def _operator_fonts() -> dict[str, dict]:

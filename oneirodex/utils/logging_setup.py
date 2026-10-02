@@ -145,6 +145,12 @@ def configure_logging(app=None) -> None:
             # unleash the dev-server request spam.
             "loggers": {
                 "werkzeug": {"level": "INFO"},
+                # urllib3 logs every request line (with its query string) at
+                # DEBUG. Some provider APIs take a server key as a query
+                # parameter (Steam's owned-games call), so DEBUG on our code
+                # must not also write those keys to the container log.
+                # Never below INFO, never louder than the configured level.
+                "urllib3": {"level": "INFO" if level == "DEBUG" else level},
             },
         }
     )

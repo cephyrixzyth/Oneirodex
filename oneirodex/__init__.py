@@ -9,7 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from config import Config
 from datetime import datetime
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 from flask_caching import Cache
 from oneirodex.utils.db import check_postgres_port_open
 from oneirodex.utils.proxy import apply_proxy_fix
@@ -72,42 +72,34 @@ def create_app(config_object=None):
 
     # SAFETY CHECK: Prevent production database access during tests
     if 'pytest' in sys.modules or 'PYTEST_CURRENT_TEST' in os.environ:
-        # We are running in pytest - ensure we're using test database
-        test_db_url = os.getenv('TEST_DATABASE_URL')
-        production_db_url = os.getenv('DATABASE_URL')
-        
-        # If DATABASE_URL was not properly overridden in conftest.py
-        if production_db_url and test_db_url and production_db_url != test_db_url:
-            if 'oneirodex' in production_db_url and 'test' not in production_db_url:
-                logger.error(f"🚨 CRITICAL: Tests attempting to use production database: {production_db_url}")
-                logger.warning(f"🛡️  BLOCKING: Forcing test database: {test_db_url}")
-                app.config['SQLALCHEMY_DATABASE_URI'] = test_db_url
-        
-        logger.info(f"🧪 PYTEST MODE: Using database: {app.config.get('SQLALCHEMY_DATABASE_URI', 'NOT SET')}")
+        from database_test_guard import validate_test_database_url
+        test_db_url = validate_test_database_url(os.getenv('TEST_DATABASE_URL'))
+        if app.config.get('SQLALCHEMY_DATABASE_URI') != test_db_url:
+            raise RuntimeError('CRITICAL: App test database configuration mismatch; connection details withheld.')
+        logger.info('PYTEST MODE: validated test database configuration')
     
     csrf.init_app(app)
     apply_proxy_fix(app)
     apply_security_headers(app)
-    app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static/library')
+    from oneirodex.utils.library_paths import library_dir, relocated_library_dir
+    app.config['UPLOAD_FOLDER'] = library_dir(app.root_path)
+    if relocated_library_dir():
+        # Standalone install (ADR 0011): runtime files live in the data folder,
+        # still served at /static/library/.
+        from oneirodex.utils.static_files import serve_relocated_static
+        app.config['IMAGE_SAVE_PATH'] = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
+        serve_relocated_static(app)
 
     from oneirodex.utils.i18n import init_babel
     init_babel(app)
-    # --- BEGIN: Print masked PostgreSQL connection string ---
-    raw_db_uri = app.config['SQLALCHEMY_DATABASE_URI']
-    parsed_uri = urlparse(raw_db_uri)
-    if parsed_uri.password:
-        # Create a new netloc with the masked password
-        netloc_parts = parsed_uri.netloc.split('@')
-        auth_part = netloc_parts[0].replace(parsed_uri.password, '********')
-        masked_netloc = f"{auth_part}@{netloc_parts[1]}" if len(netloc_parts) > 1 else auth_part
-        masked_uri = urlunparse(parsed_uri._replace(netloc=masked_netloc))
-        logger.info(f"Attempting to connect to PostgreSQL with URI: {masked_uri}")
-    else:
-        logger.info(f"Attempting to connect to PostgreSQL with URI: {raw_db_uri}")
-    # --- END: Print masked PostgreSQL connection string ---
+    logger.info('Connecting to configured PostgreSQL database')
 
     parsed_url = urlparse(app.config['SQLALCHEMY_DATABASE_URI'])
-    check_postgres_port_open(parsed_url.hostname, 5432, 60, 2)
+    # Wait on the port the URL names: a standalone install runs its bundled
+    # PostgreSQL on its own port (ADR 0011), and probing 5432 there stalled
+    # boot for two minutes. No host (a socket URL) means nothing to probe.
+    if parsed_url.hostname:
+        check_postgres_port_open(parsed_url.hostname, parsed_url.port or 5432, 60, 2)
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'login.login'
@@ -256,6 +248,23 @@ def create_app(config_object=None):
         }
 
     @app.before_request
+    def guard_private_library_files():
+        """The Flask twin of asgi.py's static guard (dev server, test client):
+        members' private files under /static/library/ are never static, and
+        BIOS needs a signed-in member."""
+        from flask import abort, request
+        from flask_login import current_user
+        from pathlib import Path as _Path
+        from oneirodex.utils.static_files import static_access
+
+        if not request.path.startswith('/static/'):
+            return None
+        access = static_access(_Path(app.static_folder or ''), request.path)
+        if access == 'private' or (access == 'member' and not current_user.is_authenticated):
+            abort(404)
+        return None
+
+    @app.before_request
     def check_setup_status():
         """Check if setup is required and redirect accordingly."""
         from flask import request, redirect
@@ -264,6 +273,9 @@ def create_app(config_object=None):
         # Skip setup checks for certain endpoints
         exempt_endpoints = {
             'setup.setup', 'setup.setup_submit', 'setup.setup_smtp', 'setup.setup_igdb',
+            # Steps 2-4 need the admin from step 1 signed in; an admin who lost
+            # that session must be able to sign in again mid-wizard.
+            'login.login',
             'static', 'favicon', 'site.favicon',
             'info.pulse', 'info.awake',
         }

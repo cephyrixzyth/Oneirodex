@@ -75,10 +75,10 @@ class TestLoadUser:
             assert loaded_user is None
     
     def test_load_user_invalid_id_format(self, app, db_session):
-        """Test loading with invalid ID format raises ValueError."""
+        """A malformed session id is no user, not a server error."""
         with app.app_context():
-            with pytest.raises(ValueError):
-                load_user('invalid_id')
+            assert load_user('invalid_id') is None
+            assert load_user('12:not-the-fingerprint') is None
 
 
 class TestAuthenticateAndRedirect:

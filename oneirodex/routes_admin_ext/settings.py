@@ -471,7 +471,8 @@ def integrations_igdb_save():
 
         # Validate input
         client_id = data.get('igdb_client_id', '').strip()
-        client_secret = data.get('igdb_client_secret', '').strip()
+        # The page never shows the saved secret; blank keeps it.
+        client_secret = data.get('igdb_client_secret', '').strip() or (settings.igdb_client_secret or '')
 
         if len(client_id) < 20 or len(client_secret) < 20:
             return api_error('Client ID and Secret must be at least 20 characters long', code='bad_request')
@@ -486,8 +487,8 @@ def integrations_igdb_save():
 
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error saving IGDB settings from integrations: {str(e)}")
-        return api_error(str(e), code='internal')
+        logging.error("Error saving IGDB settings from integrations: %s", type(e).__name__)
+        return api_error('Could not save the IGDB settings.', code='internal')
 
 
 @admin2_bp.route('/admin/integrations/igdb/test', methods=['POST'])
@@ -516,8 +517,9 @@ def integrations_igdb_test():
             return api_error('Invalid API response', code='internal')
 
     except Exception as e:
-        logging.error(f"Error testing IGDB from integrations: {str(e)}")
-        return api_error(str(e), code='internal')
+        # Not str(e): the IGDB request carries the client secret in its URL.
+        logging.error("Error testing IGDB from integrations: %s", type(e).__name__)
+        return api_error('The IGDB connection test failed.', code='internal')
 
 
 @admin2_bp.route('/admin/integrations/oidc/save', methods=['POST'])
@@ -533,7 +535,10 @@ def integrations_oidc_save():
         settings.oidc_display_name = (data.get('oidc_display_name') or 'Sign in with SSO').strip()[:120]
         settings.oidc_issuer_url = (data.get('oidc_issuer_url') or '').strip()[:512] or None
         settings.oidc_client_id = (data.get('oidc_client_id') or '').strip()[:255] or None
-        settings.oidc_client_secret = (data.get('oidc_client_secret') or '').strip()[:512] or None
+        # The page never shows the saved secret; blank keeps it.
+        new_secret = (data.get('oidc_client_secret') or '').strip()[:512]
+        if new_secret:
+            settings.oidc_client_secret = new_secret
         settings.oidc_redirect_uri = (data.get('oidc_redirect_uri') or '').strip()[:512] or None
         settings.oidc_scopes = (data.get('oidc_scopes') or 'openid email profile').strip()[:255]
         settings.oidc_role_claim = (data.get('oidc_role_claim') or 'groups').strip()[:64]
@@ -566,8 +571,8 @@ def integrations_oidc_save():
         return api_ok({'message': 'OIDC settings saved successfully.'})
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Error saving OIDC settings: {str(e)}")
-        return api_error(str(e), code='internal')
+        logging.error("Error saving OIDC settings: %s", type(e).__name__)
+        return api_error('Could not save the OIDC settings.', code='internal')
 
 
 @admin2_bp.route('/admin/integrations/community', methods=['POST'])

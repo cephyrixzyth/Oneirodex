@@ -10,19 +10,13 @@ def test_parse_connect_string():
 
 def test_probe_server_health_http(monkeypatch):
     class FakeResponse:
-        status = 200
+        status_code = 200
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def getcode(self):
-            return 200
+        def close(self):
+            pass
 
     monkeypatch.setattr(
-        'oneirodex.utils.game_servers.urlopen',
+        'oneirodex.utils.game_servers.safe_request',
         lambda *args, **kwargs: FakeResponse(),
     )
     result = probe_server_health(None, 'http://127.0.0.1/health')

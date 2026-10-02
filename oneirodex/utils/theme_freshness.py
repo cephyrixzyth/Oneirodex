@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from typing import Any
+from oneirodex.utils.library_paths import library_dir
 
 #: Only the asset types Reset Themes actually manages. Images and fonts are
 #: excluded: they are large, rarely edited, and an operator swapping artwork is
@@ -46,7 +47,7 @@ def theme_freshness(app_root: str | Path, theme: str = 'default') -> dict[str, A
     """
     root = Path(app_root)
     source = root / 'setup' / 'default_theme'
-    deployed = root / 'static' / 'library' / 'themes' / theme
+    deployed = Path(library_dir(root)) / 'themes' / theme
 
     if not source.is_dir():
         # Nothing to compare against — say so rather than implying freshness.

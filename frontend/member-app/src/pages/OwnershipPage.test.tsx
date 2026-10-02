@@ -1,216 +1,106 @@
-import { vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { OwnershipPage } from './OwnershipPage'
 import { ShellHarness } from '../testShell'
-
-function summaryPayload(overrides = {}) {
-  return {
-    enabled: true,
-    has_steam_api_key: true,
-    has_gog_api_key: false,
-    has_epic_api_key: false,
-    total_owned: 12,
-    total_matched: 5,
-    stores: {
-      amazon: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-      epic: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-      gog: { connected: false, external_account_id: null, owned_count: 2, matched_count: 1 },
-      steam: {
-        connected: true,
-        external_account_id: '76561190000000000',
-        owned_count: 10,
-        matched_count: 4,
-      },
-    },
-    ...overrides,
-  }
-}
-
-function jsonResponse(body: any, { ok = true, status = 200 } = {}): Promise<any> {
-  const payload = JSON.stringify(body)
-  return Promise.resolve({
-    ok,
-    status,
-    headers: new Headers({ 'content-type': 'application/json' }),
-    json: () => Promise.resolve(body),
-    text: () => Promise.resolve(payload),
-  })
-}
-
-function requestHeaders(call: any) {
-  return new Headers(call?.[1]?.headers)
-}
-
-function ownedTitlesCounts() {
-  const el = document.querySelector('.od-ownership__card-counts')
-  return (el?.textContent || '').replace(/\s+/g, ' ').trim()
-}
+import { jsonResponse, requestHeaders, stubFetch } from '../testJsonResponse'
+import { connection, connectionsBody, job } from '../components/stores/storeFixtures'
 
 beforeEach(() => {
-  document.head.innerHTML = '<meta name="csrf-token" content="token-abc">'
-  global.fetch = vi.fn()
+  document.head.innerHTML = '<meta name="csrf-token" content="csrf-test">'
 })
 
-afterEach(() => {
-  document.head.innerHTML = ''
-  delete (global as any).fetch
+afterEach(() => vi.unstubAllGlobals())
+
+const LINKED_GOG = connection('gog', {
+  state: 'connected',
+  account: { connected: true, linked_at: null, updated_at: null },
+  credential: { source: 'member', household_available: false },
+  records: { owned: 12, matched: 5, needs_review: 4, last_recorded_at: null },
+  actions: ['sync', 'reconnect', 'import_csv', 'disconnect'],
+  last_sync: job({ synced: 12 }),
 })
 
-test('renders ownership summary after loading', async () => {
-  vi.mocked(global.fetch).mockImplementation(() => jsonResponse(summaryPayload()))
-
-  render(
-    <ShellHarness shell={{}}>
+function renderPage({ shell = {}, route = '/ownership' } = {}) {
+  return render(
+    <ShellHarness shell={shell} router initialEntries={[route]}>
       <OwnershipPage />
     </ShellHarness>,
   )
+}
 
-  expect(screen.getByText('Loading ownership status…')).toBeInTheDocument()
-
-  await waitFor(() => {
-    expect(ownedTitlesCounts()).toMatch(/12 synced · 5 matched/)
-  })
-  const storeRows = screen.getAllByRole('listitem')
-  const steamRow = storeRows.find((row) => /Steam/.test(row.textContent || ''))
-  const gogRow = storeRows.find(
-    (row) => /^GOG/.test((row.textContent || '').trim()) || /\bGOG\b/.test(row.textContent || ''),
-  )
-  expect(steamRow).toHaveTextContent(/connected/)
-  expect(steamRow).toHaveTextContent(/10 titles · 4 matched/)
-  expect(gogRow).toHaveTextContent(/not connected/)
-  expect(gogRow).toHaveTextContent(/2 titles · 1 matched/)
-  expect(
-    screen.getByText(/Steam API key configured.*GOG \/ Epic \/ Amazon: live register/),
-  ).toBeInTheDocument()
-  expect(global.fetch).toHaveBeenCalledWith(
-    '/api/ownership',
-    expect.objectContaining({ credentials: 'include' }),
-  )
-  expect(screen.getByLabelText('Steam ID (64-bit)')).toHaveValue('76561190000000000')
-  expect(screen.getByRole('button', { name: 'Disconnect Steam' })).toBeEnabled()
-  expect(screen.getByRole('button', { name: 'Disconnect Epic Games' })).toBeDisabled()
-})
-
-test('shows empty state when nothing is synced yet', async () => {
-  vi.mocked(global.fetch).mockImplementation(() =>
+test('Settings renders the shared connection list from the status contract', async () => {
+  stubFetch(() =>
     jsonResponse(
-      summaryPayload({
-        total_owned: 0,
-        total_matched: 0,
-        stores: {
-          amazon: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-          epic: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-          gog: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-          steam: { connected: false, external_account_id: null, owned_count: 0, matched_count: 0 },
-        },
-      }),
+      connectionsBody([
+        LINKED_GOG,
+        connection('humble', { state: 'unavailable', live: false, actions: [] }),
+      ]),
     ),
   )
+  renderPage()
+  const gog = await screen.findByRole('listitem', { name: 'GOG' })
+  expect(within(gog).getByText('12 titles · 5 matched · 4 to review')).toBeInTheDocument()
+  expect(screen.getByText(/Not available yet: Humble Bundle/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'First-time setup' })).toHaveAttribute('href', '/welcome')
+})
 
-  render(
-    <ShellHarness>
-      <OwnershipPage />
-    </ShellHarness>,
-  )
-
+test('new chrome shows totals in the context bar and switches to match review', async () => {
+  const user = userEvent.setup()
+  const fetchMock = stubFetch((url: string) => {
+    if (url.startsWith('/api/ownership/titles'))
+      return jsonResponse({ ok: true, titles: [], next_after_id: null })
+    return jsonResponse(connectionsBody([LINKED_GOG]))
+  })
+  renderPage({ shell: { enableNewChrome: true } })
+  expect(await screen.findByText('12 owned · 5 matched · 4 to review')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Review matches' }))
+  expect(await screen.findByText('Nothing is waiting for review.')).toBeInTheDocument()
   expect(
-    await screen.findByText('No owned titles synced yet. Connect a store or import a CSV below.'),
+    fetchMock.mock.calls.some(([url]) =>
+      String(url).startsWith('/api/ownership/titles?after_id=0&status=needs_review'),
+    ),
+  ).toBe(true)
+})
+
+test('a failed status read offers a retry', async () => {
+  const user = userEvent.setup()
+  let calls = 0
+  stubFetch(() => {
+    calls += 1
+    return calls === 1
+      ? jsonResponse(
+          { ok: false, error: 'boom', error_code: 'internal' },
+          { ok: false, status: 500 },
+        )
+      : jsonResponse(connectionsBody([LINKED_GOG]))
+  })
+  renderPage()
+  await user.click(await screen.findByRole('button', { name: 'Try again' }))
+  expect(await screen.findByRole('listitem', { name: 'GOG' })).toBeInTheDocument()
+})
+
+test('sync posts to the store route with the CSRF header', async () => {
+  const user = userEvent.setup()
+  const fetchMock = stubFetch((url: string, init: any) => {
+    if (url === '/api/ownership/gog/sync' && init?.method === 'POST') {
+      return jsonResponse({
+        ok: true,
+        synced: 12,
+        matched: 6,
+        store: 'gog',
+        job: job({ synced: 12, matched: 6 }),
+      })
+    }
+    return jsonResponse(connectionsBody([LINKED_GOG]))
+  })
+  renderPage()
+  const gog = await screen.findByRole('listitem', { name: 'GOG' })
+  await user.click(within(gog).getByRole('button', { name: 'Sync now' }))
+  const call = fetchMock.mock.calls.find(
+    ([url, init]: any) => url === '/api/ownership/gog/sync' && init?.method === 'POST',
+  )
+  expect(requestHeaders(call).get('X-CSRFToken')).toBe('csrf-test')
+  expect(
+    await within(gog).findByText('Synced 12 titles (6 matched to your library).'),
   ).toBeInTheDocument()
-})
-
-test('shows retry when the summary request fails', async () => {
-  vi.mocked(global.fetch)
-    .mockImplementationOnce(() => jsonResponse({}, { ok: false, status: 500 }))
-    .mockImplementation(() => jsonResponse(summaryPayload()))
-
-  const user = userEvent.setup()
-  render(
-    <ShellHarness>
-      <OwnershipPage />
-    </ShellHarness>,
-  )
-
-  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load store ownership.')
-
-  await user.click(screen.getByRole('button', { name: /Try again/i }))
-
-  await waitFor(() => {
-    expect(ownedTitlesCounts()).toMatch(/12 synced · 5 matched/)
-  })
-})
-
-test('sync posts to the steam sync endpoint with the CSRF header', async () => {
-  vi.mocked(global.fetch).mockImplementation((url: any) => {
-    if (url === '/api/ownership/steam/sync') {
-      return jsonResponse({ synced: 10, matched: 4, store: 'steam', summary: summaryPayload() })
-    }
-    return jsonResponse(summaryPayload())
-  })
-
-  const user = userEvent.setup()
-  render(
-    <ShellHarness>
-      <OwnershipPage />
-    </ShellHarness>,
-  )
-
-  const syncButton = await screen.findByRole('button', { name: 'Sync from Steam' })
-  await user.click(syncButton)
-
-  await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/ownership/steam/sync',
-      expect.objectContaining({
-        method: 'POST',
-        credentials: 'include',
-      }),
-    )
-  })
-  const syncCall = vi
-    .mocked(global.fetch)
-    .mock.calls.find(([url]: any) => url === '/api/ownership/steam/sync')
-  expect(requestHeaders(syncCall).get('X-CSRFToken')).toBe('token-abc')
-
-  expect(await screen.findByText('Synced 10 titles (4 matched to library).')).toBeInTheDocument()
-})
-
-test('csv import posts the pasted rows as JSON', async () => {
-  vi.mocked(global.fetch).mockImplementation((url: any) => {
-    if (url === '/api/ownership/gog/csv') {
-      return jsonResponse({ imported: 3, matched: 2, store: 'gog', summary: summaryPayload() })
-    }
-    return jsonResponse(summaryPayload())
-  })
-
-  const user = userEvent.setup()
-  render(
-    <ShellHarness>
-      <OwnershipPage />
-    </ShellHarness>,
-  )
-
-  const textarea = await screen.findByLabelText(
-    'Import owned titles (CSV: product ID or id,name per line)',
-  )
-  await user.type(textarea, '123,Some Game')
-
-  await user.click(screen.getAllByRole('button', { name: 'Import CSV' })[1])
-
-  await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/ownership/gog/csv',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ csv: '123,Some Game' }),
-      }),
-    )
-  })
-  const csvCall = vi
-    .mocked(global.fetch)
-    .mock.calls.find(([url]: any) => url === '/api/ownership/gog/csv')
-  expect(requestHeaders(csvCall).get('X-CSRFToken')).toBe('token-abc')
-  expect(requestHeaders(csvCall).get('Content-Type')).toBe('application/json')
-
-  expect(await screen.findByText('Imported 3 GOG titles (2 matched).')).toBeInTheDocument()
 })

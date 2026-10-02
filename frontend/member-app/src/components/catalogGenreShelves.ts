@@ -31,6 +31,10 @@ const INHERITED_FILTER_KEYS = [
   'player_perspective',
   'favorites',
   'signal',
+  // LIB-02: without these the Grid view silently ignored store / ownership filters.
+  'store',
+  'store_match',
+  'ownership',
 ]
 
 export function shelfQuery(filters: any, genre: any) {

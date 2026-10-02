@@ -19,6 +19,7 @@ import { startClientHeartbeat, type HeartbeatScheduler } from './heartbeat.js'
 import { keychainAdapter } from './keychain.js'
 import { joinUrl } from './paths.js'
 import { openSocialCompanionWindow } from './social-window.js'
+import { checkServerUrl, savedServerUrlProblem } from './transport-policy.js'
 
 const LIBRARY_LABEL = 'library'
 
@@ -43,7 +44,18 @@ function startThinPresence(baseUrl: string, token: string): void {
   if (!baseUrl || !token) {
     return
   }
-  const auth = createAuthStore({ baseUrl, token })
+  let auth: ReturnType<typeof createAuthStore>
+  try {
+    auth = createAuthStore({ baseUrl, token })
+  } catch (error) {
+    // Saved by an older build, refused now (plain http:// to a public host): stay
+    // quiet rather than send the token there. Save / Validate show the reason.
+    logCompanion(
+      'thin',
+      `presence skipped: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    return
+  }
   thinPresence = startClientHeartbeat(auth, {
     deviceKind: 'thin',
     deviceName: 'Oneirodex Thin',
@@ -190,6 +202,11 @@ export async function mountThinApp(root: HTMLElement): Promise<void> {
       setStatus('Enter a server base URL.', 'error')
       return null
     }
+    const serverCheck = checkServerUrl(baseUrl)
+    if (!serverCheck.ok) {
+      setStatus(serverCheck.message, 'error')
+      return null
+    }
     const token = readNormalizedToken()
     if (token && !isOneirodexToken(token)) {
       setStatus(shapeInvalidConnectionResult().message, 'error')
@@ -210,6 +227,11 @@ export async function mountThinApp(root: HTMLElement): Promise<void> {
   try {
     const stored = await loadStoredConfig()
     if (stored.baseUrl) baseUrlEl.value = stored.baseUrl
+    // A URL saved by an older build that the transport policy refuses now (plain
+    // http:// to a public host) never reaches presence — and without this the
+    // seat just vanishes from Ops while the window still says "enter your URL".
+    const refused = savedServerUrlProblem(stored.baseUrl)
+    if (refused) setStatus(refused, 'error')
     const fromKeychain = await keychainAdapter.load()
     const token = stored.token || fromKeychain
     if (token) tokenEl.value = normalizeOneirodexToken(token)

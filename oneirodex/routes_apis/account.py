@@ -235,6 +235,10 @@ def account_password(body: ChangePasswordBody):
         current_app.logger.warning('password change failed for user %s: %s', user.id, exc)
         return api_error('Could not change your password.', code='internal')
 
+    # The new password ends every other session (User.get_id); keep this one.
+    from flask_login import login_user
+
+    login_user(user, remember=True)
     return api_ok({'changed': True})
 
 

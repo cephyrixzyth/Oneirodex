@@ -22,8 +22,11 @@ launcher surfaces (operator-supplied tokens); CSV still works for all of them.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
+
+logger = logging.getLogger(__name__)
 
 _scheduler_started = False
 
@@ -159,6 +162,8 @@ def sync_all_linked_accounts() -> dict:
     from oneirodex import db
     from oneirodex.models import StoreAccount
     from oneirodex.utils import store_ownership
+    from oneirodex.utils.store_sync_errors import AUTH_REASONS, SyncOutcomeError
+    from oneirodex.utils.store_sync_jobs import is_stale, latest_jobs, run_store_sync
 
     if not store_ownership.is_ownership_sync_enabled():
         return {'skipped': 'ownership sync disabled by administrator'}
@@ -178,39 +183,67 @@ def sync_all_linked_accounts() -> dict:
     accounts = db.session.execute(
         select(StoreAccount).filter(StoreAccount.store.in_(tuple(usable)))
     ).scalars().all()
+    # Snapshot account facts up front: every job commits, which expires ORM rows.
+    accounts = [
+        (a.user_id, (a.store or '').lower(), a.external_account_id, getattr(a, 'credential', None), a.updated_at)
+        for a in accounts
+    ]
+    # Same for the latest jobs: a disconnect during this cycle deletes its
+    # store's job rows, and reading an expired, deleted row would raise.
+    last_jobs = {
+        key: (job.status, job.reason, job.finished_at, is_stale(job))
+        for key, job in latest_jobs({user_id for user_id, *_ in accounts}).items()
+    }
 
     synced = 0
     failed = 0
-    for account in accounts:
-        store = (account.store or '').lower()
+    waiting = 0
+    for user_id, store, external_account_id, credential, updated_at in accounts:
         handler = usable.get(store)
         if handler is None:
             # Unreachable given the filter, and deliberately not a fallthrough:
             # syncing an unknown store with whichever function happened to be in
             # scope is exactly the bug this registry replaced.
             continue
-        if store == 'steam' and not account.external_account_id:
+        if store == 'steam' and not external_account_id:
             continue
-        if store == 'gog' and not (
-            getattr(account, 'credential', None) or store_ownership.get_gog_api_token()
-        ):
+        if store == 'gog' and not (credential or store_ownership.get_gog_api_token()):
             continue
-        if store == 'epic' and not (
-            getattr(account, 'credential', None) or store_ownership.get_epic_api_token()
-        ):
+        if store == 'epic' and not (credential or store_ownership.get_epic_api_token()):
             continue
-        if store == 'amazon' and not (
-            getattr(account, 'credential', None) or store_ownership.get_amazon_api_token()
-        ):
+        if store == 'amazon' and not (credential or store_ownership.get_amazon_api_token()):
+            continue
+        # A sign-in the provider already refused will be refused again; wait
+        # for the member to reconnect instead of retrying it every cycle. A
+        # sync still running (member button, another worker) is left alone.
+        last_status, last_reason, last_finished, last_stale = last_jobs.get((user_id, store), (None,) * 4)
+        if last_status == 'running' and not last_stale:
+            waiting += 1
+            continue
+        if (last_status == 'failed' and last_reason in AUTH_REASONS
+                and not (updated_at and last_finished and updated_at > last_finished)):
+            waiting += 1
             continue
         try:
-            handler['sync'](account.user_id)
-            synced += 1
-        except Exception as exc:
+            outcome = run_store_sync(user_id, store, trigger='schedule', sync_fn=handler['sync'])
+        except SyncOutcomeError:
+            waiting += 1
+            continue
+        except Exception as exc:  # noqa: BLE001 -- one member's link must not end everyone's refresh
+            db.session.rollback()
             failed += 1
-            print(f'[OWNERSHIP] sync failed for user {account.user_id}: {exc}')
+            # Type only: a database error's text includes statement parameters.
+            logger.warning('Ownership sync error for user %s (%s): %s', user_id, store, type(exc).__name__)
+            continue
+        if outcome['job'].status in ('succeeded', 'partial'):
+            synced += 1
+        else:
+            failed += 1
+            # Reason code only: exception text can carry request URLs (the
+            # Steam server key) or SQL parameters (tokens).
+            print(f"[OWNERSHIP] sync {outcome['job'].status} for user {user_id} ({store}): {outcome['reason']}")
 
-    return {'accounts': len(accounts), 'synced': synced, 'failed': failed}
+    return {'accounts': len(accounts), 'synced': synced, 'failed': failed, 'waiting': waiting}
 
 
 def start_ownership_scheduler(app):
@@ -259,7 +292,8 @@ def start_ownership_scheduler(app):
                         )
             except Exception as exc:
                 # A poller that dies takes ownership freshness with it silently.
-                print(f'[OWNERSHIP] Poll error: {exc}')
+                # Type only: a database error's text includes statement parameters.
+                print(f'[OWNERSHIP] Poll error: {type(exc).__name__}')
             time.sleep(interval)
 
     threading.Thread(target=_loop, name='od-ownership-poll', daemon=True).start()

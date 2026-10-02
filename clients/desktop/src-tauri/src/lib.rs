@@ -2,9 +2,13 @@ use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{copy, Write};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+use url::{Host, Url};
 use zip::ZipArchive;
+mod install_recovery;
+mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
 /// identifier is unavailable (tests, unbundled dev runs).
@@ -45,11 +49,27 @@ pub struct LifecycleRegistryFile {
     pub records: Vec<LifecycleRecord>,
 }
 
+/// The generation an update replaced, kept for one more update so a file the new
+/// archive overwrote stays recoverable (see `GameInstallRecord.superseded`).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupersededInstall {
+    pub archive_path: String,
+    pub extract_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_path: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InstallRecord {
     pub archive_path: String,
     pub extract_path: String,
     pub exe_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_path: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending_uninstall: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded: Option<SupersededInstall>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -107,7 +127,41 @@ fn installs_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     resolve_subdir(app, "installs")
 }
 
-fn canonicalize_path(path: &Path) -> Result<PathBuf, String> {
+/// Said when a containment helper is handed a path it must not even look at.
+const PATH_NOT_PROBEABLE: &str = "Path must be an absolute local path inside an app directory";
+
+/// The text-only half of containment: may `path` be touched on disk at all?
+///
+/// `canonicalize_path`, and every `ensure_path_*` built on it, starts with
+/// `path.exists()`. On Windows that probe of a UNC path opens an SMB connection
+/// and answers the named host's NTLM challenge, handing it the user's credential
+/// hash (the leak `is_network_or_device_path` keeps out of `open_path`). The
+/// strings that reach these helpers come from the webview and from
+/// `installs.json`, so they are screened as text first: UNC and device paths and
+/// non-absolute ones (which would resolve against the working directory) are
+/// refused before any filesystem call.
+///
+/// One exception, string-compared only: a Windows profile redirected to a file
+/// server puts the app's own folders on a UNC path, so a UNC path at or below the
+/// `root` the app itself supplied is the app's own folder, not a stranger's host.
+/// A `..` segment takes a path out of that prefix (see `is_under_trusted_share`).
+fn check_path_text_before_probe(path: &Path, root: &Path) -> Result<(), String> {
+    let text = path.to_string_lossy();
+    if is_network_or_device_path(&text) {
+        let root_text = root.to_string_lossy();
+        if trusted_shares::is_under_trusted_share(&text, &[&*root_text]) {
+            return Ok(());
+        }
+        return Err(PATH_NOT_PROBEABLE.into());
+    }
+    if !path.is_absolute() {
+        return Err(PATH_NOT_PROBEABLE.into());
+    }
+    Ok(())
+}
+
+fn canonicalize_path(path: &Path, root: &Path) -> Result<PathBuf, String> {
+    check_path_text_before_probe(path, root)?;
     if path.exists() {
         return path.canonicalize().map_err(|error| error.to_string());
     }
@@ -125,22 +179,52 @@ fn canonicalize_path(path: &Path) -> Result<PathBuf, String> {
     Ok(path.to_path_buf())
 }
 
-fn ensure_path_under_root(path: &Path, root: &Path) -> Result<(), String> {
+/// Canonicalize `path` and `root` and require `path` to sit inside `root`.
+///
+/// `Path::starts_with` is reflexive, so the plain check also accepts the root
+/// itself. That is fine for anything that reads or writes *into* the root, but
+/// fatal for an operation that wipes or removes its target: a game id of `.`
+/// would make the target the whole installs directory. `strict` closes that by
+/// refusing the root itself.
+fn check_path_under_root(path: &Path, root: &Path, strict: bool) -> Result<(), String> {
+    check_path_text_before_probe(path, root)?;
     let canonical_root = root.canonicalize().map_err(|error| error.to_string())?;
-    let canonical_path = canonicalize_path(path)?;
+    let canonical_path = canonicalize_path(path, root)?;
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Path is outside allowed app directory".into());
+    }
+    if strict && canonical_path == canonical_root {
+        return Err("Path must be inside an app directory, not the directory itself".into());
     }
     Ok(())
 }
 
-fn ensure_path_under_any_root(path: &Path, roots: &[&Path]) -> Result<(), String> {
+fn check_path_under_any_root(path: &Path, roots: &[&Path], strict: bool) -> Result<(), String> {
     for root in roots {
-        if ensure_path_under_root(path, root).is_ok() {
+        if check_path_under_root(path, root, strict).is_ok() {
             return Ok(());
         }
     }
     Err("Path is outside allowed app directories".into())
+}
+
+/// `path` is the root or anything below it — for reads and writes into the root.
+fn ensure_path_under_root(path: &Path, root: &Path) -> Result<(), String> {
+    check_path_under_root(path, root, false)
+}
+
+fn ensure_path_under_any_root(path: &Path, roots: &[&Path]) -> Result<(), String> {
+    check_path_under_any_root(path, roots, false)
+}
+
+/// `path` is strictly below the root (never the root itself). Use for every
+/// destructive operation: extract-with-wipe, remove, rename, uninstall.
+fn ensure_path_strictly_under_root(path: &Path, root: &Path) -> Result<(), String> {
+    check_path_under_root(path, root, true)
+}
+
+fn ensure_path_strictly_under_any_root(path: &Path, roots: &[&Path]) -> Result<(), String> {
+    check_path_under_any_root(path, roots, true)
 }
 
 /// Is this file the sort of thing we can hand to `Command::new`?
@@ -249,6 +333,118 @@ fn check_process_running(pid: u32) -> bool {
     }
 }
 
+/// Is this IPv4 address on the local machine or local network?
+/// 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 and the shared address space
+/// 100.64/10 (RFC 6598), where Tailscale puts every peer. Tailscale encrypts the
+/// hop. Accepting that range is the companion's own call; the backend's rule for
+/// it is the SSRF filter (`_is_blocked_ip` in `oneirodex/utils/security.py`),
+/// which counts it as non-public home-lab space.
+fn is_private_or_loopback_ipv4(ip: &Ipv4Addr) -> bool {
+    let [a, b, _, _] = ip.octets();
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || (a == 100 && (64..=127).contains(&b))
+}
+
+/// Same for IPv6: `::1`, unique-local `fc00::/7` (which holds Tailscale's
+/// `fd7a:115c:a1e0::/48`), link-local `fe80::/10`, and an IPv4-mapped address
+/// (`::ffff:a.b.c.d`) whose embedded IPv4 is itself local.
+fn is_private_or_loopback_ipv6(ip: &Ipv6Addr) -> bool {
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        return is_private_or_loopback_ipv4(&mapped);
+    }
+    let first = ip.segments()[0];
+    ip.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
+}
+
+/// House-network host suffixes a router hands out. The same suffixes as
+/// `_PRIVATE_SUFFIXES` in `oneirodex/utils/trusted_host.py`; the address ranges
+/// above are the companion's own list.
+const PRIVATE_HOST_SUFFIXES: [&str; 5] =
+    [".local", ".lan", ".home.arpa", ".internal", ".localdomain"];
+
+/// Does this host name a machine on the user's own network?
+///
+/// Besides the literal local address ranges: the house-network suffixes
+/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and a
+/// bare single-label name such as `nas` or `localhost`, which only resolve
+/// through the local resolver / search domain. Anything with a public-looking
+/// dotted name is not local, however much like a LAN address it reads
+/// (`192.168.1.1.evil.com`).
+fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
+    match host {
+        Host::Ipv4(ip) => is_private_or_loopback_ipv4(ip),
+        Host::Ipv6(ip) => is_private_or_loopback_ipv6(ip),
+        Host::Domain(domain) => {
+            let name = domain.trim_end_matches('.').to_ascii_lowercase();
+            match PRIVATE_HOST_SUFFIXES
+                .iter()
+                .find_map(|suffix| name.strip_suffix(suffix))
+            {
+                Some(label) => !label.is_empty(),
+                None => !name.is_empty() && !name.contains('.'),
+            }
+        }
+    }
+}
+
+/// Validate the server base URL before it is written to `config.json`.
+///
+/// The companion sends its API token as a Bearer header on every request, so a
+/// plain `http://` server on the open internet would expose the token to anyone
+/// on the path. `https://` is always accepted; `http://` only for loopback and
+/// private-LAN hosts; every other scheme is refused. An empty string clears the
+/// saved URL and is allowed. The TypeScript client applies the same policy before
+/// it ever sends a request — this is the backstop for anything that reaches
+/// `save_config` without going through it. `fixtures/server-urls.json` holds the
+/// URLs both implementations are tested against, so they cannot drift apart.
+fn validate_server_base_url(raw: &str) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let url = Url::parse(trimmed).map_err(|_| {
+        "Server URL is not a valid URL. Start it with https:// (or http:// for a server on your own network).".to_string()
+    })?;
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" => {
+            if url
+                .host()
+                .is_some_and(|host| is_private_or_loopback_host(&host))
+            {
+                return Ok(());
+            }
+            Err(format!(
+                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names).",
+                url.host_str().unwrap_or("this server")
+            ))
+        }
+        _ => Err(
+            "Server URL must start with https:// (or http:// for a server on your own network)."
+                .to_string(),
+        ),
+    }
+}
+
+/// Apply `validate_server_base_url` to a `save_config` request.
+///
+/// A URL that is already on disk may be re-saved unchanged: that is how the
+/// legacy plaintext token gets scrubbed from `config.json` on first load, and it
+/// creates no new exposure (the TypeScript client still refuses to use the URL).
+/// Any *new* URL has to pass the policy.
+fn validate_config_base_url(config_file: &Path, requested: &str) -> Result<(), String> {
+    let persisted = fs::read_to_string(config_file)
+        .ok()
+        .and_then(|data| serde_json::from_str::<AppConfig>(&data).ok())
+        .map(|config| config.base_url);
+    if persisted.as_deref().map(str::trim) == Some(requested.trim()) {
+        return Ok(());
+    }
+    validate_server_base_url(requested)
+}
+
 #[tauri::command]
 fn load_config(app: tauri::AppHandle) -> Result<AppConfig, String> {
     let path = config_path(&app)?;
@@ -263,6 +459,7 @@ fn load_config(app: tauri::AppHandle) -> Result<AppConfig, String> {
 #[tauri::command]
 fn save_config(app: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
     let path = config_path(&app)?;
+    validate_config_base_url(&path, &config.base_url)?;
     // Never persist API tokens in plaintext JSON — secrets live in the OS store.
     let sanitized = AppConfig {
         base_url: config.base_url,
@@ -340,7 +537,119 @@ fn load_installs(app: tauri::AppHandle) -> Result<InstallsFile, String> {
 fn save_installs(app: tauri::AppHandle, installs_file: InstallsFile) -> Result<(), String> {
     let path = installs_path(&app)?;
     let data = serde_json::to_string_pretty(&installs_file).map_err(|error| error.to_string())?;
-    fs::write(path, data).map_err(|error| error.to_string())
+    install_recovery::atomic_write(&path, data.as_bytes()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn retain_install_files(app: tauri::AppHandle, from: String, to: String) -> Result<(), String> {
+    let root = installs_root(&app)?;
+    let source = PathBuf::from(from);
+    let destination = PathBuf::from(to);
+    ensure_path_under_root(&source, &root)?;
+    ensure_path_under_root(&destination, &root)?;
+    let source = source.canonicalize().map_err(|error| error.to_string())?;
+    let destination = destination
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if source.starts_with(&destination) || destination.starts_with(&source) {
+        return Err("Update directories must be separate".into());
+    }
+    let summary = install_recovery::retain_missing(&source, &destination)
+        .map_err(|error| error.to_string())?;
+    log_skipped_links("update", &summary);
+    Ok(())
+}
+
+/// Linked files are never copied (see `install_recovery::retain_missing`); say so
+/// on the companion's own stderr rather than let the copy look complete.
+fn log_skipped_links(operation: &str, summary: &install_recovery::RetainSummary) {
+    if !summary.skipped_links.is_empty() {
+        eprintln!(
+            "oneirodex: {operation} did not copy {} symbolic link(s)/junction(s); the data they point at was left where it is",
+            summary.skipped_links.len()
+        );
+    }
+}
+
+#[tauri::command]
+fn preserve_install_files(
+    app: tauri::AppHandle,
+    path: String,
+    backup_path: String,
+) -> Result<Option<String>, String> {
+    let root = installs_root(&app)?;
+    let source = PathBuf::from(&path);
+    let backup = PathBuf::from(&backup_path);
+    ensure_path_under_root(&source, &root)?;
+    ensure_path_under_root(&backup, &root)?;
+    if !source.exists() {
+        return Ok(None);
+    }
+    let source = source.canonicalize().map_err(|error| error.to_string())?;
+    let backup = canonicalize_path(&backup, &root)?;
+    if backup.exists()
+        || source == root.canonicalize().map_err(|error| error.to_string())?
+        || backup.starts_with(&source)
+    {
+        return Err("Invalid install backup destination".into());
+    }
+    fs::create_dir(&backup).map_err(|error| error.to_string())?;
+    let summary =
+        install_recovery::retain_missing(&source, &backup).map_err(|error| error.to_string())?;
+    log_skipped_links("snapshot", &summary);
+    Ok(Some(backup_path))
+}
+
+#[tauri::command]
+fn restore_install_snapshot(
+    app: tauri::AppHandle,
+    from: String,
+    to: String,
+) -> Result<ExtractZipResult, String> {
+    let root = installs_root(&app)?;
+    let source = PathBuf::from(from);
+    let destination = PathBuf::from(to);
+    ensure_path_under_root(&source, &root)?;
+    ensure_path_under_root(&destination, &root)?;
+    let source = source.canonicalize().map_err(|error| error.to_string())?;
+    let destination = canonicalize_path(&destination, &root)?;
+    if destination.exists() || destination.starts_with(&source) || source.starts_with(&destination)
+    {
+        return Err("Restore destination must be a separate new directory".into());
+    }
+    fs::create_dir(&destination).map_err(|error| error.to_string())?;
+    let summary = install_recovery::retain_missing(&source, &destination)
+        .map_err(|error| error.to_string())?;
+    log_skipped_links("restore", &summary);
+    // `canonicalize` hands back `\\?\C:\…` on Windows. That string ends up in the
+    // install record and later in "Show in Explorer", which refuses device-style
+    // paths — give the record the ordinary drive path instead.
+    Ok(ExtractZipResult {
+        extract_path: user_facing_path(&destination.to_string_lossy()),
+        exe_path: find_likely_exe(&destination, 2).map(|exe| user_facing_path(&exe)),
+    })
+}
+
+/// Strip the Win32 verbatim prefix from a drive path (`\\?\C:\x` -> `C:\x`) or a
+/// UNC path (`\\?\UNC\host\share` -> `\\host\share`, the form the OS itself reports
+/// for a redirected profile folder). Every other shape is returned as is.
+fn user_facing_path(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        if !rest.is_empty() && !rest.starts_with('\\') {
+            return format!(r"\\{rest}");
+        }
+    }
+    if let Some(rest) = path.strip_prefix(r"\\?\") {
+        let bytes = rest.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+        {
+            return rest.to_string();
+        }
+    }
+    path.to_string()
 }
 
 #[tauri::command]
@@ -391,11 +700,28 @@ fn extract_zip_archive(
 ) -> Result<ExtractZipResult, String> {
     let downloads = resolve_subdir(&app, "downloads")?;
     let installs = resolve_subdir(&app, "installs")?;
-    let archive = PathBuf::from(&archive_path);
-    let destination = PathBuf::from(&dest_dir);
-    ensure_path_under_root(&archive, &downloads)?;
-    ensure_path_under_root(&destination, &installs)?;
-    extract_zip_to_dir(&archive, &destination)
+    extract_zip_within_roots(
+        Path::new(&archive_path),
+        Path::new(&dest_dir),
+        &downloads,
+        &installs,
+    )
+}
+
+/// The containment rules of `extract_zip_archive`, without the `AppHandle`.
+///
+/// `extract_zip_to_dir` deletes `destination` before extracting, so the
+/// destination must be strictly *below* the installs root: a destination equal
+/// to the root (a game id of `.`) would wipe every installed game.
+fn extract_zip_within_roots(
+    archive: &Path,
+    destination: &Path,
+    downloads: &Path,
+    installs: &Path,
+) -> Result<ExtractZipResult, String> {
+    ensure_path_under_root(archive, downloads)?;
+    ensure_path_strictly_under_root(destination, installs)?;
+    extract_zip_to_dir(archive, destination)
 }
 
 /// Extract every entry of `archive` under `destination`, restoring unix
@@ -542,12 +868,21 @@ fn remove_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let cheats = resolve_subdir(&app, "cheats")?;
     let patches = resolve_subdir(&app, "patches")?;
     let mods = resolve_subdir(&app, "mods")?;
-    let target = PathBuf::from(&path);
-    ensure_path_under_any_root(&target, &[&downloads, &installs, &cheats, &patches, &mods])?;
+    remove_path_within_roots(
+        Path::new(&path),
+        &[&downloads, &installs, &cheats, &patches, &mods],
+    )
+}
+
+/// The containment rules of `remove_path`, without the `AppHandle`. The target
+/// must be strictly below one of the roots — a root directory itself is never
+/// removable, so a bad path cannot take a whole app directory with it.
+fn remove_path_within_roots(target: &Path, roots: &[&Path]) -> Result<(), String> {
+    ensure_path_strictly_under_any_root(target, roots)?;
     if !target.exists() {
         return Ok(());
     }
-    remove_path_inner(&target)
+    remove_path_inner(target)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -599,7 +934,8 @@ fn apply_staged_mod(
     let source = PathBuf::from(&source_path);
     let destination_root = PathBuf::from(&install_root);
     ensure_path_under_root(&source, &mods)?;
-    ensure_path_under_root(&destination_root, &installs)?;
+    // Mods land inside one game's folder, never in the installs root itself.
+    ensure_path_strictly_under_root(&destination_root, &installs)?;
     if !source.is_file() {
         return Err(format!("Staged mod not found: {source_path}"));
     }
@@ -739,13 +1075,75 @@ fn rename_path(app: tauri::AppHandle, from: String, to: String) -> Result<(), St
     let installs = resolve_subdir(&app, "installs")?;
     let source = PathBuf::from(&from);
     let destination = PathBuf::from(&to);
-    ensure_path_under_root(&source, &installs)?;
-    ensure_path_under_root(&destination, &installs)?;
+    ensure_path_strictly_under_root(&source, &installs)?;
+    ensure_path_strictly_under_root(&destination, &installs)?;
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     fs::rename(&source, &destination).map_err(|error| error.to_string())
 }
+
+fn trusted_shares_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("trusted_shares.json"))
+}
+
+/// The network shares the user listed under *Trusted network shares*.
+#[tauri::command]
+fn load_trusted_shares(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    Ok(trusted_shares::read_share_roots(&trusted_shares_path(
+        &app,
+    )?))
+}
+
+/// Replace the list. Every entry is validated first and one bad entry fails the
+/// whole save, so the list on disk is always one the user actually meant. Returns
+/// the canonical form that was stored.
+#[tauri::command]
+fn save_trusted_shares(app: tauri::AppHandle, roots: Vec<String>) -> Result<Vec<String>, String> {
+    let normalized = trusted_shares::normalize_share_roots(&roots)?;
+    let data = serde_json::to_string_pretty(&serde_json::json!({ "roots": &normalized }))
+        .map_err(|error| error.to_string())?;
+    install_recovery::atomic_write(&trusted_shares_path(&app)?, data.as_bytes())
+        .map_err(|error| error.to_string())?;
+    Ok(normalized)
+}
+
+/// UNC folders the OS itself reports for this user (Windows Folder Redirection
+/// puts Documents / AppData / the profile on a file server). Those hosts are
+/// already trusted by the OS, so paths under them need no entry in the list; a
+/// path the server chose that merely *looks* similar still has to match one
+/// of these segment for segment.
+fn os_reported_share_roots(app: &tauri::AppHandle) -> Vec<String> {
+    let resolver = app.path();
+    [
+        resolver.home_dir(),
+        resolver.document_dir(),
+        resolver.data_dir(),
+        resolver.config_dir(),
+        resolver.local_data_dir(),
+        resolver.app_data_dir(),
+    ]
+    .into_iter()
+    .filter_map(Result::ok)
+    .map(|dir| dir.to_string_lossy().into_owned())
+    .filter(|dir| trusted_shares::is_plain_unc(dir))
+    .collect()
+}
+
+/// Everything a queued `open_path` may reach over the network: the user's list
+/// plus the OS-reported roots. Read fresh on every reveal, never cached, and never
+/// supplied by the webview — a path the server chose cannot widen it.
+fn effective_trusted_shares(app: &tauri::AppHandle) -> Result<Vec<String>, String> {
+    let mut shares = trusted_shares::read_share_roots(&trusted_shares_path(app)?);
+    shares.extend(os_reported_share_roots(app));
+    Ok(shares)
+}
+
+/// Shown when a reveal path names a network share or a device. Keep in step with
+/// `NETWORK_PATH_REFUSED` in `src/open-path.ts`; a test in `src/open-path.test.ts`
+/// reads this file and fails when the two differ.
+const NETWORK_PATH_REFUSED: &str =
+    "Network (UNC) paths only open for shares you list under Trusted network shares in the companion (or map the share to a drive letter); device paths are always blocked";
 
 fn is_absolute_os_path(path: &Path) -> bool {
     if path.is_absolute() {
@@ -753,6 +1151,8 @@ fn is_absolute_os_path(path: &Path) -> bool {
     }
     let s = path.to_string_lossy();
     // UNC / drive letter may still parse absolute on Windows; keep explicit checks.
+    // "Absolute" is not "allowed": `validate_reveal_path` refuses UNC and device
+    // paths (`is_network_or_device_path`) before it ever calls this.
     s.starts_with("\\\\")
         || s.starts_with("//")
         || (s.len() >= 3
@@ -765,14 +1165,34 @@ fn path_has_dotdot_segment(path: &str) -> bool {
     path.split(['/', '\\']).any(|segment| segment == "..")
 }
 
-/// Validate a caller-supplied reveal path and classify it as a file or directory.
+/// Is this a UNC share or a Win32/NT device path?
 ///
-/// Every rejection here happens before any OS process is spawned, which is what
-/// makes the guard testable in isolation: empty / whitespace-only, longer than
-/// 4096 bytes, embedded NUL / CR / LF, any `..` path segment, a non-absolute
-/// path, or a path that does not exist on this machine.
-fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
-    let trimmed = path.trim();
+/// Covers `\\host\share` and `//host/share` (and the mixed `\/` / `/\` forms
+/// Windows treats the same), the device namespaces `\\?\…` and `\\.\…`, and the
+/// NT object prefix `\??\…` (std reads it like the verbatim `\\?\` prefix).
+///
+/// On Windows merely probing such a path — `Path::exists()` is enough — makes the
+/// OS open an SMB connection and answer the server's NTLM challenge, handing the
+/// user's credential hash to whichever host the path names. A queued `open_path`
+/// is written by the server, which the companion must not trust that far, so
+/// these are refused on the raw string before any filesystem call, on every
+/// platform.
+fn is_network_or_device_path(path: &str) -> bool {
+    let is_separator = |c: char| c == '/' || c == '\\';
+    let mut chars = path.chars();
+    if let (Some(first), Some(second)) = (chars.next(), chars.next()) {
+        if is_separator(first) && is_separator(second) {
+            return true;
+        }
+    }
+    path.starts_with("\\??\\") || path.starts_with("/??/")
+}
+
+/// Every check on the text of a reveal path — all of `validate_reveal_path` that
+/// does not touch the filesystem. Split out so the decision "may this path be
+/// probed at all" is testable without a probe (on Windows a probe of an
+/// untrusted UNC path is the very thing being prevented).
+fn check_reveal_path_text(trimmed: &str, trusted_shares: &[String]) -> Result<(), String> {
     if trimmed.is_empty() {
         return Err("Path is required".into());
     }
@@ -782,14 +1202,40 @@ fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
     if trimmed.contains('\0') || trimmed.contains('\n') || trimmed.contains('\r') {
         return Err("Path contains invalid control characters".into());
     }
+    if is_network_or_device_path(trimmed)
+        && !trusted_shares::is_under_trusted_share(trimmed, trusted_shares)
+    {
+        return Err(NETWORK_PATH_REFUSED.into());
+    }
     if path_has_dotdot_segment(trimmed) {
         return Err("Path must not contain .. segments".into());
     }
-
-    let target = PathBuf::from(trimmed);
-    if !is_absolute_os_path(&target) {
+    if !is_absolute_os_path(Path::new(trimmed)) {
         return Err("Path must be absolute".into());
     }
+    Ok(())
+}
+
+/// Validate a caller-supplied reveal path and classify it as a file or directory.
+///
+/// Every rejection here happens before any OS process is spawned, which is what
+/// makes the guard testable in isolation: empty / whitespace-only, longer than
+/// 4096 bytes, embedded NUL / CR / LF, a UNC or device path, any `..` path
+/// segment, a non-absolute path, or a path that does not exist on this machine.
+/// The UNC / device check comes before the first filesystem call (`exists()`).
+///
+/// A UNC path passes that check only when it sits at or below a share in
+/// `trusted_shares` — the shares the user listed, plus the ones the OS itself
+/// reports for the user's folders. The match is string-only, so the filesystem is
+/// still never touched for a host nobody trusted.
+fn validate_reveal_path(
+    path: &str,
+    trusted_shares: &[String],
+) -> Result<(PathBuf, &'static str), String> {
+    let trimmed = path.trim();
+    check_reveal_path_text(trimmed, trusted_shares)?;
+
+    let target = PathBuf::from(trimmed);
     if !target.exists() {
         return Err(format!("Path does not exist on this machine: {trimmed}"));
     }
@@ -802,12 +1248,72 @@ fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
     Ok((target, revealed_as))
 }
 
+/// Does this folder's own name carry an extension (`Evil.app`, `Foo.xcodeproj`)?
+///
+/// On macOS `open <directory>` only opens a folder when the directory is an
+/// ordinary one. A *package* - a directory LaunchServices maps to a handler by
+/// its extension - is launched instead: `open Evil.app` runs the app. The set of
+/// package extensions is open-ended (`.app`, `.bundle`, `.prefPane`, `.saver`,
+/// `.workflow`, `.scptd`, `.xpc`, `.appex`, `.kext`, `.plugin`, `.mpkg`, and
+/// whatever a third-party app registers), so no list is kept: a name with an
+/// extension is never opened, only revealed.
+fn looks_like_package(folder: &Path) -> bool {
+    folder
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().contains('.'))
+}
+
+/// The arguments for `open` when the companion reveals `target` on macOS.
+///
+/// A queued `open_path` is written by the server, and it can ask for the folder
+/// to be opened rather than selected (`select == false`). `open <directory>`
+/// would then launch an `.app` the server had just had installed (a zip
+/// extraction sets no quarantine attribute), with no click from the user, so
+/// the companion never hands `open` a folder that could be a package:
+///
+/// * `select`: `open -R <target>`. `-R` reveals the item in Finder and never
+///   opens it, whatever it is;
+/// * otherwise the folder (the target, or a file's parent) is opened only when
+///   its name has no extension and it does not resolve (through a symbolic link)
+///   to one that has; anything else is revealed with `-R` instead.
+///
+/// `resolve` maps a folder to its symbolic-link-free form (`fs::canonicalize`
+/// in the command, injected so the choice stays a pure function). Every path is
+/// absolute (`validate_reveal_path`), so none can be read as an `open` option.
+/// Not `cfg(target_os = "macos")` so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn macos_open_args(
+    target: &Path,
+    target_is_file: bool,
+    select_item: bool,
+    resolve: impl Fn(&Path) -> PathBuf,
+) -> Vec<String> {
+    if select_item {
+        return vec!["-R".to_string(), target.to_string_lossy().into_owned()];
+    }
+    let folder = if target_is_file {
+        target.parent().unwrap_or(target)
+    } else {
+        target
+    };
+    let folder_arg = folder.to_string_lossy().into_owned();
+    if looks_like_package(folder) || looks_like_package(&resolve(folder)) {
+        return vec!["-R".to_string(), folder_arg];
+    }
+    vec![folder_arg]
+}
+
 /// Open `path` in Explorer (Windows), Finder (macOS), or the default file manager (Linux).
 /// When `select` is true and the path is a file, select it in the parent folder.
 #[tauri::command]
-fn reveal_path_in_os(path: String, select: Option<bool>) -> Result<RevealPathResult, String> {
+fn reveal_path_in_os(
+    app: tauri::AppHandle,
+    path: String,
+    select: Option<bool>,
+) -> Result<RevealPathResult, String> {
     let trimmed = path.trim();
-    let (target, revealed_as) = validate_reveal_path(trimmed)?;
+    let trusted = effective_trusted_shares(&app)?;
+    let (target, revealed_as) = validate_reveal_path(trimmed, &trusted)?;
     let select_item = select.unwrap_or(true);
 
     #[cfg(windows)]
@@ -842,25 +1348,13 @@ fn reveal_path_in_os(path: String, select: Option<bool>) -> Result<RevealPathRes
 
     #[cfg(target_os = "macos")]
     {
-        let status = if select_item {
-            std::process::Command::new("open")
-                .args(["-R", trimmed])
-                .status()
-                .map_err(|error| format!("Failed to start Finder: {error}"))?
-        } else {
-            let open_target = if target.is_file() {
-                target
-                    .parent()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| trimmed.to_string())
-            } else {
-                trimmed.to_string()
-            };
-            std::process::Command::new("open")
-                .arg(&open_target)
-                .status()
-                .map_err(|error| format!("Failed to start Finder: {error}"))?
-        };
+        let args = macos_open_args(&target, target.is_file(), select_item, |path| {
+            fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        });
+        let status = std::process::Command::new("open")
+            .args(args)
+            .status()
+            .map_err(|error| format!("Failed to start Finder: {error}"))?;
         if !status.success() {
             return Err(format!("open exited with status {status}"));
         }
@@ -911,12 +1405,17 @@ pub fn run() {
             save_lifecycle_registry,
             load_installs,
             save_installs,
+            retain_install_files,
+            preserve_install_files,
+            restore_install_snapshot,
             get_app_subdir,
             write_file_bytes,
             append_file_bytes,
             extract_zip_archive,
             launch_game,
             reveal_path_in_os,
+            load_trusted_shares,
+            save_trusted_shares,
             is_process_running,
             remove_path,
             rename_path,
@@ -936,6 +1435,12 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
     use zip::write::{SimpleFileOptions, ZipWriter};
+
+    /// The reveal tests below run with an empty trust list (nothing on the
+    /// network is trusted); the trusted-share cases have their own section.
+    fn validate_reveal_path(path: &str) -> Result<(PathBuf, &'static str), String> {
+        super::validate_reveal_path(path, &[])
+    }
 
     // ---------------------------------------------------------------
     // ensure_path_under_root
@@ -1271,5 +1776,720 @@ mod tests {
         extract_zip_to_dir(&archive, &dest).unwrap();
         assert!(dest.join("fresh.txt").is_file());
         assert!(!dest.join("stale.txt").exists());
+    }
+
+    // ---------------------------------------------------------------
+    // strictly-under-root — destructive operations never take a root
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn plain_check_accepts_the_root_itself_but_strict_does_not() {
+        let root = tempdir().unwrap();
+        assert!(ensure_path_under_root(root.path(), root.path()).is_ok());
+        let err = ensure_path_strictly_under_root(root.path(), root.path()).unwrap_err();
+        assert!(err.contains("not the directory itself"), "got: {err}");
+    }
+
+    #[test]
+    fn strict_rejects_dot_segment_and_dotdot_that_resolve_to_the_root() {
+        let root = tempdir().unwrap();
+        // A game id of "." joins to `installs/.` — the root under another name.
+        assert!(ensure_path_strictly_under_root(&root.path().join("."), root.path()).is_err());
+        // installs/sub/.. also lands on the root.
+        let sub = root.path().join("sub");
+        fs::create_dir_all(&sub).unwrap();
+        assert!(ensure_path_strictly_under_root(&sub.join(".."), root.path()).is_err());
+    }
+
+    #[test]
+    fn strict_accepts_children_existing_or_not() {
+        let root = tempdir().unwrap();
+        let existing = root.path().join("game");
+        fs::create_dir_all(&existing).unwrap();
+        assert!(ensure_path_strictly_under_root(&existing, root.path()).is_ok());
+        assert!(ensure_path_strictly_under_root(&root.path().join("missing"), root.path()).is_ok());
+    }
+
+    #[test]
+    fn strict_still_rejects_paths_outside_the_root() {
+        let base = tempdir().unwrap();
+        let root = base.path().join("installs");
+        let outside = base.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let err = ensure_path_strictly_under_root(&outside.join("x"), &root).unwrap_err();
+        assert!(err.contains("outside allowed"), "got: {err}");
+        // The parent of the root (game id "..") is outside too.
+        assert!(ensure_path_strictly_under_root(&root.join(".."), &root).is_err());
+    }
+
+    #[test]
+    fn strict_any_root_rejects_every_root_but_accepts_their_children() {
+        let base = tempdir().unwrap();
+        let downloads = base.path().join("downloads");
+        let installs = base.path().join("installs");
+        fs::create_dir_all(&downloads).unwrap();
+        fs::create_dir_all(&installs).unwrap();
+        let roots = [downloads.as_path(), installs.as_path()];
+        assert!(ensure_path_strictly_under_any_root(&downloads, &roots).is_err());
+        assert!(ensure_path_strictly_under_any_root(&installs, &roots).is_err());
+        assert!(ensure_path_strictly_under_any_root(&installs.join("game"), &roots).is_ok());
+        assert!(ensure_path_strictly_under_any_root(&downloads.join("g.zip"), &roots).is_ok());
+    }
+
+    // ---------------------------------------------------------------
+    // extract_zip_within_roots — a bad game id must not wipe the installs root
+    // ---------------------------------------------------------------
+
+    struct AppDirs {
+        _base: tempfile::TempDir,
+        downloads: PathBuf,
+        installs: PathBuf,
+    }
+
+    fn app_dirs() -> AppDirs {
+        let base = tempdir().unwrap();
+        let downloads = base.path().join("downloads");
+        let installs = base.path().join("installs");
+        fs::create_dir_all(&downloads).unwrap();
+        fs::create_dir_all(&installs).unwrap();
+        AppDirs {
+            _base: base,
+            downloads,
+            installs,
+        }
+    }
+
+    #[test]
+    fn extract_refuses_to_wipe_the_installs_root() {
+        let dirs = app_dirs();
+        let archive = dirs.downloads.join("bundle.zip");
+        write_zip(&archive, &[("fresh.txt", b"new")]);
+        let other_game = dirs.installs.join("other-game");
+        fs::create_dir_all(&other_game).unwrap();
+        fs::write(other_game.join("save.dat"), b"precious").unwrap();
+
+        // The root itself, and `installs/.` — what a game id of "." produces.
+        for destination in [dirs.installs.clone(), dirs.installs.join(".")] {
+            let err =
+                extract_zip_within_roots(&archive, &destination, &dirs.downloads, &dirs.installs)
+                    .unwrap_err();
+            assert!(err.contains("not the directory itself"), "got: {err}");
+            assert_eq!(fs::read(other_game.join("save.dat")).unwrap(), b"precious");
+            assert!(!dirs.installs.join("fresh.txt").exists());
+        }
+    }
+
+    #[test]
+    fn extract_within_roots_still_installs_below_the_root() {
+        let dirs = app_dirs();
+        let archive = dirs.downloads.join("bundle.zip");
+        write_zip(&archive, &[("fresh.txt", b"new")]);
+        let destination = dirs.installs.join("game-1");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("stale.txt"), b"old").unwrap();
+
+        extract_zip_within_roots(&archive, &destination, &dirs.downloads, &dirs.installs).unwrap();
+        assert!(destination.join("fresh.txt").is_file());
+        assert!(!destination.join("stale.txt").exists());
+    }
+
+    #[test]
+    fn extract_within_roots_rejects_a_destination_outside_installs() {
+        let dirs = app_dirs();
+        let archive = dirs.downloads.join("bundle.zip");
+        write_zip(&archive, &[("fresh.txt", b"new")]);
+        // Game id ".." would target the app-data directory itself.
+        let err = extract_zip_within_roots(
+            &archive,
+            &dirs.installs.join(".."),
+            &dirs.downloads,
+            &dirs.installs,
+        )
+        .unwrap_err();
+        assert!(err.contains("outside allowed"), "got: {err}");
+    }
+
+    // ---------------------------------------------------------------
+    // remove_path_within_roots — uninstall never removes a root directory
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn remove_refuses_a_root_directory_and_keeps_its_contents() {
+        let dirs = app_dirs();
+        let game = dirs.installs.join("game-1");
+        fs::create_dir_all(&game).unwrap();
+        fs::write(game.join("save.dat"), b"precious").unwrap();
+        let roots = [dirs.downloads.as_path(), dirs.installs.as_path()];
+
+        for target in [
+            dirs.installs.clone(),
+            dirs.installs.join("."),
+            dirs.downloads.clone(),
+        ] {
+            assert!(
+                remove_path_within_roots(&target, &roots).is_err(),
+                "removed {}",
+                target.display()
+            );
+        }
+        assert_eq!(fs::read(game.join("save.dat")).unwrap(), b"precious");
+        assert!(dirs.downloads.is_dir());
+    }
+
+    #[test]
+    fn remove_deletes_a_game_directory_and_an_archive_below_a_root() {
+        let dirs = app_dirs();
+        let game = dirs.installs.join("game-1");
+        fs::create_dir_all(game.join("data")).unwrap();
+        fs::write(game.join("data/x.bin"), b"x").unwrap();
+        let archive = dirs.downloads.join("game-1.zip");
+        fs::write(&archive, b"zip").unwrap();
+        let roots = [dirs.downloads.as_path(), dirs.installs.as_path()];
+
+        remove_path_within_roots(&game, &roots).unwrap();
+        remove_path_within_roots(&archive, &roots).unwrap();
+        assert!(!game.exists());
+        assert!(!archive.exists());
+        assert!(dirs.installs.is_dir());
+        assert!(dirs.downloads.is_dir());
+    }
+
+    #[test]
+    fn remove_of_a_missing_child_is_a_no_op() {
+        let dirs = app_dirs();
+        let roots = [dirs.installs.as_path()];
+        assert!(remove_path_within_roots(&dirs.installs.join("gone"), &roots).is_ok());
+    }
+
+    #[test]
+    fn remove_rejects_paths_outside_every_root() {
+        let dirs = app_dirs();
+        let outside = tempdir().unwrap();
+        let victim = outside.path().join("keep.txt");
+        fs::write(&victim, b"x").unwrap();
+        let roots = [dirs.downloads.as_path(), dirs.installs.as_path()];
+        assert!(remove_path_within_roots(&victim, &roots).is_err());
+        assert!(victim.is_file());
+    }
+
+    // ---------------------------------------------------------------
+    // UNC / device paths — refused before any filesystem probe
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn network_or_device_path_detection() {
+        for path in [
+            r"\\attacker\share",
+            r"\\attacker\share\game",
+            "//attacker/share",
+            r"\/attacker\share",
+            r"/\attacker/share",
+            r"\\?\C:\Windows",
+            r"\\?\UNC\attacker\share",
+            r"\\.\pipe\name",
+            "//?/C:/Windows",
+            r"\??\C:\Windows",
+            "/??/C:/Windows",
+        ] {
+            assert!(is_network_or_device_path(path), "missed: {path}");
+        }
+        for path in [
+            "",
+            "/",
+            "/mnt/user/games",
+            "/home/me/games",
+            r"C:\Users\me\game",
+            "C:/Users/me/game",
+            r"\single\leading\backslash",
+            "relative/path",
+            "/a//b",
+            r"D:\\double\inside",
+        ] {
+            assert!(!is_network_or_device_path(path), "false positive: {path}");
+        }
+    }
+
+    #[test]
+    fn reveal_rejects_unc_and_device_paths_before_any_filesystem_probe() {
+        // Every one of these would otherwise fall through to `target.exists()`
+        // (and, on Windows, to an SMB connection). The refusal message — not
+        // "does not exist" — proves the check runs first.
+        for path in [
+            r"\\attacker\x",
+            "//attacker/x",
+            r"\\attacker\share\dir\file.txt",
+            r"\/attacker\x",
+            r"\\?\C:\Windows",
+            r"\\?\UNC\attacker\x",
+            r"\\.\pipe\x",
+            r"\??\C:\Windows",
+        ] {
+            assert_eq!(
+                validate_reveal_path(path).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "path: {path}"
+            );
+            // Surrounding whitespace does not hide it (the command trims first,
+            // but the validator must not depend on that).
+            assert_eq!(
+                validate_reveal_path(&format!("  {path}  ")).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "padded path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn containment_helpers_refuse_unc_and_device_strings_before_any_filesystem_probe() {
+        // The same shapes the reveal check refuses, aimed at the helpers every
+        // remove / write / extract / launch goes through. The exact refusal text
+        // - not an OS error from a lookup, nor the generic "outside" message -
+        // proves the text gate ran before `exists()`, which on Windows would
+        // open an SMB connection to the named host.
+        let base = tempdir().unwrap();
+        let root = base.path().join("installs");
+        fs::create_dir_all(&root).unwrap();
+        for raw in [
+            r"\\attacker.invalid\x",
+            "//attacker.invalid/x",
+            r"\\attacker.invalid\share\dir\file.txt",
+            r"\/attacker.invalid\x",
+            r"\\?\C:\Windows",
+            r"\\?\UNC\attacker.invalid\x",
+            r"\\.\pipe\x",
+            r"\??\C:\Windows",
+        ] {
+            let path = Path::new(raw);
+            assert_eq!(
+                ensure_path_under_root(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "path: {raw}"
+            );
+            assert_eq!(
+                ensure_path_strictly_under_root(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "strict path: {raw}"
+            );
+            assert_eq!(
+                canonicalize_path(path, &root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "canonicalize: {raw}"
+            );
+            assert!(ensure_path_under_any_root(path, &[root.as_path()]).is_err());
+            assert!(remove_path_within_roots(path, &[root.as_path()]).is_err());
+        }
+    }
+
+    #[test]
+    fn containment_helpers_refuse_a_relative_path_instead_of_resolving_it_against_the_working_directory(
+    ) {
+        // A root inside the working directory makes a relative path that lands
+        // in it: without the text gate the lookup resolves it through the cwd
+        // and the helper accepts a path nobody wrote as absolute.
+        let base = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        let root = base.path().to_path_buf();
+        let relative = Path::new(root.file_name().unwrap()).join("game.zip");
+        assert!(!relative.is_absolute());
+        assert_eq!(
+            ensure_path_under_root(&relative, &root).unwrap_err(),
+            PATH_NOT_PROBEABLE
+        );
+        assert_eq!(
+            ensure_path_strictly_under_root(&relative, &root).unwrap_err(),
+            PATH_NOT_PROBEABLE
+        );
+        assert!(ensure_path_under_any_root(&relative, &[root.as_path()]).is_err());
+        // The same file by its absolute path is still fine.
+        assert!(ensure_path_under_root(&root.join("game.zip"), &root).is_ok());
+    }
+
+    #[test]
+    fn text_gate_lets_a_redirected_profiles_own_unc_folders_through_and_nothing_else() {
+        // Windows Folder Redirection puts app data on a file server, which the OS
+        // reports as a plain UNC path. Paths below that root are the app's own
+        // folders; string compare only, so a host nobody named is still never
+        // looked up.
+        let root =
+            Path::new(r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs");
+        for path in [
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game\run.exe",
+            "//FS01/profiles$/chris/AppData/Roaming/com.oneirodex.desktop/installs/game",
+        ] {
+            assert_eq!(
+                check_path_text_before_probe(Path::new(path), root),
+                Ok(()),
+                "path: {path}"
+            );
+        }
+        for path in [
+            r"\\attacker\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\other\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs.evil\game",
+            r"\\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\..\..\..\other",
+            r"\\?\UNC\fs01\profiles$\chris\AppData\Roaming\com.oneirodex.desktop\installs\game",
+            r"\\fs01\profiles$\chris",
+        ] {
+            assert_eq!(
+                check_path_text_before_probe(Path::new(path), root).unwrap_err(),
+                PATH_NOT_PROBEABLE,
+                "path: {path}"
+            );
+        }
+        // With an ordinary local root no UNC string is ever the app's own.
+        assert!(check_path_text_before_probe(
+            Path::new(r"\\fs01\profiles$\chris"),
+            Path::new(r"C:\Users\chris\AppData\Roaming\app")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn reveal_still_accepts_a_local_absolute_path() {
+        let base = tempdir().unwrap();
+        assert!(validate_reveal_path(base.path().to_str().unwrap()).is_ok());
+    }
+
+    // ---------------------------------------------------------------
+    // macOS reveal arguments - a package is revealed, never opened
+    // ---------------------------------------------------------------
+
+    fn mac_args(target: &str, is_file: bool, select: bool) -> Vec<String> {
+        macos_open_args(Path::new(target), is_file, select, |path| {
+            path.to_path_buf()
+        })
+    }
+
+    #[test]
+    fn macos_selecting_always_reveals_and_never_opens() {
+        for (target, is_file) in [
+            ("/Users/me/games/Evil.app", false),
+            ("/Users/me/games/Doom 3", false),
+            ("/Users/me/games/Doom 3/base.pk4", true),
+        ] {
+            assert_eq!(mac_args(target, is_file, true), ["-R", target], "{target}");
+        }
+    }
+
+    #[test]
+    fn macos_opens_an_ordinary_folder_and_a_files_parent() {
+        assert_eq!(
+            mac_args("/Users/me/games/Doom 3", false, false),
+            ["/Users/me/games/Doom 3"]
+        );
+        assert_eq!(
+            mac_args("/Users/me/games/Doom 3/base.pk4", true, false),
+            ["/Users/me/games/Doom 3"]
+        );
+        assert_eq!(mac_args("/", false, false), ["/"]);
+        assert_eq!(mac_args("/file.bin", true, false), ["/"]);
+    }
+
+    #[test]
+    fn macos_reveals_a_directory_named_like_a_package_instead_of_opening_it() {
+        // `open Evil.app` would run the app. Every one of these is a directory
+        // LaunchServices hands to a handler, so each is revealed (`-R`), not opened.
+        for name in [
+            "Evil.app",
+            "Evil.APP",
+            "Evil.bundle",
+            "Evil.prefPane",
+            "Evil.saver",
+            "Evil.workflow",
+            "Evil.scptd",
+            "Evil.xpc",
+            "Evil.appex",
+            "Evil.kext",
+            "Evil.plugin",
+            "Evil.mpkg",
+            "Evil.xcodeproj",
+            "Evil.app.",
+            ".hidden",
+        ] {
+            let dir = format!("/Users/me/installs/{name}");
+            assert_eq!(mac_args(&dir, false, false), ["-R", dir.as_str()], "{name}");
+            // A trailing separator does not hide the extension.
+            let slashed = format!("{dir}/");
+            assert_eq!(
+                mac_args(&slashed, false, false),
+                ["-R", slashed.as_str()],
+                "{name}/"
+            );
+        }
+    }
+
+    #[test]
+    fn macos_reveals_the_package_when_the_file_asked_for_sits_directly_inside_it() {
+        // The open target of `Evil.app/Info.plist` is its parent, the bundle.
+        assert_eq!(
+            mac_args("/Users/me/installs/Evil.app/Info.plist", true, false),
+            ["-R", "/Users/me/installs/Evil.app"]
+        );
+    }
+
+    #[test]
+    fn macos_resolves_symbolic_links_before_it_decides() {
+        // installs/shortcut -> /Applications/Evil.app: the name is innocent, the
+        // folder it opens is a package.
+        let resolve = |path: &Path| {
+            if path.ends_with("shortcut") {
+                PathBuf::from("/Applications/Evil.app")
+            } else {
+                path.to_path_buf()
+            }
+        };
+        assert_eq!(
+            macos_open_args(
+                Path::new("/Users/me/installs/shortcut"),
+                false,
+                false,
+                resolve
+            ),
+            ["-R", "/Users/me/installs/shortcut"]
+        );
+        assert_eq!(
+            macos_open_args(Path::new("/Users/me/installs/plain"), false, false, resolve),
+            ["/Users/me/installs/plain"]
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // Trusted network shares — a UNC path is probed only when the user (or the
+    // OS, for the user's own folders) named its share. These call the
+    // text-only gate: the real thing would open an SMB connection.
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn a_trusted_share_lets_its_paths_through_the_text_gate() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        for path in [
+            r"\\nas\roms\Game",
+            r"\\NAS\ROMS\Game\disc.cue",
+            "//nas/roms/Game",
+            r"\\nas\roms",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted),
+                Ok(()),
+                "path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_untrusted_host_or_share_is_still_refused_with_the_list_in_place() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        for path in [
+            r"\\attacker\roms\Game",
+            r"\\nas.evil.example\roms\Game",
+            r"\\nas\other\Game",
+            r"\\nas",
+            r"\\?\UNC\nas\roms\Game",
+            r"\\.\nas\roms",
+            r"\??\UNC\nas\roms",
+            r"//?/UNC/nas/roms",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "path: {path}"
+            );
+        }
+        // No list, nothing trusted: the default is still refusal.
+        assert_eq!(
+            check_reveal_path_text(r"\\nas\roms\Game", &[]).unwrap_err(),
+            NETWORK_PATH_REFUSED
+        );
+    }
+
+    #[test]
+    fn a_trusted_share_does_not_excuse_traversal_or_control_characters() {
+        let trusted = vec![r"\\nas\roms".to_string()];
+        // A `..` anywhere takes the path out of the trusted prefix altogether, so
+        // it is refused as an untrusted network path rather than walked out of
+        // the share.
+        for path in [
+            r"\\nas\roms\..\other",
+            r"\\nas\roms\Game\..\..\other",
+            r"\\nas\roms\.\Game",
+        ] {
+            assert_eq!(
+                check_reveal_path_text(path, &trusted).unwrap_err(),
+                NETWORK_PATH_REFUSED,
+                "path: {path}"
+            );
+        }
+        assert!(check_reveal_path_text("\\\\nas\\roms\\a\nb", &trusted)
+            .unwrap_err()
+            .contains("control"));
+        assert_eq!(
+            check_reveal_path_text(&format!(r"\\nas\roms\{}", "a".repeat(5000)), &trusted)
+                .unwrap_err(),
+            "Path is too long"
+        );
+    }
+
+    #[test]
+    fn only_os_reported_unc_roots_count_as_implicit_trust() {
+        // `os_reported_share_roots` keeps a folder only when it is a plain UNC
+        // path; a drive path or a verbatim form is never an implicit root.
+        assert!(trusted_shares::is_plain_unc(
+            r"\\fs01\profiles$\chris\Documents"
+        ));
+        assert!(!trusted_shares::is_plain_unc(r"C:\Users\chris\Documents"));
+        assert!(!trusted_shares::is_plain_unc(r"\\?\UNC\fs01\profiles$"));
+        let redirected = vec![r"\\fs01\profiles$\chris\Documents".to_string()];
+        assert_eq!(
+            check_reveal_path_text(
+                r"\\fs01\profiles$\chris\Documents\My Games\Saves",
+                &redirected
+            ),
+            Ok(())
+        );
+        assert!(check_reveal_path_text(r"\\fs01\profiles$\other\Documents", &redirected).is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // user_facing_path — no \\?\ in the install record
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn user_facing_path_strips_only_the_verbatim_drive_prefix() {
+        assert_eq!(
+            user_facing_path(r"\\?\C:\Users\me\installs\game"),
+            r"C:\Users\me\installs\game"
+        );
+        assert_eq!(user_facing_path(r"C:\Users\me\game"), r"C:\Users\me\game");
+        assert_eq!(user_facing_path("/home/me/game"), "/home/me/game");
+        // Verbatim UNC becomes the plain UNC form the OS reports for a redirected
+        // profile; it is then refused at reveal unless its share is trusted.
+        assert_eq!(
+            user_facing_path(r"\\?\UNC\host\share\game"),
+            r"\\host\share\game"
+        );
+        assert_eq!(user_facing_path(r"\\?\UNC\host\share"), r"\\host\share");
+        // Device shapes, and a verbatim UNC with no host, are left alone.
+        assert_eq!(user_facing_path(r"\\?\UNC\"), r"\\?\UNC\");
+        assert_eq!(user_facing_path(r"\\?\UNC\\x"), r"\\?\UNC\\x");
+        assert_eq!(user_facing_path(r"\\?\pipe"), r"\\?\pipe");
+        assert_eq!(user_facing_path(r"\\.\pipe\x"), r"\\.\pipe\x");
+    }
+
+    // ---------------------------------------------------------------
+    // validate_server_base_url — http:// only on the local network
+    // ---------------------------------------------------------------
+
+    /// The URL cases `src/transport-policy.test.ts` reads too: one JSON file, so
+    /// the TypeScript check the UI runs and this backstop cannot drift apart.
+    fn shared_url_cases() -> Vec<(String, bool)> {
+        #[derive(Deserialize)]
+        struct Case {
+            url: String,
+            ok: bool,
+        }
+        #[derive(Deserialize)]
+        struct Fixture {
+            cases: Vec<Case>,
+        }
+        let fixture: Fixture =
+            serde_json::from_str(include_str!("../../fixtures/server-urls.json")).unwrap();
+        fixture
+            .cases
+            .into_iter()
+            .map(|case| (case.url, case.ok))
+            .collect()
+    }
+
+    #[test]
+    fn server_url_policy_matches_the_shared_fixture() {
+        let cases = shared_url_cases();
+        // A fixture that quietly emptied would pass vacuously.
+        assert!(cases.len() > 50, "only {} cases", cases.len());
+        assert!(cases.iter().any(|(_, ok)| *ok) && cases.iter().any(|(_, ok)| !*ok));
+        for (url, expected) in &cases {
+            match validate_server_base_url(url) {
+                Ok(()) => assert!(*expected, "accepted, fixture says refuse: {url:?}"),
+                Err(message) => {
+                    assert!(
+                        !*expected,
+                        "refused, fixture says accept: {url:?}: {message}"
+                    );
+                    // Whatever the reason, the message points at the fix.
+                    assert!(
+                        message.contains("https://"),
+                        "no https hint for {url:?}: {message}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn server_url_blank_clears_the_saved_url() {
+        // Not in the shared fixture: the TypeScript check refuses a blank URL.
+        for url in ["", "   "] {
+            assert!(validate_server_base_url(url).is_ok(), "rejected: {url:?}");
+        }
+    }
+
+    #[test]
+    fn save_config_keeps_an_already_saved_url_but_refuses_a_new_insecure_one() {
+        let dir = tempdir().unwrap();
+        let config = dir.path().join("config.json");
+        // Nothing saved yet: a new public http URL is refused, https is fine.
+        assert!(validate_config_base_url(&config, "http://games.example.com").is_err());
+        assert!(validate_config_base_url(&config, "https://games.example.com").is_ok());
+        assert!(validate_config_base_url(&config, "").is_ok());
+
+        // A legacy config on disk (saved by an older build, token still inside).
+        fs::write(
+            &config,
+            r#"{"base_url":"http://games.example.com","token":"gt_ab_secret"}"#,
+        )
+        .unwrap();
+        // Re-saving it unchanged must work — that is the plaintext-token scrub.
+        assert!(validate_config_base_url(&config, "http://games.example.com").is_ok());
+        assert!(validate_config_base_url(&config, " http://games.example.com ").is_ok());
+        // A different insecure URL is still refused; so is an unreadable config.
+        assert!(validate_config_base_url(&config, "http://other.example.com").is_err());
+        fs::write(&config, "not json").unwrap();
+        assert!(validate_config_base_url(&config, "http://games.example.com").is_err());
+    }
+
+    // ---------------------------------------------------------------
+    // InstallRecord - superseded generation survives a save/load round trip
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn install_record_keeps_the_superseded_generation_and_stays_compatible() {
+        let legacy: InstallsFile = serde_json::from_str(
+            r#"{"installs":{"g":{"archive_path":"a.zip","extract_path":"i/g","exe_path":null}}}"#,
+        )
+        .unwrap();
+        let legacy_json = serde_json::to_string(&legacy).unwrap();
+        assert!(!legacy_json.contains("superseded"), "{legacy_json}");
+
+        let with_previous: InstallsFile = serde_json::from_str(
+            r#"{"installs":{"g":{"archive_path":"new.zip","extract_path":"i/g-new","exe_path":null,
+                "superseded":{"archive_path":"old.zip","extract_path":"i/g","retained_path":"i/g.uninstalled-1"}}}}"#,
+        )
+        .unwrap();
+        let record = &with_previous.installs["g"];
+        let previous = record.superseded.as_ref().expect("superseded is read");
+        assert_eq!(previous.extract_path, "i/g");
+        assert_eq!(previous.archive_path, "old.zip");
+        assert_eq!(previous.retained_path.as_deref(), Some("i/g.uninstalled-1"));
+        // Writing it back must not drop it - `save_installs` is a straight re-serialise.
+        let round: InstallsFile =
+            serde_json::from_str(&serde_json::to_string(&with_previous).unwrap()).unwrap();
+        assert_eq!(
+            round.installs["g"]
+                .superseded
+                .as_ref()
+                .unwrap()
+                .extract_path,
+            "i/g"
+        );
     }
 }

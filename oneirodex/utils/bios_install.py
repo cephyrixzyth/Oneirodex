@@ -23,7 +23,11 @@ from oneirodex.utils.emulator_bios import (
     bios_root,
     bios_status_for_platforms,
 )
-from oneirodex.utils.security import get_allowed_base_directories
+from oneirodex.utils.security import (
+    get_allowed_base_directories,
+    is_plain_file_within,
+    open_plain_file_within,
+)
 
 
 def wanted_firmware_names() -> dict[str, str]:
@@ -61,17 +65,43 @@ def scan_for_firmware(source: str, wanted: dict[str, str] | None = None) -> dict
     for dirpath, _dirnames, filenames in os.walk(source):
         for filename in filenames:
             canonical = names.get(filename.lower())
-            if canonical:
-                found.setdefault(canonical, []).append(os.path.join(dirpath, filename))
+            if not canonical:
+                continue
+            path = os.path.join(dirpath, filename)
+            # A collection folder is somebody's share: ``scph5501.bin -> /app/.env``
+            # would be copied into the firmware volume, which every signed-in
+            # member can read. Links (and anything that resolves outside the
+            # collection) are not firmware; they are skipped, not followed.
+            if not is_plain_file_within(source, path):
+                continue
+            found.setdefault(canonical, []).append(path)
     return found
 
 
-def firmware_digest(path: str) -> str:
+def firmware_digest(path: str, base: str | None = None) -> str:
+    """SHA-1 of a firmware file. With *base*, the file must still be a plain
+    file under it when it is opened (see ``open_plain_file_within``)."""
     h = hashlib.sha1()
-    with open(path, 'rb') as fh:
+    handle = open_plain_file_within(base, path) if base is not None else open(path, 'rb')
+    with handle as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _copy_firmware(source_root: str, src: str, dest_path: str) -> None:
+    """Copy one scanned firmware file into the volume.
+
+    Opens the source through ``open_plain_file_within`` and copies from that
+    descriptor, so a file swapped for a link after the scan is refused instead
+    of followed. Raises ``OSError`` in that case; both callers already treat
+    that as "could not copy this one".
+    """
+    with open_plain_file_within(source_root, src) as fin:
+        with open(dest_path, 'wb') as fout:
+            shutil.copyfileobj(fin, fout, 1024 * 1024)
+        info = os.fstat(fin.fileno())
+    os.utime(dest_path, ns=(info.st_atime_ns, info.st_mtime_ns))
 
 
 def _relpath(path: str, source_root: str) -> str:
@@ -149,7 +179,13 @@ def versions_for(sources: list[str], source_root: str) -> tuple[list[dict], str,
 
     by_digest: dict[str, list[str]] = {}
     for path in sources:
-        by_digest.setdefault(firmware_digest(path), []).append(path)
+        try:
+            digest = firmware_digest(path, source_root)
+        except OSError:
+            continue  # swapped for a link (or removed) since the scan: not a candidate
+        by_digest.setdefault(digest, []).append(path)
+    if not by_digest:
+        return [], '', ''
 
     versions: list[dict] = []
     for digest, paths in by_digest.items():
@@ -171,6 +207,13 @@ def versions_for(sources: list[str], source_root: str) -> tuple[list[dict], str,
     return versions, default, note
 
 
+def _digest_or_none(path: str, source_root: str) -> str | None:
+    try:
+        return firmware_digest(path, source_root)
+    except OSError:
+        return None
+
+
 def _resolve_choice(sources: list[str], source_root: str, choice: str | None) -> str | None:
     if not sources:
         return None
@@ -180,7 +223,7 @@ def _resolve_choice(sources: list[str], source_root: str, choice: str | None) ->
         versions, default, _note = versions_for(sources, source_root)
         if default and len(default) == 40:
             for path in sources:
-                if firmware_digest(path) == default:
+                if _digest_or_none(path, source_root) == default:
                     return path
         if versions and versions[0].get('paths'):
             return _resolve_choice(sources, source_root, versions[0]['paths'][0])
@@ -191,7 +234,7 @@ def _resolve_choice(sources: list[str], source_root: str, choice: str | None) ->
     if digest_like:
         want = token.lower()
         for path in sources:
-            if firmware_digest(path) == want:
+            if _digest_or_none(path, source_root) == want:
                 return path
         return None
     for path in sources:
@@ -410,7 +453,7 @@ def apply_firmware_import(
             unresolved.append(canonical)
             continue
         try:
-            shutil.copy2(chosen_path, os.path.join(dest, canonical))
+            _copy_firmware(source, chosen_path, os.path.join(dest, canonical))
             copied.append(canonical)
         except OSError:
             unresolved.append(canonical)
@@ -450,7 +493,7 @@ def import_bios_from(source: str, dest: str | None = None) -> int:
         if canonical.lower() in present:
             continue
         try:
-            shutil.copy2(sources[0], os.path.join(dest, canonical))
+            _copy_firmware(source, sources[0], os.path.join(dest, canonical))
             copied += 1
         except OSError:
             # One unreadable file should not abandon the rest of the import.

@@ -66,6 +66,7 @@ from oneirodex.utils.cover_art_tokens import (  # noqa: F401
 )
 from oneirodex.utils.cover_art_paint import ART_DIRECTIONS  # noqa: F401
 from oneirodex.utils.cover_art_title import _fit_title_font  # noqa: F401
+from oneirodex.utils.library_paths import library_dir, static_write_dir
 
 
 SAFE_PACK_ID = re.compile(r'^[a-zA-Z0-9_-]{1,64}$')
@@ -87,22 +88,17 @@ KNOWN_FILENAMES = frozenset(
 
 
 def generated_root(package_root: str | Path | None = None) -> Path:
-    if package_root is not None:
-        return Path(package_root) / 'static' / 'library' / 'generated'
-    return Path(current_app.root_path) / 'static' / 'library' / 'generated'
+    return Path(library_dir(package_root)) / 'generated'
 
 
 def stock_root(package_root: str | Path | None = None) -> Path:
     """Operator-selectable platform / stock packs (stable ids under library/stock/)."""
-    if package_root is not None:
-        return Path(package_root) / 'static' / 'library' / 'stock'
-    return Path(current_app.root_path) / 'static' / 'library' / 'stock'
+    return Path(library_dir(package_root)) / 'stock'
 
 
 def newstyle_root(package_root: str | Path | None = None) -> Path:
-    if package_root is not None:
-        return Path(package_root) / 'static' / 'newstyle'
-    return Path(current_app.root_path) / 'static' / 'newstyle'
+    """Where fallback covers are written; served at /static/newstyle/."""
+    return static_write_dir('newstyle', package_root=package_root)
 
 
 def render_cover_art(

@@ -4,6 +4,7 @@ import { claimFreeGameAssist, fetchFreeGames } from '../api/freeGames'
 import { fetchGamingNews } from '../api/gamingNews'
 import { ContextBar } from '../chrome/ContextBar'
 import { formatLocaleDate } from '../utils/formatLocaleDate'
+import { safeClaimUrl } from '../utils/safeUrl'
 import { PageStatus } from '../components/PageStatus'
 import './NewsPage.css'
 import { useShellConfig } from '@oneirodex/ui'
@@ -60,7 +61,11 @@ export function NewsPage() {
         ...prev,
         [item.id]: result.message || (result.ok ? 'Ownership updated.' : result.error || 'Failed'),
       }))
-      const href = result.links?.protocol || result.links?.https || item.links?.https
+      // First candidate that survives the scheme check. A hostile feed URL is
+      // skipped, not opened, and does not hide a good https fallback behind it.
+      const href = [result.links?.protocol, result.links?.https, item.links?.https]
+        .map(safeClaimUrl)
+        .find(Boolean)
       if (href && result.ok) {
         window.open(href, '_blank', 'noopener,noreferrer')
       }

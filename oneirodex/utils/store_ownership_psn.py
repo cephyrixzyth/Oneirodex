@@ -33,6 +33,7 @@ from oneirodex.utils.store_ownership_common import (
     unofficial_store_opt_in,
     upsert_owned_title,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError, StoreSyncPermissionError, rejected_reason
 
 STORE = 'psn'
 PACKAGE = 'psnawp'
@@ -74,10 +75,26 @@ def disconnect_psn_account(user_id: int) -> None:
     disconnect_store_account(user_id, STORE)
 
 
-def _npsso_for(account: StoreAccount) -> str:
+def _npsso_source(account: StoreAccount) -> tuple[str, str | None]:
+    """(npsso, origin): the member's own token, else the household PSN_NPSSO."""
     data = _parse_credential_json(account.credential)
     token = str(data.get('npsso') or data.get('token') or '').strip()
-    return token or (get_psn_api_token() or '')
+    if token:
+        return token, None
+    household = get_psn_api_token() or ''
+    return household, ('household' if household else None)
+
+
+def _npsso_for(account: StoreAccount) -> str:
+    return _npsso_source(account)[0]
+
+
+def credential_source(account: StoreAccount) -> str:
+    """member | household | none, by the same selection the sync makes."""
+    token, origin = _npsso_source(account)
+    if not token:
+        return 'none'
+    return 'household' if origin == 'household' else 'member'
 
 
 def _psn_titles(npsso: str) -> tuple[list[tuple[str, str | None]], str | None]:
@@ -101,29 +118,31 @@ def _psn_titles(npsso: str) -> tuple[list[tuple[str, str | None]], str | None]:
 def sync_psn_owned_games(user_id: int) -> dict[str, Any]:
     """Register IDs and names from the PSN title history. Never downloads."""
     if not is_ownership_sync_enabled():
-        raise PermissionError('Store ownership sync is disabled by administrator')
+        raise StoreSyncPermissionError('Store ownership sync is disabled by administrator', 'sync_disabled')
     if STORE not in unofficial_store_opt_in():
-        raise PermissionError(
-            'PlayStation live sync is opt-in: set ENABLE_UNOFFICIAL_STORE_SYNC=psn on the server. CSV import works without it.'
+        raise StoreSyncPermissionError(
+            'PlayStation live sync is opt-in: set ENABLE_UNOFFICIAL_STORE_SYNC=psn on the server. CSV import works without it.',
+            'opt_in_required',
         )
     if not client_available():
-        raise ValueError(INSTALL_HINT)
+        raise StoreSyncError(INSTALL_HINT, 'client_package_missing')
     account = db.session.execute(
         select(StoreAccount).filter_by(user_id=user_id, store=STORE)
     ).scalars().first()
     if not account:
-        raise ValueError('PlayStation account not connected')
-    npsso = _npsso_for(account)
+        raise StoreSyncError('PlayStation account not connected', 'not_connected')
+    npsso, origin = _npsso_source(account)
     if not npsso:
-        raise ValueError('PlayStation live sync needs an npsso token. CSV import works without it.')
+        raise StoreSyncError('PlayStation live sync needs an npsso token. CSV import works without it.', 'credential_missing')
     try:
         rows, online_id = _psn_titles(npsso)
     except Exception as exc:  # noqa: BLE001
         text = str(exc)
         if '401' in text or 'Unauthorized' in text or 'npsso' in text.lower():
-            raise ValueError('PlayStation rejected the saved npsso (unofficial psnawp client). Paste a fresh token; CSV import still works.') from exc
-        raise ValueError(f'PlayStation sync failed: {type(exc).__name__}') from exc
-    if online_id and not account.external_account_id:
+            raise StoreSyncError('PlayStation rejected the saved npsso (unofficial psnawp client). Paste a fresh token; CSV import still works.', rejected_reason(origin)) from exc
+        raise StoreSyncError(f'PlayStation sync failed: {type(exc).__name__}', 'upstream_unavailable') from exc
+    # Never label a member's link with the household account's online ID.
+    if online_id and not account.external_account_id and origin != 'household':
         account.external_account_id = online_id[:64]
     matched = 0
     for title_id, name in rows:

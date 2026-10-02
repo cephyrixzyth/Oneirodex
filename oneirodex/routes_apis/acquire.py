@@ -8,7 +8,12 @@ from flask_login import current_user, login_required
 
 from oneirodex.schemas.acquire import AcquireDownloadBody
 from oneirodex.utils.acquire_scoring import rank_acquire_hits, title_looks_like_newer_repack
-from oneirodex.utils.arr_connectors import get_arr_config, search_indexers, send_to_download_client
+from oneirodex.utils.arr_connectors import (
+    client_error_message,
+    get_arr_config,
+    search_indexers,
+    send_to_download_client,
+)
 from oneirodex.utils.debrid_connectors import (
     alldebrid_upload_magnet,
     debrid_enabled,
@@ -99,7 +104,7 @@ def acquire_search():
     try:
         hits = search_indexers(query)
     except Exception as exc:
-        return api_error(str(exc), code='bad_gateway')
+        return api_error(client_error_message(exc, noun='indexer'), code='bad_gateway')
     ranked = rank_acquire_hits([hit.to_dict() for hit in hits], query=query)
     if current_label:
         for row in ranked:
@@ -154,4 +159,6 @@ def acquire_download(body: AcquireDownloadBody):
             return api_ok({'provider': 'torbox', 'result': payload})
         return api_error('Unknown provider', code='bad_request')
     except Exception as exc:
-        return api_error(str(exc), code='bad_gateway')
+        # Not str(exc): a failed SABnzbd/AllDebrid call carries ?apikey=... and
+        # the pinned internal address in its text.
+        return api_error(client_error_message(exc), code='bad_gateway')

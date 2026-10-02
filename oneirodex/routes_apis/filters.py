@@ -168,6 +168,20 @@ def get_igdb_platforms():
         return api_error('Database error retrieving igdb platforms', code='internal')
 
 
+def _ownership_store_options():
+    """Stores the browse `store=` filter can answer for (LIB-02): recorded
+    ownership only, and only while the operator policy allows the provider.
+    Names come from the provider registry; no member data is read."""
+    from oneirodex.utils.store_capabilities import provider_capabilities
+    from oneirodex.utils.store_ownership_common import is_ownership_sync_enabled, unofficial_store_opt_in
+
+    return [
+        {'id': p['id'], 'name': p['name']}
+        for p in provider_capabilities(enabled=is_ownership_sync_enabled(), unofficial_stores=unofficial_store_opt_in())
+        if p['capabilities']['store_filter'] == 'recorded_ownership' and p['policy_enabled']
+    ]
+
+
 @apis_bp.route('/filters/bundle')
 @login_required
 def filters_bundle():
@@ -186,6 +200,7 @@ def filters_bundle():
             'themes': _taxonomy_list(Theme),
             'gameModes': _taxonomy_list(GameMode),
             'playerPerspectives': _taxonomy_list(PlayerPerspective),
+            'ownershipStores': _ownership_store_options(),
         }
         cache.set(cache_key, payload, timeout=60)
         return jsonify(payload), 200

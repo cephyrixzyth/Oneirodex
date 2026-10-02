@@ -100,7 +100,8 @@ def download_game(game_uuid):
 
         try:
             from oneirodex.utils.event_bus import publish_download_event
-            publish_download_event(new_request.id, status, game_uuid=game.uuid, game_name=game.name)
+            publish_download_event(new_request.id, status, game_uuid=game.uuid, game_name=game.name,
+                                   user_id=new_request.user_id)
         except Exception:
             pass
 

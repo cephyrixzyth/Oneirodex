@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import requests
 from flask import Blueprint, jsonify, render_template, request
 from flask_login import login_required
 
 from oneirodex import db
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.arr_connectors import (
+    client_error_message,
     connector_status,
     get_arr_config,
     qbittorrent_add_url,
@@ -251,7 +253,7 @@ def arr_search():
     try:
         hits = search_indexers(query, limit=limit)
     except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway')
+        return api_error(client_error_message(exc, noun='indexer'), code='bad_gateway')
     # Prefer active profile scores; drop hard-blocked / excluded hits unless
     # ``include_disallowed=1`` (operators still see prefer-order for allowed).
     include_disallowed = str(request.args.get('include_disallowed') or '').strip().lower() in {
@@ -291,10 +293,13 @@ def arr_download(body: ArrDownloadBody):
         url = result
     try:
         result = qbittorrent_add_url(url)
+    except (RuntimeError, requests.RequestException) as exc:
+        # First, because several requests errors (InvalidURL, MissingSchema,
+        # InvalidHeader, JSONDecodeError) are also ValueErrors and their text
+        # carries the full request URL; see client_error_message.
+        return api_error(client_error_message(exc, noun='qBittorrent server'), code='bad_gateway')
     except ValueError as exc:
-        return api_error(str(exc), code='bad_request')
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway')
+        return api_error(client_error_message(exc, noun='qBittorrent server'), code='bad_request')
     return api_ok(result, status=202)
 
 

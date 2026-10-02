@@ -231,6 +231,11 @@ simply does not exist for it, which shows up as a root that is configured and
 never mounted. `install-windows.ps1` warns when it spots a mapped drive in
 `-LibraryRoots`.
 
+Members who open games from a UNC root with the desktop companion (**Show in
+Explorer**, installs, launches) list the share under **Trusted network shares**
+in the companion first. It refuses UNC paths to any other share before they
+reach the network ([desktop-companion.md](../user/desktop-companion.md#trusted-network-shares-unc-library-roots)).
+
 If the share needs credentials, give the service account persistent access:
 
 ```

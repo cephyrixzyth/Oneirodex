@@ -51,11 +51,41 @@ def rate_limit_enabled() -> bool:
 
 
 def client_ip_from_request(request) -> str:
-    """Best-effort client IP (trust X-Forwarded-For first hop when behind a proxy)."""
-    forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
-    if forwarded:
-        return forwarded[:64]
+    """The client IP the rate limit keys on.
+
+    ``remote_addr`` only. It used to take the first ``X-Forwarded-For`` hop,
+    which any client can set, so a new header value per request meant a fresh
+    bucket every time and no limit at all. Behind a reverse proxy, set
+    ``TRUSTED_PROXIES`` and ProxyFix (utils/proxy.py) puts the real client
+    address in ``remote_addr`` from the hops that proxy added.
+    """
+    _warn_if_behind_an_untrusted_proxy(request)
     return (request.remote_addr or 'unknown')[:64]
+
+
+_PROXY_WARNED = False
+
+
+def _warn_if_behind_an_untrusted_proxy(request) -> None:
+    """Say once, in the log, when requests carry X-Forwarded-For but
+    TRUSTED_PROXIES is 0: every visitor then shares the proxy's address, so one
+    person's failed logins lock everyone out of the per-address limit."""
+    global _PROXY_WARNED
+    if _PROXY_WARNED or not request.headers.get('X-Forwarded-For'):
+        return
+    try:
+        from flask import current_app
+
+        if int(current_app.config.get('TRUSTED_PROXIES') or 0) > 0:
+            return
+        current_app.logger.warning(
+            'Requests carry X-Forwarded-For but TRUSTED_PROXIES is 0: the login '
+            'rate limit sees the proxy as the client, so one visitor can lock '
+            'everyone out. Set TRUSTED_PROXIES to the number of proxies in front.'
+        )
+    except Exception:  # noqa: BLE001 — a warning must never break login
+        return
+    _PROXY_WARNED = True
 
 
 def _prune(bucket: Deque[float], now: float, window: float) -> None:

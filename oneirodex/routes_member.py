@@ -198,6 +198,13 @@ def ownership_page():
     return render_member_spa(title='Store Ownership')
 
 
+@member_bp.route('/welcome')
+@login_required
+def welcome_page():
+    """First-run store setup: the same connection list as Ownership (LIB-02)."""
+    return render_member_spa(title='Set up your stores')
+
+
 @member_bp.route('/calendar')
 @login_required
 def calendar_page():

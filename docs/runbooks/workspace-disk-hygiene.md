@@ -7,7 +7,7 @@
 
 A full clone can balloon past **1 GB** from regenerable caches while the **shipped** surface stays small: Python app + vendored WebRetro cores (~72 MB) + SPA built inside Docker. Local `node_modules` and Tauri `target/` are **dev-only**.
 
-**Unraid host disk is separate:** if the array/cache is ~99% full, free space on the **NAS** before `git pull` / `docker compose build` — wiping workspace caches here does not free array capacity. See [unraid-deploy.md § Deploy gates](unraid-deploy.md#deploy-gates-operator-checklist). The live stack is `/mnt/user/infernal-data-streams/_projects/Oneirodex` (`Z:\_projects\Oneirodex` on Windows). Games are `/mnt/user/infernal-data-streams/_software/_games`, not the repo. `/mnt/user/isos/oneirodex/` is retired.
+**Unraid host disk is separate:** if the array/cache is ~99% full, free space on the **NAS** before `git pull` / `docker compose build` — wiping workspace caches here does not free array capacity. See [unraid-deploy.md § Deploy gates](unraid-deploy.md#deploy-gates-operator-checklist). The live stack is `/mnt/user/example-share/_projects/Oneirodex` (`Z:\_projects\Oneirodex` on Windows). Games are `/mnt/user/example-share/_software/_games`, not the repo. `/mnt/user/isos/oneirodex/` is retired.
 
 ## KEEP (never delete)
 

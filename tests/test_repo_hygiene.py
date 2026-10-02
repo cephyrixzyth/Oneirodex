@@ -36,6 +36,7 @@ FORBIDDEN = (
     'CLAUDE.md',
     'AGENTS.md',
     '.claude/',
+    '.agents/',
     '.cursor/',
     'docs/HANDOFF.md',
     'docs/_private/',
@@ -70,5 +71,5 @@ def test_agent_harness_files_are_not_tracked():
 def test_gitignore_still_names_the_policy():
     """The ignore lines are the first line of defence; the test is the second."""
     text = (ROOT / '.gitignore').read_text(encoding='utf-8')
-    for line in ('/AGENTS.md', '/CLAUDE.md', '.claude/', 'docs/_private/'):
+    for line in ('/AGENTS.md', '/CLAUDE.md', '.claude/', '.agents/', 'docs/_private/'):
         assert line in text, f'{line!r} missing from .gitignore'

@@ -193,11 +193,20 @@ services:
     shm_size: 128mb
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      # SET A STRONG PASSWORD in .env (.env.*.example say how to generate one).
+      # The `postgres` fallback only exists so a stack whose .env predates this
+      # variable keeps starting; it is a known password, so never rely on it on a
+      # host anyone else can reach. Postgres reads this only when it first creates
+      # the db_data volume: changing it later does NOT rotate an existing database
+      # (docs/runbooks/docker-compose-deploy.md § Postgres password).
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-oneirodex}
       - PGDATA=/var/lib/postgresql/data/pgdata
     # Force a Compose-friendly HBA so Docker-bridge IPs can connect without SSL.
     # (Stale volume pg_hba with only hostssl → "no encryption" / no pg_hba entry.)
+    # listen_addresses=* is required INSIDE the container: the app reaches db over
+    # the Compose bridge network. What keeps it off the LAN is the published-port
+    # bind below plus the private-range rules in docker/postgres/pg_hba.conf.
     command:
       - postgres
       - -c
@@ -208,8 +217,12 @@ services:
       - db_data:/var/lib/postgresql/data/pgdata
       - ./docker/postgres/pg_hba.conf:/etc/oneirodex/pg_hba.conf:ro
     ports:
-      # Host access for local pytest / native app against Compose Postgres
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      # Host access for local pytest / native app against Compose Postgres.
+      # Loopback only by default: a Postgres superuser login must not be offered
+      # to the whole LAN. To reach it from another machine, opt in explicitly
+      # (POSTGRES_HOST_BIND=0.0.0.0, or the host's LAN IP) AND set a strong
+      # POSTGRES_PASSWORD. The app container never uses this mapping.
+      - "${POSTGRES_HOST_BIND:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
@@ -218,12 +231,30 @@ services:
       start_period: 10s
 
   # Optional LiveKit SFU — start with: docker compose --profile livekit up -d
+  #
+  # Not in --dev mode. Dev mode ships the public key pair devkey/secret, so
+  # anyone who can reach :7880 could mint room tokens. The pair now comes from
+  # LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env, the same two values the app
+  # reads to mint tokens, so there is one source of truth. Generate them
+  # (.env.*.example say how) — with either empty LiveKit refuses to start
+  # ("one of key-file or keys must be provided") rather than running open.
+  # Keep the key and secret alphanumeric (no $ : # or quotes) and the secret at
+  # least 32 characters. If you still carry devkey/secret from an older
+  # template it starts, but logs "secret is too short" — rotate both.
+  #
+  # --udp-port 7882 is load-bearing once --dev is gone: dev mode quietly pinned
+  # WebRTC media to the single UDP port 7882; without it LiveKit uses UDP
+  # 50000-60000, which this file does not publish, and audio would never flow.
   livekit:
     profiles: ['livekit']
     image: livekit/livekit-server:v1.8.4
     container_name: oneirodex-livekit
     restart: unless-stopped
-    command: --dev --bind 0.0.0.0 --port 7880
+    command: --bind 0.0.0.0 --port 7880 --udp-port 7882
+    environment:
+      # Must read exactly "key: secret", colon and space included, so the whole
+      # entry is quoted for YAML.
+      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
     ports:
       - "${LIVEKIT_HOST_PORT:-7880}:7880"
       - "${LIVEKIT_RTC_PORT:-7881}:7881"
@@ -335,7 +366,11 @@ services:
       - sdnext_models:/webui/data/models
       - sdnext_outputs:/webui/outputs
     ports:
-      - "${SDNEXT_HOST_PORT:-7860}:7860"
+      # SD.Next has no login. Loopback by default so only this host can open its
+      # UI; the app reaches it over the Compose network (AI_ARTWORK_URL=
+      # http://sdnext:7860) and does not use this mapping. To browse it from
+      # another machine set SDNEXT_HOST_BIND to this host's LAN IP.
+      - "${SDNEXT_HOST_BIND:-127.0.0.1}:${SDNEXT_HOST_PORT:-7860}:7860"
     # No `deploy:` GPU reservation here on purpose — see the note above. It used
     # to sit commented out at this spot, which invited exactly one fix ("just
     # uncomment it") and no way to undo that per host. It lives in

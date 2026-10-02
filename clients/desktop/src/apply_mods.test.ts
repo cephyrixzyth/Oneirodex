@@ -356,6 +356,110 @@ describe('apply_mods helpers', () => {
     })
   })
 
+  describe('stageModFromUrl transport policy', () => {
+    const modAt = (source_url: string) => ({
+      id: 'hd',
+      name: 'HD',
+      version: '1',
+      source_url,
+      enabled: true,
+      load_order: 0,
+      loader: '',
+      requires: [],
+    })
+    const okFetch = () =>
+      vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+      }))
+
+    beforeEach(() => {
+      vi.mocked(invoke).mockImplementation(async (command: string) =>
+        command === 'get_app_subdir' ? '/appdata/mods' : undefined,
+      )
+    })
+
+    it('refuses plain http:// from a public host without fetching or writing', async () => {
+      const fetchImpl = okFetch()
+      const result = await stageModFromUrl({
+        gameUuid: 'game-42',
+        mod: modAt('http://cdn.example.com/hd.zip'),
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.error).toMatch(/https:\/\//)
+      expect(fetchImpl).not.toHaveBeenCalled()
+      expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
+    })
+
+    it('refuses non-http(s) schemes and junk', async () => {
+      for (const source of [
+        'ftp://cdn.example.com/hd.zip',
+        'file:///C:/x.zip',
+        'cdn.example/hd.zip',
+      ]) {
+        const fetchImpl = okFetch()
+        const result = await stageModFromUrl({
+          gameUuid: 'game-42',
+          mod: modAt(source),
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+        })
+        expect(result.ok, source).toBe(false)
+        expect(fetchImpl).not.toHaveBeenCalled()
+      }
+    })
+
+    it('allows http:// on the local network (LAN address, .local, bare name, loopback)', async () => {
+      for (const source of [
+        'http://192.168.1.20:8080/hd.zip',
+        'http://nas.local/hd.zip',
+        'http://nas/hd.zip',
+        'http://127.0.0.1:9000/hd.zip',
+        'https://cdn.example.com/hd.zip',
+      ]) {
+        const fetchImpl = okFetch()
+        const result = await stageModFromUrl({
+          gameUuid: 'game-42',
+          mod: modAt(source),
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+        })
+        expect(result.ok, source).toBe(true)
+        expect(fetchImpl).toHaveBeenCalledWith(source)
+      }
+    })
+
+    it('refuses an https source that redirects to plain http:// on a public host', async () => {
+      const fetchImpl = vi.fn(async () => ({
+        ok: true,
+        redirected: true,
+        url: 'http://evil.example.com/hd.zip',
+        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+      }))
+      const result = await stageModFromUrl({
+        gameUuid: 'game-42',
+        mod: modAt('https://cdn.example.com/hd.zip'),
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+      expect(result.ok).toBe(false)
+      expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
+    })
+
+    it('accepts an https source that redirects to another https URL', async () => {
+      const fetchImpl = vi.fn(async () => ({
+        ok: true,
+        redirected: true,
+        url: 'https://objects.example.net/hd.zip',
+        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+      }))
+      const result = await stageModFromUrl({
+        gameUuid: 'game-42',
+        mod: modAt('https://cdn.example.com/hd.zip'),
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+      expect(result.ok).toBe(true)
+    })
+  })
+
   it('kickoffApplyModPack stages and applies each enabled mod', async () => {
     vi.mocked(invoke).mockImplementation(async (command: string) => {
       if (command === 'get_app_subdir') {

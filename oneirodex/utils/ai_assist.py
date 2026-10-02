@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -12,8 +13,49 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game, GlobalSettings
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
+from oneirodex.utils.security import validate_connector_http_url, validate_outbound_http_url
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30
+
+#: Fixed client-facing text. ``requests`` exception strings name the host, port
+#: and sometimes the resolver's failure; the detail goes to the server log.
+_OLLAMA_UNREACHABLE = 'Ollama unreachable'
+_OLLAMA_BLOCKED = 'Ollama URL is not allowed by the outbound policy'
+
+
+def _operator_ollama_url(url: str) -> tuple[bool, str]:
+    """Env / built-in default Ollama URL: the operator's own choice.
+
+    ``OLLAMA_BASE_URL`` (and the loopback default) were never validated, and
+    ``http://host.docker.internal:11434`` is the documented Docker value, so the
+    private/loopback range stays reachable regardless of the LAN flag. Cloud
+    metadata still is not.
+    """
+    return validate_outbound_http_url(url, allow_http=True, allow_private_lan=True)
+
+
+def _ollama_url_validator():
+    """The policy the effective Ollama base URL must pass on every request.
+
+    An admin-saved URL was validated with ``validate_connector_http_url`` at
+    save time and is held to that same LAN-aware policy at use time -- and on
+    every redirect hop, which a one-shot save check never covered.
+    """
+    settings = db.session.execute(
+        select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
+    ).scalars().first()
+    if settings is not None and getattr(settings, 'ollama_base_url', None):
+        return validate_connector_http_url
+    return _operator_ollama_url
+
+
+def _ollama_failure_text(exc: BaseException) -> str:
+    """Fixed text for a failed Ollama call; the detail is logged, not returned."""
+    logger.warning('Ollama request failed: %s', type(exc).__name__)
+    return _OLLAMA_BLOCKED if isinstance(exc, BlockedOutboundUrl) else _OLLAMA_UNREACHABLE
 
 
 def ai_enabled() -> bool:
@@ -60,12 +102,17 @@ def ollama_status() -> dict[str, Any]:
     error = None
     if enabled:
         try:
-            resp = requests.get(f'{base}/api/tags', timeout=5)
+            resp = safe_request(
+                'GET',
+                f'{base}/api/tags',
+                validator=_ollama_url_validator(),
+                timeout=5,
+            )
             reachable = resp.status_code < 500
             if resp.status_code >= 400:
                 error = f'Ollama returned {resp.status_code}'
         except requests.RequestException as exc:
-            error = str(exc)
+            error = _ollama_failure_text(exc)
     return {
         'enabled': enabled,
         'auto_apply_enabled': ai_auto_apply_enabled(),
@@ -126,8 +173,10 @@ def _chat(system: str, user: str) -> str:
         raise PermissionError('AI assist is disabled')
     base, model = _ollama_config()
     try:
-        resp = requests.post(
+        resp = safe_request(
+            'POST',
             f'{base}/api/chat',
+            validator=_ollama_url_validator(),
             json={
                 'model': model,
                 'stream': False,
@@ -139,7 +188,7 @@ def _chat(system: str, user: str) -> str:
             timeout=DEFAULT_TIMEOUT,
         )
     except requests.RequestException as exc:
-        raise ConnectionError(f'Ollama unreachable: {exc}') from exc
+        raise ConnectionError(_ollama_failure_text(exc)) from exc
     if resp.status_code >= 400:
         raise ConnectionError(f'Ollama error ({resp.status_code})')
     payload = resp.json() if resp.content else {}

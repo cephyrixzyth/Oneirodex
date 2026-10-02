@@ -139,4 +139,48 @@ describe('launch helper', () => {
       },
     })
   })
+
+  it('keeps the pointers to retained and superseded files when it persists the exe path', async () => {
+    // A reinstall from a retained snapshot where no exe was found: the first Play
+    // resolves one and rewrites the record. Rebuilding the record from three
+    // fields used to drop retainedPath, orphaning the snapshot.
+    const record = {
+      archivePath: 'C:\\appdata\\downloads\\game-42.zip',
+      extractPath: 'C:\\appdata\\installs\\game-42.reinstall-1',
+      exePath: null,
+      retainedPath: 'C:\\appdata\\installs\\game-42.uninstalled-1',
+      superseded: {
+        archivePath: 'C:\\appdata\\downloads\\game-42-old.zip',
+        extractPath: 'C:\\appdata\\installs\\game-42-old',
+      },
+    }
+    vi.mocked(getInstallRecord).mockResolvedValue(record)
+    vi.mocked(loadInstallsFromDisk).mockResolvedValue({ 'game-42': record })
+    vi.mocked(invoke).mockResolvedValue({
+      pid: 9001,
+      exe_path: 'C:\\appdata\\installs\\game-42.reinstall-1\\game.exe',
+      resolved_exe_path: 'C:\\appdata\\installs\\game-42.reinstall-1\\game.exe',
+    })
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: 4, game_uuid: 'game-42' }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    const api = createOneirodexClient({
+      baseUrl: 'https://example.com',
+      getToken: () => 'gt_abcd_secret',
+      fetchImpl,
+    })
+
+    await kickoffLaunch(api, 'game-42')
+
+    expect(saveInstallsToDisk).toHaveBeenCalledWith({
+      'game-42': {
+        ...record,
+        exePath: 'C:\\appdata\\installs\\game-42.reinstall-1\\game.exe',
+      },
+    })
+  })
 })
