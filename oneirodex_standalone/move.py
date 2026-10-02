@@ -150,6 +150,12 @@ def _opens_to(path: Path, key: str, plain_sha256: str) -> bool:
 
 def _engine(url: str):
     from sqlalchemy import create_engine
+    from sqlalchemy.dialects import registry
+
+    # As config.keep_psycopg2_for_plain_postgresql_urls (not imported here: it
+    # needs the server's environment): SQLAlchemy 2.1 maps a bare postgresql://
+    # to psycopg v3, which is not installed.
+    registry.register('postgresql', 'sqlalchemy.dialects.postgresql.psycopg2', 'PGDialect_psycopg2')
     return create_engine(url, pool_pre_ping=False)
 
 

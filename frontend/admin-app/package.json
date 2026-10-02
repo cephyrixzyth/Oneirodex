@@ -15,9 +15,9 @@
     "format:check": "npm --prefix ../.. run format:check"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-router-dom": "^7.18.1"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
@@ -27,7 +27,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^4.5.2",
     "jsdom": "^26.1.0",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vite": "^6.3.5",
     "vitest": "^4.1.11"
   }

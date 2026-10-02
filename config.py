@@ -13,6 +13,23 @@ from product_env import getenv_product
 load_dotenv()
 
 
+def keep_psycopg2_for_plain_postgresql_urls() -> None:
+    """Keep ``postgresql://`` URLs on psycopg2.
+
+    SQLAlchemy 2.1 made psycopg (v3) the driver for a URL without ``+driver``.
+    The app, its tests, Alembic and every operator's ``DATABASE_URL`` use the
+    plain form with psycopg2 installed, so without this each of them failed
+    with ``No module named 'psycopg'``. Explicit ``postgresql+psycopg://`` URLs
+    are untouched. Harmless on SQLAlchemy 2.0, where this is the default.
+    """
+    from sqlalchemy.dialects import registry
+
+    registry.register('postgresql', 'sqlalchemy.dialects.postgresql.psycopg2', 'PGDialect_psycopg2')
+
+
+keep_psycopg2_for_plain_postgresql_urls()
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     """Parse a boolean env var.
 
