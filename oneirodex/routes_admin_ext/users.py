@@ -442,8 +442,10 @@ def manage_user_api(user_id):
         if user_id == 1:
             return api_error('Cannot delete primary admin account', code='forbidden')
         
-        # Prevent deleting the last active admin
-        valid, error = check_admin_protection(user_id)
+        # Deleting an active admin has the same effect as deactivating them.
+        # Without new_state=False, the guard sees no requested change and lets
+        # the last active admin delete their own account.
+        valid, error = check_admin_protection(user_id, new_state=False)
         if not valid:
             return api_error(error, code='forbidden')
         
