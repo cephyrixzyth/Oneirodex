@@ -17,6 +17,7 @@ How Oneirodex is tested against platforms and devices we do not own, and what ea
 |---|---|---|
 | Layer 4 | `GET /admin/api/ops/system` returned 503 on every install with at least one logged event (`get_log_info()['latest']` is an ORM row, not JSON). Admin → Ops lost its System panel. | Fixed, regression test `tests/test_ops_system_snapshot.py` |
 | Layer 3 (fake companion) | `POST /api/client/commands` returned 500 for every install/update/uninstall queued from the web: a local `select = data.get('select')` shadowed SQLAlchemy's `select`. | Fixed, `tests/test_vdevice_fake_companion.py` |
+| Layer 4 (hover) | The top bar blinked/hid while hovering tiles. `scripts/vdevice/hover_stability.py` reproduces it in a real browser (old CSS: the scroll pane flips over the bar; `/library`: the bar is covered for the whole sweep) and showed the first fix was **incomplete**: `od-era.css` (the default look) carried the same `:has(.game-card:hover)` lift as `od-shell.css`. | Fixed in both files; sweep reports STABLE on `/discover` and `/library` |
 | Layer 4 (phone) | `/admin/arr` (+155px) and `/admin/reference_sets` (+61px) scrolled sideways: the legacy admin content shrank to fit-content instead of filling its grid track. | Fixed in `od-shell.css`; applies after *Reset Themes* copies the theme |
 
 Run the sweep with `python scripts/serve_capture.py` in one shell and `python scripts/vdevice/ui_sweep.py` in another (`--viewports desktop`, `--no-screenshots` available).

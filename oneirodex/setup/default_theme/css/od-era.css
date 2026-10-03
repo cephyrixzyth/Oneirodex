@@ -231,22 +231,10 @@ html[data-era] .od-topbar {
   z-index: 30;
 }
 
-/* Era also pins #content at z-index 1; lift the scroll pane above the bar so
-   enlarged tiles overlap chrome. Transparent while lifted so the top bar is
-   not blanked out by the era wash on `.od-shell__main`. */
-html[data-era] .od-shell:has(.game-card:hover) .od-shell__main,
-html[data-era] .od-shell:has(.game-card:focus-visible) .od-shell__main,
-html[data-era] .od-shell:has(.game-card :focus-visible) .od-shell__main,
-html[data-era] .od-shell:has(.od-news-card:hover) .od-shell__main,
-html[data-era] .od-shell:has(.od-news-card:focus-visible) .od-shell__main,
-html[data-era] .od-shell:has(.game-card:hover) > #content,
-html[data-era] .od-shell:has(.game-card:focus-visible) > #content,
-html[data-era] .od-shell:has(.game-card :focus-visible) > #content,
-html[data-era] .od-shell:has(.od-news-card:hover) > #content,
-html[data-era] .od-shell:has(.od-news-card:focus-visible) > #content {
-  z-index: 40;
-  background: transparent;
-}
+/* The scroll pane is NOT lifted above the bar on tile hover (it used to be, via
+   `:has(.game-card:hover)`, with a transparent background while lifted). That
+   flip re-ran across every gap between tiles and made the top bar blink in and
+   out. The bar keeps its constant z-index; see od-shell.css. */
 
 /* ---- Room recipes (setting / decade). No manufacturer names. ---- */
 
