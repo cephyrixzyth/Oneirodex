@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: oneirodex-public-demo
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    healthCheckPath: /awake
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: ONEIRODEX_PUBLIC_DEMO
+        value: "true"
+      - key: ONEIRODEX_EMBEDDED_DB
+        value: "true"
+      - key: ONEIRODEX_CONFIG_DIR
+        value: /tmp/oneirodex-config
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: REMEMBER_COOKIE_SECURE
+        value: "true"
+      - key: ENABLE_LIVEKIT
+        value: "false"
+      - key: ENABLE_EMAIL_DIGEST
+        value: "false"
+      - key: ENABLE_FREE_GAMES
+        value: "false"
+      - key: ENABLE_DISCOVER_ML
+        value: "false"
+      - key: ENABLE_LOGIN_RATE_LIMIT
+        value: "true"

@@ -55,6 +55,13 @@ if not run_complete_startup_initialization():
 print('✅ Initialization completed - starting workers...')
 "
 
+# Render's free Docker service supplies PORT at runtime. The public demo uses
+# the same image and keeps the normal Compose/Unraid port unchanged otherwise.
+if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
+    echo "🎮 Preparing isolated public demo data..."
+    python3 /app/scripts/seed_public_demo.py
+fi
+
 # Ensure environment variables are set for worker processes
 export ONEIRODEX_MIGRATIONS_COMPLETE=true
 export ONEIRODEX_INITIALIZATION_COMPLETE=true
@@ -64,4 +71,5 @@ export ONEIRODEX_INITIALIZATION_COMPLETE=true
 # single-process. Override UVICORN_WORKERS=2+ only when you accept per-worker state
 # (or after a shared cache lands).
 WORKERS="${UVICORN_WORKERS:-1}"
-exec uvicorn asgi:asgi_app --host 0.0.0.0 --port 5006 --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"
+PORT="${PORT:-5006}"
+exec uvicorn asgi:asgi_app --host 0.0.0.0 --port "$PORT" --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"
