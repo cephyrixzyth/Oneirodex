@@ -4,6 +4,7 @@ import { deleteJson, getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { MetricStrip } from '../components/opsWidgets'
 import { showToast } from '../utils/toast'
+import { Page } from '../components/Page'
 
 type ExtGroupId = 'archives' | 'disc' | 'cart' | 'other'
 
@@ -212,22 +213,20 @@ export function ExtensionsPage() {
 
   if (loading) {
     return (
-      <div className="od-admin-page">
-        <h1>File Extensions</h1>
+      <Page title="File Extensions">
         <PageStatus loading loadingMessage="Loading allowed extensions…" />
-      </div>
+      </Page>
     )
   }
 
   if (error && items.length === 0) {
     return (
-      <div className="od-admin-page">
-        <h1>File Extensions</h1>
+      <Page title="File Extensions">
         <PageStatus error={error} />
         <a className="od-btn" href="/libraries">
           Back to libraries
         </a>
-      </div>
+      </Page>
     )
   }
 
@@ -242,14 +241,17 @@ export function ExtensionsPage() {
   ]
 
   return (
-    <div className="od-admin-page od-ext-page">
-      <h1>File Extensions</h1>
-      <p className="od-admin-lede">
-        Extensions used during library scan recognition. Only files matching these suffixes are
-        treated as games when scanning folders — add archives, disc images, or cartridge dumps your
-        libraries actually contain.
-      </p>
-
+    <Page
+      title="File Extensions"
+      className="od-ext-page"
+      lede={
+        <>
+          Extensions used during library scan recognition. Only files matching these suffixes are
+          treated as games when scanning folders — add archives, disc images, or cartridge dumps
+          your libraries actually contain.
+        </>
+      }
+    >
       {/* UID-014. An empty extension list is the state worth shouting about:
           scans would recognise nothing at all, and the page otherwise reports
           that as a quiet "0" in a table. */}
@@ -388,6 +390,6 @@ export function ExtensionsPage() {
           Scan jobs
         </a>
       </div>
-    </div>
+    </Page>
   )
 }

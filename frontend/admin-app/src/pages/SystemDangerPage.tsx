@@ -1,4 +1,5 @@
 import { AdminPageActions } from '../components/AdminPageActions'
+import { Page } from '../components/Page'
 import { SystemResetPanel } from '../components/SystemResetPanel'
 
 /**
@@ -10,20 +11,18 @@ import { SystemResetPanel } from '../components/SystemResetPanel'
  */
 export function SystemDangerPage() {
   return (
-    <div className="od-admin-page od-system-danger">
+    <Page
+      className="od-system-danger"
+      title="Danger zone"
+      lede="Scoped factory reset for this Oneirodex install. Nothing here deletes game files on disk — only database state you choose. Confirmations are required before anything runs."
+    >
       <AdminPageActions label="Danger zone" slot="trail">
         <a className="od-cbtn" href="/admin/ops">
           Back to Ops
         </a>
       </AdminPageActions>
 
-      <h1>Danger zone</h1>
-      <p className="od-admin-lede">
-        Scoped factory reset for this Oneirodex install. Nothing here deletes game files on disk —
-        only database state you choose. Confirmations are required before anything runs.
-      </p>
-
       <SystemResetPanel />
-    </div>
+    </Page>
   )
 }

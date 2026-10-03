@@ -4,6 +4,7 @@ import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { MetricStrip } from '../components/opsWidgets'
 import { CreateUserForm } from '../components/CreateUserForm'
+import { Page } from '../components/Page'
 
 interface InviteUser {
   user_id?: string
@@ -55,14 +56,16 @@ export function InvitesPage() {
   }
 
   return (
-    <div className="od-admin-page">
-      <h1>Invites</h1>
-      <p className="od-admin-lede">
-        Per-user invite quota and unused tokens. Adjust quota on the classic form if needed. Members
-        can create invites as links without an email address — see their Invites panel. Admins can
-        also skip invites entirely and add a member here.
-      </p>
-
+    <Page
+      title="Invites"
+      lede={
+        <>
+          Per-user invite quota and unused tokens. Adjust quota on the classic form if needed.
+          Members can create invites as links without an email address — see their Invites panel.
+          Admins can also skip invites entirely and add a member here.
+        </>
+      }
+    >
       <CreateUserForm
         onCreated={() => setReloadKey((key) => key + 1)}
         title="Create user without invite"
@@ -108,6 +111,6 @@ export function InvitesPage() {
         getRowKey={(u) => u.user_id || u.id}
         emptyMessage={loading ? 'Loading invites…' : 'No users.'}
       />
-    </div>
+    </Page>
   )
 }

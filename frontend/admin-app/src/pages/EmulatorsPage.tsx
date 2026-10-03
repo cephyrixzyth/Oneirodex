@@ -5,6 +5,7 @@ import { errorText } from '../utils/errorText'
 import { BrowserPlayerPilot } from '../components/BrowserPlayerPilot'
 import { RetroAchievementsPanel } from '../components/RetroAchievementsPanel'
 import { EmulatorFirmwarePanel } from '../components/EmulatorFirmwarePanel'
+import { Page } from '../components/Page'
 
 /**
  * Admin › Emulators. Second H-D.5 port.
@@ -93,7 +94,7 @@ export function EmulatorProfilesForm() {
   const platforms = Object.keys(catalog).sort()
 
   return (
-    <section className="od-adminpage-panel" aria-labelledby="emu-profiles-heading">
+    <section className="od-admin-panel" aria-labelledby="emu-profiles-heading">
       <h2 id="emu-profiles-heading" className="h5">
         Preferred cores
       </h2>
@@ -147,16 +148,19 @@ export function EmulatorProfilesForm() {
 
 export function EmulatorsPage() {
   return (
-    <div className="od-admin-page">
-      <h1>Emulators</h1>
-      <p className="od-admin-lede">
-        Which core plays each console in the browser, the browser-player pilot, RetroAchievements,
-        and the firmware each core needs.
-      </p>
+    <Page
+      title="Emulators"
+      lede={
+        <>
+          Which core plays each console in the browser, the browser-player pilot, RetroAchievements,
+          and the firmware each core needs.
+        </>
+      }
+    >
       <EmulatorProfilesForm />
       <BrowserPlayerPilot />
       <RetroAchievementsPanel />
       <EmulatorFirmwarePanel />
-    </div>
+    </Page>
   )
 }

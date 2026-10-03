@@ -79,14 +79,14 @@ export function RetroAchievementsPanel() {
 
   return (
     <section
-      className="od-adminpage-panel"
+      className="od-admin-panel"
       id="retroachievements"
       aria-labelledby="od-retroachievements-heading"
     >
       <h2 id="od-retroachievements-heading" className="od-section-head__title">
         RetroAchievements
       </h2>
-      <p className="od-adminpage-lede">
+      <p className="od-admin-lede">
         Matches cartridge ROMs to community achievement sets by the hash RetroAchievements uses, so
         a title can say it has a set and a member can see their own progress. Read-only: nothing
         played in the browser unlocks anything, hardcore or softcore.
