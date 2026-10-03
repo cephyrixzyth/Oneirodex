@@ -111,7 +111,7 @@ start_embedded_db() {
 
     echo "🗄️  Starting embedded PostgreSQL on 127.0.0.1:${EMBEDDED_PG_PORT}..."
     _pg_run "${bin}/pg_ctl" start -w -t 120 -D "${EMBEDDED_PGDATA}" -l "${EMBEDDED_PG_LOG}" \
-        -o "-c listen_addresses=127.0.0.1 -c port=${EMBEDDED_PG_PORT} -c unix_socket_directories= -c max_connections=${EMBEDDED_PG_MAX_CONNECTIONS:-60} -c shared_buffers=${EMBEDDED_PG_SHARED_BUFFERS:-64MB} -c jit=off" \
+        -o "-c listen_addresses=127.0.0.1 -c port=${EMBEDDED_PG_PORT} -c unix_socket_directories= -c max_connections=${EMBEDDED_PG_MAX_CONNECTIONS:-60} -c shared_buffers=${EMBEDDED_PG_SHARED_BUFFERS:-64MB} -c jit=off -c timezone=UTC" \
         >/dev/null || {
         echo "❌ Embedded PostgreSQL failed to start; see ${EMBEDDED_PG_LOG}"
         return 1
