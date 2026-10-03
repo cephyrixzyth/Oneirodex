@@ -78,4 +78,4 @@ export PORT=${PORT:-5006}
 # "CurrentThreadExecutor already quit" under concurrent asset load.
 # Static files are now served natively in asgi.py; keep workers modest.
 WORKERS="${UVICORN_WORKERS:-1}"
-uvicorn asgi:asgi_app --host 0.0.0.0 --port $PORT --workers "$WORKERS"
+uvicorn asgi:asgi_app --host 0.0.0.0 --port $PORT --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"

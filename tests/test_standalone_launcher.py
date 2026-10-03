@@ -64,13 +64,19 @@ def _pg(tmp_path, **kw):
                            port=kw.get('port', 54999), password=kw.get('password', 'p@ss/word:1'))
 
 
-def test_the_server_gets_a_local_url_and_http_cookies(tmp_path):
+def test_the_server_gets_a_local_url_and_http_cookies(tmp_path, monkeypatch):
     env = launcher.server_env(_pg(tmp_path), {'secret_key': 'k' * 48}, tmp_path)
     assert env['DATABASE_URL'] == 'postgresql://oneirodex:p%40ss%2Fword%3A1@127.0.0.1:54999/oneirodex'
     assert env['ONEIRODEX_LIBRARY_DIR'] == str(tmp_path / 'library'), 'writes go to the data folder'
     assert env['SECRET_KEY'] == 'k' * 48
     assert env['SESSION_COOKIE_SECURE'] == 'false' and env['REMEMBER_COOKIE_SECURE'] == 'false'
-    assert launcher.server_command(5006)[-6:] == ['--host', '127.0.0.1', '--port', '5006', '--workers', '1']
+    command = launcher.server_command(5006)
+    assert command[2:10] == [
+        'uvicorn', 'asgi:asgi_app', '--host', '127.0.0.1', '--port', '5006', '--workers', '1'
+    ]
+    assert command[-2:] == ['--timeout-graceful-shutdown', '5']
+    monkeypatch.setenv('UVICORN_GRACEFUL_TIMEOUT', '13')
+    assert launcher.server_command(5006)[-2:] == ['--timeout-graceful-shutdown', '13']
     assert 'run_complete_startup_initialization' in launcher.init_command()[-1]
 
 
