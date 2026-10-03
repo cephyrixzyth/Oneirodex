@@ -232,6 +232,16 @@ class TestScanJobsStatusTimingAndFilters:
         assert row['stalled'] is False
 
     def test_queued_eta_null(self, client, db_session, sample_library, _admin_session):
+        # The admin status endpoint is also a safety drain and promotes queued
+        # work when no scan is active. Keep the row queued while testing its
+        # serialized timing fields.
+        _make_job(
+            db_session,
+            sample_library,
+            status='Running',
+            scan_folder='/games/active',
+            total_folders=1,
+        )
         job = _make_job(
             db_session,
             sample_library,

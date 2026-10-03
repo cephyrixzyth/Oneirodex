@@ -153,7 +153,7 @@ class BundledPostgres:
     def server_args(self) -> list[str]:
         opts = [
             'listen_addresses=127.0.0.1', f'port={self.port}',
-            'max_connections=40', 'shared_buffers=32MB', 'jit=off',
+            'max_connections=40', 'shared_buffers=32MB', 'jit=off', 'timezone=UTC',
         ]
         if os.name != 'nt':
             # TCP only: one connection story on every OS, and no socket files

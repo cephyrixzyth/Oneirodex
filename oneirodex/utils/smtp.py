@@ -254,19 +254,19 @@ def send_password_reset_email(user_email, token):
 
     reset_path = url_for('login.reset_password', token=token)
     reset_url = f"{public_origin()}{reset_path}"
-    html = f'''<p>Ahoy there!</p>
+    html = f'''<p>You requested a password reset for your Oneirodex account.</p>
 
-<p>Ye be wantin' to reset yer password, aye? No worries, we got ye covered! Jus' click on the link below to set a new course for yer password:</p>
+<p>Use the link below to choose a new password:</p>
 
 <p><a href="{reset_url}">Password Reset Link</a></p>
 
-<p>If ye didn't request this, ye can just ignore this message and continue sailin' the digital seas.</p>
+<p>If you did not request this, you can ignore this message.</p>
 
-<p>Fair winds and followin' seas,</p>
+<p>Oneirodex</p>'''
 
-<p>Captain Blackbeard</p>'''
+    from oneirodex import PRODUCT_NAME
 
-    subject = "Ye Password Reset Request Arrr!"
+    subject = f'{PRODUCT_NAME} password reset request'
     send_email(user_email, subject, html)
     
     

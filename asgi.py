@@ -230,8 +230,6 @@ class LazyASGIApp:
         restrict_child: bool,
     ):
         """Async SSE — keeps the uvicorn event loop free (not WsgiToAsgi)."""
-        import queue as queue_mod
-
         if scope.get("method") != "GET":
             await self._send_error(send, 405, "Method Not Allowed")
             return
@@ -249,13 +247,7 @@ class LazyASGIApp:
 
         from oneirodex.utils.event_bus import encode_sse, event_bus
 
-        subscriber = event_bus.subscribe()
-
-        def _poll(timeout: float = 1.0):
-            try:
-                return subscriber.get(timeout=timeout)
-            except queue_mod.Empty:
-                return None
+        subscriber = event_bus.subscribe_async(asyncio.get_running_loop())
 
         await send({
             "type": "http.response.start",
@@ -288,9 +280,22 @@ class LazyASGIApp:
                 "more_body": True,
             })
             while not disconnected.is_set():
-                event = await asyncio.to_thread(_poll, 1.0)
-                if disconnected.is_set():
+                next_event = asyncio.create_task(subscriber.get())
+                done, _pending = await asyncio.wait(
+                    (next_event, watcher),
+                    timeout=1.0,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if watcher in done:
+                    next_event.cancel()
+                    await asyncio.gather(next_event, return_exceptions=True)
                     break
+                if next_event in done:
+                    event = next_event.result()
+                else:
+                    next_event.cancel()
+                    await asyncio.gather(next_event, return_exceptions=True)
+                    event = None
                 if event is None:
                     await send({
                         "type": "http.response.body",
@@ -933,49 +938,49 @@ class LazyASGIApp:
         })
 
     async def _handle_lifespan(self, receive, send):
-        """Handle ASGI lifespan events (startup/shutdown)"""
-        message = await receive()
+        """Handle startup and shutdown until the ASGI server finishes its cycle."""
+        while True:
+            message = await receive()
 
-        if message["type"] == "lifespan.startup":
-            try:
-                from oneirodex.utils.shutdown import register_shutdown_handlers
-
-                register_shutdown_handlers()
-                # Eager-init Flask so the first browser burst does not race bridge setup.
-                await self._ensure_flask()
-
-                # Background schedulers live here now, not in create_app().
-                # Wrapped so a scheduler that throws on start can never wedge
-                # lifespan and take the whole server down with it.
+            if message["type"] == "lifespan.startup":
                 try:
-                    from oneirodex.background import start_background_workers
+                    # Eager-init Flask so the first browser burst does not race bridge setup.
+                    await self._ensure_flask()
 
-                    start_background_workers(self._flask_app)
+                    # Background schedulers live here now, not in create_app().
+                    # Wrapped so a scheduler that throws on start can never wedge
+                    # lifespan and take the whole server down with it.
+                    try:
+                        from oneirodex.background import start_background_workers
+
+                        start_background_workers(self._flask_app)
+                    except Exception as e:
+                        print(f"Background workers failed to start: {e}")
+
+                    await send({"type": "lifespan.startup.complete"})
                 except Exception as e:
-                    print(f"Background workers failed to start: {e}")
+                    print(f"Startup failed: {e}")
+                    await send({"type": "lifespan.startup.failed", "message": "Startup failed"})
+                    return
 
-                await send({"type": "lifespan.startup.complete"})
-            except Exception as e:
-                print(f"Startup failed: {e}")
-                await send({"type": "lifespan.startup.failed", "message": "Startup failed"})
-
-        elif message["type"] == "lifespan.shutdown":
-            try:
-                from oneirodex.utils.shutdown import request_shutdown
-
+            elif message["type"] == "lifespan.shutdown":
                 try:
-                    from oneirodex.background import stop_background_workers
+                    try:
+                        from oneirodex.background import stop_background_workers
 
-                    stop_background_workers()
+                        stop_background_workers()
+                    except Exception as e:
+                        print(f"Background workers failed to stop cleanly: {e}")
+
+                    from oneirodex.utils.shutdown import request_shutdown
+
+                    request_shutdown()
+                    print("🛑 ASGI lifespan shutdown initiated")
+                    await send({"type": "lifespan.shutdown.complete"})
                 except Exception as e:
-                    print(f"Background workers failed to stop cleanly: {e}")
-
-                request_shutdown()
-                print("🛑 ASGI lifespan shutdown initiated")
-                await send({"type": "lifespan.shutdown.complete"})
-            except Exception as e:
-                print(f"Shutdown failed: {e}")
-                await send({"type": "lifespan.shutdown.failed", "message": "Shutdown failed"})
+                    print(f"Shutdown failed: {e}")
+                    await send({"type": "lifespan.shutdown.failed", "message": "Shutdown failed"})
+                return
 
 
 asgi_app = LazyASGIApp()

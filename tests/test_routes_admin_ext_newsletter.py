@@ -1,6 +1,6 @@
 import pytest
 from flask import url_for
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from oneirodex.models import User, Newsletter, GlobalSettings
 from oneirodex import db
 from uuid import uuid4
@@ -202,8 +202,8 @@ class TestNewsletterRoute:
         assert b'Newsletter' in response.data
         assert b'Test Newsletter' in response.data
 
-    @patch('oneirodex.routes_admin_ext.newsletter.mail.send')
-    def test_newsletter_post_success(self, mock_mail_send, client, admin_user, global_settings_smtp_enabled, db_session):
+    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
+    def test_newsletter_post_success(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
         """Test successful newsletter sending via POST."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -233,12 +233,12 @@ class TestNewsletterRoute:
         assert newsletter.sender_id == admin_user.id
 
         # Verify email was attempted to be sent
-        mock_mail_send.assert_called_once()
+        assert mock_send_email.call_count == 2
+        assert [call.args[0] for call in mock_send_email.call_args_list] == ['test1@test.com', 'test2@test.com']
 
-    @patch('oneirodex.routes_admin_ext.newsletter.mail.send')
-    def test_newsletter_post_email_failure(self, mock_mail_send, client, admin_user, global_settings_smtp_enabled, db_session):
+    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=False)
+    def test_newsletter_post_email_failure(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
         """Test newsletter sending when email fails."""
-        mock_mail_send.side_effect = Exception('SMTP connection failed')
 
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -257,15 +257,16 @@ class TestNewsletterRoute:
 
         response = client.post('/admin/newsletter', data=data, follow_redirects=True)
         assert response.status_code == 200
-        assert b'SMTP connection failed' in response.data
+        assert b'Failed to send to: test@test.com' in response.data
 
         # Verify newsletter was created but marked as failed
         newsletter = db_session.query(Newsletter).filter_by(subject='Failed Newsletter').first()
         assert newsletter is not None
         assert newsletter.status == 'failed'
-        assert newsletter.error_message == 'SMTP connection failed'
+        assert newsletter.error_message == 'Failed to send to: test@test.com'
+        mock_send_email.assert_called_once_with('test@test.com', 'Failed Newsletter', '<p>This will fail</p>')
 
-    def test_newsletter_post_invalid_form(self, client, admin_user, global_settings_smtp_enabled):
+    def test_newsletter_post_invalid_form(self, client, admin_user, global_settings_smtp_enabled, db_session):
         """Test POST with invalid form data."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -279,8 +280,10 @@ class TestNewsletterRoute:
             'send': 'Send'
         }
 
-        response = client.get('/admin/newsletter')
+        response = client.post('/admin/newsletter', data=data)
         assert response.status_code == 200
+        assert b'Newsletter sent successfully!' not in response.data
+        assert db_session.query(Newsletter).filter_by(subject='').first() is None
 
 
 class TestViewNewsletterRoute:
@@ -324,8 +327,8 @@ class TestViewNewsletterRoute:
 class TestNewsletterIntegration:
     """Integration tests for newsletter functionality."""
     
-    @patch('oneirodex.routes_admin_ext.newsletter.mail.send')
-    def test_newsletter_workflow_complete(self, mock_mail_send, client, admin_user, global_settings_smtp_enabled, db_session):
+    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
+    def test_newsletter_workflow_complete(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
         """Test complete newsletter workflow from creation to viewing."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -352,6 +355,7 @@ class TestNewsletterIntegration:
         assert newsletter is not None
         assert newsletter.status == 'sent'
         assert newsletter.recipient_count == 3
+        assert mock_send_email.call_count == 3
 
         # Step 3: View the created newsletter
         response = client.get(f'/admin/newsletter/{newsletter.id}')
@@ -376,7 +380,7 @@ class TestNewsletterIntegration:
         db_session.commit()
 
         # Test various recipient formats
-        with patch('oneirodex.routes_admin_ext.newsletter.mail.send'):
+        with patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True) as mock_send_email:
             data = {
                 'subject': 'Recipient Test',
                 'content': '<p>Testing recipients</p>',
@@ -389,7 +393,7 @@ class TestNewsletterIntegration:
 
             newsletter = db_session.query(Newsletter).filter_by(subject='Recipient Test').first()
             assert newsletter is not None
-            # Recipients should be stored as a list, even with spaces
-            expected_recipients = ['user1@test.com', ' user2@test.com ', 'user3@test.com', '  user4@test.com  ']
+            expected_recipients = ['user1@test.com', 'user2@test.com', 'user3@test.com', 'user4@test.com']
             assert newsletter.recipients == expected_recipients
             assert newsletter.recipient_count == 4
+            assert [call.args[0] for call in mock_send_email.call_args_list] == expected_recipients

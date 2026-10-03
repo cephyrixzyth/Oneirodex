@@ -123,7 +123,7 @@ def init_command() -> list[str]:
 
 
 def server_command(port: int) -> list[str]:
-    return [sys.executable, '-m', 'uvicorn', 'asgi:asgi_app', '--host', '127.0.0.1', '--port', str(port), '--workers', '1']
+    return [sys.executable, '-m', 'uvicorn', 'asgi:asgi_app', '--host', '127.0.0.1', '--port', str(port), '--workers', '1', '--timeout-graceful-shutdown', os.environ.get('UVICORN_GRACEFUL_TIMEOUT', '5')]
 
 
 class Supervisor:

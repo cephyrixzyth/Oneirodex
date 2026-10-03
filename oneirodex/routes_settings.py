@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app
 from flask_login import login_required, current_user, login_user
-from oneirodex.forms import EditProfileForm, UserPasswordForm, UserPreferencesForm
+from oneirodex.forms import ChangePasswordForm, EditProfileForm, UserPreferencesForm
 from oneirodex.models import User, InviteToken, UserPreference
 from sqlalchemy import select, func
 from oneirodex.utils.api_response import api_error, api_ok
@@ -96,10 +96,14 @@ def settings_profile_view():
 @settings_bp.route('/settings_password', methods=['GET', 'POST'])
 @login_required
 def account_pw():
-    form = UserPasswordForm()
+    form = ChangePasswordForm()
     user = db.session.get(User, current_user.id)
 
     if form.validate_on_submit():
+        if not user.check_password(form.current_password.data):
+            form.current_password.errors.append('Current password is incorrect.')
+            flash('Current password is incorrect.', 'error')
+            return render_template('settings/settings_password.html', title='Change Password', form=form, user=user)
         try:
             user.set_password(form.password.data)
             db.session.commit()

@@ -129,7 +129,7 @@ class TestUpdatesScanRoute:
         assert recent.name not in probed
 
     def test_a_failing_title_does_not_end_the_sweep(
-        self, app, db_session, scan_user, scan_library, monkeypatch
+        self, app, db_session, scan_user, scan_library, monkeypatch, caplog
     ):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         _game(db_session, scan_library, 'Aaa breaks', created=now)
@@ -161,7 +161,9 @@ class TestUpdatesScanRoute:
         # member the rest of the batch.
         assert body['checked'] == 1
         assert len(body['errors']) == 1
-        assert 'store timed out' in body['errors'][0]['error']
+        assert body['errors'][0]['error'] == 'Could not check this title'
+        assert 'store timed out' not in body['errors'][0]['error']
+        assert any('store timed out' in record.message for record in caplog.records)
 
     def test_limit_is_clamped(self, app, db_session, scan_user, scan_library, monkeypatch):
         monkeypatch.setattr(

@@ -32,7 +32,10 @@ def delete_download_request(request_id):
         return redirect(url_for('download.manage_downloads'))
 
     # Delete the download request from database
-    log_system_event('admin_download', f'Admin deleting download request {request_id}', 'info')
+    log_system_event(
+        f'Admin deleting download request {request_id}',
+        event_type='admin_download', event_level='info',
+    )
     db.session.delete(download_request)
     db.session.commit()
 

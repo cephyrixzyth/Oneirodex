@@ -1,5 +1,5 @@
 # /oneirodex/routes_admin_ext/newsletter.py
-from flask import render_template, redirect, url_for, flash, abort
+from flask import render_template, redirect, url_for, flash, abort, request
 from flask_login import login_required, current_user
 from oneirodex.models import User, Newsletter
 from oneirodex import db
@@ -32,7 +32,6 @@ def newsletter():
         flash('SMTP default sender email is not configured.', 'warning')
         return redirect(url_for('site.admin_dashboard'))
 
-    print("ADMIN NEWSLETTER: Processing", request.method, "request")
     form = NewsletterForm()
     users = db.session.execute(select(User)).scalars().all()
     if form.validate_on_submit():

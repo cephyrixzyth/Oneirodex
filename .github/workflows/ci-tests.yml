@@ -10,6 +10,7 @@
 name: CI tests
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
@@ -18,6 +19,9 @@ on:
       - 'feature/**'
       - 'feat/**'
       - 'fix/**'
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-tests-${{ github.workflow }}-${{ github.ref }}
@@ -53,10 +57,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
           cache: pip
@@ -96,12 +100,6 @@ jobs:
           --deselect tests/test_member_chrome_css.py::test_tile_hover_has_no_accent_glow_and_grows_from_center
           --deselect tests/test_member_chrome_css.py::test_topbar_cluster_is_not_a_shared_outline
           --deselect tests/test_member_spa_assets.py::test_member_spa_links_member_app_css
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterIntegration::test_newsletter_recipients_parsing
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterIntegration::test_newsletter_workflow_complete
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterRoute::test_newsletter_get_request_success
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterRoute::test_newsletter_post_email_failure
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterRoute::test_newsletter_post_invalid_form
-          --deselect tests/test_routes_admin_ext_newsletter.py::TestNewsletterRoute::test_newsletter_post_success
           --deselect tests/test_routes_admin_ext_settings_shell.py::TestSettingsShellSections::test_every_section_deep_link_is_reachable_from_the_react_hub
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_invalid_request_id_zero
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_database_error
@@ -173,10 +171,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
           cache: pip
@@ -207,10 +205,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -235,10 +233,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -276,10 +274,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -348,10 +346,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -387,10 +385,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -432,10 +430,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -476,10 +474,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm

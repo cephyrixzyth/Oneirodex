@@ -289,7 +289,7 @@ show_help() {
 
 # Backup existing configuration files
 backup_existing_config() {
-    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" != true ]; then
+    if [ -f "$SCRIPT_DIR/.env" ]; then
         print_step "Backing up existing configuration..."
         cp "$SCRIPT_DIR/.env" "$SCRIPT_DIR/.env.backup.$(date +%Y%m%d-%H%M%S)"
         print_success "Configuration backed up"
@@ -520,20 +520,20 @@ configure_postgresql_auth() {
     # database, and Oneirodex never needs a superuser login.
     print_verbose "Adding password authentication for oneirodex database..."
 
-    # Add our rules at the top (before default rules)
-    {
-        echo "# Added by Oneirodex installer - $(date)"
-        echo "local   oneirodex   oneirodexuser   md5"
-        echo "host    oneirodex   oneirodexuser   127.0.0.1/32   md5"
-        echo "host    oneirodex   oneirodexuser   ::1/128        md5"
-        echo ""
-    } | sudo tee "$PG_HBA_CONF.new" >/dev/null
-
-    # Append original content
-    sudo cat "$PG_HBA_CONF" | sudo tee -a "$PG_HBA_CONF.new" >/dev/null
-
-    # Replace original with new configuration
-    sudo mv "$PG_HBA_CONF.new" "$PG_HBA_CONF"
+    if ! sudo grep -qF '# Added by Oneirodex installer' "$PG_HBA_CONF"; then
+        # Add our rules at the top (before default rules), once only.
+        {
+            echo "# Added by Oneirodex installer - $(date)"
+            echo "local   oneirodex   oneirodexuser   md5"
+            echo "host    oneirodex   oneirodexuser   127.0.0.1/32   md5"
+            echo "host    oneirodex   oneirodexuser   ::1/128        md5"
+            echo ""
+        } | sudo tee "$PG_HBA_CONF.new" >/dev/null
+        sudo cat "$PG_HBA_CONF" | sudo tee -a "$PG_HBA_CONF.new" >/dev/null
+        sudo mv "$PG_HBA_CONF.new" "$PG_HBA_CONF"
+    else
+        print_info "Oneirodex PostgreSQL authentication rules already exist"
+    fi
 
     # Reload PostgreSQL configuration
     if sudo systemctl reload postgresql 2>/dev/null; then
@@ -668,6 +668,8 @@ DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'oneirodexuser') THEN
         CREATE USER oneirodexuser WITH ENCRYPTED PASSWORD '$DB_PASSWORD';
+    ELSE
+        ALTER USER oneirodexuser WITH ENCRYPTED PASSWORD '$DB_PASSWORD';
     END IF;
 END
 \$\$;
@@ -748,14 +750,15 @@ setup_python_environment() {
 configure_application() {
     print_step "Configuring Oneirodex application..."
 
-    # Copy configuration files
-    if [ ! -f "$SCRIPT_DIR/config.py" ] || [ "$FORCE_INSTALL" = true ]; then
-        cp "$SCRIPT_DIR/config.py.example" "$SCRIPT_DIR/config.py"
-        print_success "Configuration file created"
+    # Keep the tracked config.py as the source of truth and preserve the
+    # signing key across reinstalls.
+    SECRET_KEY=""
+    if [ -f "$SCRIPT_DIR/.env" ]; then
+        SECRET_KEY=$(sed -n 's/^SECRET_KEY=//p' "$SCRIPT_DIR/.env" | head -n 1)
     fi
-
-    # Generate secret key
-    SECRET_KEY=$(generate_secret_key)
+    if [ -z "$SECRET_KEY" ]; then
+        SECRET_KEY=$(generate_secret_key)
+    fi
 
     # Prompt for games directory if not specified
     if [ -z "$GAMES_DIR" ]; then

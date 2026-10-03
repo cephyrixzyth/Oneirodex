@@ -314,7 +314,7 @@ def register():
                 email=form.email.data.lower(),
                 role='user',
                 is_email_verified=False,
-                email_verification_token=get_serializer().dumps(form.email.data, salt='email-confirm'),
+                email_verification_token=get_serializer().dumps(email_address, salt='email-confirm'),
                 token_creation_time=datetime.now(timezone.utc),
                 created=datetime.now(timezone.utc)
             )
@@ -342,7 +342,8 @@ def register():
 
             # Verification email
             verification_token = user.email_verification_token
-            confirm_url = url_for('login.confirm_email', token=verification_token, _external=True)
+            confirm_path = url_for('login.confirm_email', token=verification_token)
+            confirm_url = f'{public_origin()}{confirm_path}'
             html = render_template('login/registration_activate.html', confirm_url=confirm_url)
             subject = "Please confirm your email"
             send_email(user.email, subject, html)
@@ -368,7 +369,9 @@ def confirm_email(token):
     except BadSignature:
         return render_template('login/confirmation_invalid.html'), 400
 
-    user = db.session.execute(select(User).filter_by(email=email)).scalar_one_or_none() or abort(404)
+    user = db.session.execute(
+        select(User).where(func.lower(User.email) == email.lower())
+    ).scalar_one_or_none() or abort(404)
     if user.is_email_verified:
         return render_template('login/registration_already_confirmed.html')
     else:

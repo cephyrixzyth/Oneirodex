@@ -306,7 +306,7 @@ def api_my_downloads():
 def api_delete_download_request(request_id: int) -> Tuple[dict, int]:
     """Delete a download request."""
     if request_id <= 0:
-        log_system_event('download_api', f'Invalid request ID: {request_id}', 'warning')
+        log_system_event(f'Invalid request ID: {request_id}', event_type='download_api', event_level='warning')
         return api_error('Invalid request ID', code='bad_request')
 
     try:
@@ -315,24 +315,27 @@ def api_delete_download_request(request_id: int) -> Tuple[dict, int]:
             return api_error('Download request not found', code='not_found')
 
         log_system_event(
-            'download_api',
             f'Deleting download request {request_id} for user {download_request.user_id}',
-            'info'
+            event_type='download_api',
+            event_level='info',
         )
 
         db.session.delete(download_request)
         db.session.commit()
 
-        log_system_event('download_api', f'Successfully deleted download request {request_id}', 'info')
+        log_system_event(
+            f'Successfully deleted download request {request_id}',
+            event_type='download_api', event_level='info',
+        )
 
         return api_ok({'message': 'Download request deleted successfully'})
 
     except Exception as e:
         db.session.rollback()
         log_system_event(
-            'download_api',
             f'Error deleting download request {request_id}: {str(e)}',
-            'error'
+            event_type='download_api',
+            event_level='error',
         )
         current_app.logger.warning('delete download request failed: %s', e)
         return api_error('Could not delete the download request', code='internal')

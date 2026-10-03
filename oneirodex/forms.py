@@ -172,6 +172,10 @@ class UserPasswordForm(FlaskForm):
     cancel = SubmitField('Cancel')
 
 
+class ChangePasswordForm(UserPasswordForm):
+    current_password = PasswordField('Current Password', validators=[DataRequired()])
+
+
 class NewsletterForm(FlaskForm):
     subject = StringField('Subject', validators=[DataRequired()])
     content = TextAreaField('Content', validators=[DataRequired()])

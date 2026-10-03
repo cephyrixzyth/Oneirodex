@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import queue
 import threading
@@ -26,6 +27,7 @@ class EventBus:
     def __init__(self, history_size: int = 50):
         self._lock = threading.Lock()
         self._subscribers: list[queue.Queue] = []
+        self._async_subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = []
         self._history: list[AppEvent] = []
         self._history_size = history_size
 
@@ -36,12 +38,19 @@ class EventBus:
             if len(self._history) > self._history_size:
                 self._history = self._history[-self._history_size:]
             subscribers = list(self._subscribers)
+            async_subscribers = list(self._async_subscribers)
 
         for q in subscribers:
             try:
                 q.put_nowait(event)
             except queue.Full:
                 pass
+        for loop, async_queue in async_subscribers:
+            try:
+                loop.call_soon_threadsafe(self._offer_async, async_queue, event)
+            except RuntimeError:
+                # The subscriber's event loop has already closed.
+                self.unsubscribe(async_queue)
         return event
 
     def subscribe(self) -> queue.Queue:
@@ -56,10 +65,34 @@ class EventBus:
                 break
         return q
 
-    def unsubscribe(self, q: queue.Queue) -> None:
+    @staticmethod
+    def _offer_async(subscriber: asyncio.Queue, event: AppEvent) -> None:
+        try:
+            subscriber.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
+
+    def subscribe_async(self, loop: asyncio.AbstractEventLoop) -> asyncio.Queue:
+        """Subscribe an async handler without polling in a worker thread."""
+        subscriber: asyncio.Queue = asyncio.Queue(maxsize=100)
+        with self._lock:
+            self._async_subscribers.append((loop, subscriber))
+            history = list(self._history)
+        for event in history[-10:]:
+            try:
+                subscriber.put_nowait(event)
+            except asyncio.QueueFull:
+                break
+        return subscriber
+
+    def unsubscribe(self, q: queue.Queue | asyncio.Queue) -> None:
         with self._lock:
             if q in self._subscribers:
                 self._subscribers.remove(q)
+            self._async_subscribers = [
+                (loop, subscriber) for loop, subscriber in self._async_subscribers
+                if subscriber is not q
+            ]
 
 
 event_bus = EventBus()

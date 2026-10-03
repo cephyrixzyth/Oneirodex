@@ -237,6 +237,61 @@ def test_an_invite_registers_exactly_one_account(app, db_session, monkeypatch):
     assert db_session.query(User).filter_by(name=second).one_or_none() is None, 'one link, one account'
 
 
+def test_mixed_case_registration_email_confirms_successfully(app, db_session, monkeypatch):
+    """Stored email is normalized, and confirmation must use the same identity."""
+    from oneirodex.models import InviteToken
+    import oneirodex.routes_login as routes_login
+
+    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: None)
+    inviter = _user(db_session, prefix='mixed_case_inviter')
+    invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
+    db_session.add(invite)
+    db_session.commit()
+    email = f'Alice.{uuid4().hex[:6]}@Example.com'
+    username = f'mixedcase{uuid4().hex[:8]}'
+
+    response = app.test_client().post(f'/register?token={invite.token}', data={
+        'username': username, 'email': email, 'password': 'long-enough-1',
+    })
+    assert response.status_code == 302
+    db_session.expire_all()
+    user = db_session.query(User).filter_by(name=username).one()
+    assert user.email == email.lower()
+    assert user.is_email_verified is False
+
+    confirmed = app.test_client().get(f'/confirm/{user.email_verification_token}')
+    assert confirmed.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is True
+
+
+def test_registration_confirmation_link_ignores_host_header(app, db_session, monkeypatch):
+    from oneirodex.models import InviteToken
+    import oneirodex.routes_login as routes_login
+
+    sent = []
+    monkeypatch.setattr(routes_login, 'send_email', lambda *args, **kwargs: sent.append(args))
+    monkeypatch.setattr(routes_login, 'public_origin', lambda: 'https://library.example')
+    inviter = _user(db_session, prefix='host_header_inviter')
+    invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
+    db_session.add(invite)
+    db_session.commit()
+
+    app.test_client().post(
+        f'/register?token={invite.token}',
+        base_url='http://attacker.example',
+        data={
+            'username': f'hostguard{uuid4().hex[:8]}',
+            'email': f'{uuid4().hex}@example.com',
+            'password': 'long-enough-1',
+        },
+    )
+
+    assert len(sent) == 1
+    assert 'https://library.example/confirm/' in sent[0][2]
+    assert 'attacker.example' not in sent[0][2]
+
+
 def test_a_token_cannot_mint_a_broader_token(app, db_session):
     """An admin's companion token could mint itself an admin-scope token."""
     from oneirodex.utils.api_tokens import generate_api_token

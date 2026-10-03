@@ -9,11 +9,13 @@ from __future__ import annotations
 import os
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from typing import Deque
 
 _lock = threading.Lock()
-_hits: dict[str, Deque[float]] = defaultdict(deque)
+_hits: dict[str, Deque[float]] = {}
+_MAX_KEYS = 50_000
+_last_capacity_sweep = float('-inf')
 
 
 def _defaults() -> tuple[int, float]:
@@ -99,9 +101,27 @@ def is_rate_limited(key: str, *, now: float | None = None) -> bool:
     max_attempts, window = _defaults()
     stamp = time.monotonic() if now is None else now
     with _lock:
-        bucket = _hits[key]
+        bucket = _hits.get(key)
+        if bucket is None:
+            return False
         _prune(bucket, stamp, window)
+        if not bucket:
+            _hits.pop(key, None)
+            return False
         return len(bucket) >= max_attempts
+
+
+def _make_room_for_key(now: float, window: float) -> None:
+    """Prune expired keys periodically, then evict oldest insertions at cap."""
+    global _last_capacity_sweep
+    if len(_hits) >= _MAX_KEYS and now - _last_capacity_sweep >= window:
+        for key, bucket in list(_hits.items()):
+            _prune(bucket, now, window)
+            if not bucket:
+                _hits.pop(key, None)
+        _last_capacity_sweep = now
+    while len(_hits) >= _MAX_KEYS:
+        _hits.pop(next(iter(_hits)))
 
 
 def record_failure(key: str, *, now: float | None = None) -> int:
@@ -111,8 +131,16 @@ def record_failure(key: str, *, now: float | None = None) -> int:
     max_attempts, window = _defaults()
     stamp = time.monotonic() if now is None else now
     with _lock:
-        bucket = _hits[key]
-        _prune(bucket, stamp, window)
+        bucket = _hits.get(key)
+        if bucket is not None:
+            _prune(bucket, stamp, window)
+            if not bucket:
+                _hits.pop(key, None)
+                bucket = None
+        if bucket is None:
+            _make_room_for_key(stamp, window)
+            bucket = deque()
+            _hits[key] = bucket
         bucket.append(stamp)
         # Cap memory
         while len(bucket) > max_attempts + 5:
@@ -126,8 +154,10 @@ def clear_failures(key: str) -> None:
 
 
 def reset_for_tests() -> None:
+    global _last_capacity_sweep
     with _lock:
         _hits.clear()
+        _last_capacity_sweep = float('-inf')
 
 
 def login_rate_key(ip: str, username: str | None = None) -> str:

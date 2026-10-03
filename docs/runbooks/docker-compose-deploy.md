@@ -262,6 +262,8 @@ Prometheus/Grafana are **not** bundled. Near-realtime ops for operators = Admin 
 
 Default `UVICORN_WORKERS=1` (Compose + `startweb-docker.sh`; override in `.env` / Compose env). Schedulers, SSE fan-out, and in-memory rate limits are **per worker** — keep **1** for single-node household ops until a shared cache lands. Set `UVICORN_WORKERS=2` only when you accept split in-process state.
 
+`UVICORN_GRACEFUL_TIMEOUT` controls how many seconds Uvicorn waits for active HTTP requests after `SIGTERM` before cancelling them (default **5**). Raise it in `.env` if a reverse proxy or container stop routinely interrupts longer requests; Docker's `stop_grace_period` should be longer than this value.
+
 Background schedulers (scan, library-watch, free-games, discover-ML, ownership, email-digest) start from the **ASGI lifespan handler** (`asgi.py`), not `create_app()`. `ONEIRODEX_ENABLE_BACKGROUND_WORKERS` (default **true**) gates them — set `false` only for a web-only process that must not run them (e.g. a second replica behind the same DB).
 
 Scan / turbo image thread counts are **not** Compose env vars — set them under Admin → Server Settings. Unraid-safe defaults (scan **1**, turbo off or ≤4 threads during big libraries): [unraid-deploy.md § CPU / scan load](unraid-deploy.md#cpu--scan-load-unraid-safe-defaults). Keep `ONEIRODEX_LIBRARY_WATCH` off unless you accept best-effort events; watcher bursts should **queue**, not force-parallel.

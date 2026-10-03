@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Admin protection:** deleting the only active admin is refused, including when that admin attempts to delete their own account.
+- **Database time zone:** PostgreSQL connections now use UTC across Flask, CLI, and migration entry points; embedded PostgreSQL servers also start in UTC. Existing timestamps already shifted by older local-time settings are left as stored and are not migrated.
+- **Registration, password, and SSO:** mixed-case confirmation links resolve correctly, registration links use the configured or trusted public origin, password changes require the current password, and edited OIDC settings replace the registered client.
+- **Live updates and shutdown:** SSE subscribers use async queues without consuming Uvicorn's worker executor; ASGI lifespan shutdown stops workers, with Uvicorn's graceful wait controlled by `UVICORN_GRACEFUL_TIMEOUT` (default 5 seconds).
+- **Rate limits, newsletters, and event logs:** expired login buckets are pruned and capped, newsletter delivery tests and handling use the boolean email API, and affected audit events pass metadata by keyword.
+- **Installers and plugins:** Linux/macOS/Windows installers preserve an existing `SECRET_KEY` and back up `.env` even with force; Linux DB credentials stay synchronized and `pg_hba.conf` rules are idempotent. Save-path plugin status is isolated from store-notification failures.
+- **Cheats and scans:** child accounts can read but cannot mutate `.cht` cheats; update-scan errors no longer expose exception text, and concurrent scan starts yield only to an older busy row.
+- **Email copy:** password reset email and confirmation page use plain Oneirodex wording.
+
+### Security
+- **CI permissions and dependencies:** test and desktop workflows default to `contents: read`; third-party actions are pinned to verified commit SHAs. Docker image publishing now depends on the reusable CI workflow.
+
+### Changed
+- **Time and shutdown compatibility:** already-shifted database rows are intentionally not rewritten; new PostgreSQL timestamps use UTC. `UVICORN_GRACEFUL_TIMEOUT` sets the server's graceful-shutdown wait and defaults to 5 seconds.
+
 ### Changed
 - **Docker Hub image is `cephyrixzyth/oneirodex`.** The Unraid Community Apps template, `docker-compose.single.yml`, `ca_profile.xml`, the env examples and the runbooks named `chrisjrovira/oneirodex`, an image that was never published; the Docker Hub account is `cephyrixzyth`. Set the repository variable `DOCKERHUB_USERNAME` to `cephyrixzyth` (and the `DOCKERHUB_TOKEN` secret) for the publish workflow. The GitHub repository and `SUPPORT_GITHUB_REPO` are unchanged.
 

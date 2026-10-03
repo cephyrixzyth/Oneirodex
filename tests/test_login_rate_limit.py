@@ -71,3 +71,17 @@ def test_disabled_never_limits(monkeypatch):
     for _ in range(20):
         lrl.record_failure(key)
     assert lrl.is_rate_limited(key) is False
+
+
+def test_distinct_limit_checks_do_not_allocate_buckets():
+    for index in range(100_000):
+        assert lrl.is_rate_limited(f'probe:{index}') is False
+    assert lrl._hits == {}
+
+
+def test_distinct_failures_are_bounded_and_evict_oldest_key():
+    for index in range(60_000):
+        lrl.record_failure(f'failure:{index}', now=1000.0)
+    assert len(lrl._hits) <= lrl._MAX_KEYS
+    assert 'failure:0' not in lrl._hits
+    assert 'failure:59999' in lrl._hits

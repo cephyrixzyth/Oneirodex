@@ -32,11 +32,17 @@ def _get_filter_data(model_class: Type[db.Model], filter_type: str) -> Tuple[Res
         return jsonify(data_list), 200
 
     except SQLAlchemyError as e:
-        log_system_event('filters_api', f'Database error fetching {filter_type}: {str(e)}', 'error')
+        log_system_event(
+            f'Database error fetching {filter_type}: {str(e)}',
+            event_type='filters_api', event_level='error',
+        )
         return api_error(f'Database error retrieving {filter_type}', code='internal')
 
     except Exception as e:
-        log_system_event('filters_api', f'Unexpected error fetching {filter_type}: {str(e)}', 'error')
+        log_system_event(
+            f'Unexpected error fetching {filter_type}: {str(e)}',
+            event_type='filters_api', event_level='error',
+        )
         return api_error(f'Error retrieving {filter_type}', code='internal')
 
 
@@ -154,7 +160,7 @@ def get_library_platforms():
         data = _library_platforms_payload(current_user, include_completion=include_completion)
         return jsonify(data), 200
     except SQLAlchemyError as e:
-        log_system_event('filters_api', f'Database error fetching library_platforms: {str(e)}', 'error')
+        log_system_event('Database error fetching library_platforms', event_type='filters_api', event_level='error')
         return api_error('Database error retrieving library platforms', code='internal')
 
 
@@ -164,7 +170,7 @@ def get_igdb_platforms():
     try:
         return jsonify(_igdb_platforms_payload()), 200
     except SQLAlchemyError as e:
-        log_system_event('filters_api', f'Database error fetching igdb_platforms: {str(e)}', 'error')
+        log_system_event('Database error fetching igdb_platforms', event_type='filters_api', event_level='error')
         return api_error('Database error retrieving igdb platforms', code='internal')
 
 
@@ -205,5 +211,5 @@ def filters_bundle():
         cache.set(cache_key, payload, timeout=60)
         return jsonify(payload), 200
     except SQLAlchemyError as e:
-        log_system_event('filters_api', f'Database error fetching filters bundle: {str(e)}', 'error')
+        log_system_event('Database error fetching filters bundle', event_type='filters_api', event_level='error')
         return api_error('Database error retrieving filters', code='internal')

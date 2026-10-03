@@ -351,11 +351,11 @@ def _game(db_session, tmp_path):
     return game
 
 
-def _user(db_session):
+def _user(db_session, role='admin'):
     tag = uuid4().hex[:8]
     user = User(
         name=f'u-{tag}', email=f'u-{tag}@example.com', password_hash='unused',
-        role='admin', user_id=str(uuid4()), state=True,
+        role=role, user_id=str(uuid4()), state=True,
     )
     user.set_password('password123')
     db_session.add(user)
@@ -398,6 +398,26 @@ def test_cheat_routes_answer_with_a_clear_4xx(client, app, db_session, tmp_path,
         content_type='multipart/form-data',
     )
     assert full_upload.status_code == 409
+
+
+def test_children_cannot_mutate_cheats(client, app, db_session, tmp_path, monkeypatch):
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path / 'cheats'))
+    game = _game(db_session, tmp_path)
+    url = f'/api/games/{game.uuid}/cheats'
+
+    _login(client, _user(db_session, role='child'))
+    refused = client.post(url, json={'name': 'child', 'codes': [{'code': 'AA'}]})
+    assert refused.status_code == 403
+
+def test_members_can_mutate_cheats(client, app, db_session, tmp_path, monkeypatch):
+    monkeypatch.setitem(app.config, 'EMULATOR_CHEATS_PATH', str(tmp_path / 'cheats'))
+    game = _game(db_session, tmp_path)
+    _login(client, _user(db_session, role='user'))
+    allowed = client.post(
+        f'/api/games/{game.uuid}/cheats',
+        json={'name': 'member', 'codes': [{'code': 'AA'}]},
+    )
+    assert allowed.status_code == 201, allowed.get_json()
 
 
 # --------------------------------------------------------------------------
