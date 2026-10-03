@@ -7,6 +7,8 @@ that tests patch) stays in ``software_identify``.
 """
 from __future__ import annotations
 
+import re
+
 
 
 from oneirodex.utils.item_kind import (
@@ -21,6 +23,34 @@ STAGE_D_SOURCE_ORDER = ('steam', 'gog', 'epic')
 
 def _casefold_title(value: str | None) -> str:
     return (value or '').casefold().strip()
+
+
+_TITLE_KEY_STRIP = re.compile(r"[\u2122\u00ae\u00a9\u2120'\u2019\u2018`]")
+_TITLE_KEY_NON_ALNUM = re.compile(r'[^a-z0-9]+')
+
+
+def title_match_key(value: str | None) -> str:
+    """Store-title key for exact matching that survives how stores print titles.
+
+    Folder names lose punctuation that store listings keep, so plain casefold
+    equality missed most real pairs: ``Assassins Creed Rogue`` vs Steam's
+    ``Assassin's Creed Rogue``; ``Star Wars Knights of the Old Republic`` vs
+    ``STAR WARS\u2122 - Knights of the Old Republic\u2122``; ``Death Horizon
+    Cyberfusion`` vs ``Death Horizon: Cyberfusion``. Equal *after* this
+    normalisation is still an exact title -- no edit distance, no prefix -- so the
+    unique-hit rule that guards auto-import is unchanged.
+    """
+    import unicodedata
+
+    # Strip the trademark marks first: NFKD would turn the TM sign into "TM".
+    text = _TITLE_KEY_STRIP.sub('', (value or '').casefold().replace('&', ' and '))
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    text = _TITLE_KEY_NON_ALNUM.sub(' ', text).strip()
+    words = text.split()
+    if len(words) > 1 and words[0] == 'the':
+        words = words[1:]
+    return ' '.join(words)
 
 
 # Ownership / identify payloads must never carry install or download queue fields.
