@@ -28,8 +28,10 @@ source /app/docker/embedded-db.sh
 if embedded_db_wanted; then
     EMBEDDED=true
     echo "📦 Single-container mode: using the embedded PostgreSQL (data in ${CONFIG_DIR})."
-    embedded_db_defaults
+    # Order matters: start_embedded_db creates ${CONFIG_DIR}/secrets and resolves
+    # the database user, which embedded_db_defaults needs to store SECRET_KEY.
     start_embedded_db || exit 1
+    embedded_db_defaults
 fi
 
 # Inside Docker Compose, Postgres is the sibling service named "db".
@@ -165,7 +167,9 @@ while kill -0 "${APP_PID}" 2>/dev/null; do
     wait $! || true
 done
 
-wait "${APP_PID}"
-APP_STATUS=$?
+# `set -e` is on: a bare `wait` returning the app's non-zero status would end the
+# script here and skip stopping PostgreSQL, so capture the status explicitly.
+APP_STATUS=0
+wait "${APP_PID}" || APP_STATUS=$?
 stop_embedded_db
 exit "${APP_STATUS}"
