@@ -18,7 +18,6 @@ import {
   applySizePreset,
   nudgeWidget,
   type SizePreset,
-
   DASH_RESIZE_PX_PER_COL,
   DASH_RESIZE_PX_PER_ROW,
   boardCellMetrics,
@@ -366,7 +365,11 @@ export function DashboardBoard({
   )
 
   const beginResize = useCallback(
-    (id: string, event: ReactPointerEvent<HTMLButtonElement>, axis: 'x' | 'y' | 'both' = 'both') => {
+    (
+      id: string,
+      event: ReactPointerEvent<HTMLButtonElement>,
+      axis: 'x' | 'y' | 'both' = 'both',
+    ) => {
       if (event.button !== 0) return
       if (pinnedRef.current.includes(id)) return
       const board = boardRef.current
@@ -395,7 +398,8 @@ export function DashboardBoard({
 
   const defaultSize = useCallback(
     (id: string) => {
-      const source = isCustom && defaultLayout ? defaultLayout() : defaultDashboardLayout({ hasErrors: true })
+      const source =
+        isCustom && defaultLayout ? defaultLayout() : defaultDashboardLayout({ hasErrors: true })
       const found = source.find((item) => item.id === id)
       return found ? { w: found.w, h: found.h } : { w: 4, h: 2 }
     },

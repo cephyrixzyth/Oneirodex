@@ -67,7 +67,8 @@ const STATUS_MIN = { w: 6, h: 2 }
 
 export function widgetMins(id: string): WidgetMins {
   if (id === 'status') return STATUS_MIN
-  if (id === 'host' || id === 'companions' || id === 'errors' || id === 'scan-jobs') return PANEL_MIN
+  if (id === 'host' || id === 'companions' || id === 'errors' || id === 'scan-jobs')
+    return PANEL_MIN
   return METRIC_MIN
 }
 
@@ -422,7 +423,14 @@ export function applySizePreset(
   const w = cols[preset]
   // Keep the left edge when it still fits, otherwise slide left.
   const x = Math.min(current.x, DASHBOARD_COLS - w)
-  const moved = commitResize(patchWidget(layout, id, { x }, minsFn), id, w, current.h, minsFn, fixedIds)
+  const moved = commitResize(
+    patchWidget(layout, id, { x }, minsFn),
+    id,
+    w,
+    current.h,
+    minsFn,
+    fixedIds,
+  )
   return moved
 }
 
