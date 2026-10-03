@@ -770,5 +770,14 @@ def mark_unmatched_as_kind(
         steam_app_id=int(steam_app_id) if steam_app_id else None,
         summary=summary,
     )
+    # A hand-picked Steam match used to bring over only the name (and a summary
+    # when the fetch above happened to work): the game was created and nothing
+    # mapped Steam's genres, developer, publisher, release date, modes, cover or
+    # store specs onto it, because only the automatic Stage D path hydrated.
+    # Steam is the one source with an App ID to ask for, so this is one fast call.
+    if steam_app_id:
+        from oneirodex.utils.software_identify_custom_game import hydrate_steam_for_game
+
+        hydrate_steam_for_game(game, int(steam_app_id))
     db.session.delete(folder)
     return game

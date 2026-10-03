@@ -5,6 +5,7 @@ Split out of ``software_identify`` in the v11 cycle (H-D.4) as a pure move.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -18,6 +19,8 @@ from oneirodex.utils.item_kind import (
     normalize_item_kind,
 )
 from oneirodex.utils.software_identify_store import scrub_stage_d_payload
+
+logger = logging.getLogger(__name__)
 
 CUSTOM_IGDB_BASE = 2000000420
 
@@ -203,6 +206,28 @@ def upsert_stage_d_custom_game(
     return created
 
 
+def hydrate_steam_for_game(game, steam_app_id) -> dict:
+    """Map Steam ``appdetails`` onto ``game`` inside a SAVEPOINT; never raises.
+
+    Returns the report from ``hydrate_game_from_steam`` (``{}`` when Steam had
+    nothing or the call failed -- logged, not swallowed silently).
+    """
+    if not game or not steam_app_id:
+        return {}
+    try:
+        from oneirodex import db
+        from oneirodex.utils.steam_metadata import hydrate_game_from_steam
+
+        with db.session.begin_nested():
+            report = hydrate_game_from_steam(game, app_id=steam_app_id)
+        if not report:
+            logger.warning('Steam hydrate for %r (app %s) returned nothing', getattr(game, 'name', '?'), steam_app_id)
+        return report or {}
+    except Exception as exc:  # noqa: BLE001 -- a metadata miss must not undo an identification
+        logger.warning('Steam hydrate for %r (app %s) failed: %s', getattr(game, 'name', '?'), steam_app_id, exc)
+        return {}
+
+
 def _hydrate_steam_content(game, steam_app_id) -> None:
     """Pull full store content (summary, genres, dev/publisher, release, modes).
 
@@ -223,9 +248,7 @@ def _hydrate_steam_content(game, steam_app_id) -> None:
 
     try:
         if steam_app_id:
-            from oneirodex.utils.steam_metadata import hydrate_game_from_steam
-
-            hydrate_game_from_steam(game, app_id=steam_app_id)
+            hydrate_steam_for_game(game, steam_app_id)
             # Steam answered on the fields it covers; anything still empty is
             # worth one more pass through the other sources.
             from oneirodex.utils.secondary_scrapers import missing_core_fields
@@ -243,4 +266,4 @@ def _hydrate_steam_content(game, steam_app_id) -> None:
         # is strictly richer than what the cascade's name search would return.
         hydrate_game_from_cascade(game, skip=('steam',) if steam_app_id else ())
     except Exception as exc:  # noqa: BLE001
-        print(f'Content hydrate skipped for {getattr(game, "name", "?")}: {exc}')
+        logger.warning('Content hydrate skipped for %r: %s', getattr(game, 'name', '?'), exc)

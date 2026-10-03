@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 import requests
 
+logger = logging.getLogger(__name__)
 
-def fetch_steam_app_details(app_id: int, *, timeout: float = 5.0) -> dict | None:
+#: Steam's store API rate-limits (HTTP 429) and sometimes answers 403 to a bare
+#: client; both used to read as "this app has no data" and the game stayed blank.
+_STEAM_HEADERS = {'User-Agent': 'Oneirodex/1.0 (+https://github.com/chrisjrovira/oneirodex)'}
+_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _get_with_retry(url: str, *, timeout: float, attempts: int = 3):
+    """GET with a short backoff on rate limits / transient errors."""
+    resp = None
+    for attempt in range(attempts):
+        resp = requests.get(url, timeout=timeout, headers=_STEAM_HEADERS)
+        if resp.status_code not in _RETRY_STATUSES or attempt == attempts - 1:
+            return resp
+        try:
+            wait = min(float(resp.headers.get('Retry-After', '')), 5.0)
+        except (TypeError, ValueError):
+            wait = 1.5 * (attempt + 1)
+        time.sleep(wait)
+    return resp
+
+
+def fetch_steam_app_details(app_id: int, *, timeout: float = 10.0) -> dict | None:
     """
     Resolve a Steam App ID to store details (name, type, …).
     Returns None on any failure (network, missing app, unexpected payload).
@@ -15,12 +40,14 @@ def fetch_steam_app_details(app_id: int, *, timeout: float = 5.0) -> dict | None
 
     url = f'https://store.steampowered.com/api/appdetails?appids={app_id}&l=english'
     try:
-        resp = requests.get(url, timeout=timeout)
+        resp = _get_with_retry(url, timeout=timeout)
         if resp.status_code != 200:
+            logger.warning('Steam appdetails for %s answered HTTP %s', app_id, resp.status_code)
             return None
         payload = resp.json()
         entry = payload.get(str(app_id)) or {}
         if not entry.get('success'):
+            logger.info('Steam appdetails for %s: no data (success=false; delisted or region-locked?)', app_id)
             return None
         data = entry.get('data') or {}
         name = data.get('name')
@@ -62,7 +89,8 @@ def fetch_steam_app_details(app_id: int, *, timeout: float = 5.0) -> dict | None
             'linux_requirements': data.get('linux_requirements'),
             'supported_languages': data.get('supported_languages'),
         }
-    except (requests.RequestException, ValueError, TypeError, AttributeError):
+    except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
+        logger.warning('Steam appdetails for %s failed: %s', app_id, type(exc).__name__)
         return None
 
 

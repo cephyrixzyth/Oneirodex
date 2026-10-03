@@ -217,6 +217,20 @@ def enrich_game_all_sources(game, lookup_name=None):
         }
         logger.warning(f"Steam enrichment for '{name}': skipped (platform_not_on_steam)")
 
+    # Steam is the one source that returns everything we show (credits, release
+    # date, modes, system requirements, cover). The name-based pass above only
+    # ever added a few taxonomy rows, so an IGDB-identified game with a Steam
+    # App ID -- from a folder id, an earlier pass, or a hand-picked match -- now
+    # gets the full appdetails mapping by id, which is exact, not a name guess.
+    # Fill-don't-clobber: IGDB values are never overwritten.
+    if getattr(game, 'steam_app_id', None):
+        try:
+            from oneirodex.utils.software_identify_custom_game import hydrate_steam_for_game
+
+            result['steam_full'] = bool(hydrate_steam_for_game(game, game.steam_app_id))
+        except Exception as steam_full_err:  # noqa: BLE001
+            logger.info(f"Full Steam hydrate skipped for '{name}': {steam_full_err}")
+
     result['cascade'] = None
     if not _game_core_fields_missing(game):
         return result
