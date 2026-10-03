@@ -244,3 +244,12 @@ def test_discover_hbar_uses_one_gap_token_for_every_row():
     assert 'news' not in hbar.lower()
     assert '.od-shelf--news' not in shelf
     assert 'data-discover-section=news' not in shelf
+
+
+def test_legacy_admin_content_fills_its_grid_track():
+    """Found by the virtual-device sweep: without width:100% the item shrank to
+    fit-content and one unbreakable string widened the page past a phone."""
+    shell = _read('od-shell.css')
+    body = _blocks_for(shell, 'body.od-shell-host > #admin-legacy-content')
+    assert 'width: 100%' in body
+    assert 'box-sizing: border-box' in body

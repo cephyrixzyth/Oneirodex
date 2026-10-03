@@ -236,6 +236,12 @@ body.od-shell-host > #admin-legacy-content,
 body.od-shell-host .od-admin-main {
   grid-area: main;
   min-width: 0;
+  /* Fill the grid track. With `margin: auto` + `max-width` the item shrinks to
+     fit-content instead of stretching, and one unbreakable string (a path in a
+     <code>) or a nowrap table header then widens the whole page past a phone
+     viewport (/admin/arr +155px, /admin/reference_sets +61px at 390px). */
+  box-sizing: border-box;
+  width: 100%;
   z-index: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
