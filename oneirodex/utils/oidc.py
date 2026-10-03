@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import secrets
 from dataclasses import dataclass
@@ -40,7 +41,7 @@ DEFAULT_ROLE_MAP: dict[str, str] = {
 }
 
 _oauth: Any | None = None
-_oidc_registered_key: str | None = None
+_oidc_registered_key: tuple[str, str, str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -350,8 +351,22 @@ def register_oidc_provider(app, config: OidcConfig) -> None:
     if oauth is None:
         return
 
-    registration_key = f'{config.issuer_url}:{config.client_id}'
+    secret_digest = hashlib.sha256(config.client_secret.encode('utf-8')).hexdigest()
+    registration_key = (
+        config.issuer_url,
+        config.client_id,
+        secret_digest,
+        config.scopes,
+    )
     if _oidc_registered_key == registration_key:
+        return
+
+    # Authlib keeps registered clients on each OAuth instance. Replacing the
+    # instance avoids stale config without depending on its private _clients.
+    global _oauth
+    _oauth = OAuth()
+    oauth = init_oauth(app)
+    if oauth is None:
         return
 
     metadata_url = urljoin(config.issuer_url + '/', '.well-known/openid-configuration')
