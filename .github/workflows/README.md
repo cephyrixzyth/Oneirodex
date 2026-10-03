@@ -3,7 +3,7 @@
 | File | Runs on | What it gates |
 |---|---|---|
 | [ci-tests.yml](ci-tests.yml) | push + PR to `main` | The **core** pytest subset, member-app / admin-app / desktop vitest, and the two ratchets. Not the whole `tests/` tree — that is local/release-only, so passing CI is not the same as passing the suite. |
-| [desktop-build.yml](desktop-build.yml) | tags + manual | Tauri desktop client. Unsigned `.exe` is the supported path — see [desktop-code-signing.md](../../docs/runbooks/desktop-code-signing.md). |
+| [desktop-build.yml](desktop-build.yml) | `v*` tags + manual (+ path-filtered pushes/PRs) | Tauri desktop client: six unsigned installers (full + thin × Windows / macOS / Linux). A `v*` tag, or a manual run with `release_tag`, attaches them to that GitHub release. Unsigned `.exe` is the supported path — see [desktop-code-signing.md](../../docs/runbooks/desktop-code-signing.md). |
 
 ## There is no codeql.yml (retired 2026-08-24)
 

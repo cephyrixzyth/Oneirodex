@@ -12,7 +12,7 @@ Use before tagging a release (example: **v0.1.0**).
 - [ ] `frontend/member-app`, `frontend/admin-app`, `frontend/ops-glance`, `frontend/api-client`, `frontend/shared` package versions (npm workspaces — the single root [`package-lock.json`](../../package-lock.json) is the only lockfile; there are no per-app lockfiles to bump)
 - [ ] Desktop `client_version` needs no edit — it is injected from `package.json` at build time (`__APP_VERSION__`)
 - [ ] Leaving pre-release (`X.Y.Z-beta` → `X.Y.Z`)? Add `msi` and `rpm` back to `bundle.targets` in both Tauri configs — they are excluded only because pre-release versions break those two bundlers ([desktop-code-signing.md](desktop-code-signing.md))
-- [ ] `docker-compose.yml` image tag (`APP_IMAGE`, preferred Hub `chrisjrovira/oneirodex:X.Y.Z`; local default `oneirodex:1.0.0-beta`)
+- [ ] `docker-compose.yml` image tag (`APP_IMAGE`, preferred Hub `chrisjrovira/oneirodex:X.Y.Z`; local default `oneirodex:1.0.0`)
 - [ ] Root `README.md` and `docs/README.md` version references
 
 ## CI (PR gate)
@@ -67,6 +67,6 @@ and `Alembic upgrade head complete`. `/readyz` green as before.
 ## Publish
 
 - [ ] Commit + push release branch / PR to `main`
-- [ ] Git tag `vX.Y.Z` and GitHub Release notes from CHANGELOG
+- [ ] Git tag `vX.Y.Z` and GitHub Release notes from CHANGELOG. Pushing the tag builds the six desktop installers and attaches them to the release (`desktop-build.yml`, `release` job); to add them to an existing release instead, run **Desktop build** manually with `release_tag` set. Check the release lists eight files (`.exe`, `.dmg`, `.deb` and `.AppImage` for the full and the thin client) before announcing
 - [ ] Push Docker image tags `:X.Y.Z` and `:latest` (when publishing images)
 - [ ] Unraid / docs note if env vars changed
