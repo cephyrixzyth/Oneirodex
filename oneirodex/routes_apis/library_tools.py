@@ -23,7 +23,7 @@ from oneirodex.schemas.library_tools import (
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.security import is_safe_path, get_allowed_base_directories
 from oneirodex.utils.disk_rename import apply_rename_plan, build_rename_plan, validate_plan_for_game
-from oneirodex.utils.path_repoint import repoint_paths
+from oneirodex.utils.path_repoint import _moved as path_moved, repoint_paths
 from oneirodex.utils.match_proposal import (
     resolve_proposal_path,
     remove_proposal_files,
@@ -192,6 +192,12 @@ def rename_apply():
     if root_moves:
         for result in root_moves:
             repoint_paths(result['from_path'], result['to_path'])
+            # The game being renamed is repointed even when its stored path is
+            # spelled differently from the plan's (doubled slash, odd case) and
+            # so escaped the prefix query above.
+            moved = path_moved(game.full_disk_path, result['from_path'], result['to_path'])
+            if moved is not None:
+                game.full_disk_path = moved
         try:
             from oneirodex.utils.rom_language import apply_rom_language_fields
 

@@ -46,6 +46,8 @@ FREE_ROM_PLATFORMS = {
     'atari2600': 'ATARI_2600',
     'snes': 'SNES',
     'n64': 'N64',
+    'lynx': 'LYNX',
+    'vb': 'VB',
 }
 
 STATES = ('game-tested', 'core-smoke', 'bios-blocked', 'companion-only', 'catalog-only')

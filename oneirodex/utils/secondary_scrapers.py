@@ -325,6 +325,43 @@ def search_rawg_games(game_name, api_key=None, limit=10):
         return []
 
 
+def _text(value):
+    """A stripped non-empty string, else None (store payloads vary in shape)."""
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return None
+
+
+def _first_text(*values):
+    for value in values:
+        text = _text(value)
+        if text:
+            return text
+    return None
+
+
+def _release_text(value):
+    """Epoch seconds/millis or a date string -> 'YYYY-MM-DD' (what the mapper parses)."""
+    from datetime import datetime, timezone
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        seconds = value / 1000 if value > 10_000_000_000 else value
+        try:
+            return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime('%Y-%m-%d')
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = _text(value)
+    return text[:10] if text and len(text) >= 10 and text[4:5] == '-' else text
+
+
+def _content_fields(**fields):
+    """Only the fields a store actually returned: never empty keys."""
+    return {key: value for key, value in fields.items() if value}
+
+
 def search_gog_games(game_name, limit=10):
     """Return GOG embed search hits for manual identify UI."""
     try:
@@ -353,11 +390,35 @@ def search_gog_games(game_name, limit=10):
                 'summary': None,
                 'gog_id': product_id,
                 'slug': slug,
+                # The store-grid payload already names these; they were dropped,
+                # so a GOG-only game had no genre, developer or publisher.
+                **_content_fields(
+                    developer=_first_text(product.get('developer')),
+                    publisher=_first_text(product.get('publisher')),
+                    genres=[g for g in (
+                        [_text(product.get('category'))]
+                        + [_text(x) for x in (product.get('genres') or []) if isinstance(x, str)]
+                    ) if g],
+                    release_date=_release_text(product.get('releaseDate') or product.get('release_date')),
+                ),
             })
         return results
     except Exception as e:
         print(f"GOG search error for {game_name}: {e}")
         return []
+
+
+def _epic_attr(item, key):
+    """Value of an Epic ``customAttributes`` entry ([{key, value}] or {key: {value}})."""
+    attrs = item.get('customAttributes')
+    if isinstance(attrs, list):
+        for entry in attrs:
+            if isinstance(entry, dict) and entry.get('key') == key:
+                return entry.get('value')
+    elif isinstance(attrs, dict):
+        entry = attrs.get(key)
+        return entry.get('value') if isinstance(entry, dict) else entry
+    return None
 
 
 def search_epic_games(game_name, limit=10):
@@ -409,6 +470,12 @@ def search_epic_games(game_name, limit=10):
                 'epic_id': offer_id,
                 'slug': slug,
                 'ownership_only': True,
+                **_content_fields(
+                    developer=_first_text(item.get('developerDisplayName'), _epic_attr(item, 'developerName')),
+                    publisher=_first_text(item.get('publisherDisplayName'), _epic_attr(item, 'publisherName'),
+                                          (item.get('seller') or {}).get('name') if isinstance(item.get('seller'), dict) else None),
+                    release_date=_release_text(item.get('releaseDate') or item.get('effectiveDate')),
+                ),
             })
         return results
     except Exception as e:
@@ -450,6 +517,14 @@ def search_itch_games(game_name, limit=10):
                 'cover_url': cover,
                 'summary': game.get('short_text') or game.get('description'),
                 'itch_id': game_id,
+                **_content_fields(
+                    developer=_first_text(
+                        (game.get('user') or {}).get('display_name') if isinstance(game.get('user'), dict) else None,
+                        (game.get('user') or {}).get('username') if isinstance(game.get('user'), dict) else None,
+                    ),
+                    genres=[g for g in [_text(game.get('genre'))] if g],
+                    release_date=_release_text(game.get('published_at') or game.get('created_at')),
+                ),
             })
         return results
     except Exception as e:
@@ -663,12 +738,26 @@ def fetch_steam_data(game_name):
         if not items:
             return None
 
-        clean_lower = clean_name.strip().lower()
-        exact = next(
-            (item for item in items if (item.get('name') or '').strip().lower() == clean_lower),
-            None,
-        )
-        app_id = (exact or items[0])['id']
+        from oneirodex.utils.software_identify_store import title_match_key
+
+        wanted = title_match_key(clean_name)
+        exact_items = [item for item in items if title_match_key(item.get('name')) == wanted]
+        # Several store entries can normalise to one title (a demo, a regional
+        # listing, a soundtrack named the same). Narrow by how the title was
+        # actually spelled, then by product type, before giving up -- each step
+        # only applies when it leaves at least one candidate.
+        if len(exact_items) > 1:
+            literal = [i for i in exact_items if (i.get('name') or '').strip().casefold() == clean_name.strip().casefold()]
+            exact_items = literal or exact_items
+        if len(exact_items) > 1:
+            apps = [i for i in exact_items if (i.get('type') or 'app') == 'app']
+            exact_items = apps or exact_items
+        if len(exact_items) != 1:
+            # Never fall back to the first search hit: for "Baldur's Gate 2" that
+            # is a different game, and its genres, developer and App ID would be
+            # attached to this one. No exact (or an ambiguous) title is a miss.
+            return None
+        app_id = exact_items[0]['id']
         details_url = f"https://store.steampowered.com/api/appdetails?appids={app_id}"
         details_resp = request_with_backoff(details_url, host_key='steam', timeout=5)
         if details_resp is None:

@@ -70,6 +70,24 @@ roms:
     source: https://github.com/DerekTurtleRoe/N64-PD-ROMS
     notes: "256 KB Pong homebrew by Oman; the repo collects public-domain N64 homebrew, demos and test ROMs."
 
+  - id: jumtro
+    platform: lynx
+    filename: jumtro.lnx
+    url: https://www.zophar.net/download_file/11850
+    archive: zip
+    license: "Listed under Public Domain ROMs on Zophar's Domain (author-distributed homebrew demo by James Higgs)"
+    source: https://www.zophar.net/pdroms/lynx/jumtro.html
+    notes: "Atari Lynx demo with C source. URL taken from the Zophar page; not download-verified from the dev sandbox, so run the fetcher once to confirm."
+
+  - id: super-fighter-demo
+    platform: vb
+    filename: super-fighter-demo.vb
+    url: https://www.zophar.net/download_file/11861
+    archive: zip
+    license: "Listed under Public Domain ROMs on Zophar's Domain (author-distributed Virtual Boy demo by KR155E and Death Adder)"
+    source: https://www.zophar.net/pdroms/vboy/super-fighter-demo.html
+    notes: "Virtual Boy demo. URL taken from the Zophar page; not download-verified from the dev sandbox, so run the fetcher once to confirm."
+
 # Platforms Oneirodex can browser/companion-play, but no clear legal GitHub URL yet.
 skipped:
   - platform: sega_ms
@@ -82,14 +100,10 @@ skipped:
     note: "Browser-playable via mednafen_ngp (same WASM as NGP); no clearly licensed NGPC homebrew ROM URL verified."
   - platform: nds
     note: "Browser core ships; no clearly licensed NDS homebrew ROM URL verified."
-  - platform: vb
-    note: "Browser core ships; no clearly licensed Virtual Boy homebrew ROM URL verified."
   - platform: psx
     note: "Needs operator BIOS; no legal PS1 game dump. Homebrew ISOs are not auto-fetched."
   - platform: sega_saturn
     note: "Needs operator BIOS; no legal Saturn dump auto-fetched."
-  - platform: lynx
-    note: "Browser core ships; Lynx boot ROM is operator BIOS, not a sample game."
   - platform: jaguar
     note: "Browser core ships; no clearly licensed Jaguar homebrew ROM URL verified."
   - platform: ws

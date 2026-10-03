@@ -50,6 +50,7 @@ from oneirodex.utils.software_identify_store import (  # noqa: F401
     igdb_retry_title_from_store,
     scrub_stage_d_payload,
     _casefold_title,
+    title_match_key,
     _candidate_from_epic_hit,
     _candidate_from_gog_hit,
     _candidate_from_steam_details,
@@ -183,15 +184,17 @@ def enrich_proposal_with_software(proposal: dict, raw_label: str) -> dict:
 
 
 def exact_title_hits(query: str, hits: list[dict] | None) -> list[dict]:
-    """Return store hits whose name casefolds equal to query (exact only)."""
-    needle = _casefold_title(query)
+    """Return store hits whose name equals the query after title normalisation
+    (case, \u2122/\u00ae, apostrophes, punctuation, accents, a leading "The").
+    Exact only: no prefix, no edit distance."""
+    needle = title_match_key(query)
     if not needle:
         return []
     out: list[dict] = []
     for hit in hits or []:
         if not isinstance(hit, dict):
             continue
-        if _casefold_title(hit.get('name')) == needle:
+        if title_match_key(hit.get('name')) == needle:
             out.append(hit)
     return out
 
@@ -770,5 +773,14 @@ def mark_unmatched_as_kind(
         steam_app_id=int(steam_app_id) if steam_app_id else None,
         summary=summary,
     )
+    # A hand-picked Steam match used to bring over only the name (and a summary
+    # when the fetch above happened to work): the game was created and nothing
+    # mapped Steam's genres, developer, publisher, release date, modes, cover or
+    # store specs onto it, because only the automatic Stage D path hydrated.
+    # Steam is the one source with an App ID to ask for, so this is one fast call.
+    if steam_app_id:
+        from oneirodex.utils.software_identify_custom_game import hydrate_steam_for_game
+
+        hydrate_steam_for_game(game, int(steam_app_id))
     db.session.delete(folder)
     return game

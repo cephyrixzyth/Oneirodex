@@ -165,6 +165,16 @@ def validate_plan_for_game(plan: list[dict], game_root: str) -> list[str]:
     return errors
 
 
+def _is_under(path: str, root: str) -> bool:
+    """True when *path* is *root* or inside it (separator-aware, not a prefix match)."""
+    try:
+        p = Path(path).resolve(strict=False)
+        r = Path(root).resolve(strict=False)
+    except (OSError, ValueError):
+        return False
+    return p == r or r in p.parents
+
+
 def apply_rename_plan(plan: list[dict], allowed_bases: list[str]) -> list[dict]:
     """
     Apply checked rename operations. Returns per-item results with ok/error.
@@ -185,6 +195,17 @@ def apply_rename_plan(plan: list[dict], allowed_bases: list[str]) -> list[dict]:
 
         if not src or not dst:
             result['error'] = 'Missing path'
+            results.append(result)
+            continue
+
+        # A root folder that did not move leaves its media items planned into a
+        # folder that does not exist; moving them would mkdir it and pull the
+        # files out of the game's real folder.
+        failed_roots = [
+            r['to_path'] for r in results if r.get('kind') == 'root_folder' and not r.get('ok')
+        ]
+        if item.get('kind') != 'root_folder' and any(_is_under(dst, root) for root in failed_roots):
+            result['error'] = 'Skipped: the game folder rename failed'
             results.append(result)
             continue
 

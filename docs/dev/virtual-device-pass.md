@@ -51,7 +51,7 @@ Run the sweep with `python scripts/serve_capture.py` in one shell and `python sc
 Regenerate with `python scripts/vdevice/platform_table.py --write` (a test fails when this table is stale).
 
 <!-- platform-table:begin -->
-88 platforms: 8 game-tested, 12 core-smoke, 11 bios-blocked, 49 companion-only, 8 catalog-only.
+88 platforms: 10 game-tested, 10 core-smoke, 11 bios-blocked, 49 companion-only, 8 catalog-only.
 
 | Platform | Mode | Core | Free ROM | Firmware | Pass can claim |
 |---|---|---|---|---|---|
@@ -67,7 +67,7 @@ Regenerate with `python scripts/vdevice/platform_table.py --write` (a test fails
 | Nintendo GameBoy Advance (`GBA`) | browser | mgba | yes | ok | game-tested |
 | Nintendo GameBoy Color (`GBC`) | browser | mgba | yes | ok | game-tested |
 | Nintendo DS (`NDS`) | browser | melonds | no | missing | bios-blocked |
-| Nintendo Virtual Boy (`VB`) | browser | mednafen_vb | no | ok | core-smoke |
+| Nintendo Virtual Boy (`VB`) | browser | mednafen_vb | yes | ok | game-tested |
 | Nintendo Wii (`WII`) | companion | – | no | ok | companion-only |
 | Nintendo 3DS (`N3DS`) | companion | – | no | ok | companion-only |
 | Sega Mega Drive/Genesis (MD) (`SEGA_MD`) | browser | genesis_plus_gx | yes | ok | game-tested |
@@ -80,7 +80,7 @@ Regenerate with `python scripts/vdevice/platform_table.py --write` (a test fails
 | Atari 7800 (`ATARI_7800`) | browser | prosystem | no | ok | core-smoke |
 | Atari 5200 (`ATARI_5200`) | browser | a5200 | no | missing | bios-blocked |
 | Atari 2600 (`ATARI_2600`) | browser | stella2014 | yes | ok | game-tested |
-| Atari Lynx (`LYNX`) | browser | handy | no | ok | core-smoke |
+| Atari Lynx (`LYNX`) | browser | handy | yes | ok | game-tested |
 | Atari Jaguar (`JAGUAR`) | browser | virtualjaguar | no | ok | core-smoke |
 | PC Engine (`PCE`) | companion | – | no | ok | companion-only |
 | PC-FX (`PCFX`) | companion | – | no | ok | companion-only |

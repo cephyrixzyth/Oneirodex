@@ -13,10 +13,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import ssl
 import sys
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -102,12 +105,55 @@ def load_simple_manifest(path: Path) -> dict[str, Any]:
     return data
 
 
-def download(url: str, dest: Path, timeout: float = 90.0) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
+def fetch_bytes(url: str, timeout: float = 90.0) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     ctx = ssl.create_default_context()
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
-        data = resp.read()
+        return resp.read()
+
+
+#: Extensions tried, in order, when a zip entry does not name its ROM member.
+ROM_EXTENSIONS = (
+    ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".nds", ".z64", ".n64", ".v64",
+    ".md", ".gen", ".bin", ".sms", ".gg", ".sg", ".a26", ".a52", ".a78", ".lnx", ".lyx",
+    ".j64", ".jag", ".vb", ".ngp", ".ngc", ".ws", ".wsc", ".col", ".vec", ".int", ".pce", ".rom",
+)
+
+
+def extract_rom_from_zip(data: bytes, member: str | None = None) -> tuple[str, bytes]:
+    """Pick the ROM inside a zip: the named member, else the first ROM-looking file.
+
+    Returns ``(member_name, bytes)``. Raises ``ValueError`` when the archive holds
+    no usable file, so a changed download is reported instead of saved as junk.
+    """
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        names = [n for n in zf.namelist() if not n.endswith("/")]
+        if member:
+            wanted = [n for n in names if n == member or Path(n).name == member]
+            if not wanted:
+                raise ValueError(f"zip has no member {member!r} (has: {', '.join(names[:8])})")
+            chosen = wanted[0]
+        else:
+            by_ext = [n for n in names if Path(n).suffix.lower() in ROM_EXTENSIONS]
+            if not by_ext:
+                raise ValueError(f"zip has no ROM-looking file (has: {', '.join(names[:8])})")
+            chosen = by_ext[0]
+        return chosen, zf.read(chosen)
+
+
+def download(url: str, dest: Path, timeout: float = 90.0, *, archive: str | None = None,
+             member: str | None = None, sha256: str | None = None) -> None:
+    """Download ``url`` to ``dest``; unzip first when ``archive`` is ``zip``.
+
+    ``sha256`` (optional) pins the downloaded bytes, so an upstream file that
+    changes is refused rather than silently replacing a known-legal sample.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    data = fetch_bytes(url, timeout)
+    if sha256 and hashlib.sha256(data).hexdigest() != sha256.lower():
+        raise ValueError("sha256 mismatch: the file at the URL is not the one the manifest was written for")
+    if (archive or "").lower() == "zip":
+        _name, data = extract_rom_from_zip(data, member)
     dest.write_bytes(data)
 
 
@@ -206,12 +252,13 @@ def main(argv: list[str] | None = None) -> int:
             ok.append(f"{platform}/{filename}")
             continue
         try:
-            download(url, dest)
+            download(url, dest, archive=entry.get("archive"), member=entry.get("member"),
+                     sha256=entry.get("sha256"))
             write_license_note(dest, {k: str(v) for k, v in entry.items()})
             size = dest.stat().st_size
             print(f"  OK ({size} bytes) + LICENSE note")
             ok.append(f"{platform}/{filename}")
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError, zipfile.BadZipFile) as exc:
             print(f"  FAIL: {exc}")
             failed.append((f"{platform}/{filename}", str(exc)))
 
