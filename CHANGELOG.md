@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Admin navigation.** Settings and Integrations unfold in the left rail into four icon sub-sections each; the pages inside a sub-section are icon buttons in the top bar. Every admin rail sub-link now has an icon (24 new shared glyphs). The Integrations hub is rebuilt as the same grouped rows as Settings, Arr moved to Integrations → Acquisition, the Support inbox lives only under Users, and the command palette is built from the same lists. Nine hand-built admin pages now use the shared `Page` shell and one panel class. See [admin/navigation.md](docs/admin/navigation.md).
 - **Admin widget boards (Dashboard, Ops):** edge and corner resize, S/M/L/Full presets, keyboard move/resize, pin to lock a widget in place, hide, and an **Add widget** menu; metric tiles grow to fit wrapped text. New optional Dashboard widgets: CPU, Memory, Unmatched folders, Active scan jobs.
 
 ### Added
