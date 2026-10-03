@@ -38,7 +38,15 @@ MEMBER_ROUTES = [
 VIEWPORTS = {
     'desktop': {'width': 1440, 'height': 900},
     'phone': {'width': 390, 'height': 844},
+    'phone-landscape': {'width': 844, 'height': 390},
+    'tablet': {'width': 820, 'height': 1180},
+    'tv': {'width': 1920, 'height': 1080},
+    'quest': {'width': 1832, 'height': 1920},
 }
+DEFAULT_VIEWPORTS = 'desktop,phone'
+#: Pages that render a loading message until their data arrives. Still showing
+#: it after this long is a stuck page, which a text-length check cannot see.
+LOADING_WAIT_MS = 12_000
 #: Noise that is environmental in a sandbox (no outbound network), not an app bug.
 IGNORED_CONSOLE = ('net::ERR_', 'Failed to load resource: net::', 'favicon', 'ERR_BLOCKED', 'ERR_PROXY')
 
@@ -91,6 +99,12 @@ def sweep_route(context, route: str, shots: Path | None, tag: str) -> dict:
         resp = page.goto(f'{BASE}{route}', wait_until='domcontentloaded', timeout=30_000)
         status = resp.status if resp else None
         page.wait_for_timeout(1500)
+        try:
+            page.wait_for_function(
+                "() => !/\\bLoading\\b[^\\n]{0,40}(\u2026|\\.{2,3})/.test(document.body.innerText)", timeout=LOADING_WAIT_MS,
+            )
+        except Exception:  # noqa: BLE001
+            findings.append('still showing a loading message after %ds' % (LOADING_WAIT_MS // 1000))
         metrics = page.evaluate(
             '() => ({text: (document.body.innerText || "").trim().length,'
             ' overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth})'
@@ -131,7 +145,7 @@ def sweep_route(context, route: str, shots: Path | None, tag: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--out', type=Path, default=ROOT / 'data' / 'vdevice-sweep')
-    parser.add_argument('--viewports', default='desktop,phone')
+    parser.add_argument('--viewports', default=DEFAULT_VIEWPORTS, help='comma list of: ' + ', '.join(VIEWPORTS))
     parser.add_argument('--no-screenshots', action='store_true')
     parser.add_argument('--limit', type=int, default=0, help='sweep only the first N routes (debugging)')
     args = parser.parse_args(argv)

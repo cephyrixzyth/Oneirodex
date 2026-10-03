@@ -8,8 +8,22 @@ How Oneirodex is tested against platforms and devices we do not own, and what ea
 |---|---|---|---|
 | 1 | Every platform, no boot: play mode, core, firmware, free ROM | `scripts/vdevice/platform_table.py`, `tests/test_platform_capability_table.py` | Done |
 | 2 | Real browser boot of free-ROM platforms | `scripts/vdevice/boot_matrix.py` | **Blocked here**: the WASM cores come from `cdn.jsdelivr.net`, which this environment's network policy denies. Runs wherever that host is reachable. |
-| 3 | Virtual devices (stubs and emulated contexts) | `tests/test_vdevice_fake_*.py`, `scripts/vdevice/` | In progress: fake desktop companion done |
-| 4 | Whole-app UI sweep, admin and member, desktop and phone | `scripts/vdevice/ui_sweep.py` | Done: 50 routes x 2 viewports |
+| 3 | Virtual devices (stubs and emulated contexts) | `tests/test_vdevice_fake_*.py`, `scripts/vdevice/gamepad.py`, `scripts/vdevice/hover_stability.py`, `ui_sweep.py --viewports` | Done for the devices below |
+| 4 | Whole-app UI sweep, admin and member | `scripts/vdevice/ui_sweep.py` | Done: ~49 routes x 6 viewports (desktop, phone, phone-landscape, tablet, TV, Quest) |
+
+## Virtual devices
+
+| Device | Stand-in | Covers | Check |
+|---|---|---|---|
+| Desktop companion | Fake client with a Bearer token | queue → heartbeat → ack/nack → lifecycle, over the real routes | `tests/test_vdevice_fake_companion.py` |
+| Game server | Real loopback TCP listener | status up/down, no host or exception text leaked, blocked health URL | `tests/test_vdevice_fake_game_server.py` |
+| Lighting controller | Local Hyperion JSON-RPC stub | colour then clear, bearer token, admin-only | `tests/test_vdevice_fake_ambient_lighting.py` |
+| Remote play host | Sunshine/Wolf base URL | member status without the operator token, metadata hosts refused | `tests/test_vdevice_fake_remote_play.py` |
+| Game controller | `navigator.getGamepads` replacement | Big Picture d-pad, stick, confirm | `scripts/vdevice/gamepad.py` |
+| Phone, tablet, TV, Quest | Playwright viewports | overflow, console errors, 5xx, blank or stuck-loading pages on every route | `scripts/vdevice/ui_sweep.py --viewports …` |
+| Pointer on tiles | Real mouse across the first row | the top bar stays on top (regression for the blink) | `scripts/vdevice/hover_stability.py` |
+
+Not covered here, and why: real console emulators and Moonlight (no hardware), OpenXR (no headset; `/vr` is swept in a Quest-sized viewport only), live store accounts (CSV and mocked sync only), WASM emulator boot (Layer 2, blocked by network policy).
 
 ## Findings so far
 
