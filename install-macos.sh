@@ -262,18 +262,19 @@ check_scan_locations() {
 configure_application() {
     print_step "Configuring Oneirodex..."
 
-    if [ ! -f "$SCRIPT_DIR/config.py" ] || [ "$FORCE_INSTALL" = true ]; then
-        cp "$SCRIPT_DIR/config.py.example" "$SCRIPT_DIR/config.py"
-        print_success "Configuration file created"
-    fi
-
-    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" != true ]; then
+    if [ -f "$SCRIPT_DIR/.env" ]; then
         cp "$SCRIPT_DIR/.env" "$SCRIPT_DIR/.env.backup.$(date +%Y%m%d-%H%M%S)"
         print_success "Existing .env backed up"
     fi
 
     local secret_key
-    secret_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
+    secret_key=""
+    if [ -f "$SCRIPT_DIR/.env" ]; then
+        secret_key="$(sed -n 's/^SECRET_KEY=//p' "$SCRIPT_DIR/.env" | head -n 1)"
+    fi
+    if [ -z "$secret_key" ]; then
+        secret_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
+    fi
 
     if [ -z "$GAMES_DIR" ]; then
         echo

@@ -215,20 +215,20 @@ function Test-ScanLocations([string]$Roots) {
 function Write-EnvFile([string]$DatabaseUrl) {
     Write-Step 'Writing configuration...'
 
-    $configPath = Join-Path $ScriptDir 'config.py'
-    if ((-not (Test-Path $configPath)) -or $Force) {
-        Copy-Item (Join-Path $ScriptDir 'config.py.example') $configPath -Force
-        Write-Ok 'Configuration file created'
-    }
-
     $envPath = Join-Path $ScriptDir '.env'
-    if ((Test-Path $envPath) -and (-not $Force)) {
+    $existingSecretKey = $null
+    if (Test-Path $envPath) {
         $backup = "$envPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         Copy-Item $envPath $backup
         Write-Ok "Existing .env backed up to $(Split-Path -Leaf $backup)"
+        $secretLine = Get-Content $envPath | Where-Object { $_ -match '^SECRET_KEY=' } | Select-Object -First 1
+        if ($secretLine) { $existingSecretKey = $secretLine.Substring('SECRET_KEY='.Length) }
     }
 
-    $secretKey = (& python -c 'import secrets; print(secrets.token_urlsafe(64))').Trim()
+    $secretKey = $existingSecretKey
+    if ([string]::IsNullOrWhiteSpace($secretKey)) {
+        $secretKey = (& python -c 'import secrets; print(secrets.token_urlsafe(64))').Trim()
+    }
     $testUrl = $DatabaseUrl -replace "/$DbName`$", "/$TestDbName"
     $uploadFolder = (Join-Path $ScriptDir 'oneirodex\static\library')
     $devMode = if ($Dev) { 'true' } else { 'false' }
