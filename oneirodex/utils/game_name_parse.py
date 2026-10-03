@@ -380,6 +380,38 @@ def is_bare_update_package(name: str | None) -> bool:
     return folded in _BARE_UPDATE_PACKAGE_NAMES
 
 
+# A folder that is itself a patch/update package for a game that lives elsewhere:
+# "Beast of Reincarnation update 1.0.7.0 - 1.0.8.0", "Grim Dawn Update_from_v1.3.0.0
+# _to_v1.3.0.3-ElAmigos", "Alan Wake 2 update 1.2.8 - 1.2.10", "... Unofficial
+# Patch". Not a full release that merely *includes* updates ("(Incl. Update 2)"),
+# which is a game and imports normally.
+_INCLUDES_UPDATE_RE = re.compile(r'\b(?:incl(?:ude[sd]?|uding)?\.?|with)\s+updates?\b', re.IGNORECASE)
+_PATCH_PACKAGE_RE = re.compile(
+    r'\bupdate\b\s*(?:from\s+)?v?\d'
+    r'|\bunofficial\s+patch\b'
+    r'|\bhotfix\b'
+    r'|\bpatch\s+v?\d',
+    re.IGNORECASE,
+)
+
+
+def looks_like_patch_package(raw: str | None) -> bool:
+    """True when the folder name is a standalone update/patch package.
+
+    Such a folder must never become a Game record: it is an update *for* a game,
+    and importing it creates the game from the update folder -- under the wrong
+    title when the update is for a sequel ("Alan Wake 2 update ..." was imported
+    as Alan Wake), and it leaves the real game folder flagged as a duplicate of
+    its own update.
+    """
+    if not raw or not isinstance(raw, str):
+        return False
+    label = _basename_only(raw).replace('_', ' ')
+    # "(Incl. Update 5)" describes a full release that bundles updates.
+    label = _INCLUDES_UPDATE_RE.sub('', label)
+    return bool(_PATCH_PACKAGE_RE.search(label))
+
+
 def detect_update_packaging(
     raw: str | None,
     *,

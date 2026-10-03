@@ -46,7 +46,7 @@ from oneirodex.utils.match_proposal import (
     build_match_proposal,
     write_match_proposal,
 )
-from oneirodex.utils.game_name_parse import parse_game_label, detect_update_packaging
+from oneirodex.utils.game_name_parse import parse_game_label, detect_update_packaging, looks_like_patch_package
 from oneirodex.utils.image_kinds import IGDB_DOWNLOAD_KINDS
 from oneirodex.utils.rom_name_peel import (
     parse_console_rom_label,
@@ -744,6 +744,13 @@ def retrieve_and_save_game(
             cleaned_name=parsed_label.get('cleaned_name'),
             transforms=parsed_label.get('transforms'),
         )
+    # A standalone patch/update package ("<Game> update 1.0.7.0 - 1.0.8.0",
+    # "Update_from_v1_to_v2", "Unofficial Patch") is an update FOR a game, not a
+    # game. Importing it created the game from the update folder -- under the
+    # wrong title for a sequel's update (Alan Wake 2 update -> Alan Wake) -- and
+    # left the real folder flagged as a duplicate of its own update.
+    if not use_console_rom_peel and looks_like_patch_package(raw_folder_label):
+        update_meta['is_bare_update_package'] = True
     if update_meta.get('is_bare_update_package'):
         logger.info(
             f"📦 [UPDATE-PACKAGE] Folder '{raw_folder_label}' looks like an update/"
