@@ -359,3 +359,36 @@ test('arrangeDiscoverSections hides and pins without waiting for a refetch', () 
   const arranged = arrangeDiscoverSections(sections, { pins: ['c', 'a'], hidden: ['b'] })
   expect(arranged.map((row: any) => row.identifier)).toEqual(['c', 'a'])
 })
+
+test('zones are buttons in the top bar and Surprise me is a bar action', async () => {
+  const shelf = (identifier: string, title: string) => ({
+    identifier,
+    title,
+    games: [{ uuid: identifier, name: title, cover_url: '', genres: [] }],
+  })
+  global.fetch = vi.fn((url) =>
+    Promise.resolve(
+      String(url).includes('/pins')
+        ? jsonResponse({ ok: true, pins: [], max_pins: 3, available: [] })
+        : jsonResponse({
+            sections: [shelf('a', 'Shelf A')],
+            zones: [
+              { slug: 'for-you', title: 'For you' },
+              { slug: 'popular', title: 'Popular here' },
+            ],
+          }),
+    ),
+  ) as unknown as typeof global.fetch
+
+  renderDiscover()
+
+  expect(await screen.findByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: 'For you' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Popular here' })).toBeInTheDocument()
+  // The old gutter strip of pill links is gone.
+  expect(screen.queryByRole('navigation', { name: 'Discover zones' })).not.toBeInTheDocument()
+  // Surprise me is a bar button that opens its panel, not a section on the page.
+  expect(screen.queryByRole('heading', { name: 'Surprise me' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Surprise me' }))
+  expect(await screen.findByRole('button', { name: 'Pick something' })).toBeInTheDocument()
+})

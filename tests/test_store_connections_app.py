@@ -89,7 +89,7 @@ def test_status_route_covers_every_provider(client, app, db_session, member):
     _login(client, app, member)
     body = client.get('/api/ownership/connections').get_json()
     assert body['ok'] is True and body['schema_version'] == 1
-    assert len(body['connections']) == 14
+    assert len(body['connections']) == 18
     assert {c['state'] for c in body['connections']} <= {
         'unavailable', 'disabled', 'import_only', 'not_configured', 'not_connected', 'needs_credential',
         'connected', 'syncing', 'partial', 'reauth_required', 'failed', 'cancelled'}

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { confirmAction } from '@oneirodex/ui'
+import { Button, confirmAction } from '@oneirodex/ui'
 import {
   cancelStoreSync,
   connectStore,
   disconnectStore,
   fetchOwnershipConnections,
   importCsv,
-  importPlayniteFile,
+  importLauncherFile,
+  syncAllStores,
   syncStore,
   type StoreConnection,
   type StoreConnectionsResponse,
@@ -119,6 +120,36 @@ export function StoreConnections({ variant = 'settings', onStatus, pollMs = SYNC
     return ok
   }
 
+  const [syncAllBusy, setSyncAllBusy] = useState(false)
+  const [syncAllNote, setSyncAllNote] = useState<CardMessage>(null)
+  async function onSyncAll() {
+    setSyncAllBusy(true)
+    setSyncAllNote(null)
+    try {
+      const { results } = await syncAllStores()
+      const ran = results.filter((r) => r.status !== 'skipped')
+      const failed = ran.filter((r) => r.status === 'failed')
+      const titles = ran.reduce((sum, r) => sum + (r.synced ?? 0), 0)
+      setSyncAllNote(
+        ran.length === 0
+          ? { tone: 'info', text: 'No linked stores to sync yet.' }
+          : failed.length
+            ? {
+                tone: 'bad',
+                text: `Synced ${ran.length - failed.length} of ${ran.length} stores (${titles} titles). Check ${failed
+                  .map((r) => r.store)
+                  .join(', ')}.`,
+              }
+            : { tone: 'good', text: `Synced ${ran.length} stores (${titles} titles).` },
+      )
+    } catch (error) {
+      setSyncAllNote({ tone: 'bad', text: apiErrorInfo(error).message })
+    } finally {
+      setSyncAllBusy(false)
+      await refresh()
+    }
+  }
+
   const handlers = (connection: StoreConnection) => ({
     onSync: () =>
       run(connection, 'sync', async () => {
@@ -189,7 +220,7 @@ export function StoreConnections({ variant = 'settings', onStatus, pollMs = SYNC
     },
     onImportFile: (file: File) =>
       run(connection, 'import', async () => {
-        const result = await importPlayniteFile(file)
+        const result = await importLauncherFile(file, connection.provider)
         return {
           tone: 'good',
           text: `Imported ${result?.imported ?? 0} titles (${result?.matched ?? 0} matched).`,
@@ -244,6 +275,14 @@ export function StoreConnections({ variant = 'settings', onStatus, pollMs = SYNC
           <p className="od-store-list__lede">
             Linked stores refresh on their own. Nothing is ever downloaded or installed.
           </p>
+          {live.some((c) => c.actions.includes('sync')) ? (
+            <p className="od-store-list__lede">
+              <Button size="sm" disabled={syncAllBusy || syncing} onClick={onSyncAll}>
+                {syncAllBusy ? 'Syncing all…' : 'Sync all stores'}
+              </Button>{' '}
+              {syncAllNote ? <span role="status">{syncAllNote.text}</span> : null}
+            </p>
+          ) : null}
           <ul className="od-store-list__cards">{live.map(card)}</ul>
         </section>
       ) : null}
@@ -253,7 +292,8 @@ export function StoreConnections({ variant = 'settings', onStatus, pollMs = SYNC
             Import a list
           </GroupTitle>
           <p className="od-store-list__lede">
-            A one-time snapshot. Import again whenever your list changes.
+            A one-time snapshot from a store or launcher export (Playnite, Heroic, Lutris, GOG
+            Galaxy, CSV). Import again whenever your list changes.
           </p>
           <ul className="od-store-list__cards">{imports.map(card)}</ul>
         </section>

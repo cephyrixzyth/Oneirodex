@@ -80,6 +80,29 @@ def _theme_asset_panel() -> dict:
     return panel
 
 
+def _log_summary():
+    """``get_log_info()`` with its newest event as plain JSON.
+
+    The helper returns the ORM row (its own tests read attributes off it), and
+    handing that to ``jsonify`` raised ``Object of type SystemEvents is not JSON
+    serializable`` as soon as one event existed -- so the whole system snapshot
+    answered 503 on every install that had logged anything, and only a brand-new
+    database (no events) looked healthy.
+    """
+    info = get_log_info()
+    latest = info.get('latest')
+    return {
+        'count': info.get('count'),
+        'latest': None if latest is None else {
+            'id': latest.id,
+            'timestamp': latest.timestamp.isoformat() if latest.timestamp else None,
+            'level': latest.event_level,
+            'type': latest.event_type,
+            'text': latest.event_text,
+        },
+    }
+
+
 @info_bp.route('/admin/api/ops/system', methods=['GET'])
 @login_required
 @admin_required
@@ -105,7 +128,7 @@ def ops_system_json():
             'system': system_info,
             'database': get_database_info(),
             'active_users': get_active_users(),
-            'logs': get_log_info(),
+            'logs': _log_summary(),
             # The last thing the standalone Server info page showed that Ops did
             # not, so folding the two into one pane (W27-D1) needed it here
             # first — retiring a page that still held the only copy of something

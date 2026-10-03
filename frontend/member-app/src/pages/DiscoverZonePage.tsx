@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { fetchDiscoverZone } from '../api/discover'
 import { ContextBar } from '../chrome/ContextBar'
+import { useDiscoverZoneViews } from '../components/discoverZones'
 import { DiscoverShelf } from '../components/DiscoverShelf'
 import { PageStatus } from '../components/PageStatus'
 import { useShellConfig, useViewer } from '@oneirodex/ui'
@@ -9,7 +10,7 @@ import { useShellConfig, useViewer } from '@oneirodex/ui'
 /**
  * One Discover zone — the feed narrowed to one named surface.
  *
- * Reached from the zone strip on Discover. The rows are the same rows the main
+ * Reached from the zone buttons in Discover's top bar. The rows are the same rows the main
  * feed serves, assembled by the same pipeline, so a shelf behaves identically
  * whichever surface a member arrives through — including its dedupe token,
  * which is per-assembly and therefore per-zone.
@@ -49,10 +50,12 @@ export function DiscoverZonePage() {
     }
   }, [slug])
 
+  const zoneBar = useDiscoverZoneViews(slug || '')
+
   /* The zone's name stays in the bar through loading and failure, for the same
      reason the row page keeps its title: the slug is in the URL and the name is
      not, so a bare status would leave nothing saying what had failed. */
-  const bar = <ContextBar title={zone?.title || 'Discover'} />
+  const bar = <ContextBar title={zone?.title || 'Discover'} {...zoneBar} />
 
   if (loading || error) {
     return (

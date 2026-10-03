@@ -133,8 +133,18 @@ export interface StoreSyncResponse {
 
 export interface StoreImportResponse {
   imported?: number
+  /** Launcher imports: rows that already existed and were refreshed. */
+  updated?: number
   matched?: number
   skipped?: number
+}
+
+export interface SyncAllResult {
+  store: string
+  status: string
+  reason: string | null
+  synced?: number
+  matched?: number
 }
 
 /** One status contract for first-run and Settings. Stored facts only — no provider call. */
@@ -175,19 +185,31 @@ export async function disconnectStore(store: string) {
   return deleteJson(`/api/ownership/${store}`, undefined, { label: `disconnect_${store}` })
 }
 
-/** Playnite export (JSON or CSV file) — register-only ownership marks. */
-export async function importPlayniteFile(file: File) {
+/**
+ * A launcher export (Playnite, Heroic, Lutris, GOG Galaxy, or a CSV) —
+ * register-only ownership marks. `launcher` pins the format; the server
+ * detects it when omitted.
+ */
+export async function importLauncherFile(file: File, launcher?: string) {
   const body = new FormData()
   body.append('file', file)
+  if (launcher) body.append('launcher', launcher)
   const token = getCsrfToken()
   if (token) {
     body.append('csrf_token', token)
   }
-  return send('/api/imports/playnite', {
+  return send('/api/imports/launcher', {
     method: 'POST',
     body,
-    label: 'import_playnite',
+    label: 'import_launcher',
   }) as Promise<StoreImportResponse>
+}
+
+/** Sync every linked store; one failing store does not stop the others. */
+export async function syncAllStores() {
+  return postJson('/api/ownership/sync-all', {}, { label: 'sync_all' }) as Promise<{
+    results: SyncAllResult[]
+  }>
 }
 
 export async function fetchOwnershipTitles(

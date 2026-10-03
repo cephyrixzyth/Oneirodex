@@ -65,6 +65,6 @@ def test_route_authentication_and_policy(monkeypatch):
     assert response.status_code == 200
     body = response.get_json()
     assert body['ok'] and body['schema_version'] == 1
-    assert len(body['providers']) == 14
+    assert len(body['providers']) == 18
     assert all(not p['policy_enabled'] for p in body['providers'])
     assert not {'credential','external_account_id','user_id'} & set().union(*(p.keys() for p in body['providers']))

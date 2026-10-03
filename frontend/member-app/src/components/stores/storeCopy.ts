@@ -114,6 +114,9 @@ export const STATE_TONE: Record<StoreConnectionState, Tone> = {
   cancelled: 'warn',
 }
 
+/** Launchers whose own export file can be imported (not a store CSV). */
+const IMPORT_SOURCES = new Set(['playnite', 'heroic', 'lutris', 'galaxy', 'import'])
+
 const SETUP_TEXT: Record<string, string> = {
   server_key:
     'Live sync needs a server key your administrator has not configured. Import a list instead. Saving your Steam ID still lets a free-game claim record the game and open Steam.',
@@ -132,8 +135,8 @@ export function stateSentence(connection: StoreConnection): string {
     case 'disabled':
       return 'Your administrator turned store ownership off.'
     case 'import_only':
-      return connection.provider === 'playnite'
-        ? 'Import a Playnite library export. It is a snapshot, correct as of the import.'
+      return IMPORT_SOURCES.has(connection.provider)
+        ? `Import a ${connection.name} library export. It is a snapshot, correct as of the import.`
         : 'Import a list of what you own. It is a snapshot, correct as of the import.'
     case 'not_configured':
       return SETUP_TEXT[connection.setup.missing || ''] || 'Live sync is not set up on this server.'

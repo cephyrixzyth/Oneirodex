@@ -15,6 +15,10 @@ _DEFINITIONS = (
     ('psn', 'PlayStation', 'unofficial_opt_in', 'token', 'snapshot', True, ['sony']),
     ('meta_quest', 'Meta Quest', 'import', 'none', 'snapshot', True, []),
     ('playnite', 'Playnite', 'import', 'none', 'snapshot', False, []),
+    ('heroic', 'Heroic', 'import', 'none', 'snapshot', False, []),
+    ('lutris', 'Lutris', 'import', 'none', 'snapshot', False, []),
+    ('galaxy', 'GOG Galaxy', 'import', 'none', 'snapshot', False, ['gog galaxy']),
+    ('import', 'Other launcher (CSV)', 'import', 'none', 'snapshot', False, ['csv']),
     ('humble', 'Humble Bundle', 'unavailable', 'none', 'unavailable', False, []),
     ('ea', 'EA app', 'unavailable', 'none', 'unavailable', False, ['origin']),
     ('battlenet', 'Battle.net', 'unavailable', 'none', 'unavailable', False, []),
@@ -22,6 +26,15 @@ _DEFINITIONS = (
     ('itch', 'itch.io', 'unavailable', 'none', 'unavailable', False, []),
     ('nintendo', 'Nintendo', 'unavailable', 'none', 'unavailable', False, []),
 )
+
+#: Import-only sources and the export they accept (see utils/launcher_imports.py).
+_FILE_IMPORT = {
+    'playnite': 'playnite_export',
+    'heroic': 'heroic_export',
+    'lutris': 'lutris_export',
+    'galaxy': 'galaxy_export',
+    'import': 'generic_csv',
+}
 
 REGISTER_ACCOUNT_STORES = frozenset({'steam', 'gog', 'epic', 'amazon', 'xbox', 'psn', 'meta_quest'})
 
@@ -43,7 +56,7 @@ def provider_capabilities(*, enabled=True, unofficial_stores=frozenset()):
                 'connect': auth if key in REGISTER_ACCOUNT_STORES and auth != 'none' else 'unavailable',
                 'library_listing': listing,
                 'csv_import': 'snapshot' if csv else 'unavailable',
-                'file_import': 'playnite_export' if key == 'playnite' else 'unavailable',
+                'file_import': _FILE_IMPORT.get(key, 'unavailable'),
                 'identity_matching': 'existing_register' if supported else 'unavailable',
                 'store_filter': 'recorded_ownership' if supported else 'unavailable',
                 'install': 'unavailable',
