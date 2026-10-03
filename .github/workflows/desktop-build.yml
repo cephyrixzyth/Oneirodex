@@ -267,7 +267,7 @@ jobs:
 
     steps:
       - name: Download every installer
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: installers
           pattern: oneirodex-*
@@ -278,7 +278,7 @@ jobs:
       # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
       # per platform extension, so they can sit side by side on one release.
       - name: Attach to the release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
           files: installers/**/*
