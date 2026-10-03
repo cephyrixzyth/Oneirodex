@@ -37,6 +37,6 @@ def test_ca_profile_links_point_at_this_project():
 def test_container_template_parses_and_names_its_image():
     root = _root('unraid/oneirodex.xml')
     assert root.tag == 'Container'
-    assert (root.findtext('Repository') or '').startswith('chrisjrovira/oneirodex')
+    assert (root.findtext('Repository') or '').startswith('cephyrixzyth/oneirodex')
     assert (root.findtext('Overview') or '').strip()
     assert (root.findtext('Support') or '').startswith('https://')

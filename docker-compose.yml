@@ -32,8 +32,7 @@
 #   APP_IMAGE=oneirodex:1.0.1
 #   APP_CONTAINER_NAME=oneirodex-app
 #   DB_CONTAINER_NAME=oneirodex-db
-# Preferred Hub image once published: chrisjrovira/oneirodex:1.0.1
-# (chrisjrovira/oneirodex remains accepted). Postgres *database* name stays
+# Preferred Hub image: cephyrixzyth/oneirodex:1.0.1. Postgres *database* name stays
 # POSTGRES_DB (default oneirodex) so existing volumes keep their catalog.
 # Sidecar profile container names (livekit / clamav / …) are unchanged.
 # ---------------------------------------------------------------------------

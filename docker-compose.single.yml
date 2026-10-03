@@ -8,7 +8,7 @@
 # with a separate Postgres (NAS / Unraid Compose Manager) use docker-compose.yml.
 services:
   oneirodex:
-    image: ${APP_IMAGE:-chrisjrovira/oneirodex:latest}
+    image: ${APP_IMAGE:-cephyrixzyth/oneirodex:latest}
     container_name: oneirodex
     restart: unless-stopped
     ports:

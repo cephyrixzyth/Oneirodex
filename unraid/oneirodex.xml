@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Oneirodex</Name>
-  <Repository>chrisjrovira/oneirodex:latest</Repository>
-  <Registry>https://hub.docker.com/r/chrisjrovira/oneirodex</Registry>
+  <Repository>cephyrixzyth/oneirodex:latest</Repository>
+  <Registry>https://hub.docker.com/r/cephyrixzyth/oneirodex</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
