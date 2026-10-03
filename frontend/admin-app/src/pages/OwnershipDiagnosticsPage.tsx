@@ -5,6 +5,7 @@ import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 import './OwnershipDiagnosticsPage.css'
+import { Page } from '../components/Page'
 
 /**
  * Store connection diagnostics and repair (LIB-04 / LIB-02).
@@ -210,14 +211,13 @@ export function OwnershipDiagnosticsPage() {
 
   if (error && !data) {
     return (
-      <div className="od-admin-page">
-        <h1>Store connections</h1>
+      <Page title="Store connections">
         <PageStatus
           error
           errorMessage="Unable to load store connection diagnostics."
           onRetry={() => load()}
         />
-      </div>
+      </Page>
     )
   }
   if (!data) {
@@ -301,13 +301,17 @@ export function OwnershipDiagnosticsPage() {
     .filter(([, present]) => present)
     .map(([store]) => store)
   return (
-    <div className="od-admin-page od-own-diag">
-      <h1>Store connections</h1>
-      <p className="od-admin-lede">
-        Each member’s store links, the last sync result and which sign-in it uses. Credentials,
-        store account IDs and title lists are never shown here. Retry uses the member’s own saved
-        sign-in.
-      </p>
+    <Page
+      title="Store connections"
+      className="od-own-diag"
+      lede={
+        <>
+          Each member’s store links, the last sync result and which sign-in it uses. Credentials,
+          store account IDs and title lists are never shown here. Retry uses the member’s own saved
+          sign-in.
+        </>
+      }
+    >
       <dl className="od-own-diag__household">
         <div>
           <dt>Store ownership</dt>
@@ -350,6 +354,6 @@ export function OwnershipDiagnosticsPage() {
           {loadingMore ? 'Loading…' : 'Show more members'}
         </Button>
       ) : null}
-    </div>
+    </Page>
   )
 }

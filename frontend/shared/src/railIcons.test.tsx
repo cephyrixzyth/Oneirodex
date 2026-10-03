@@ -10,6 +10,37 @@ test('every rail destination has a glyph, including the one admin used to miss',
   expect(Object.keys(railIconPaths).length).toBeGreaterThanOrEqual(30)
 })
 
+test('admin sub-section glyphs exist', () => {
+  for (const name of [
+    'scan',
+    'tools',
+    'unmatched',
+    'filter',
+    'art',
+    'plugins',
+    'chart',
+    'danger',
+    'storage',
+    'emulators',
+    'themes',
+    'layout',
+    'attract',
+    'ai',
+    'quality',
+    'reference',
+    'matching',
+    'mail',
+    'metadata',
+    'identity',
+    'voice',
+    'stores',
+    'remote',
+    'server',
+  ]) {
+    expect(railIconPaths[name], name).toBeTruthy()
+  }
+})
+
 test('renders a padded viewBox so a 2px edge stroke is not sliced in half', () => {
   const { container } = render(<RailIcon name="activity" />)
   const svg = container.querySelector('svg')

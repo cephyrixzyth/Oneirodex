@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
-import { ADMIN_NAV, railDestinations, resolveNavSection } from './navConfig'
+import {
+  ADMIN_NAV,
+  findSubSection,
+  hubIcon,
+  railDestinations,
+  railSubSections,
+  resolveNavSection,
+} from './navConfig'
 import { RailIcon } from './railIcons'
 
 const COLLAPSED_SECTIONS_KEY = 'od.admin.rail.collapsedSections'
@@ -29,7 +36,7 @@ function useCollapsedSections(activeSectionId: string | null) {
     }
     const initial = new Set<string>()
     for (const link of ADMIN_NAV) {
-      if (!railDestinations(link.id).length) continue
+      if (!railDestinations(link.id).length && !railSubSections(link.id).length) continue
       if (link.id === activeSectionId) continue
       initial.add(link.id)
     }
@@ -72,8 +79,9 @@ function useCollapsedSections(activeSectionId: string | null) {
  * Left navigation rail for the admin shell.
  *
  * Hub sections use the member Oneirodex fold: muted uppercase
- * `.od-rail__group-toggle` headings (caret + label, no icon). Destinations are
- * the indented sub-links underneath. Dashboard and icon-only rail stay plain
+ * `.od-rail__group-toggle` headings (caret + label). Destinations are the
+ * indented, icon-led sub-links underneath. Settings and Integrations unfold into
+ * their sub-sections; those pages' children are buttons in the top bar. Dashboard and icon-only rail stay plain
  * destination links with icons.
  */
 export function AdminSideRail({
@@ -83,7 +91,7 @@ export function AdminSideRail({
   railState?: string
   onCloseDrawer?: () => void
 }) {
-  const { pathname, search } = useLocation()
+  const { pathname, search, hash } = useLocation()
   const iconOnly = railState === 'collapsed'
   const ownedSection = resolveNavSection(pathname)
   const [collapsedSections, toggleSection] = useCollapsedSections(ownedSection)
@@ -159,7 +167,8 @@ export function AdminSideRail({
         {ADMIN_NAV.map((link) => {
           const active = isActiveSection(link)
           const subs = railDestinations(link.id)
-          const hasSubs = subs.length > 0
+          const groups = railSubSections(link.id)
+          const hasSubs = subs.length > 0 || groups.length > 0
 
           // Icon-only rail, or a section with no hub list: plain destination.
           if (iconOnly || !hasSubs) {
@@ -186,6 +195,32 @@ export function AdminSideRail({
               </li>
               {folded
                 ? null
+                : groups.map((group) => {
+                    const here = findSubSection(pathname, hash)
+                    const groupActive = here?.sub.id === group.id && here.sectionId === link.id
+                    return (
+                      <li key={`${link.id}:${group.id}`}>
+                        <a
+                          className={
+                            groupActive
+                              ? 'od-rail__link od-rail__link--sub is-active'
+                              : 'od-rail__link od-rail__link--sub'
+                          }
+                          href={group.items[0].to}
+                          data-rail-item={group.icon}
+                          onClick={onCloseDrawer}
+                          aria-current={groupActive ? 'page' : undefined}
+                        >
+                          <span className="od-rail__icon" aria-hidden="true">
+                            <RailIcon name={group.icon} />
+                          </span>
+                          <span className="od-rail__label">{group.title}</span>
+                        </a>
+                      </li>
+                    )
+                  })}
+              {folded
+                ? null
                 : subs.map((sub) => {
                     const subActive = isActiveSub(sub.href, sub.label)
                     return (
@@ -200,6 +235,9 @@ export function AdminSideRail({
                           onClick={onCloseDrawer}
                           aria-current={subActive ? 'page' : undefined}
                         >
+                          <span className="od-rail__icon" aria-hidden="true">
+                            <RailIcon name={hubIcon(sub.label)} />
+                          </span>
                           <span className="od-rail__label">{sub.label}</span>
                         </a>
                       </li>

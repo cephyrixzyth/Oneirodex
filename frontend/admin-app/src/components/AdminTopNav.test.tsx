@@ -199,16 +199,20 @@ test('rail marks the active section and expands its hub subsections', () => {
   expect(section.querySelector('.od-rail__icon')).toBeNull()
 })
 
-test('rail settings is landing-only (hub owns the module list)', () => {
-  const { container } = renderRail({ at: '/admin/settings' })
+test('rail settings unfolds into four icon sub-sections; children are not in the rail', () => {
+  const { container } = renderRail({ at: '/admin/themes' })
 
-  // No fold — Settings is a single destination; module rows live on the hub.
-  expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
-  const settings = screen.getByRole('link', { name: 'Settings' })
-  expect(settings).toHaveAttribute('href', '/admin/settings')
-  expect(settings).toHaveClass('is-active')
-  expect(container.querySelector('a[href="/admin/new_server_settings"]')).toBeNull()
-  expect(screen.queryByRole('link', { name: 'All settings' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-expanded', 'true')
+  const titles = ['Library & matching', 'Play & emulation', 'Presentation', 'Extend']
+  for (const title of titles) {
+    const link = screen.getByRole('link', { name: title })
+    expect(link.querySelector('.od-rail__icon svg')).not.toBeNull()
+  }
+  // Themes lives in Presentation, so that row is the active one.
+  expect(screen.getByRole('link', { name: 'Presentation' })).toHaveClass('is-active')
+  // Children are top-bar buttons, never rail rows.
+  expect(container.querySelector('a[href="/admin/scan_match"]')).toBeNull()
+  expect(container.querySelector('a[href="/admin/art_studio"]')).toBeNull()
 })
 
 test('rail libraries is a hub of sibling pages', () => {
@@ -252,21 +256,32 @@ test('rail Scan is active for both auto and manual', () => {
   ).toEqual(['Scan'])
 })
 
-test('rail integrations is landing-only (hub owns provider links)', () => {
-  const { container } = renderRail({ at: '/admin/integrations' })
+test('rail integrations is built like settings: icon sub-sections', () => {
+  const { container } = renderRail({ at: '/admin/smtp_settings' })
 
-  expect(screen.queryByRole('button', { name: 'Integrations' })).toBeNull()
-  const integrations = screen.getByRole('link', { name: 'Integrations' })
-  expect(integrations).toHaveAttribute('href', '/admin/integrations')
-  expect(integrations).toHaveClass('is-active')
-  expect(container.querySelector('a[href="/admin/smtp_settings"]')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Integrations' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  for (const title of [
+    'Metadata & art',
+    'Stores & ownership',
+    'Messaging & identity',
+    'Acquisition',
+  ]) {
+    expect(
+      screen.getByRole('link', { name: title }).querySelector('.od-rail__icon svg'),
+    ).not.toBeNull()
+  }
+  expect(screen.getByRole('link', { name: 'Messaging & identity' })).toHaveClass('is-active')
+  expect(container.querySelector('a[href="/admin/chat_emoji"]')).toBeNull()
 })
 
-test('rail subsection titles have no bullet markers', () => {
+test('rail sub-links carry an icon like the member rail', () => {
   const { container } = renderRail({ at: '/admin/ops' })
   const sub = container.querySelector('.od-rail__link--sub')
   expect(sub).toBeTruthy()
-  expect(sub!.querySelector('.od-rail__icon')).toBeNull()
+  expect(sub!.querySelector('.od-rail__icon svg')).not.toBeNull()
 })
 
 test('the ways out of admin survive, and live in exactly one place', () => {

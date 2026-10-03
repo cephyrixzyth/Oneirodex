@@ -121,19 +121,20 @@ test('integrations hub shows grouped cards', async () => {
       </MemoryRouter>,
     )
     expect(screen.getByRole('heading', { name: 'Integrations' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'IGDB' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Artwork & secondary metadata' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'SMTP' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'OIDC' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'LiveKit' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Acquire / Arr' })).toBeInTheDocument()
+    for (const name of [
+      'Metadata & art',
+      'Stores & ownership',
+      'Messaging & identity',
+      'Acquisition',
+    ]) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
     // "Export packs" left Integrations with GT-B8 — it writes a file for another
     // emulator frontend to read, which is emulation, not a service we talk to.
     expect(screen.queryByRole('heading', { name: 'Export packs' })).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Support' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'IGDB settings' })).toHaveAttribute(
+    // Support inbox lives under Users now; Remote play under Settings.
+    expect(screen.queryByRole('link', { name: 'Support inbox' })).toBeNull()
+    expect(screen.getByRole('link', { name: /^IGDB/ })).toHaveAttribute(
       'href',
       '/admin/igdb_settings',
     )
@@ -170,8 +171,13 @@ test('renders admin brand and primary nav', () => {
   expect(screen.getByText('Oneirodex Admin')).toBeInTheDocument()
   const nav = screen.getByRole('navigation', { name: 'Admin' })
   expect(nav.querySelector('a[href="/admin/dashboard"]')).toHaveTextContent('Dashboard')
-  // Settings is landing-only (hub owns module rows).
-  expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin/settings')
+  // Settings unfolds into four icon sub-sections; their children live in the top bar.
+  const settingsToggle = screen.getByRole('button', { name: 'Settings' })
+  expect(settingsToggle).toHaveClass('od-rail__group-toggle')
+  fireEvent.click(settingsToggle)
+  for (const title of ['Library & matching', 'Play & emulation', 'Presentation', 'Extend']) {
+    expect(screen.getByRole('link', { name: title })).toBeInTheDocument()
+  }
 
   // Libraries & scans is a hub of sibling pages again.
   const librariesToggle = screen.getByRole('button', { name: 'Libraries & scans' })

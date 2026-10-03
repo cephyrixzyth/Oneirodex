@@ -5,6 +5,7 @@ import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
+import { Page } from '../components/Page'
 
 interface Announcement {
   id: string
@@ -63,13 +64,15 @@ export function AnnouncementsPage() {
   }
 
   return (
-    <div className="od-admin-page">
-      <h1>Announcements</h1>
-      <p className="od-admin-lede">
-        Publish blasts that appear on the member News page alongside gaming headlines. Save as draft
-        to keep an unpublished note in this list.
-      </p>
-
+    <Page
+      title="Announcements"
+      lede={
+        <>
+          Publish blasts that appear on the member News page alongside gaming headlines. Save as
+          draft to keep an unpublished note in this list.
+        </>
+      }
+    >
       <PageStatus error={error} />
 
       <form className="od-admin-panel" onSubmit={handleSubmit}>
@@ -123,6 +126,6 @@ export function AnnouncementsPage() {
           ))}
         </ul>
       ) : null}
-    </div>
+    </Page>
   )
 }

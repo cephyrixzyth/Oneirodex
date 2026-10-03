@@ -3,10 +3,11 @@ import { describe, expect, test } from 'vitest'
 import {
   ADMIN_NAV,
   HUB_LINKS,
-  INTEGRATION_CARDS,
+  INTEGRATION_SECTIONS,
   RAIL_SECTION_MODE,
   SETTINGS_GROUPS,
   railDestinations,
+  railSubSections,
   resolveNavSection,
 } from './navConfig'
 
@@ -39,11 +40,8 @@ function collectHrefs() {
     }
   }
 
-  for (const card of INTEGRATION_CARDS) {
-    if (card.href) found.push(card.href)
-    for (const link of card.links || []) {
-      if (link.href) found.push(link.href)
-    }
+  for (const group of INTEGRATION_SECTIONS) {
+    for (const item of group.items) found.push(item.to)
   }
 
   for (const links of Object.values(HUB_LINKS)) {
@@ -56,7 +54,12 @@ function collectHrefs() {
 }
 
 describe('integrations deep links', () => {
-  const cardIds = new Set(INTEGRATION_CARDS.map((card) => card.id))
+  // The hub renders an element id for every child that points at a fragment.
+  const cardIds = new Set(
+    INTEGRATION_SECTIONS.flatMap((group) => group.items)
+      .map((item) => item.to.split('#')[1])
+      .filter(Boolean),
+  )
   const anchors = collectHrefs()
     .filter((href) => href.startsWith(INTEGRATIONS))
     .map((href) => href.slice(INTEGRATIONS.length))
@@ -67,7 +70,7 @@ describe('integrations deep links', () => {
     expect(anchors.length).toBeGreaterThan(0)
   })
 
-  test('every anchor names a real card', () => {
+  test('every anchor names a row the hub renders', () => {
     const orphans = [...new Set(anchors)].filter((id) => !cardIds.has(id))
 
     expect(orphans).toEqual([])
@@ -118,13 +121,16 @@ describe('section ownership', () => {
 })
 
 describe('rail destinations vs hub catalogue', () => {
-  test('settings and integrations are landing-only; libraries is a hub again', () => {
+  test('settings and integrations unfold into sub-sections; libraries is a hub', () => {
     expect(RAIL_SECTION_MODE.libraries).toBe('hub')
-    expect(RAIL_SECTION_MODE.settings).toBe('landing')
-    expect(RAIL_SECTION_MODE.integrations).toBe('landing')
+    expect(RAIL_SECTION_MODE.settings).toBe('groups')
+    expect(RAIL_SECTION_MODE.integrations).toBe('groups')
     expect(railDestinations('libraries').length).toBeGreaterThan(0)
     expect(railDestinations('settings')).toEqual([])
     expect(railDestinations('integrations')).toEqual([])
+    expect(railSubSections('settings')).toHaveLength(4)
+    expect(railSubSections('integrations')).toHaveLength(4)
+    expect(railSubSections('libraries')).toEqual([])
   })
 
   test('hub catalogue owns library sibling pages for section highlight', () => {

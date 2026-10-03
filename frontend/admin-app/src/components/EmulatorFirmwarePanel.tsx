@@ -172,11 +172,11 @@ export function EmulatorFirmwarePanel() {
           : null
 
   return (
-    <section className="od-adminpage-panel" aria-labelledby="od-firmware-heading">
+    <section className="od-admin-panel" aria-labelledby="od-firmware-heading">
       <h2 id="od-firmware-heading" className="od-section-head__title">
         Firmware / BIOS
       </h2>
-      <p className="od-adminpage-lede">
+      <p className="od-admin-lede">
         Some cores need system files you legally own. Upload one file, scan a folder of dumps you
         already have, or mount them at <code>EMULATOR_BIOS_PATH</code>. Oneirodex never downloads
         BIOS for you.
@@ -212,13 +212,13 @@ export function EmulatorFirmwarePanel() {
       ) : null}
 
       <h3 className="od-section-head__title">Install from a collection</h3>
-      <p className="od-adminpage-lede">
+      <p className="od-admin-lede">
         Point at a folder on this server. Subfolders are searched too. Matching names are offered
         for every system the service supports; if two dumps share a filename, pick which one that
         system should use. Cores read one file per name from the firmware root, so a shared filename
         is one dump for every system that uses it.
       </p>
-      <label className="od-adminpage-lede" htmlFor="od-firmware-source">
+      <label className="od-admin-lede" htmlFor="od-firmware-source">
         Firmware collection folder
       </label>
       <input

@@ -3,6 +3,7 @@ import { Button, confirmAction } from '@oneirodex/ui'
 import { PageStatus } from '@oneirodex/ui'
 import { deleteJson, getJson, postJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
+import { Page } from '../components/Page'
 
 interface QualityProfile {
   id: string
@@ -251,24 +252,25 @@ export function QualityProfilesPage() {
 
   if (error && profiles.length === 0) {
     return (
-      <div className="od-admin-page">
-        <h1>Quality Profiles</h1>
+      <Page title="Quality Profiles">
         <PageStatus error={error} />
         <a className="od-btn" href="/admin/settings">
           Back to settings
         </a>
-      </div>
+      </Page>
     )
   }
 
   return (
-    <div className="od-admin-page">
-      <h1>Quality Profiles</h1>
-      <p className="od-admin-lede">
-        Preferred / blocked release groups, naming patterns, excluded terms, and size bands. The
-        active profile scores Arr search hits and extends scan name-clean filters.
-      </p>
-
+    <Page
+      title="Quality Profiles"
+      lede={
+        <>
+          Preferred / blocked release groups, naming patterns, excluded terms, and size bands. The
+          active profile scores Arr search hits and extends scan name-clean filters.
+        </>
+      }
+    >
       <div className="od-admin-panel od-admin-panel--stacked-below">
         <div className="od-admin-actions-row od-admin-actions-row--end od-admin-actions-row--flush">
           <label className="od-admin-field od-admin-field--grow od-admin-field--flush">
@@ -429,6 +431,6 @@ export function QualityProfilesPage() {
           </p>
         ) : null}
       </div>
-    </div>
+    </Page>
   )
 }

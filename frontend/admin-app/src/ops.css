@@ -1101,3 +1101,23 @@ body.od-shell-host .od-admin-main:has(.od-dash),
     pointer-events: auto;
   }
 }
+
+/* --- Settings / Integrations sub-section buttons in the top bar ----------- */
+
+.od-cbtn--section {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.od-cbtn--section.is-active {
+  background: var(--od-accent);
+  color: var(--od-bg);
+  font-weight: 600;
+}
+
+.od-settings-group__title .od-icon,
+.od-settings-row__title .od-icon {
+  vertical-align: -0.2em;
+  margin-right: 0.15rem;
+}

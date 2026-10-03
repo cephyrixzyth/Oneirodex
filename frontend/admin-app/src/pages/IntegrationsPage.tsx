@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
-import { INTEGRATION_CARDS } from '../components/navConfig'
+import { INTEGRATION_SECTIONS } from '../components/navConfig'
+import { RailIcon } from '../components/railIcons'
 
 const INVENTORY_CATEGORY_ORDER = [
   'metadata',
@@ -94,35 +95,27 @@ export function IntegrationsPage() {
   return (
     <Page
       title="Integrations"
-      lede="All providers in one place — metadata, artwork, mail, SSO, voice, acquire, ownership, and export packs. Classic Jinja forms stay behind these deep links."
+      lede="Services Oneirodex talks to — metadata and art, store ownership, mail, SSO and voice, and acquisition. Same layout as Settings."
     >
-      {/* Rows, not a card grid (UX-C11): providers carry wildly different link
-          counts, so an even grid left tall gaps beside the short ones. Same
-          dense treatment as Settings / Libraries. */}
-      <div className="od-admin-panel od-provider-list">
-        {INTEGRATION_CARDS.map((card) => (
-          // id={card.id} is the anchor the nav actually links to. Every
-          // `/admin/integrations#<id>` link in navConfig was dead because the
-          // only id on the page was the heading's `int-<id>`, which nothing
-          // links to — so all nine deep links landed at the top of the page
-          // and looked like they did nothing (W27-A8). The heading keeps its
-          // prefixed id for aria-labelledby, which needs to stay unique.
-          <section
-            key={card.id}
-            id={card.id}
-            className="od-provider-row"
-            aria-labelledby={`int-${card.id}`}
-          >
-            <div className="od-provider-row__head">
-              <h2 id={`int-${card.id}`} className="od-provider-row__title">
-                <a href={card.href}>{card.title}</a>
-              </h2>
-              <p className="od-provider-row__blurb">{card.blurb}</p>
-            </div>
-            <ul className="od-provider-row__links">
-              {(card.links || []).map((link) => (
-                <li key={`${link.href}-${link.label}`}>
-                  <a href={link.href}>{link.label}</a>
+      {/* Same sheet as Settings: grouped rows, one icon per row. The row id is
+          the fragment its deep link names (`/admin/integrations#oidc`) — the
+          anchors the nav links to must exist or the click lands at the top and
+          looks like it did nothing (W27-A8). */}
+      <div className="od-admin-panel od-settings">
+        {INTEGRATION_SECTIONS.map((group) => (
+          <section key={group.id} className="od-settings-group">
+            <h2 className="od-settings-group__title">
+              <RailIcon name={group.icon} size={16} /> {group.title}
+            </h2>
+            <ul className="od-settings-list">
+              {group.items.map((item) => (
+                <li key={item.to} id={item.to.split('#')[1]}>
+                  <a className="od-settings-row" href={item.to}>
+                    <span className="od-settings-row__title">
+                      <RailIcon name={item.icon} size={16} /> {item.title}
+                    </span>
+                    <span className="od-settings-row__blurb">{item.blurb}</span>
+                  </a>
                 </li>
               ))}
             </ul>
@@ -139,10 +132,7 @@ export function IntegrationsPage() {
       {inventory && inventory.length > 0 ? (
         <div className="od-admin-panel od-admin-inventory od-admin-panel--stacked">
           <h2>Provider inventory</h2>
-          <p>
-            Live status from <code>GET /api/admin/integrations/inventory</code> — every provider
-            with a deep link (not IGDB-only).
-          </p>
+          <p>Live status of every provider, with a link to its settings.</p>
           {inventoryGroups.map((group) => (
             <div key={group.id} className="od-admin-inventory__group">
               <h3 className="od-admin-inventory__category">{group.label}</h3>
@@ -167,24 +157,15 @@ export function IntegrationsPage() {
 
       {inventory && inventory.length === 0 && !inventoryError ? (
         <div className="od-admin-panel od-admin-panel--stacked">
-          <p>Provider inventory returned no rows — use the cards above.</p>
+          <p>Provider inventory returned no rows — use the list above.</p>
         </div>
       ) : null}
 
       {inventoryError ? (
         <div className="od-admin-panel od-admin-panel--stacked">
-          <PageStatus emptyMessage="Provider inventory unavailable — use the cards above." />
+          <PageStatus emptyMessage="Provider inventory unavailable — use the list above." />
         </div>
       ) : null}
-
-      <div className="od-admin-panel od-admin-panel--stacked">
-        <p>
-          Full Integrations tabs (SMTP · IGDB · community · artwork · ownership · OIDC · indexers)
-          still render when Jinja content is present. This React hub is the fallback chrome when the
-          classic body is empty. Member Systems also lists export packs under a secondary{' '}
-          <strong>Export packs</strong> section (not buried in the page intro).
-        </p>
-      </div>
     </Page>
   )
 }

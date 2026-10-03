@@ -140,4 +140,4 @@ Companion: [desktop-companion.md](desktop-companion.md).
 
 ## Sample free ROMs (legal only)
 
-For smoke-testing browser/companion play without commercial dumps, operators can fetch author-licensed homebrew and test ROMs via `python scripts/fetch-free-roms.py` (manifest + notes in [samples/free-roms/](../../samples/free-roms/README.md)). Binaries are gitignored; never commit pirated ROMs.
+For smoke-testing browser/companion play without commercial dumps, operators can fetch author-licensed homebrew and test ROMs via `python scripts/fetch-free-roms.py` (manifest + notes in [samples/free-roms/](../../samples/free-roms/README.md)). The manifest supports zip archives (`archive: zip`, `member:`) and `sha256:` checks, and covers NES, SNES, Game Boy, Game Boy Color, GBA, Genesis, Atari 2600, N64 (Pong Oman), Atari Lynx and Virtual Boy. Binaries are gitignored; never commit pirated ROMs.

@@ -203,6 +203,9 @@ No — claim on the store, then sync Ownership for badges. Steam / GOG / Epic / 
 **How do I keep GOG, Epic, or Amazon ownership current?**  
 **More → Ownership.** Save a GOG refresh token, Epic device-auth JSON (Heroic / Legendary), or Amazon Nile/Heroic token JSON, then **Sync**. Same idea as Steam Web API. Tokens stay on your server; they are not shown again after save. CSV import still works if you do not want live sync.
 
+**Can I bring in a library from another launcher?**  
+Yes. On **More → Ownership**, import an export from Playnite, Heroic, Lutris or GOG Galaxy (or a plain CSV). Oneirodex records the titles as owned, never links one on a name alone (uncertain ones wait in **Review matches**), and never downloads anything. **Sync all stores** refreshes every linked store at once.
+
 **Can I see what I own on Xbox or PlayStation?**
 Yes, as a register only. **More → Ownership** has Xbox and PlayStation Network cards: import a CSV of title ids (or id,name) any time. Live sync from the accounts themselves uses *unofficial* community clients and is **off unless your server operator opts in** (`ENABLE_UNOFFICIAL_STORE_SYNC`) and installs the optional package — the Sync button tells you which part is missing. When it runs it records ids and names, nothing else: Oneirodex never downloads a console title, and a rejected token just asks for a fresh one. Nintendo remains CSV-only.
 

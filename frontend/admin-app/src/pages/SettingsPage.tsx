@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { SETTINGS_GROUPS } from '../components/navConfig'
+import { RailIcon } from '../components/railIcons'
 
 interface ModuleStatusEntry {
   on?: boolean
@@ -49,12 +50,16 @@ export function SettingsPage() {
       <div className="od-admin-panel od-settings">
         {SETTINGS_GROUPS.map((group) => (
           <section key={group.id} className="od-settings-group">
-            <h2 className="od-settings-group__title">{group.title}</h2>
+            <h2 className="od-settings-group__title">
+              <RailIcon name={group.icon} size={16} /> {group.title}
+            </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
                 <li key={item.to}>
                   <a className="od-settings-row" href={item.to}>
-                    <span className="od-settings-row__title">{item.title}</span>
+                    <span className="od-settings-row__title">
+                      <RailIcon name={item.icon} size={16} /> {item.title}
+                    </span>
                     {item.statusKey ? (
                       <ModuleBadge status={moduleStatus?.[item.statusKey]} />
                     ) : null}

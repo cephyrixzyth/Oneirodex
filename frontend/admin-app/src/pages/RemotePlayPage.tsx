@@ -5,6 +5,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { showToast } from '../utils/toast'
+import { Page } from '../components/Page'
 
 interface RemotePlayForm {
   enabled: boolean
@@ -102,12 +103,15 @@ export function RemotePlayPage() {
   }
 
   return (
-    <div className="od-admin-page">
-      <h1>Remote play</h1>
-      <p className="od-admin-lede">
-        Register a BYO Sunshine or Wolf host. Oneirodex does not bundle Wolf/GOW — members use
-        Moonlight clients with the hints you set.
-      </p>
+    <Page
+      title="Remote play"
+      lede={
+        <>
+          Register a BYO Sunshine or Wolf host. Oneirodex does not bundle Wolf/GOW — members use
+          Moonlight clients with the hints you set.
+        </>
+      }
+    >
       {loading ? (
         <PageStatus loading loadingMessage="Loading remote play settings…" />
       ) : (
@@ -196,6 +200,6 @@ export function RemotePlayPage() {
           {message ? <p role="status">{message}</p> : null}
         </form>
       )}
-    </div>
+    </Page>
   )
 }

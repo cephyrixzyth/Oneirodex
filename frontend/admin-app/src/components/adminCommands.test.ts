@@ -6,7 +6,7 @@ import {
   scoreCommand,
   type AdminCommand,
 } from './adminCommands'
-import { ADMIN_NAV, HUB_LINKS, INTEGRATION_CARDS, SETTINGS_GROUPS } from './navConfig'
+import { ADMIN_NAV, HUB_LINKS, INTEGRATION_SECTIONS, SETTINGS_GROUPS } from './navConfig'
 
 /**
  * The palette's value depends entirely on being complete (GT-A7).
@@ -34,11 +34,10 @@ describe('buildAdminCommands', () => {
     }
   })
 
-  it('indexes every integration card and its links', () => {
-    for (const card of INTEGRATION_CARDS) {
-      expect(hrefs.has(card.href)).toBe(true)
-      for (const link of card.links || []) {
-        expect(hrefs.has(link.href)).toBe(true)
+  it('indexes every integration destination', () => {
+    for (const group of INTEGRATION_SECTIONS) {
+      for (const item of group.items) {
+        expect(hrefs.has(item.to)).toBe(true)
       }
     }
   })

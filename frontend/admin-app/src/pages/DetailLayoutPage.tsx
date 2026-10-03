@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
+import { Page } from '../components/Page'
 
 /**
  * Install-wide game-details section order and visibility (`/api/layouts/detail`).
@@ -76,10 +77,10 @@ export function DetailLayoutPage() {
   }
 
   return (
-    <div className="od-admin-page">
-      <h1>Detail layout</h1>
-      <p className="od-admin-lede">Reorder and show/hide sections on the game details page.</p>
-
+    <Page
+      title="Detail layout"
+      lede={<>Reorder and show/hide sections on the game details page.</>}
+    >
       <PageStatus loading={loading} error={loadError} onRetry={() => setReloadKey((k) => k + 1)}>
         {/* A polite live region without a status role: a transient "Saved" / "Reset"
             line, the shape QualityProfilesPage uses. PageStatus owns loading / error. */}
@@ -141,6 +142,6 @@ export function DetailLayoutPage() {
           </Button>
         </div>
       </PageStatus>
-    </div>
+    </Page>
   )
 }

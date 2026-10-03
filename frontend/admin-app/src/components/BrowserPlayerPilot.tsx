@@ -130,11 +130,11 @@ export function BrowserPlayerPilot() {
   const emulatorjsInstalled = available.includes('emulatorjs')
 
   return (
-    <section className="od-adminpage-panel" aria-labelledby="od-browser-player-heading">
+    <section className="od-admin-panel" aria-labelledby="od-browser-player-heading">
       <h2 id="od-browser-player-heading" className="od-section-head__title">
         Browser play engine
       </h2>
-      <p className="od-adminpage-lede">
+      <p className="od-admin-lede">
         WebRetro ships with the image. EmulatorJS is a second shell with its own UI and cores; it is
         offered once an EmulatorJS release is in the server&rsquo;s data bind (
         <code>scripts/fetch-emulatorjs.sh</code>). Either way ROMs and cores stay on this box, and a

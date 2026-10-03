@@ -38,7 +38,6 @@ describe('SettingsPage module badges', () => {
 
   test('renders on/off badges against the modules that report status', async () => {
     stubModuleStatus({
-      arr: { on: true, label: 'On' },
       ai: { on: false, label: 'Off' },
       storage: { on: true, label: 'On', detail: 'Apply off' },
     })
@@ -50,13 +49,13 @@ describe('SettingsPage module badges', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getAllByTestId('settings-module-badge')).toHaveLength(3)
+      expect(screen.getAllByTestId('settings-module-badge')).toHaveLength(2)
     })
 
-    // Only the three modules with a statusKey are badged — the rest of the hub
+    // Only the modules with a statusKey are badged — the rest of the hub
     // is plain links, which is why the count is asserted exactly.
     const badges = screen.getAllByTestId('settings-module-badge')
-    expect(badges.filter((b) => b.className.includes('settings-shell-badge--on'))).toHaveLength(2)
+    expect(badges.filter((b) => b.className.includes('settings-shell-badge--on'))).toHaveLength(1)
     expect(badges.filter((b) => b.className.includes('settings-shell-badge--off'))).toHaveLength(1)
     // `detail` is how the hub says "helpers on, apply still off".
     expect(screen.getByText(/Apply off/)).toBeInTheDocument()
@@ -79,7 +78,7 @@ describe('SettingsPage module badges', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Arr module')).toBeInTheDocument()
+    expect(await screen.findByText('Remote play')).toBeInTheDocument()
     expect(screen.getByText('Storage')).toBeInTheDocument()
     expect(screen.queryByTestId('settings-module-badge')).not.toBeInTheDocument()
   })

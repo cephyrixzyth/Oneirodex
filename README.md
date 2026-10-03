@@ -237,6 +237,8 @@ docker compose up -d --build
 
 Open **http://localhost:5006** — Postgres is the `db` service; games mount at `/storage`.
 
+**One container, no separate database:** leave `DATABASE_URL` unset and the image starts its own PostgreSQL 17 (127.0.0.1 only) inside `/config`. Use `docker-compose.single.yml`, or the Unraid Community Apps template in `unraid/oneirodex.xml` — see [unraid-community-apps.md](docs/runbooks/unraid-community-apps.md).
+
 | Deploy | Guide |
 |---|---|
 | 🏠 Unraid / NAS | [NAS-DEPLOY.md](NAS-DEPLOY.md) · [unraid-deploy.md](docs/runbooks/unraid-deploy.md) |
@@ -410,7 +412,7 @@ Full lists: [`.env.example`](.env.example) · [`.env.docker.example`](.env.docke
 | Ollama | AI assist / triage (`ENABLE_AI_ASSIST`), reached on your own host | 11434 |
 | Prometheus / Grafana | Monitoring, commented out in `docker-compose.yml` | 9090 / 3000 |
 
-Oneirodex is a **self-hosted game library**, not a notes, file-sync or automation tool. The chat and voice channels are built into the app and are not a Discord replacement. There is no one-click template: deploy with Docker Compose (the image builds locally) or the [Unraid / NAS runbooks](docs/runbooks/unraid-deploy.md). Resource needs depend mostly on which optional modules you enable and the size of your library, so no fixed sizing is published.
+Oneirodex is a **self-hosted game library**, not a notes, file-sync or automation tool. The chat and voice channels are built into the app and are not a Discord replacement. Deploy with Docker Compose, the single-container image (embedded database, Unraid Community Apps template), or the [Unraid / NAS runbooks](docs/runbooks/unraid-deploy.md). Resource needs depend mostly on which optional modules you enable and the size of your library, so no fixed sizing is published.
 
 <br/>
 
