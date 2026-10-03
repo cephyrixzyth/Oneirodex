@@ -8,7 +8,7 @@ How Oneirodex is tested against platforms and devices we do not own, and what ea
 |---|---|---|---|
 | 1 | Every platform, no boot: play mode, core, firmware, free ROM | `scripts/vdevice/platform_table.py`, `tests/test_platform_capability_table.py` | Done |
 | 2 | Real browser boot of free-ROM platforms | `scripts/vdevice/boot_matrix.py` | **Blocked here**: the WASM cores come from `cdn.jsdelivr.net`, which this environment's network policy denies. Runs wherever that host is reachable. |
-| 3 | Virtual devices (stubs and emulated contexts) | `scripts/vdevice/` | In progress |
+| 3 | Virtual devices (stubs and emulated contexts) | `tests/test_vdevice_fake_*.py`, `scripts/vdevice/` | In progress: fake desktop companion done |
 | 4 | Whole-app UI sweep, admin and member, desktop and phone | `scripts/vdevice/ui_sweep.py` | Done: 50 routes x 2 viewports |
 
 ## Findings so far
@@ -16,6 +16,7 @@ How Oneirodex is tested against platforms and devices we do not own, and what ea
 | Found by | Finding | Status |
 |---|---|---|
 | Layer 4 | `GET /admin/api/ops/system` returned 503 on every install with at least one logged event (`get_log_info()['latest']` is an ORM row, not JSON). Admin → Ops lost its System panel. | Fixed, regression test `tests/test_ops_system_snapshot.py` |
+| Layer 3 (fake companion) | `POST /api/client/commands` returned 500 for every install/update/uninstall queued from the web: a local `select = data.get('select')` shadowed SQLAlchemy's `select`. | Fixed, `tests/test_vdevice_fake_companion.py` |
 | Layer 4 (phone) | `/admin/arr` (+155px) and `/admin/reference_sets` (+61px) scrolled sideways: the legacy admin content shrank to fit-content instead of filling its grid track. | Fixed in `od-shell.css`; applies after *Reset Themes* copies the theme |
 
 Run the sweep with `python scripts/serve_capture.py` in one shell and `python scripts/vdevice/ui_sweep.py` in another (`--viewports desktop`, `--no-screenshots` available).
