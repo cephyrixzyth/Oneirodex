@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-10-03
+
+### Added
+- **Unraid Community Apps profile.** `ca_profile.xml` at the repository root (a non-empty `<Profile>` with repository overview and support information, plus icon and web page), with a test that keeps it and the container template valid.
+
 ### Changed
 - **Desktop releases.** `desktop-build.yml` gained a `release` job: a `v*` tag push, or a manual run with `release_tag`, attaches all six installers (full + thin × Windows, macOS, Linux) to that GitHub release. Until now the installers were only workflow artifacts and no workflow touched a release.
 - **Admin navigation.** Settings and Integrations unfold in the left rail into four icon sub-sections each; the pages inside a sub-section are icon buttons in the top bar. Every admin rail sub-link now has an icon (24 new shared glyphs). The Integrations hub is rebuilt as the same grouped rows as Settings, Arr moved to Integrations → Acquisition, the Support inbox lives only under Users, and the command palette is built from the same lists. Nine hand-built admin pages now use the shared `Page` shell and one panel class. See [admin/navigation.md](docs/admin/navigation.md).
@@ -983,7 +988,9 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 - Hardlink and AI apply remain feature-flagged and path-sandboxed
 - `SECRET_KEY` required; container refuses the placeholder
 
-[Unreleased]: https://github.com/chrisjrovira/oneirodex/compare/v1.0.0-beta...HEAD
+[Unreleased]: https://github.com/chrisjrovira/oneirodex/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/chrisjrovira/oneirodex/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/chrisjrovira/oneirodex/releases/tag/v1.0.0
 [1.0.0-beta]: https://github.com/chrisjrovira/oneirodex/releases/tag/v1.0.0-beta
 [0.1.0]: https://github.com/chrisjrovira/oneirodex/releases/tag/v0.1.0
 

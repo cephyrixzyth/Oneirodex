@@ -29,10 +29,10 @@
 # P3b (ADR 0003): new installs default to oneirodex-* names. Live Unraid stacks
 # that still run oneirodex-app / oneirodex-db should pin those names in .env
 # until the scan FIFO is idle, then drop the pins so Compose recreates:
-#   APP_IMAGE=oneirodex:1.0.0
+#   APP_IMAGE=oneirodex:1.0.1
 #   APP_CONTAINER_NAME=oneirodex-app
 #   DB_CONTAINER_NAME=oneirodex-db
-# Preferred Hub image once published: chrisjrovira/oneirodex:1.0.0
+# Preferred Hub image once published: chrisjrovira/oneirodex:1.0.1
 # (chrisjrovira/oneirodex remains accepted). Postgres *database* name stays
 # POSTGRES_DB (default oneirodex) so existing volumes keep their catalog.
 # Sidecar profile container names (livekit / clamav / …) are unchanged.
@@ -49,7 +49,7 @@ services:
       args:
         ONEIRODEX_BUILD_SHA: ${ONEIRODEX_BUILD_SHA:-}
         ONEIRODEX_BUILT_AT: ${ONEIRODEX_BUILT_AT:-}
-    image: ${APP_IMAGE:-oneirodex:1.0.0}
+    image: ${APP_IMAGE:-oneirodex:1.0.1}
     container_name: ${APP_CONTAINER_NAME:-oneirodex-app}
     restart: unless-stopped
     ports:
