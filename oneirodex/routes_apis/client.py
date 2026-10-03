@@ -127,7 +127,7 @@ def client_commands_post():
     kind = data.get('kind')
     version_uuid = (data.get('version_uuid') or '').strip() or None
     open_path = (data.get('path') or '').strip() or None
-    select = data.get('select')
+    select_in_folder = data.get('select')
 
     if action in WRITE_DOWNLOAD_ACTIONS and not user_has_scope('write:download'):
         return api_error(
@@ -150,7 +150,7 @@ def client_commands_post():
                 game_uuid,
                 action,
                 path=open_path,
-                select=None if select is None else bool(select),
+                select=None if select_in_folder is None else bool(select_in_folder),
             )
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')

@@ -187,17 +187,13 @@ def test_tile_hover_has_no_accent_glow_and_grows_from_center():
     assert 'grid-template-areas: \'rail main\'' in shell
     assert 'grid-area: main' in _rule(shell, '.od-topbar')
     assert 'z-index: 30' in _rule(shell, '.od-topbar')
-    # Top bar stays solid; hover lifts the scroll pane so tiles overlap it.
+    # Top bar stays solid at a constant z-index. Hover must not flip the scroll
+    # pane above it: the flip toggled between tiles and made the bar blink.
     assert '.od-shell:has(.game-card:hover) .od-topbar' not in shell
     assert 'opacity: 0' not in _rule(shell, '.od-topbar')
     assert 'transition: opacity' not in _rule(shell, '.od-topbar')
-    assert '.od-shell:has(.game-card:hover) .od-shell__main' in shell
-    hover_main = shell.split('.od-shell:has(.game-card:hover) .od-shell__main', 1)[1]
-    assert 'z-index: 40' in hover_main.split('}', 1)[0] or 'z-index: 40' in shell
-    # Nested :has() invalidates the whole selector list in Chromium — use a
-    # descendant focus check instead.
-    assert '.od-shell:has(.game-card:has(:focus-visible))' not in shell
-    assert '.od-shell:has(.game-card :focus-visible) .od-shell__main' in shell
+    assert '.od-shell:has(.game-card:hover) .od-shell__main' not in shell
+    assert '.od-shell:has(.game-card :focus-visible) .od-shell__main' not in shell
     assert 'padding-inline: max(var(--od-gutter), var(--od-tile-hover-bleed-x))' not in shell
     assert 'padding-inline: calc(var(--od-gutter) + var(--od-tile-hover-pad-x))' in shell
     assert 'padding: calc(var(--od-topbar-h) + var(--od-stack)) var(--od-gutter)' in shell
@@ -248,3 +244,12 @@ def test_discover_hbar_uses_one_gap_token_for_every_row():
     assert 'news' not in hbar.lower()
     assert '.od-shelf--news' not in shelf
     assert 'data-discover-section=news' not in shelf
+
+
+def test_legacy_admin_content_fills_its_grid_track():
+    """Found by the virtual-device sweep: without width:100% the item shrank to
+    fit-content and one unbreakable string widened the page past a phone."""
+    shell = _read('od-shell.css')
+    body = _blocks_for(shell, 'body.od-shell-host > #admin-legacy-content')
+    assert 'width: 100%' in body
+    assert 'box-sizing: border-box' in body

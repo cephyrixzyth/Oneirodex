@@ -120,9 +120,10 @@ def test_admin_chrome_stacks_above_era_atmosphere():
     )
     assert topbar, 'topbar overlay stacking rule with z-index: 30 is missing'
     assert 'html[data-era] .od-shell:has(.game-card:hover) .od-topbar' not in era
-    assert 'html[data-era] .od-shell:has(.game-card:hover) .od-shell__main' in era
+    # No hover-driven lift of the scroll pane: it flipped across tile gaps and
+    # made the top bar blink (found by scripts/vdevice/hover_stability.py).
+    assert 'html[data-era] .od-shell:has(.game-card:hover) .od-shell__main' not in era
     assert 'html[data-era] .od-shell:has(.game-card:has(:focus-visible))' not in era
-    assert 'z-index: 40' in era
     assert 'opacity: 0' not in topbar.group(0)
     assert 'transition: opacity' not in era
     for flattened in ('#admin-app-root', '.od-admin-shell'):

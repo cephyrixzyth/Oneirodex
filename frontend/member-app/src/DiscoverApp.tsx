@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useShellConfig, useViewer } from '@oneirodex/ui'
 import { fetchDiscoverSections } from './api/discover'
 import { fetchDiscoverPins, saveDiscoverPins } from './api/discoverPins'
-import { ContextBar } from './chrome/ContextBar'
+import { ContextBar, Popover } from './chrome/ContextBar'
 import { DiscoverShelf, formatEventEnds, rowItems } from './components/DiscoverShelf'
 import { DiscoverRowSettings } from './components/DiscoverRowSettings'
 import { DiscoverSurprise } from './components/DiscoverSurprise'
-import { DiscoverZoneStrip } from './components/DiscoverZoneStrip'
+import { ALL_ZONES, rememberDiscoverZones, useDiscoverZoneViews } from './components/discoverZones'
 import { PageStatus } from './components/PageStatus'
 
 /**
@@ -65,6 +65,7 @@ export function DiscoverApp() {
         if (cancelled) return
         setSections(next.sections)
         setZones(next.zones)
+        rememberDiscoverZones(next.zones)
         setLoading(false)
       })
       .catch((err: any) => {
@@ -111,6 +112,7 @@ export function DiscoverApp() {
         // Hiding the last shelf in a zone removes that zone from the strip, so
         // the strip has to be refreshed with the feed, not just once at mount.
         setZones(next.zones)
+        rememberDiscoverZones(next.zones)
       })
       .catch(() => {
         /* Arrangement already applied locally; a failed refetch is not a rollback. */
@@ -210,6 +212,8 @@ export function DiscoverApp() {
     }))
   }, [known, sections])
 
+  const zoneBar = useDiscoverZoneViews(ALL_ZONES, zones)
+
   if (loading || error) {
     return (
       <PageStatus
@@ -221,27 +225,41 @@ export function DiscoverApp() {
     )
   }
 
-  /* The way back for a hidden row, and the only place pin order can be said.
-     Rendered whenever the server told us what the feed could contain — without
-     that list the panel would be a control that cannot list what it controls. */
-  const bar = settingsRows.length ? (
+  /* One bar for the whole page: zones as the view strip (same control Game
+     Catalog uses), Surprise me as a bar action, and the row settings behind the
+     "N rows" summary when the server told us what the feed could contain. The
+     bar renders even without settings — zones and Surprise me do not depend on
+     them. */
+  const bar = (
     <ContextBar
-      summary={`${visible.length} rows`}
+      {...zoneBar}
+      summary={settingsRows.length ? `${visible.length} rows` : null}
       filterCount={hidden.length}
       filtersOnSummary
       filters={
-        <DiscoverRowSettings
-          rows={settingsRows}
-          pins={pins}
-          hidden={hidden}
-          maxPins={maxPins}
-          onTogglePin={togglePin}
-          onToggleHidden={toggleHidden}
-          onMovePin={movePin}
-        />
+        settingsRows.length ? (
+          <DiscoverRowSettings
+            rows={settingsRows}
+            pins={pins}
+            hidden={hidden}
+            maxPins={maxPins}
+            onTogglePin={togglePin}
+            onToggleHidden={toggleHidden}
+            onMovePin={movePin}
+          />
+        ) : null
+      }
+      actions={
+        <Popover label="Surprise me" chromeless align="end">
+          <DiscoverSurprise
+            isAdmin={isAdmin}
+            showPlayStatus={Boolean(shellConfig.showPlayStatus)}
+            enableDeleteOnDisk={Boolean(shellConfig.enableDeleteOnDisk)}
+          />
+        </Popover>
       }
     />
-  ) : null
+  )
 
   if (!visible.length) {
     return (
@@ -255,12 +273,6 @@ export function DiscoverApp() {
   return (
     <>
       {bar}
-      <DiscoverZoneStrip zones={zones} />
-      <DiscoverSurprise
-        isAdmin={isAdmin}
-        showPlayStatus={Boolean(shellConfig.showPlayStatus)}
-        enableDeleteOnDisk={Boolean(shellConfig.enableDeleteOnDisk)}
-      />
       {visible.map((section: any) => {
         const identifier = String(section.identifier || section.title || 'section')
         return (

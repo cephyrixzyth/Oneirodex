@@ -296,7 +296,7 @@ def test_state_matrix_without_accounts(app, monkeypatch, settings):
     with app.app_context():
         client = _client(app, MEMBER)
         states = {c['provider']: c for c in client.get('/api/ownership/connections').get_json()['connections']}
-        assert len(states) == 14
+        assert len(states) == 18
         assert states['humble']['state'] == 'unavailable' and states['humble']['actions'] == []
         assert states['meta_quest']['state'] == 'import_only' and states['meta_quest']['actions'] == ['import_csv']
         assert states['playnite']['actions'] == ['import_file']

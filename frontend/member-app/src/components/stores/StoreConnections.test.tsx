@@ -729,3 +729,57 @@ test('arrows from a card heading step to its neighbours, and stop at the ends of
   expect(fireEvent.keyDown(gogHeading, { key: 'ArrowUp' })).toBe(true)
   expect(gogHeading).toHaveFocus()
 })
+
+test('Sync all stores runs every linked store and reports a failing one without hiding the rest', async () => {
+  const user = userEvent.setup()
+  const fetchMock = stubFetch((url: string) => {
+    if (url === '/api/ownership/sync-all')
+      return jsonResponse({
+        ok: true,
+        results: [
+          { store: 'gog', status: 'succeeded', reason: null, synced: 4, matched: 1 },
+          { store: 'epic', status: 'failed', reason: 'credential_rejected' },
+          { store: 'steam', status: 'skipped', reason: 'not_connected' },
+        ],
+      })
+    return jsonResponse(
+      connectionsBody([
+        connection('gog', {
+          state: 'connected',
+          account: { connected: true, linked_at: null, updated_at: null },
+          actions: ['sync', 'reconnect', 'import_csv', 'disconnect'],
+          last_sync: job(),
+        }),
+      ]),
+    )
+  })
+  render(<StoreConnections />)
+  await user.click(await screen.findByRole('button', { name: 'Sync all stores' }))
+  expect(
+    await screen.findByText(/Synced 1 of 2 stores \(4 titles\)\. Check epic\./),
+  ).toBeInTheDocument()
+  expect(fetchMock.mock.calls.some((c) => c[0] === '/api/ownership/sync-all')).toBe(true)
+})
+
+test('a launcher export is imported through the launcher route with its own name', async () => {
+  const user = userEvent.setup()
+  const fetchMock = stubFetch((url: string) => {
+    if (url === '/api/imports/launcher')
+      return jsonResponse({ ok: true, launcher: 'heroic', imported: 2, updated: 0 })
+    return jsonResponse(
+      connectionsBody([
+        connection('heroic', { state: 'import_only', live: false, actions: ['import_file'] }),
+      ]),
+    )
+  })
+  render(<StoreConnections />)
+  const heroic = await screen.findByRole('listitem', { name: 'Heroic' })
+  expect(within(heroic).getByText(/Import a Heroic library export/)).toBeInTheDocument()
+  await user.click(within(heroic).getByRole('button', { name: 'Import Heroic export' }))
+  const file = new File(['{"library":[]}'], 'legendary_library.json', { type: 'application/json' })
+  await user.upload(within(heroic).getByLabelText(/Heroic export/), file)
+  await user.click(within(heroic).getByRole('button', { name: 'Import' }))
+  expect(await within(heroic).findByText(/Imported 2 titles/)).toBeInTheDocument()
+  const call = fetchMock.mock.calls.find((c) => c[0] === '/api/imports/launcher')
+  expect((call?.[1].body as FormData).get('launcher')).toBe('heroic')
+})

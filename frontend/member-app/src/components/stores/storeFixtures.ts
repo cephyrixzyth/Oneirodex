@@ -33,6 +33,7 @@ export function connection(
         epic: 'Epic Games',
         meta_quest: 'Meta Quest',
         playnite: 'Playnite',
+        heroic: 'Heroic',
         humble: 'Humble Bundle',
       }[provider] || provider,
     authority: 'unofficial',
