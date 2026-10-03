@@ -198,13 +198,20 @@ update dies with `nvml error: driver not loaded`, set `COMPOSE_FILE=docker-compo
 in the Unraid `.env` (or do not start `--profile artwork`). See
 [container-wont-start.md](container-wont-start.md) 7.
 
-Full stack in one shot:
+Single-container household deployment:
 
 ```bash
-docker compose --profile livekit --profile clamav --profile challenge up -d --build
+docker compose up -d --build
 ```
 
-This household’s Unraid `.env` pins `COMPOSE_FILE=docker-compose.yml` so Compose Manager does not merge `docker-compose.override.yml` (NVIDIA `deploy` on `sdnext` fails the whole stack when the driver is not loaded). Product flags that are on in that file still leave **`ENABLE_AI_AUTO_APPLY=false`** and **`ALLOW_HARDLINK_APPLY=false`**. Artwork stays on the Windows 2080 box (`AI_ARTWORK_URL`), not `--profile artwork`. `ONEIRODEX_LIBRARY_WATCH` stays off on `/mnt/user` FUSE.
+This household’s Unraid `.env` pins `COMPOSE_FILE=docker-compose.single.yml` and points
+`APPDATA_PATH` to a durable appdata directory. PostgreSQL data and generated secrets stay
+under that `/config` bind; the current library, game, WebRetro-core, and EmulatorJS binds
+remain separate. `APP_ENV_FILE` can point at a protected file in appdata with the existing
+app settings. Product flags keep **`ENABLE_AI_AUTO_APPLY=false`** and
+**`ALLOW_HARDLINK_APPLY=false`**. Artwork stays on the Windows 2080 box (`AI_ARTWORK_URL`).
+`ONEIRODEX_LIBRARY_WATCH` stays off on `/mnt/user` FUSE. The old Compose PostgreSQL
+container and named volume remain stopped until the embedded install has been validated.
 
 SSO is **Authentik** already installed via Dockerman (`authentik` / `authentik-worker` on `authentik-net`, UI `http://192.0.2.10:9000`). Oneirodex OAuth slug **`oneirodex`**, redirect `http://192.0.2.10:5006/login/oidc/callback`. Env `OIDC_ENABLED=true` is not enough — also set `global_settings.oidc_enabled` (Admin → Integrations → OIDC, or SQL after rebuild). LAN HTTP cookies: `SESSION_COOKIE_SECURE=false`, `TRUSTED_PROXIES=0`. Walkthrough: [oidc-authentik-unraid.md](oidc-authentik-unraid.md) Appendix A.
 
@@ -212,8 +219,8 @@ SSO is **Authentik** already installed via Dockerman (`authentik` / `authentik-w
 
 ## First boot checklist
 
-1. Set a real `SECRET_KEY` and volume paths in `.env`
-2. Start stack; watch logs until Postgres is ready
+1. Set persistent `/config`, game, and library paths in `.env`
+2. Start the app; watch logs until embedded PostgreSQL is ready
 3. Confirm healthy: `curl -f http://<unraid-ip>:5006/awake` (Compose healthcheck uses this; `/pulse` is liveness-only)
 4. Open `http://<unraid-ip>:5006`
 5. Complete setup wizard (admin → SMTP optional → IGDB)
@@ -223,7 +230,7 @@ SSO is **Authentik** already installed via Dockerman (`authentik` / `authentik-w
 
 ## Factory wipe (still logging in after “wiped volumes”)
 
-**Symptom:** You deleted some Docker volumes / appdata, but the UI still accepts login and shows libraries. The wipe hit a **different** Compose project (or Portainer recreate without `-v`). Users/libraries live in the **live** Postgres named volume (`…_db_data`), not the games RO share.
+**Symptom:** You deleted some Docker volumes / appdata, but the UI still accepts login and shows libraries. The wipe may have hit a **different** Compose project, or the persistent `/config` bind may still contain the embedded database. User data is in PostgreSQL, not the games RO share.
 
 **Do this on the Unraid host (SSH or Unraid terminal):**
 
@@ -236,29 +243,34 @@ docker inspect oneirodex-app --format '{{index .Config.Labels "com.docker.compos
 # Live Unraid until FIFO-idle recreate may still be oneirodex-db / oneirodex-app.
 ```
 
-2. **Identify the volume mounted on live Postgres:**
+2. **Identify the database storage mode:**
 
 ```bash
-docker inspect oneirodex-db --format '{{json .Mounts}}' | python3 -m json.tool
-# Look for Destination=/var/lib/postgresql/data/pgdata → Name= like <project>_db_data
+docker inspect oneirodex-app --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+docker ps -a --format '{{.Names}} {{.Status}}' | grep oneirodex-db || true
+# Embedded mode persists its cluster in the host path mounted at /config.
+# Legacy two-container mode persists it in oneirodex_db_data at the Postgres PGDATA path.
 ```
 
-3. **Confirm the app points at that DB** (Compose default host is `db`, not an external URL):
+3. **Confirm which database is active:**
 
 ```bash
-docker exec oneirodex-app python -c "import os; from sqlalchemy.engine import make_url; u=make_url(os.environ['DATABASE_URL']); print('host:', u.host, 'database:', u.database)"
-# Expect host `db` (or the compose service name). If host is a LAN IP / other container → external DB; wiping compose db_data will not clear login.
+docker exec oneirodex-app sh -c 'printf "embedded_mode=%s\\n" "$ONEIRODEX_EMBEDDED_DB"'
+docker exec oneirodex-app bash -c 'export PGPASSWORD="$(cat /config/secrets/db_password)"; psql -h 127.0.0.1 -p 55432 -U oneirodex -d oneirodex -tAc "select count(*) from users"'
+# For an external Postgres app, inspect DATABASE_URL without printing its credentials.
 ```
 
 4. **Wipe THAT stack** from the project working_dir above (not a sibling `002`/`003`/`004` clone):
 
 ```bash
-cd "$(docker inspect oneirodex-db --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')"
+cd "$(docker inspect oneirodex-app --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')"
 # Capture library bind before down (needed to empty host files):
 LIB=$(docker inspect oneirodex-app --format '{{range .Mounts}}{{if eq .Destination "/app/oneirodex/static/library"}}{{.Source}}{{end}}{{end}}')
 echo "LIBRARY host path: $LIB"
-docker compose down -v
-docker volume ls | grep -i db_data   # live <project>_db_data must be GONE
+# Stop and back up /config before a factory wipe. This path is a bind mount, so
+# `docker compose down -v` does not remove the embedded database or its secrets.
+# Only remove the `/config` host directory when intentionally resetting the install.
+# Legacy two-container mode: `docker compose down -v` removes its named db_data volume.
 # Empty library bind (covers/themes/uploads) — does NOT touch /storage games RO:
 [ -n "$LIB" ] && [ -d "$LIB" ] && rm -rf "${LIB:?}/"*
 docker compose up -d --build
@@ -268,10 +280,10 @@ docker compose up -d --build
 
 | Failure mode | Why login/libraries survive |
 |---|---|
-| Wrong project prefix (`oneirodex` vs `002`/`003`/`004`) | `down -v` removed a sibling stack’s volume; live `…_db_data` untouched |
-| `docker compose down` **without** `-v` | Containers gone; named volume `db_data` kept |
-| Portainer “Recreate” / Update without removing volume | New container remounts same `…_db_data` |
-| External `DATABASE_URL` (LAN Postgres / other stack) | Compose `db_data` wipe is irrelevant — clear that DB or point Compose back to `db` |
+| Wrong project prefix (`oneirodex` vs `002`/`003`/`004`) | `down -v` removed a sibling stack’s volume; live data remains |
+| Embedded `/config` bind remains | Compose does not remove bind-mounted data; the embedded database and secrets remain there |
+| `docker compose down` **without** `-v` in legacy mode | Containers gone; named volume `db_data` kept |
+| External `DATABASE_URL` (LAN Postgres / other stack) | Local `/config` or `db_data` wipe is irrelevant; clear that external database only when intended |
 
 See also [container-wont-start.md](container-wont-start.md) (§3 / §3b — do **not** wipe `db_data` for `pg_hba` fixes).
 

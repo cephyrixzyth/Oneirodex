@@ -87,7 +87,7 @@ Archives: [dev/archive](dev/archive/README.md) · [superpowers/archive](superpow
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
 | Version | 1.0.0 |
 | GitHub | chrisjrovira/oneirodex |
-| App / DB containers | oneirodex-app · oneirodex-db |
+| Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |
 | Python package | oneirodex |
 | Default accent | `#2fd67b` (Style B+C glass) |

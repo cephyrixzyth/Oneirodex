@@ -10,7 +10,6 @@ REPO = "/mnt/user/infernal-data-streams/_projects/Oneirodex"
 SCRIPT = rf"""
 set -eu
 cd {REPO}
-export COMPOSE_FILE=docker-compose.yml
 GIT="git -c safe.directory={REPO}"
 echo '=== HEAD ==='
 $GIT log -1 --oneline
@@ -43,7 +42,11 @@ curl -fsS http://127.0.0.1:5006/login | grep -F 'Sign in with SSO' | head -n 1
 echo '=== authentik ==='
 curl -fsS -o /dev/null -w 'authentik_http=%{{http_code}}\n' http://127.0.0.1:9000/ || true
 echo '=== oidc db ==='
-docker exec oneirodex-db psql -U postgres -d oneirodex -tAc "SELECT oidc_enabled, oidc_client_id FROM global_settings ORDER BY id LIMIT 1;"
+if docker inspect oneirodex-db >/dev/null 2>&1; then
+  docker exec oneirodex-db psql -U postgres -d oneirodex -tAc "SELECT oidc_enabled, oidc_client_id FROM global_settings ORDER BY id LIMIT 1;"
+else
+  docker exec oneirodex-app bash -c 'export PGPASSWORD="$(cat /config/secrets/db_password)"; psql -h 127.0.0.1 -p 55432 -U oneirodex -d oneirodex -tAc "SELECT oidc_enabled, oidc_client_id FROM global_settings ORDER BY id LIMIT 1;"'
+fi
 """
 
 

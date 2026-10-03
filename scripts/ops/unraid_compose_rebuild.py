@@ -8,7 +8,6 @@ SSH = ["ssh", "-o", "BatchMode=yes", "root@192.168.50.116"]
 SCRIPT = r"""
 set -eu
 cd /mnt/user/infernal-data-streams/_projects/Oneirodex
-export COMPOSE_FILE=docker-compose.yml
 echo '=== compose config services ==='
 docker compose config --services
 echo '=== build + up ==='

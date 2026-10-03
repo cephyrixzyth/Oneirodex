@@ -11,7 +11,7 @@ and nothing changes.
 | Install | File | Database |
 |---|---|---|
 | Unraid Community Apps / `docker run` | [`unraid/oneirodex.xml`](../../unraid/oneirodex.xml) | embedded, in `/config/pgdata` |
-| Docker Compose, one container | [`docker-compose.single.yml`](../../docker-compose.single.yml) | embedded |
+| Docker Compose, one container | [`docker-compose.single.yml`](../../docker-compose.single.yml) | embedded; use `APPDATA_PATH` for persistent `/config` and `APP_ENV_FILE` to retain app settings |
 | Docker Compose, two containers (existing stacks) | [`docker-compose.yml`](../../docker-compose.yml) | separate `postgres:17.6` service |
 
 ## How the embedded database behaves
@@ -34,10 +34,54 @@ with the container stopped). Losing `secrets/` makes the database unreadable.
 
 ## Moving between modes
 
-Embedded to the Compose stack: `pg_dump -Fc` from inside the container
-(`docker exec oneirodex sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h 127.0.0.1 -p 55432 -U oneirodex -Fc oneirodex' > oneirodex.dump`),
-then `pg_restore` into an empty database on the server. Copy `/config/library` to the
-server's library mount. The reverse works the same way. A standalone desktop install uses
+### Move a two-container Compose install to one container
+
+The migration copies PostgreSQL data; it does not remove the source volume. Keep the old
+database container stopped until the embedded app has passed `/awake` and a sign-in check.
+
+1. Back up the source database and validate the archive:
+
+   ```sh
+   docker exec oneirodex-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > oneirodex.dump
+   docker exec -i oneirodex-db pg_restore --list < oneirodex.dump >/dev/null
+   ```
+
+2. Choose durable paths in `.env`: `COMPOSE_FILE=docker-compose.single.yml`,
+   `APPDATA_PATH=/path/to/appdata/oneirodex/config`, `APP_ENV_FILE=/path/to/appdata/oneirodex/config/runtime.env`,
+   and keep the existing `DATA_FOLDER_GAMES`, `LIBRARY_HOST_PATH`,
+   `WEBRETRO_CORES_HOST_PATH`, and `EMULATORJS_HOST_PATH`. `APP_ENV_FILE` should contain
+   the app's current settings with external database keys (`DATABASE_URL`, `DATABASE_HOST`,
+   `DATABASE_PORT`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`) removed. Protect it as a
+   secrets file. The single-container Compose file forces embedded mode and supplies the
+   container paths.
+
+3. Build the image, then start a temporary maintenance container that initializes
+   PostgreSQL without starting the web app:
+
+   ```sh
+   docker compose build oneirodex
+   docker run -d --name oneirodex-db-migrate \
+     -e ONEIRODEX_EMBEDDED_DB=true -e POSTGRES_DB=oneirodex -e PUID=99 -e PGID=100 \
+     -v "$APPDATA_PATH:/config" --entrypoint /bin/bash "$(docker compose images -q oneirodex)" \
+     -c 'source /app/docker/embedded-db.sh; start_embedded_db; trap stop_embedded_db EXIT; sleep infinity'
+   ```
+
+4. Restore into the empty `oneirodex` database and stop the maintenance container:
+
+   ```sh
+   docker exec -i oneirodex-db-migrate bash -c \
+     'export PGPASSWORD="$(cat /config/secrets/db_password)"; pg_restore --no-owner --no-acl --role=oneirodex --single-transaction -h 127.0.0.1 -p 55432 -U oneirodex -d oneirodex' < oneirodex.dump
+   docker stop -t 60 oneirodex-db-migrate
+   docker rm oneirodex-db-migrate
+   ```
+
+5. Start the app with the single-container file. Confirm `/awake`, `/login`, and the
+   Alembic version, then stop the old `oneirodex-db` container. Keep its named volume
+   and the dump until the new install has been used successfully.
+
+The embedded cluster and generated secrets live under `/config`; back up that directory
+with the app stopped. Keep the separate library bind mount pointed at its existing host
+path so covers, themes, and uploads remain in place. A standalone desktop install uses
 [standalone-move.md](standalone-move.md) instead.
 
 ## Publishing the image

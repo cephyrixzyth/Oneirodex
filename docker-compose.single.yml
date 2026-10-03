@@ -1,26 +1,48 @@
 # Oneirodex — single container (PostgreSQL embedded).
 #
-#   cp .env.single.example .env   # optional; nothing is required
+#   cp .env.single.example .env   # configure persistent paths first
 #   docker compose -f docker-compose.single.yml up -d
 #
-# No DATABASE_URL, no POSTGRES_PASSWORD, no SECRET_KEY: the image creates its own
-# database and secrets under /config on first start. For the two-container stack
-# with a separate Postgres (NAS / Unraid Compose Manager) use docker-compose.yml.
+# PostgreSQL and generated secrets live under /config. Existing app settings can
+# be supplied with APP_ENV_FILE (default .env). For a separate Postgres service,
+# use docker-compose.yml.
 services:
   oneirodex:
-    image: ${APP_IMAGE:-cephyrixzyth/oneirodex:latest}
-    container_name: oneirodex
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ONEIRODEX_BUILD_SHA: ${ONEIRODEX_BUILD_SHA:-}
+        ONEIRODEX_BUILT_AT: ${ONEIRODEX_BUILT_AT:-}
+    image: ${APP_IMAGE:-oneirodex:1.0.1}
+    container_name: ${APP_CONTAINER_NAME:-oneirodex-app}
     restart: unless-stopped
     ports:
       - "5006:5006"
+    env_file:
+      - ${APP_ENV_FILE:-.env}
     environment:
-      - PUID=${PUID:-99}
-      - PGID=${PGID:-100}
-      - TZ=${TZ:-UTC}
-      - ONEIRODEX_LIBRARY_ROOTS=${ONEIRODEX_LIBRARY_ROOTS:-}
+      ONEIRODEX_EMBEDDED_DB: "true"
+      ONEIRODEX_CONFIG_DIR: /config
+      DATABASE_URL: ""
+      DATABASE_HOST: ""
+      DATABASE_PORT: ""
+      POSTGRES_DB: ${POSTGRES_DB:-oneirodex}
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-UTC}
+      DATA_FOLDER_GAMES: /storage
+      UPLOAD_FOLDER: /app/oneirodex/static/library
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      REMEMBER_COOKIE_SECURE: ${REMEMBER_COOKIE_SECURE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - "${APPDATA_PATH:-./appdata}:/config"
       - "${DATA_FOLDER_GAMES:-./games}:/storage:ro"
+      - "${LIBRARY_HOST_PATH:-./data/library}:/app/oneirodex/static/library"
+      - "${WEBRETRO_CORES_HOST_PATH:-./data/webretro-cores}:/app/oneirodex/static/vendor/webretro/cores"
+      - "${EMULATORJS_HOST_PATH:-./data/emulatorjs}:/app/oneirodex/static/vendor/emulatorjs/data"
     stop_grace_period: 60s
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5006/awake || exit 1"]

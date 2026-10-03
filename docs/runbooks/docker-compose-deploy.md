@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-Concise local/NAS path using the repo `docker-compose.yml` (`oneirodex-app` + `oneirodex-db` by default; override with `APP_CONTAINER_NAME` / `DB_CONTAINER_NAME`). Hub image: `cephyrixzyth/oneirodex` via `APP_IMAGE`. Live Unraid stacks that still run `oneirodex-app` should pin that name until the scan FIFO is idle.
+The repo includes two supported layouts: `docker-compose.yml` runs `oneirodex-app` plus `oneirodex-db`; `docker-compose.single.yml` runs one app container with embedded PostgreSQL. The single-container file reads app settings from `APP_ENV_FILE` (default `.env`) and keeps database files and generated secrets under the `/config` bind. Hub image: `cephyrixzyth/oneirodex` via `APP_IMAGE`.
 
 ## Prerequisites
 

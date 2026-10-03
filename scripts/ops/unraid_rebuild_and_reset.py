@@ -10,7 +10,6 @@ REPO = "/mnt/user/infernal-data-streams/_projects/Oneirodex"
 SCRIPT = rf"""
 set -eu
 cd {REPO}
-export COMPOSE_FILE=docker-compose.yml
 echo '=== HEAD (uncommitted tree is the build context) ==='
 git -c safe.directory={REPO} log -1 --oneline || true
 git -c safe.directory={REPO} status -sb || true
