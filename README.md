@@ -385,6 +385,33 @@ Full lists: [`.env.example`](.env.example) · [`.env.docker.example`](.env.docke
 | Desktop / VR | `clients/desktop/` · `clients/quest/` |
 | Docs | `docs/` — start at [docs/README.md](docs/README.md) |
 
+### Tech stack
+
+| Area | What Oneirodex uses |
+|---|---|
+| Language / server | **Python 3.12**, **Flask** under ASGI (uvicorn), SQLAlchemy + Alembic migrations |
+| Front ends | **React 19 + Vite + TypeScript** single-page apps (member, admin, ops-glance); admin also uses Jinja templates |
+| Desktop / VR | **Tauri** desktop companion · Quest PWA |
+| Database | **PostgreSQL 17** — the only required service |
+| Node.js | Build-time only (the Docker image compiles the SPAs, then ships Python); not a runtime dependency |
+| Not used | Next.js, PHP, Django, MySQL/MariaDB |
+
+**Default ports:** `5006` (web app) and `5432` (PostgreSQL, internal to Compose).
+
+**Optional services** — off by default, enabled by env vars or Compose profiles; none are needed for a normal install:
+
+| Service | Purpose | Port(s) |
+|---|---|---|
+| LiveKit | Voice in channels | 7880, 7881, 7882/udp |
+| ClamAV | Malware scan daemon (heuristics run without it) | 3310 |
+| Redis (`challenge` profile) | Backing store for the Trawl challenge solver only | internal |
+| Trawl | FlareSolverr-compatible challenge-solver sidecar (`ENABLE_CHALLENGE_SOLVER`) | 8191 (Docker network only) |
+| SD.Next / AUTOMATIC1111 / Forge | Locally generated cover art | 7860 |
+| Ollama | AI assist / triage (`ENABLE_AI_ASSIST`), reached on your own host | 11434 |
+| Prometheus / Grafana | Monitoring, commented out in `docker-compose.yml` | 9090 / 3000 |
+
+Oneirodex is a **self-hosted game library**, not a notes, file-sync or automation tool. The chat and voice channels are built into the app and are not a Discord replacement. There is no one-click template: deploy with Docker Compose (the image builds locally) or the [Unraid / NAS runbooks](docs/runbooks/unraid-deploy.md). Resource needs depend mostly on which optional modules you enable and the size of your library, so no fixed sizing is published.
+
 <br/>
 
 <a id="-troubleshooting"></a>
