@@ -12,12 +12,20 @@ import {
   patchWidget,
   resolveOverlaps,
   rowsForContentHeight,
+  DASHBOARD_OPTIONAL_IDS,
+  appendWidget,
+  applySizePreset,
+  loadIdSet,
+  nudgeWidget,
+  saveIdSet,
 } from './dashboardLayout'
 
 describe('defaultDashboardLayout', () => {
   test('metrics fill each row without leftover columns', () => {
     const layout = defaultDashboardLayout()
-    const metrics = layout.filter((item) => item.id.startsWith('m-'))
+    const metrics = layout.filter(
+      (item) => item.id.startsWith('m-') && !DASHBOARD_OPTIONAL_IDS.includes(item.id),
+    )
     const rows = new Map()
     metrics.forEach((item) => {
       const list = rows.get(item.y) || []
@@ -157,4 +165,59 @@ test('resolveOverlaps can pin an id', () => {
   const next = resolveOverlaps(layout, 'b')
   const b = next.find((item) => item.id === 'b')
   expect(b).toMatchObject({ x: 0, y: 0 })
+})
+
+describe('pinned widgets, presets and add/hide helpers', () => {
+  const base = [
+    { id: 'm-a', x: 0, y: 0, w: 4, h: 2 },
+    { id: 'm-b', x: 4, y: 0, w: 4, h: 2 },
+    { id: 'm-c', x: 8, y: 0, w: 4, h: 2 },
+  ]
+
+  test('a pinned widget never moves or resizes', () => {
+    expect(commitMove(base, 'm-a', 6, 4, undefined, ['m-a'])).toBe(base)
+    expect(commitResize(base, 'm-a', 6, 4, undefined, ['m-a'])).toBe(base)
+  })
+
+  test('others route round a pinned widget instead of displacing it', () => {
+    const next = commitMove(base, 'm-c', 4, 0, undefined, ['m-b'])
+    const pinned = next.find((item) => item.id === 'm-b')
+    expect(pinned).toMatchObject({ x: 4, y: 0 })
+    const mover = next.find((item) => item.id === 'm-c')
+    expect(mover && pinned && overlaps(mover, pinned)).toBe(false)
+  })
+
+  test('size presets set the width and keep the widget on the board', () => {
+    const full = applySizePreset(base, 'm-c', 'full')
+    expect(full.find((item) => item.id === 'm-c')).toMatchObject({ x: 0, w: DASHBOARD_COLS })
+    const small = applySizePreset(base, 'm-c', 'small')
+    expect(small.find((item) => item.id === 'm-c')?.w).toBe(3)
+    expect(applySizePreset(base, 'm-a', 'full', undefined, ['m-a'])).toEqual(base)
+  })
+
+  test('arrow nudges move, shift nudges resize', () => {
+    const moved = nudgeWidget(base, 'm-a', 0, 1, false)
+    expect(moved.find((item) => item.id === 'm-a')?.y).toBe(1)
+    const grown = nudgeWidget(base, 'm-c', 0, 1, true)
+    expect(grown.find((item) => item.id === 'm-c')?.h).toBe(3)
+  })
+
+  test('appendWidget places a re-added widget under everything, once', () => {
+    const next = appendWidget(base, 'm-d', { w: 3, h: 2 })
+    expect(next.find((item) => item.id === 'm-d')).toMatchObject({ y: 2, w: 3 })
+    expect(appendWidget(next, 'm-d', { w: 3, h: 2 })).toBe(next)
+  })
+
+  test('optional dashboard widgets are in the default layout so merges keep them', () => {
+    const ids = defaultDashboardLayout().map((item) => item.id)
+    for (const id of DASHBOARD_OPTIONAL_IDS) expect(ids).toContain(id)
+  })
+
+  test('id sets round-trip through storage and tolerate junk', () => {
+    saveIdSet('test:ids', ['a', 'b'])
+    expect(loadIdSet('test:ids')).toEqual(['a', 'b'])
+    window.localStorage.setItem('test:bad', '{"not":"an array"}')
+    expect(loadIdSet('test:bad')).toBeNull()
+    expect(loadIdSet('test:missing')).toBeNull()
+  })
 })

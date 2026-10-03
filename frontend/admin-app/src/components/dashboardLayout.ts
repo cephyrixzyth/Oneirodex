@@ -32,13 +32,42 @@ export const DASHBOARD_METRIC_IDS = [
   'companions',
 ]
 
+/**
+ * Widgets that exist but start hidden; the "Add widget" menu brings them in.
+ * They live in the default layout (below everything else) so layout merging
+ * keeps their ids; the board filters them out until the admin adds them.
+ */
+export const DASHBOARD_OPTIONAL_IDS = ['m-cpu', 'm-memory', 'm-unmatched', 'scan-jobs']
+
+export const DASHBOARD_WIDGET_LABELS: Record<string, string> = {
+  status: 'Health banner',
+  'm-build': 'Build',
+  'm-libraries': 'Libraries',
+  'm-games': 'Games',
+  'm-health': 'Library health',
+  'm-scans': 'Scans',
+  'm-disk': 'Disk',
+  'm-load': 'Load average',
+  'm-rss': 'Process memory',
+  'm-db': 'DB ping',
+  'm-awake': 'Readyz',
+  'm-companions': 'Companions',
+  'm-cpu': 'CPU',
+  'm-memory': 'Memory',
+  'm-unmatched': 'Unmatched folders',
+  'scan-jobs': 'Active scan jobs',
+  host: 'Host meters',
+  companions: 'Companions by kind',
+  errors: 'Recent errors',
+}
+
 const METRIC_MIN = { w: 2, h: 2 }
 const PANEL_MIN = { w: 3, h: 3 }
 const STATUS_MIN = { w: 6, h: 2 }
 
 export function widgetMins(id: string): WidgetMins {
   if (id === 'status') return STATUS_MIN
-  if (id === 'host' || id === 'companions' || id === 'errors') return PANEL_MIN
+  if (id === 'host' || id === 'companions' || id === 'errors' || id === 'scan-jobs') return PANEL_MIN
   return METRIC_MIN
 }
 
@@ -68,7 +97,13 @@ export function defaultDashboardLayout({
   y += 4
   if (hasErrors) {
     items.push({ id: 'errors', x: 0, y, w: 12, h: 3 })
+    y += 3
   }
+  // Optional widgets, hidden until added (see DASHBOARD_OPTIONAL_IDS).
+  items.push({ id: 'm-cpu', x: 0, y, w: 3, h: 2 })
+  items.push({ id: 'm-memory', x: 3, y, w: 3, h: 2 })
+  items.push({ id: 'm-unmatched', x: 6, y, w: 3, h: 2 })
+  items.push({ id: 'scan-jobs', x: 0, y: y + 2, w: 12, h: 3 })
   return items
 }
 
@@ -156,12 +191,27 @@ export function resolveOverlaps(
   layout: (Partial<WidgetItem> & { id: string })[],
   pinnedId: string | null = null,
   minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
 ): WidgetItem[] {
   const items = layout.map((item) => clampWidget(item, minsFn))
-  const pinned = pinnedId ? items.find((item) => item.id === pinnedId) : null
-  const rest = items.filter((item) => item.id !== pinnedId).sort((a, b) => a.y - b.y || a.x - b.x)
+  const fixed = new Set(fixedIds)
+  const anchors = items.filter((item) => fixed.has(item.id))
+  const pinned = pinnedId ? items.find((item) => item.id === pinnedId && !fixed.has(item.id)) : null
+  const rest = items
+    .filter((item) => !fixed.has(item.id) && item.id !== pinnedId)
+    .sort((a, b) => a.y - b.y || a.x - b.x)
 
-  const placed: WidgetItem[] = pinned ? [pinned] : []
+  // Locked widgets are obstacles: they never move, everything routes round them.
+  const placed: WidgetItem[] = [...anchors]
+  if (pinned) {
+    let next = { ...pinned }
+    let guard = 0
+    while (guard < 64 && placed.some((other) => overlaps(next, other))) {
+      next = { ...next, y: next.y + 1 }
+      guard += 1
+    }
+    placed.push(next)
+  }
   for (const item of rest) {
     let next = { ...item }
     let guard = 0
@@ -196,12 +246,13 @@ export function commitMove(
   x: number | undefined,
   y: number | undefined,
   minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
 ): WidgetItem[] {
   const current = layout.find((item) => item.id === id)
-  if (!current) return layout
+  if (!current || fixedIds.includes(id)) return layout
   const moved = clampWidget({ ...current, x, y }, minsFn)
   const hit = layout.find((item) => item.id !== id && overlaps(moved, item))
-  if (hit && hit.w === moved.w && hit.h === moved.h) {
+  if (hit && hit.w === moved.w && hit.h === moved.h && !fixedIds.includes(hit.id)) {
     return layout.map((item) => {
       if (item.id === id) return moved
       if (item.id === hit.id) {
@@ -210,7 +261,7 @@ export function commitMove(
       return item
     })
   }
-  return resolveOverlaps(patchWidget(layout, id, { x, y }, minsFn), id, minsFn)
+  return resolveOverlaps(patchWidget(layout, id, { x, y }, minsFn), id, minsFn, fixedIds)
 }
 
 export function commitResize(
@@ -219,8 +270,10 @@ export function commitResize(
   w: number | undefined,
   h: number | undefined,
   minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
 ): WidgetItem[] {
-  return resolveOverlaps(patchWidget(layout, id, { w, h }, minsFn), id, minsFn)
+  if (fixedIds.includes(id)) return layout
+  return resolveOverlaps(patchWidget(layout, id, { w, h }, minsFn), id, minsFn, fixedIds)
 }
 
 /** @deprecated — use commitMove / commitResize; kept for older call sites. */
@@ -344,3 +397,87 @@ export const DASH_RESIZE_PX_PER_COL = 1.85
 export const DASH_RESIZE_PX_PER_ROW = 1.85
 export const DASH_MOVE_PX_PER_COL = 1
 export const DASH_MOVE_PX_PER_ROW = 1
+
+/** Size presets offered in each widget's menu (columns of 12, rows of the board track). */
+export type SizePreset = 'small' | 'medium' | 'large' | 'full'
+
+export const SIZE_PRESET_LABELS: Record<SizePreset, string> = {
+  small: 'Small',
+  medium: 'Medium',
+  large: 'Large',
+  full: 'Full width',
+}
+
+/** Resize to a preset, keeping the widget's rows unless the preset implies more. */
+export function applySizePreset(
+  layout: WidgetItem[],
+  id: string,
+  preset: SizePreset,
+  minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
+): WidgetItem[] {
+  const current = layout.find((item) => item.id === id)
+  if (!current) return layout
+  const cols: Record<SizePreset, number> = { small: 3, medium: 6, large: 9, full: DASHBOARD_COLS }
+  const w = cols[preset]
+  // Keep the left edge when it still fits, otherwise slide left.
+  const x = Math.min(current.x, DASHBOARD_COLS - w)
+  const moved = commitResize(patchWidget(layout, id, { x }, minsFn), id, w, current.h, minsFn, fixedIds)
+  return moved
+}
+
+/** Keyboard nudge: arrows move, shift+arrows resize. Returns the layout unchanged when locked. */
+export function nudgeWidget(
+  layout: WidgetItem[],
+  id: string,
+  dx: number,
+  dy: number,
+  resize: boolean,
+  minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
+): WidgetItem[] {
+  const current = layout.find((item) => item.id === id)
+  if (!current) return layout
+  if (resize) return commitResize(layout, id, current.w + dx, current.h + dy, minsFn, fixedIds)
+  return commitMove(layout, id, current.x + dx, current.y + dy, minsFn, fixedIds)
+}
+
+/** Place a (re)added widget under everything else, at its preferred size. */
+export function appendWidget(
+  layout: WidgetItem[],
+  id: string,
+  size: { w: number; h: number },
+  minsFn: WidgetMinsFn = widgetMins,
+  fixedIds: readonly string[] = [],
+): WidgetItem[] {
+  if (layout.some((item) => item.id === id)) return layout
+  const bottom = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0)
+  return resolveOverlaps(
+    [...layout, { id, x: 0, y: bottom, w: size.w, h: size.h }],
+    null,
+    minsFn,
+    fixedIds,
+  )
+}
+
+/** Small persisted id sets (pinned / hidden widgets), per board. */
+export function loadIdSet(key: string): string[] | null {
+  if (typeof window === 'undefined' || !window.localStorage) return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : null
+  } catch {
+    return null
+  }
+}
+
+export function saveIdSet(key: string, ids: readonly string[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    window.localStorage.setItem(key, JSON.stringify([...ids]))
+  } catch {
+    /* private mode / quota */
+  }
+}

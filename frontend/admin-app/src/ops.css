@@ -904,6 +904,8 @@ body.od-shell-host .od-admin-main:has(.od-dash),
 }
 
 .od-dash__body {
+  /* Long names, paths and hints wrap instead of clipping or forcing a scrollbar. */
+  overflow-wrap: anywhere;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
@@ -960,4 +962,142 @@ body.od-shell-host .od-admin-main:has(.od-dash),
     transparent 0 55%,
     color-mix(in srgb, var(--od-accent) 55%, transparent) 55%
   );
+}
+
+/* --- Widget controls: pin, size presets, hide, edge resize, add menu ------- */
+
+.od-dash__item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--od-accent) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--od-radius-md);
+}
+
+.od-dash__item.is-pinned {
+  cursor: default;
+}
+
+.od-dash__tools {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 3;
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: var(--od-radius-md);
+  border: 1px solid var(--od-border);
+  background: color-mix(in srgb, var(--od-surface) 94%, var(--od-bg));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.od-dash__item:hover .od-dash__tools,
+.od-dash__item:focus-within .od-dash__tools,
+.od-dash__item.is-pinned .od-dash__tools:has([aria-pressed='true']) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.od-dash__item.is-dragging .od-dash__tools {
+  opacity: 0;
+}
+
+.od-dash__tool {
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.35rem;
+  border: 0;
+  border-radius: var(--od-radius-sm, 0.3rem);
+  background: transparent;
+  color: var(--od-text);
+  font: inherit;
+  font-size: var(--od-font-sm);
+  line-height: 1;
+}
+
+.od-dash__tool:hover:not(:disabled),
+.od-dash__tool[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--od-accent) 22%, transparent);
+}
+
+.od-dash__tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.od-dash__resize--x,
+.od-dash__resize--y {
+  opacity: 0;
+  background: transparent;
+}
+
+.od-dash__resize--x {
+  top: 1rem;
+  bottom: 1rem;
+  right: 0;
+  width: 0.5rem;
+  height: auto;
+  border-radius: 0;
+  cursor: ew-resize;
+}
+
+.od-dash__resize--y {
+  left: 1rem;
+  right: 1rem;
+  bottom: 0;
+  width: auto;
+  height: 0.5rem;
+  border-radius: 0;
+  cursor: ns-resize;
+}
+
+.od-dash__item:hover .od-dash__resize--x,
+.od-dash__item:hover .od-dash__resize--y {
+  opacity: 1;
+  background: color-mix(in srgb, var(--od-accent) 30%, transparent);
+}
+
+.od-dash__add {
+  position: relative;
+  display: inline-block;
+}
+
+.od-dash__add-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  min-width: 12rem;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  border-radius: var(--od-radius-md);
+  border: 1px solid var(--od-border);
+  background: var(--od-surface);
+  box-shadow: 0 0.45rem 1.1rem color-mix(in srgb, var(--od-bg) 70%, transparent);
+}
+
+.od-dash__add-item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: var(--od-radius-sm, 0.3rem);
+  background: transparent;
+  color: var(--od-text);
+  font: inherit;
+  text-align: left;
+}
+
+.od-dash__add-item:hover,
+.od-dash__add-item:focus-visible {
+  background: color-mix(in srgb, var(--od-accent) 22%, transparent);
+}
+
+@media (hover: none) {
+  .od-dash__tools {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
