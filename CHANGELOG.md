@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Docker Hub image is `cephyrixzyth/oneirodex`.** The Unraid Community Apps template, `docker-compose.single.yml`, `ca_profile.xml`, the env examples and the runbooks named `chrisjrovira/oneirodex`, an image that was never published; the Docker Hub account is `cephyrixzyth`. Set the repository variable `DOCKERHUB_USERNAME` to `cephyrixzyth` (and the `DOCKERHUB_TOKEN` secret) for the publish workflow. The GitHub repository and `SUPPORT_GITHUB_REPO` are unchanged.
+
 ## [1.0.1] — 2026-10-03
 
 ### Added

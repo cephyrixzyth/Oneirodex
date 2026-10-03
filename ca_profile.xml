@@ -6,7 +6,7 @@
 
 **What is in this repository**
 
-- `unraid/oneirodex.xml` is the Community Apps template for the `chrisjrovira/oneirodex` Docker image. The image is self-contained: PostgreSQL runs inside the container, so there is no second database container to set up. Point it at your games share (mounted read-only), keep appdata on the cache, and open the WebUI; the first visit runs the setup wizard.
+- `unraid/oneirodex.xml` is the Community Apps template for the `cephyrixzyth/oneirodex` Docker image. The image is self-contained: PostgreSQL runs inside the container, so there is no second database container to set up. Point it at your games share (mounted read-only), keep appdata on the cache, and open the WebUI; the first visit runs the setup wizard.
 - The application source, Docker Compose files, desktop companion app and documentation live in the same repository.
 
 **Support**

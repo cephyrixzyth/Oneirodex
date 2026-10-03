@@ -45,7 +45,7 @@ server's library mount. The reverse works the same way. A standalone desktop ins
 `.github/workflows/docker-publish.yml` builds `linux/amd64` + `linux/arm64` on every `v*` tag
 (or by hand) and pushes to GHCR using the built-in token. To also push to Docker Hub, add the
 repository variable `DOCKERHUB_USERNAME` and the secret `DOCKERHUB_TOKEN` (a Hub access token
-with write scope). The template points at Docker Hub (`chrisjrovira/oneirodex`); change
+with write scope). The template points at Docker Hub (`cephyrixzyth/oneirodex`); change
 `<Repository>` if you publish elsewhere.
 
 Before the first public tag, work through [release-checklist.md](release-checklist.md) and
@@ -54,7 +54,7 @@ firmware, keys or `.env`.
 
 ## Docker Hub listing
 
-1. Create the public repository `chrisjrovira/oneirodex` on Docker Hub.
+1. Create the public repository `cephyrixzyth/oneirodex` on Docker Hub.
 2. Short description: *The self-hosted game library for a household.* Paste the README as the
    full description (Hub does not sync it from GitHub on its own; a
    `peter-evans/dockerhub-description` step can be added later).
@@ -73,7 +73,7 @@ Community Apps reads templates from a **public** repository and needs a support 
    `<Profile>` (repository overview and author/support information). Keep it at the root of
    whichever repository holds the template, and add `<Forum>` there once the support thread
    in step 4 exists. `tests/test_unraid_templates.py` fails if it goes empty or invalid.
-2. Confirm the image pulls anonymously: `docker pull chrisjrovira/oneirodex:latest` from a
+2. Confirm the image pulls anonymously: `docker pull cephyrixzyth/oneirodex:latest` from a
    machine that is not logged in.
 3. Install it on a real Unraid box through *Add Container* with the template URL and check:
    first-run wizard, a scan of the games share, `docker stop` leaves a clean log, and a
