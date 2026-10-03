@@ -478,7 +478,8 @@ class TestSendEmail:
         
         # Verify
         assert result is True
-        mock_server.set_debuglevel.assert_called_with(1)
+        # SMTP debug output includes AUTH payloads; the sender must not enable it.
+        mock_server.set_debuglevel.assert_not_called()
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_with('testuser@example.com', 'testpass123')
         mock_server.send_message.assert_called_once()
@@ -693,12 +694,14 @@ class TestSendPasswordResetEmail:
         args, kwargs = mock_send_email.call_args
 
         assert args[0] == 'user@example.com'
-        assert args[1] == "Ye Password Reset Request Arrr!"
+        from oneirodex import PRODUCT_NAME
+        assert args[1] == f'{PRODUCT_NAME} password reset request'
 
         html_content = args[2]
         assert 'http://192.168.50.116:5006/reset_password/abc123' in html_content
         assert 'Password Reset Link' in html_content
-        assert 'Captain Blackbeard' in html_content
+        assert 'you can ignore this message' in html_content
+        assert 'Captain Blackbeard' not in html_content
 
 
 class TestSendInviteEmail:

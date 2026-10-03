@@ -405,10 +405,11 @@ class TestAccountPasswordChange:
             'confirm_password': 'newpassword123'
         }
         
-        with patch('oneirodex.routes_settings.UserPasswordForm') as mock_form_class:
+        with patch('oneirodex.routes_settings.ChangePasswordForm') as mock_form_class:
             mock_form = MagicMock()
             mock_form.validate_on_submit.return_value = True
             mock_form.password.data = 'newpassword123'
+            mock_form.current_password.data = 'testpassword123'
             mock_form_class.return_value = mock_form
             
             with patch('oneirodex.routes_settings.flash') as mock_flash:
@@ -428,10 +429,11 @@ class TestAccountPasswordChange:
             'confirm_password': 'newpassword123'
         }
         
-        with patch('oneirodex.routes_settings.UserPasswordForm') as mock_form_class:
+        with patch('oneirodex.routes_settings.ChangePasswordForm') as mock_form_class:
             mock_form = MagicMock()
             mock_form.validate_on_submit.return_value = True
             mock_form.password.data = 'newpassword123'
+            mock_form.current_password.data = 'testpassword123'
             mock_form_class.return_value = mock_form
             
             with patch('oneirodex.routes_settings.db.session.commit', side_effect=Exception('Database error')):
@@ -440,6 +442,21 @@ class TestAccountPasswordChange:
                     
                     assert response.status_code == 200
                     mock_flash.assert_called_with('An error occurred. Please try again.', 'error')
+
+    def test_post_password_change_rejects_wrong_current_password(self, client, test_user, db_session):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(test_user.id)
+            sess['_fresh'] = True
+
+        response = client.post('/settings_password', data={
+            'current_password': 'incorrect',
+            'password': 'newpassword123',
+            'confirm_password': 'newpassword123',
+        })
+
+        assert response.status_code == 200
+        db_session.refresh(test_user)
+        assert test_user.check_password('testpassword123')
 
 
 class TestSettingsPanel:
