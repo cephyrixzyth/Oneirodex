@@ -22,7 +22,13 @@ function at(path: string) {
 
 test('a settings page shows its sub-section children as icon buttons, current one marked', () => {
   at('/admin/scan_match')
-  for (const name of ['Server settings', 'Scan / match policy', 'ROM reference sets', 'Quality profiles', 'Storage']) {
+  for (const name of [
+    'Server settings',
+    'Scan / match policy',
+    'ROM reference sets',
+    'Quality profiles',
+    'Storage',
+  ]) {
     expect(screen.getByRole('link', { name })).toBeInTheDocument()
   }
   expect(screen.getByRole('link', { name: 'Scan / match policy' })).toHaveAttribute(
@@ -67,6 +73,7 @@ test('every icon the admin nav names has a glyph', () => {
     names.add(sub.icon)
     sub.items.forEach((item) => names.add(item.icon))
   }
-  for (const links of Object.values(HUB_LINKS)) links.forEach((link) => names.add(hubIcon(link.label)))
+  for (const links of Object.values(HUB_LINKS))
+    links.forEach((link) => names.add(hubIcon(link.label)))
   for (const name of names) expect(railIconPaths[name], name).toBeTruthy()
 })

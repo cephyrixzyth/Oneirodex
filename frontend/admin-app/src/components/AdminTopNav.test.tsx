@@ -263,8 +263,15 @@ test('rail integrations is built like settings: icon sub-sections', () => {
     'aria-expanded',
     'true',
   )
-  for (const title of ['Metadata & art', 'Stores & ownership', 'Messaging & identity', 'Acquisition']) {
-    expect(screen.getByRole('link', { name: title }).querySelector('.od-rail__icon svg')).not.toBeNull()
+  for (const title of [
+    'Metadata & art',
+    'Stores & ownership',
+    'Messaging & identity',
+    'Acquisition',
+  ]) {
+    expect(
+      screen.getByRole('link', { name: title }).querySelector('.od-rail__icon svg'),
+    ).not.toBeNull()
   }
   expect(screen.getByRole('link', { name: 'Messaging & identity' })).toHaveClass('is-active')
   expect(container.querySelector('a[href="/admin/chat_emoji"]')).toBeNull()
