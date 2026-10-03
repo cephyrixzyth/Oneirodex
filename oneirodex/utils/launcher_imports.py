@@ -109,7 +109,10 @@ def _parse_playnite(data) -> list[ParsedTitle]:
     out = []
     for item in _dicts(data):
         name = _first(item, 'Name', 'name', 'GameName')
-        ident = _first(item, 'Id', 'GameId', 'PluginId', 'id') or name
+        # PluginId names the *library plugin* a game came from (Steam, GOG ...), so
+        # every game from one plugin shares it; using it as the game id collapsed
+        # them into one row. Without Id/GameId the title is the id.
+        ident = _first(item, 'Id', 'GameId', 'id') or name
         if name and ident:
             out.append(ParsedTitle(ident, name))
     return out

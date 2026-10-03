@@ -15,7 +15,7 @@ _STEAM_HEADERS = {'User-Agent': 'Oneirodex/1.0 (+https://github.com/chrisjrovira
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
-def _get_with_retry(url: str, *, timeout: float, attempts: int = 3):
+def _get_with_retry(url: str, *, timeout: float, attempts: int = 3, max_wait: float = 5.0):
     """GET with a short backoff on rate limits / transient errors."""
     resp = None
     for attempt in range(attempts):
@@ -23,24 +23,27 @@ def _get_with_retry(url: str, *, timeout: float, attempts: int = 3):
         if resp.status_code not in _RETRY_STATUSES or attempt == attempts - 1:
             return resp
         try:
-            wait = min(float(resp.headers.get('Retry-After', '')), 5.0)
+            wait = min(float(resp.headers.get('Retry-After', '')), max_wait)
         except (TypeError, ValueError):
             wait = 1.5 * (attempt + 1)
         time.sleep(wait)
     return resp
 
 
-def fetch_steam_app_details(app_id: int, *, timeout: float = 10.0) -> dict | None:
+def fetch_steam_app_details(app_id: int, *, timeout: float = 10.0, fast: bool = False) -> dict | None:
     """
     Resolve a Steam App ID to store details (name, type, …).
     Returns None on any failure (network, missing app, unexpected payload).
+
+    ``fast`` is for bulk/background callers: one attempt, a short timeout, no
+    backoff sleep, so a rate-limited Steam cannot stall a worker per game.
     """
     if not app_id or not isinstance(app_id, int) or app_id <= 0:
         return None
 
     url = f'https://store.steampowered.com/api/appdetails?appids={app_id}&l=english'
     try:
-        resp = _get_with_retry(url, timeout=timeout)
+        resp = _get_with_retry(url, timeout=min(timeout, 5.0) if fast else timeout, attempts=1 if fast else 3)
         if resp.status_code != 200:
             logger.warning('Steam appdetails for %s answered HTTP %s', app_id, resp.status_code)
             return None

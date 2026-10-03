@@ -175,6 +175,15 @@ def _game_core_fields_missing(game):
     return False
 
 
+def _game_steam_fields_missing(game):
+    """True while any field Steam's appdetails could fill is still blank."""
+    return (
+        _game_core_fields_missing(game)
+        or getattr(game, 'publisher_id', None) is None
+        or getattr(game, 'first_release_date', None) is None
+    )
+
+
 def enrich_game_all_sources(game, lookup_name=None):
     """Fill a newly identified game from every source, not just Steam.
 
@@ -223,11 +232,14 @@ def enrich_game_all_sources(game, lookup_name=None):
     # App ID -- from a folder id, an earlier pass, or a hand-picked match -- now
     # gets the full appdetails mapping by id, which is exact, not a name guess.
     # Fill-don't-clobber: IGDB values are never overwritten.
-    if getattr(game, 'steam_app_id', None):
+    # Only when something is still empty, and with the bounded fetch: this runs
+    # for every enriched game, and a rate-limited Steam must not stall a bulk
+    # re-enrich for tens of seconds per title.
+    if getattr(game, 'steam_app_id', None) and _game_steam_fields_missing(game):
         try:
             from oneirodex.utils.software_identify_custom_game import hydrate_steam_for_game
 
-            result['steam_full'] = bool(hydrate_steam_for_game(game, game.steam_app_id))
+            result['steam_full'] = bool(hydrate_steam_for_game(game, game.steam_app_id, fast=True))
         except Exception as steam_full_err:  # noqa: BLE001
             logger.info(f"Full Steam hydrate skipped for '{name}': {steam_full_err}")
 

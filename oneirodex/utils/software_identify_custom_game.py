@@ -206,7 +206,7 @@ def upsert_stage_d_custom_game(
     return created
 
 
-def hydrate_steam_for_game(game, steam_app_id) -> dict:
+def hydrate_steam_for_game(game, steam_app_id, *, fast: bool = False) -> dict:
     """Map Steam ``appdetails`` onto ``game`` inside a SAVEPOINT; never raises.
 
     Returns the report from ``hydrate_game_from_steam`` (``{}`` when Steam had
@@ -219,7 +219,7 @@ def hydrate_steam_for_game(game, steam_app_id) -> dict:
         from oneirodex.utils.steam_metadata import hydrate_game_from_steam
 
         with db.session.begin_nested():
-            report = hydrate_game_from_steam(game, app_id=steam_app_id)
+            report = hydrate_game_from_steam(game, app_id=steam_app_id, fast=fast)
         if not report:
             logger.warning('Steam hydrate for %r (app %s) returned nothing', getattr(game, 'name', '?'), steam_app_id)
         return report or {}

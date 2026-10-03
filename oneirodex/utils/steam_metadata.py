@@ -175,7 +175,7 @@ def apply_steam_metadata_to_game(game, metadata: dict) -> dict:
     return report
 
 
-def hydrate_game_from_steam(game, *, app_id: int | None = None) -> dict:
+def hydrate_game_from_steam(game, *, app_id: int | None = None, fast: bool = False) -> dict:
     """Fetch ``appdetails`` for the game's Steam App ID and map it on.
 
     No-ops (empty report) when there is no App ID or the store lookup fails —
@@ -189,7 +189,7 @@ def hydrate_game_from_steam(game, *, app_id: int | None = None) -> dict:
     if not resolved:
         return {}
 
-    details = fetch_steam_app_details(resolved)
+    details = fetch_steam_app_details(resolved, fast=True) if fast else fetch_steam_app_details(resolved)
     if not details:
         return {}
     return apply_steam_metadata_to_game(game, steam_details_to_metadata(details))

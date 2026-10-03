@@ -742,6 +742,16 @@ def fetch_steam_data(game_name):
 
         wanted = title_match_key(clean_name)
         exact_items = [item for item in items if title_match_key(item.get('name')) == wanted]
+        # Several store entries can normalise to one title (a demo, a regional
+        # listing, a soundtrack named the same). Narrow by how the title was
+        # actually spelled, then by product type, before giving up -- each step
+        # only applies when it leaves at least one candidate.
+        if len(exact_items) > 1:
+            literal = [i for i in exact_items if (i.get('name') or '').strip().casefold() == clean_name.strip().casefold()]
+            exact_items = literal or exact_items
+        if len(exact_items) > 1:
+            apps = [i for i in exact_items if (i.get('type') or 'app') == 'app']
+            exact_items = apps or exact_items
         if len(exact_items) != 1:
             # Never fall back to the first search hit: for "Baldur's Gate 2" that
             # is a different game, and its genres, developer and App ID would be

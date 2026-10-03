@@ -385,12 +385,22 @@ def is_bare_update_package(name: str | None) -> bool:
 # _to_v1.3.0.3-ElAmigos", "Alan Wake 2 update 1.2.8 - 1.2.10", "... Unofficial
 # Patch". Not a full release that merely *includes* updates ("(Incl. Update 2)"),
 # which is a game and imports normally.
-_INCLUDES_UPDATE_RE = re.compile(r'\b(?:incl(?:ude[sd]?|uding)?\.?|with)\s+updates?\b', re.IGNORECASE)
+# "(Incl. Update 5)", "+ Update 3", "& Update 1", "with Update 2": a full release
+# that bundles an update. Stripped before the patch test so it never trips it.
+_INCLUDES_UPDATE_RE = re.compile(
+    r'(?:\b(?:incl(?:ude[sd]?|uding)?\.?|with|plus)|[+&]|\band)\s+(?:the\s+)?updates?\b(?:\s+v?\d+(?:[.\s]\d+)*)?',
+    re.IGNORECASE,
+)
+# Only version-shaped update markers count. A bare "Update 3" is ambiguous (it can
+# be a game's own subtitle or a bundled update), so it is NOT treated as a patch.
 _PATCH_PACKAGE_RE = re.compile(
-    r'\bupdate\b\s*(?:from\s+)?v?\d'
+    r'\bupdate\s+from\s+v?\d'              # Update from v1.0 to v1.1
+    r'|\bupdate\s+v\d'                       # Update v1.2.3.0, Update v1 50
+    r'|\bupdate\s+\d+(?:\.\d+)+'            # update 1.0.7.0 - 1.0.8.0
+    r'|\bupdate\s+\d+\s+\d+(?:[\s.]\d+)*'    # Update 1 02.119782
     r'|\bunofficial\s+patch\b'
-    r'|\bhotfix\b'
-    r'|\bpatch\s+v?\d',
+    r'|\bhotfix\s*v?\d'
+    r'|\bpatch\s+v?\d+\.\d',
     re.IGNORECASE,
 )
 
