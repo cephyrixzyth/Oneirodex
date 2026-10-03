@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.0.0" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.1-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.0.1" /></a>
   <a href="https://github.com/chrisjrovira/oneirodex"><img src="https://img.shields.io/badge/github-chrisjrovira%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
@@ -44,8 +44,8 @@ Oneirodex is a **Flask + React** server you run at home or on a NAS. Point it at
 Every screenshot and clip on this page is **live UI** from a stock install seeded with five legal free ROMs: what you see is what ships.
 
 <table>
-<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.0.0</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
-<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.0.0</code></td></tr>
+<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.0.1</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
+<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.0.1</code></td></tr>
 <tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — Flask under ASGI (uvicorn)</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
 </table>
 

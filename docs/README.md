@@ -1,6 +1,6 @@
 # Oneirodex documentation
 
-**Product version:** 1.0.0 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
+**Product version:** 1.0.1 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `chrisjrovira/oneirodex` once published.
 

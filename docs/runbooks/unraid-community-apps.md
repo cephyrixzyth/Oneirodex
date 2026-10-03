@@ -69,6 +69,10 @@ Community Apps reads templates from a **public** repository and needs a support 
    `chrisjrovira/unraid-templates`) containing `oneirodex.xml` at its root. If the template
    moves, update `<TemplateURL>` and `<Icon>` to the new raw URLs. Both must resolve
    without authentication.
+   The repository root also carries `ca_profile.xml`: Community Apps requires a non-empty
+   `<Profile>` (repository overview and author/support information). Keep it at the root of
+   whichever repository holds the template, and add `<Forum>` there once the support thread
+   in step 4 exists. `tests/test_unraid_templates.py` fails if it goes empty or invalid.
 2. Confirm the image pulls anonymously: `docker pull chrisjrovira/oneirodex:latest` from a
    machine that is not logged in.
 3. Install it on a real Unraid box through *Add Container* with the template URL and check:
