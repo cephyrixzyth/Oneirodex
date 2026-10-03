@@ -46,6 +46,9 @@ on:
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
 
+permissions:
+  contents: read
+
 jobs:
   rust-checks:
     name: rust · fmt + clippy + test
@@ -56,9 +59,9 @@ jobs:
         working-directory: clients/desktop/src-tauri
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -66,7 +69,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           components: rustfmt, clippy
 
@@ -85,7 +88,7 @@ jobs:
             file
 
       - name: Cache cargo build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -179,9 +182,9 @@ jobs:
               clients/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -189,7 +192,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
 
       - name: Add macOS universal targets
         if: matrix.label == 'macos'
@@ -211,7 +214,7 @@ jobs:
             file
 
       - name: Cache cargo build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cargo/registry
@@ -240,7 +243,7 @@ jobs:
         run: npm run tauri:build${{ matrix.flavor == 'thin' && ':thin' || '' }} ${{ matrix.extra_args }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: oneirodex-${{ matrix.flavor }}-${{ matrix.label }}
           path: ${{ matrix.artifacts }}
@@ -264,7 +267,7 @@ jobs:
 
     steps:
       - name: Download every installer
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           path: installers
           pattern: oneirodex-*
@@ -275,7 +278,7 @@ jobs:
       # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
       # per platform extension, so they can sit side by side on one release.
       - name: Attach to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
           files: installers/**/*
