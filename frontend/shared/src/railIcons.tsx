@@ -233,7 +233,11 @@ export const railIconPaths: Record<string, React.ReactNode> = {
       <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
     </>
   ),
-  filter: <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />,
+  filter: (
+    <>
+      <path d="M3 5h18l-7 8.5V20l-4-2v-4.5L3 5z" />
+    </>
+  ),
   art: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -242,7 +246,9 @@ export const railIconPaths: Record<string, React.ReactNode> = {
     </>
   ),
   plugins: (
-    <path d="M10 3v3H7a2 2 0 0 0-2 2v3h3a2 2 0 1 1 0 4H5v3a2 2 0 0 0 2 2h3v-3a2 2 0 1 1 4 0v3h3a2 2 0 0 0 2-2v-3h-3a2 2 0 1 1 0-4h3V8a2 2 0 0 0-2-2h-3V3a2 2 0 1 0-4 0z" />
+    <>
+      <path d="M10 3v3H7a2 2 0 0 0-2 2v3h3a2 2 0 1 1 0 4H5v3a2 2 0 0 0 2 2h3v-3a2 2 0 1 1 4 0v3h3a2 2 0 0 0 2-2v-3h-3a2 2 0 1 1 0-4h3V8a2 2 0 0 0-2-2h-3V3a2 2 0 1 0-4 0z" />
+    </>
   ),
   chart: (
     <>

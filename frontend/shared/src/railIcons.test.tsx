@@ -12,9 +12,30 @@ test('every rail destination has a glyph, including the one admin used to miss',
 
 test('admin sub-section glyphs exist', () => {
   for (const name of [
-    'scan', 'tools', 'unmatched', 'filter', 'art', 'plugins', 'chart', 'danger', 'storage',
-    'emulators', 'themes', 'layout', 'attract', 'ai', 'quality', 'reference', 'matching',
-    'mail', 'metadata', 'identity', 'voice', 'stores', 'remote', 'server',
+    'scan',
+    'tools',
+    'unmatched',
+    'filter',
+    'art',
+    'plugins',
+    'chart',
+    'danger',
+    'storage',
+    'emulators',
+    'themes',
+    'layout',
+    'attract',
+    'ai',
+    'quality',
+    'reference',
+    'matching',
+    'mail',
+    'metadata',
+    'identity',
+    'voice',
+    'stores',
+    'remote',
+    'server',
   ]) {
     expect(railIconPaths[name], name).toBeTruthy()
   }

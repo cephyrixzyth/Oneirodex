@@ -1115,3 +1115,9 @@ body.od-shell-host .od-admin-main:has(.od-dash),
   color: var(--od-bg);
   font-weight: 600;
 }
+
+.od-settings-group__title .od-icon,
+.od-settings-row__title .od-icon {
+  vertical-align: -0.2em;
+  margin-right: 0.15rem;
+}

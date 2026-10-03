@@ -59,8 +59,12 @@ export const SETTINGS_GROUPS: SubSection[] = [
         title: 'ROM reference sets',
         blurb: 'Upload No-Intro/Redump DATs for set completeness.',
       },
-      { to: '/admin/quality_profiles',
- icon: 'quality', title: 'Quality profiles', blurb: 'Release quality rules.' },
+      {
+        to: '/admin/quality_profiles',
+        icon: 'quality',
+        title: 'Quality profiles',
+        blurb: 'Release quality rules.',
+      },
       {
         to: '/admin/storage',
         icon: 'storage',
@@ -106,8 +110,12 @@ export const SETTINGS_GROUPS: SubSection[] = [
         title: 'Art studio',
         blurb: 'Placeholders + artwork picker / image queue.',
       },
-      { to: '/admin/detail_layout',
- icon: 'layout', title: 'Detail layout', blurb: 'Game details field layout.' },
+      {
+        to: '/admin/detail_layout',
+        icon: 'layout',
+        title: 'Detail layout',
+        blurb: 'Game details field layout.',
+      },
       {
         to: '/admin/attract_mode_settings',
         icon: 'attract',
@@ -263,118 +271,15 @@ export function findSubSection(pathname: string, hash = '') {
     for (const sub of subs) {
       const matches = sub.items.filter((item) => item.to.split('#')[0] === path)
       if (!matches.length) continue
-      const exact = matches.find((item) => (item.to.split('#')[1] ? `#${item.to.split('#')[1]}` : '') === frag)
+      const exact = matches.find(
+        (item) => (item.to.split('#')[1] ? `#${item.to.split('#')[1]}` : '') === frag,
+      )
       const item = exact || (matches.every((m) => m.to.includes('#')) ? null : matches[0])
       if (item) return { sectionId, sub, item, siblings: subs }
     }
   }
   return null
 }
-
-/** Grouped Integrations hub cards (React chrome; forms stay Jinja). */
-export const INTEGRATION_CARDS = [
-  {
-    id: 'igdb',
-    title: 'IGDB',
-    blurb: 'Primary game metadata credentials and sync.',
-    href: '/admin/igdb_settings',
-    links: [
-      { href: '/admin/igdb_settings', label: 'IGDB settings' },
-      { href: '/admin/integrations#igdb', label: 'Integrations · IGDB tab' },
-    ],
-  },
-  {
-    id: 'artwork',
-    title: 'Artwork & secondary metadata',
-    blurb: 'SteamGridDB covers, Giant Bomb, HowLongToBeat, Meta/Quest — not IGDB-only.',
-    href: '/admin/integrations#artwork',
-    links: [
-      { href: '/admin/integrations#artwork', label: 'SteamGridDB art' },
-      { href: '/admin/integrations#artwork', label: 'Giant Bomb' },
-      { href: '/admin/integrations#artwork', label: 'HowLongToBeat' },
-      { href: '/admin/integrations#ownership', label: 'Meta / Quest ownership' },
-      // Fragment dropped: admin_art_studio.html carries no ids at all, so
-      // `#images` was another anchor that silently landed at the top of the
-      // page. The page itself is the destination.
-      { href: '/admin/art_studio', label: 'Art studio picker' },
-    ],
-  },
-  {
-    id: 'smtp',
-    title: 'SMTP',
-    blurb: 'Outbound mail for invites, resets, and notices.',
-    href: '/admin/smtp_settings',
-    links: [
-      { href: '/admin/smtp_settings', label: 'SMTP settings' },
-      { href: '/admin/integrations#smtp', label: 'Integrations · Email tab' },
-    ],
-  },
-  {
-    id: 'oidc',
-    title: 'OIDC',
-    blurb: 'Optional SSO (Authentik). Leave off for home-only installs.',
-    href: '/admin/integrations#oidc',
-    links: [{ href: '/admin/integrations#oidc', label: 'OIDC / SSO tab' }],
-  },
-  {
-    id: 'livekit',
-    title: 'LiveKit',
-    blurb: 'Household voice rooms — enable under Features + LIVEKIT_* secrets.',
-    href: '/admin/features',
-    links: [
-      { href: '/admin/features', label: 'Features (LiveKit toggle)' },
-      { href: '/admin/ops', label: 'Ops voice pulse' },
-    ],
-  },
-  {
-    id: 'community',
-    title: 'Community chat',
-    blurb: 'Optional BYO Stoat/Matrix deep-link — not Discord webhooks.',
-    href: '/admin/integrations#community',
-    links: [
-      { href: '/admin/integrations#community', label: 'Community tab' },
-      { href: '/admin/chat_emoji', label: 'Custom chat emoji' },
-    ],
-  },
-  {
-    id: 'acquire',
-    title: 'Acquire / Arr',
-    blurb: 'Native Torznab registry + optional Prowlarr/Jackett/qBit hubs.',
-    href: '/admin/arr',
-    links: [
-      { href: '/admin/arr', label: 'Arr module' },
-      { href: '/admin/integrations#acquire', label: 'Integrations · Indexers' },
-    ],
-  },
-  {
-    id: 'ownership',
-    title: 'Ownership registers',
-    blurb:
-      'Register-only store links: each member’s connection state, last sync result and repair.',
-    href: '/admin/ownership',
-    links: [
-      { href: '/admin/ownership', label: 'Store connections' },
-      { href: '/admin/integrations#ownership', label: 'Ownership tab' },
-    ],
-  },
-  {
-    id: 'remote_play',
-    title: 'Remote play',
-    blurb: 'BYO Sunshine/Wolf for Moonlight — enable under Features + host URL.',
-    href: '/admin/remote_play',
-    links: [
-      { href: '/admin/remote_play', label: 'Remote play settings' },
-      { href: '/admin/features', label: 'Features toggle' },
-    ],
-  },
-  {
-    id: 'support',
-    title: 'Support',
-    blurb: 'Member issue inbox and optional GitHub sync.',
-    href: '/admin/support',
-    links: [{ href: '/admin/support', label: 'Support inbox' }],
-  },
-]
 
 /**
  * Links that are *actions on a page*, not destinations (GT-B7).

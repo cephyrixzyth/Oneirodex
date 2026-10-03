@@ -121,19 +121,20 @@ test('integrations hub shows grouped cards', async () => {
       </MemoryRouter>,
     )
     expect(screen.getByRole('heading', { name: 'Integrations' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'IGDB' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Artwork & secondary metadata' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'SMTP' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'OIDC' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'LiveKit' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Acquire / Arr' })).toBeInTheDocument()
+    for (const name of [
+      'Metadata & art',
+      'Stores & ownership',
+      'Messaging & identity',
+      'Acquisition',
+    ]) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
     // "Export packs" left Integrations with GT-B8 — it writes a file for another
     // emulator frontend to read, which is emulation, not a service we talk to.
     expect(screen.queryByRole('heading', { name: 'Export packs' })).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Support' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'IGDB settings' })).toHaveAttribute(
+    // Support inbox lives under Users now; Remote play under Settings.
+    expect(screen.queryByRole('link', { name: 'Support inbox' })).toBeNull()
+    expect(screen.getByRole('link', { name: /^IGDB/ })).toHaveAttribute(
       'href',
       '/admin/igdb_settings',
     )

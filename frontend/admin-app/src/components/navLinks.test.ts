@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import {
   ADMIN_NAV,
   HUB_LINKS,
-  INTEGRATION_CARDS,
+  INTEGRATION_SECTIONS,
   RAIL_SECTION_MODE,
   SETTINGS_GROUPS,
   railDestinations,
@@ -40,11 +40,8 @@ function collectHrefs() {
     }
   }
 
-  for (const card of INTEGRATION_CARDS) {
-    if (card.href) found.push(card.href)
-    for (const link of card.links || []) {
-      if (link.href) found.push(link.href)
-    }
+  for (const group of INTEGRATION_SECTIONS) {
+    for (const item of group.items) found.push(item.to)
   }
 
   for (const links of Object.values(HUB_LINKS)) {
@@ -57,7 +54,12 @@ function collectHrefs() {
 }
 
 describe('integrations deep links', () => {
-  const cardIds = new Set(INTEGRATION_CARDS.map((card) => card.id))
+  // The hub renders an element id for every child that points at a fragment.
+  const cardIds = new Set(
+    INTEGRATION_SECTIONS.flatMap((group) => group.items)
+      .map((item) => item.to.split('#')[1])
+      .filter(Boolean),
+  )
   const anchors = collectHrefs()
     .filter((href) => href.startsWith(INTEGRATIONS))
     .map((href) => href.slice(INTEGRATIONS.length))
@@ -68,7 +70,7 @@ describe('integrations deep links', () => {
     expect(anchors.length).toBeGreaterThan(0)
   })
 
-  test('every anchor names a real card', () => {
+  test('every anchor names a row the hub renders', () => {
     const orphans = [...new Set(anchors)].filter((id) => !cardIds.has(id))
 
     expect(orphans).toEqual([])

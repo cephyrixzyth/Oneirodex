@@ -1,4 +1,4 @@
-import { ADMIN_NAV, HUB_LINKS, INTEGRATION_CARDS, SETTINGS_GROUPS } from './navConfig'
+import { ADMIN_NAV, HUB_LINKS, INTEGRATION_SECTIONS, SETTINGS_GROUPS } from './navConfig'
 
 /**
  * One flat, searchable index of every admin destination (GT-A7).
@@ -116,15 +116,15 @@ export function buildAdminCommands(): AdminCommand[] {
     }
   }
 
-  for (const card of INTEGRATION_CARDS) {
-    push({
-      href: card.href,
-      label: card.title,
-      section: 'Integrations',
-      blurb: card.blurb,
-    })
-    for (const link of card.links || []) {
-      push({ href: link.href, label: link.label, section: `Integrations · ${card.title}` })
+  push({ href: '/admin/integrations', label: 'Integrations overview', section: 'Integrations' })
+  for (const group of INTEGRATION_SECTIONS) {
+    for (const item of group.items) {
+      push({
+        href: item.to,
+        label: item.title,
+        section: `Integrations · ${group.title}`,
+        blurb: item.blurb,
+      })
     }
   }
 
