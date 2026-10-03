@@ -7,15 +7,15 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-ENV_PATH = Path(r"Z:\_projects\Oneirodex\.env")
+ENV_PATH = Path(r"C:\Apps\Oneirodex\.env")
 SSH = ["ssh", "-o", "BatchMode=yes", "root@192.168.50.116"]
 SECRET_REMOTE = "/mnt/user/appdata/authentik/media/.oneirodex_oidc_secret"
 
 UPSERT = {
-    "APP_IMAGE": "oneirodex:1.0.0-beta",
+    "APP_IMAGE": "oneirodex:1.0.1",
     "APP_CONTAINER_NAME": "oneirodex-app",
-    "DB_CONTAINER_NAME": "oneirodex-db",
-    "COMPOSE_FILE": "docker-compose.yml",
+    "COMPOSE_FILE": "docker-compose.single.yml",
+    "APPDATA_PATH": "/mnt/cache/appdata/oneirodex/config",
     "ENABLE_ARR_MODULE": "true",
     "ENABLE_ARR_HARDLINK_PIPELINE": "true",
     "ENABLE_AI_ASSIST": "true",
