@@ -152,10 +152,10 @@ def save_attract_mode_settings():
 
         # Log the change
         log_system_event(
-            'configuration',
             f'Attract mode settings updated by {current_user.name}',
-            'information',
-            current_user.id
+            event_type='configuration',
+            event_level='information',
+            audit_user=current_user.id,
         )
 
         return api_ok({'message': 'Attract mode settings saved successfully'})
@@ -251,10 +251,10 @@ def save_user_attract_mode_override():
 
         # Log the change
         log_system_event(
-            'user_preference',
             f'User {current_user.name} customized attract mode settings',
-            'information',
-            current_user.id
+            event_type='user_preference',
+            event_level='information',
+            audit_user=current_user.id,
         )
 
         return api_ok({'message': 'Your attract mode preferences have been saved'})

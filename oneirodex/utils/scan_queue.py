@@ -366,6 +366,32 @@ def create_scan_job_row(
     return job
 
 
+def _has_older_busy_scan(candidate: ScanJob) -> bool:
+    """Whether a Running/Stopping row precedes this one in (last_run, id) order."""
+    rows = db.session.execute(
+        select(ScanJob.id, ScanJob.last_run)
+        .where(
+            ScanJob.status.in_(('Running', 'Stopping')),
+            ScanJob.id != candidate.id,
+        )
+        .order_by(ScanJob.last_run.asc().nullsfirst(), ScanJob.id.asc())
+    ).all()
+    candidate_run = candidate.last_run
+    if candidate_run is None:
+        candidate_run = datetime.min.replace(tzinfo=timezone.utc)
+    elif candidate_run.tzinfo is None:
+        candidate_run = candidate_run.replace(tzinfo=timezone.utc)
+    for row_id, last_run in rows:
+        if last_run is None:
+            last_run = datetime.min.replace(tzinfo=timezone.utc)
+        elif last_run.tzinfo is None:
+            last_run = last_run.replace(tzinfo=timezone.utc)
+        if (last_run, row_id) < (candidate_run, candidate.id):
+            return True
+        return False
+    return False
+
+
 def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False):
     """Spawn daemon thread that runs ``scan_and_add_games`` for an existing job."""
     from oneirodex.utilities import scan_and_add_games
@@ -504,13 +530,7 @@ def start_or_queue_scan(
     # Running, silently defeating the queue policy. Re-check now that our row is
     # visible and yield to the older job — same rollback the promote path does.
     if not force:
-        other_busy = db.session.execute(
-            select(ScanJob.id).where(
-                ScanJob.status.in_(('Running', 'Stopping')),
-                ScanJob.id != job.id,
-            ).limit(1)
-        ).first()
-        if other_busy:
+        if _has_older_busy_scan(job):
             job.status = 'Queued'
             # Back in the queue means back to unowned — a Queued row carrying
             # this process's token would be reclaimed as a dead-owner job the
@@ -709,13 +729,7 @@ def promote_next_queued_scan(app=None) -> ScanJob | None:
         return None
 
     # Another worker may have started in parallel — roll back claim if so.
-    other_busy = db.session.execute(
-        select(ScanJob.id).where(
-            ScanJob.status.in_(('Running', 'Stopping')),
-            ScanJob.id != promoted.id,
-        ).limit(1)
-    ).first()
-    if other_busy:
+    if _has_older_busy_scan(promoted):
         promoted.status = 'Queued'
         # See the matching rollback in start_or_queue_scan: unowned again.
         promoted.owner_token = None

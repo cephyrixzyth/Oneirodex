@@ -36,7 +36,7 @@ from oneirodex.utils.emulator_cheats import (
 )
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.play_url import library_platform_key
-from oneirodex.utils.rbac import librarian_required
+from oneirodex.utils.rbac import librarian_required, normalize_role
 from oneirodex.utils.security import is_safe_path
 from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
 from oneirodex.utils.validation import validate_body
@@ -104,6 +104,8 @@ def upload_game_cheat(game_uuid):
     game, refusal = _accessible_game(game_uuid)
     if refusal is not None:
         return refusal
+    if normalize_role(current_user.role) == 'child':
+        return api_error('Children cannot modify cheats', code='forbidden')
     refused = _refuse_non_retroarch(game)
     if refused is not None:
         return refused
@@ -163,6 +165,8 @@ def remove_game_cheat(game_uuid, filename):
     game, refusal = _accessible_game(game_uuid)
     if refusal is not None:
         return refusal
+    if normalize_role(current_user.role) == 'child':
+        return api_error('Children cannot modify cheats', code='forbidden')
     refused = _refuse_non_retroarch(game)
     if refused is not None:
         return refused

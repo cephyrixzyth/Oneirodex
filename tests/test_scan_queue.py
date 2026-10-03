@@ -21,6 +21,7 @@ from oneirodex.utils.scan_queue import (
     queue_position,
     reclaim_stale_busy_jobs,
     start_or_queue_scan,
+    PROCESS_TOKEN,
 )
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- library scan queue / worker coordination.
@@ -87,6 +88,38 @@ class TestParsePolicy:
 
 
 class TestStartOrQueueScan:
+    def test_race_recheck_yields_only_to_older_busy_job(self, app, db_session, sample_library, monkeypatch):
+        from oneirodex.utils import scan_queue
+
+        old = ScanJob(
+            folders={'/old': True}, content_type='Games', status='Running',
+            is_enabled=True, last_run=datetime.now(timezone.utc) - timedelta(minutes=2),
+            library_uuid=sample_library.uuid, scan_folder='/old', owner_token=PROCESS_TOKEN,
+        )
+        db_session.add(old)
+        db_session.commit()
+        monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
+        with app.app_context(), patch('oneirodex.utils.scan_queue.Thread') as thread:
+            thread.return_value.start = lambda: None
+            result = start_or_queue_scan(folder_path='/new', library_uuid=sample_library.uuid, app=app)
+        assert result['status'] == 'queued'
+        thread.assert_not_called()
+
+        db_session.execute(text('TRUNCATE TABLE scan_jobs CASCADE'))
+        db_session.commit()
+        newer = ScanJob(
+            folders={'/newer': True}, content_type='Games', status='Running',
+            is_enabled=True, last_run=datetime.now(timezone.utc) + timedelta(minutes=2),
+            library_uuid=sample_library.uuid, scan_folder='/newer', owner_token=PROCESS_TOKEN,
+        )
+        db_session.add(newer)
+        db_session.commit()
+        with app.app_context(), patch('oneirodex.utils.scan_queue.Thread') as thread:
+            thread.return_value.start = lambda: None
+            result = start_or_queue_scan(folder_path='/candidate', library_uuid=sample_library.uuid, app=app)
+        assert result['status'] == 'started'
+        thread.assert_called_once()
+
     def test_queues_when_busy_by_default(self, app, db_session, sample_library, running_job):
         with app.app_context():
             result = start_or_queue_scan(

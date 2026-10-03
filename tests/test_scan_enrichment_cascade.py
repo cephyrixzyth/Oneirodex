@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from oneirodex.utils import game_core
+from oneirodex.utils.services import game_enrich
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- scan metadata enrichment cascade.
 
@@ -58,7 +59,7 @@ class TestConsolePlatformsSkipSteam:
     def test_a_console_rom_never_calls_steam(self, no_db):
         """Four platform families' worth of scans used to spend a round trip
         each asking a PC store about a cartridge."""
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
+        with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {'queried': ['thegamesdb']}}
             game_core.enrich_game_all_sources(FakeGame(platform='SNES'))
@@ -70,7 +71,7 @@ class TestConsolePlatformsSkipSteam:
     def test_a_pc_game_still_gets_the_steam_pass(self, no_db):
         """That pass fetches more than the cascade does — VR perspectives and
         game modes — so it is not redundant with it."""
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
+        with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {}}
             game_core.enrich_game_all_sources(FakeGame(platform='PCWIN'))
@@ -79,7 +80,7 @@ class TestConsolePlatformsSkipSteam:
 
     def test_an_unknown_platform_still_asks_steam(self, no_db):
         """Absent platform is not evidence the title is a console one."""
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
+        with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {}}
             game_core.enrich_game_all_sources(FakeGame(platform=None))
@@ -90,7 +91,7 @@ class TestConsolePlatformsSkipSteam:
 class TestCascadeRunsOnlyWhenNeeded:
     def test_a_complete_game_does_not_trigger_a_single_request(self, no_db):
         complete = FakeGame(summary='A blurb.', genres=['RPG'], developer_id=4)
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
+        with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             steam.return_value = {'applied': True}
             result = game_core.enrich_game_all_sources(complete)
@@ -104,7 +105,7 @@ class TestCascadeRunsOnlyWhenNeeded:
         {'summary': 'Blurb', 'genres': ['RPG'], 'developer_id': None},
     ])
     def test_any_missing_core_field_triggers_the_walk(self, thin, no_db):
-        with patch.object(game_core, 'enrich_game_with_steam'), \
+        with patch.object(game_enrich, 'enrich_game_with_steam'), \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {'queried': ['gog']}}
             game_core.enrich_game_all_sources(FakeGame(**thin))
@@ -112,7 +113,7 @@ class TestCascadeRunsOnlyWhenNeeded:
         cascade.assert_called_once()
 
     def test_whitespace_only_summary_counts_as_missing(self, no_db):
-        with patch.object(game_core, 'enrich_game_with_steam'), \
+        with patch.object(game_enrich, 'enrich_game_with_steam'), \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {}}
             game_core.enrich_game_all_sources(
@@ -126,7 +127,7 @@ class TestSteamIsNotAskedTwice:
     def test_the_cascade_is_told_to_skip_steam(self, no_db):
         """The Steam pass above already answered; a second call is a wasted
         round trip on every PC title in a scan."""
-        with patch.object(game_core, 'enrich_game_with_steam'), \
+        with patch.object(game_enrich, 'enrich_game_with_steam'), \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             cascade.return_value = {'applied': {}, 'trace': {}}
             game_core.enrich_game_all_sources(FakeGame(platform='PCWIN'))
@@ -135,20 +136,21 @@ class TestSteamIsNotAskedTwice:
 
 
 class TestAMetadataMissNeverBreaksTheImport:
-    def test_a_failing_cascade_is_swallowed(self, no_db, capsys):
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
-             patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
-            steam.return_value = {'applied': True}
-            cascade.side_effect = RuntimeError('mobygames exploded')
-            result = game_core.enrich_game_all_sources(FakeGame())
+    def test_a_failing_cascade_is_swallowed(self, no_db, caplog):
+        with caplog.at_level('INFO', logger='oneirodex.utils.services.game_enrich'):
+            with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
+                 patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
+                steam.return_value = {'applied': True}
+                cascade.side_effect = RuntimeError('mobygames exploded')
+                result = game_core.enrich_game_all_sources(FakeGame())
 
         assert result['cascade'] is None
-        assert 'mobygames exploded' in capsys.readouterr().out
+        assert any('mobygames exploded' in record.message for record in caplog.records)
 
     def test_the_steam_result_is_still_returned_intact(self, no_db):
         """Callers read is_vr and steam_app_id off this dict; adding a cascade
         must not change its shape."""
-        with patch.object(game_core, 'enrich_game_with_steam') as steam, \
+        with patch.object(game_enrich, 'enrich_game_with_steam') as steam, \
              patch('oneirodex.utils.metadata_cascade.hydrate_game_from_cascade') as cascade:
             steam.return_value = {'applied': True, 'is_vr': True, 'steam_app_id': 42}
             cascade.return_value = {'applied': {}, 'trace': {'contributed': ['gog']}}
@@ -164,11 +166,13 @@ def test_every_scan_call_site_uses_the_full_cascade():
     future edit that reinstates the Steam-only call would be silent otherwise."""
     import inspect
 
-    source = inspect.getsource(game_core)
-    # Only the wrapper itself may call the Steam-only enricher.
-    body = source.split('def enrich_game_all_sources', 1)[1]
-    wrapper, rest = body.split('def attach_igdb_taxonomy_to_game', 1)
+    from oneirodex.utils.services import scan_identify
 
+    # The implementation moved out of game_core during the A2.3 split.
+    identify_source = inspect.getsource(scan_identify)
+    enrichment_source = inspect.getsource(game_enrich)
+    assert identify_source.count('enrich_game_all_sources(') == 2
+    assert 'enrich_game_all_sources(game, lookup_name=game.name)' in enrichment_source
+    # Only the full-cascade wrapper should call the Steam-only helper.
+    wrapper = inspect.getsource(game_enrich.enrich_game_all_sources)
     assert 'enrich_game_with_steam(' in wrapper
-    assert 'enrich_game_with_steam(' not in rest
-    assert rest.count('enrich_game_all_sources(') == 3

@@ -157,6 +157,7 @@ def _runtime_status_map() -> dict[str, str]:
                 status[f'store.{sid}'] = 'configured' if has_client else 'available'
     except Exception:
         pass
+    try:
         from oneirodex.utils.save_paths import status_summary as save_paths_status
 
         sp = save_paths_status()

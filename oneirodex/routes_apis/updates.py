@@ -373,7 +373,8 @@ def updates_scan():
                     'status': public.get('status'),
                 })
         except Exception as exc:  # noqa: BLE001 — one bad title must not end the sweep
-            errors.append({'uuid': game.uuid, 'name': game.name, 'error': str(exc)})
+            current_app.logger.warning('updates scan failed for %s: %s', game.uuid, exc)
+            errors.append({'uuid': game.uuid, 'name': game.name, 'error': 'Could not check this title'})
 
     try:
         db.session.commit()

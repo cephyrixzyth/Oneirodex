@@ -696,8 +696,14 @@ class TestGameDataFunctions:
         mock_notify_admins.assert_called_once_with(mock_game.uuid, mock_game.name)
     
     @patch('oneirodex.utils.clients.igdb.make_igdb_api_request')
-    def test_retrieve_and_save_game_api_failure(self, mock_api, app, db_session, sample_library, sample_global_settings):
+    def test_retrieve_and_save_game_api_failure(self, mock_api, app, db_session, sample_library, sample_global_settings, monkeypatch):
         """Test retrieve_and_save_game handles API failure."""
+        from oneirodex.utils.services import scan_identify
+        from oneirodex.utils import software_identify
+
+        monkeypatch.setattr(scan_identify, 'try_stage_d_store_identify', lambda **_kwargs: None)
+        monkeypatch.setattr(scan_identify, 'fetch_steam_title_by_app_id', lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(software_identify, 'search_gog_games', lambda *_args, **_kwargs: [])
         mock_api.return_value = {'error': 'API Error'}
         
         # Ensure the library exists and is committed to the database
