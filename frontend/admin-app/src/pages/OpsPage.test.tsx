@@ -662,7 +662,7 @@ test('OpsPage uses a dashboard-style board with reset and detail panels', async 
 
     expect(await screen.findByRole('heading', { name: 'System', level: 2 })).toBeInTheDocument()
     expect(document.querySelector('.od-dash__board')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Resize status' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resize Status' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Move System/ })).not.toBeInTheDocument()
 
     const reset = screen.getByRole('button', { name: 'Reset layout' })

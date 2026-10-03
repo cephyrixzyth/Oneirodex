@@ -3,6 +3,7 @@ import { PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { DashboardBoard } from '../components/DashboardBoard'
+import { DASHBOARD_OPTIONAL_IDS, DASHBOARD_WIDGET_LABELS } from '../components/dashboardLayout'
 import { Page } from '../components/Page'
 import {
   BuildTile,
@@ -35,6 +36,12 @@ const DASHBOARD_COMPANION_COLUMNS: DataTableColumn[] = [
   { key: 'kind', label: 'Kind' },
   { key: 'online', label: 'Online', align: 'right' },
   { key: 'registered', label: 'Registered', align: 'right' },
+]
+
+const DASHBOARD_SCAN_COLUMNS: DataTableColumn[] = [
+  { key: 'library', label: 'Library' },
+  { key: 'status', label: 'Status' },
+  { key: 'progress', label: 'Progress', align: 'right', render: (job) => `${job.progress ?? 0}%` },
 ]
 
 const DASHBOARD_ERROR_COLUMNS: DataTableColumn[] = [
@@ -224,6 +231,52 @@ export function DashboardPage() {
           tone={companionsTone(companions)}
         />
       ),
+      // Optional widgets: hidden until added from "Add widget".
+      'm-cpu': (
+        <MetricTile
+          label="CPU"
+          value={host?.cpu?.percent != null ? `${host.cpu.percent}%` : 'n/a'}
+          hint="host"
+          tone={percentHealthTone(host?.cpu?.percent)}
+        />
+      ),
+      'm-memory': (
+        <MetricTile
+          label="Memory"
+          value={host?.memory?.percent != null ? `${host.memory.percent}%` : 'n/a'}
+          hint={
+            host?.memory
+              ? `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`
+              : 'host'
+          }
+          tone={percentHealthTone(host?.memory?.percent)}
+        />
+      ),
+      'm-unmatched': (
+        <MetricTile
+          label="Unmatched folders"
+          value={na(library?.unmatched_folders)}
+          hint="need a match"
+          tone={gamesTone}
+        />
+      ),
+      'scan-jobs': (
+        <section className="od-ops-panel od-ops-panel--embedded">
+          <h2>Active scan jobs</h2>
+          {(scans?.jobs || []).length === 0 ? (
+            <p className="od-admin-lede">No scans running.</p>
+          ) : (
+            <DataTable
+              columns={DASHBOARD_SCAN_COLUMNS}
+              rows={(scans?.jobs || []).slice(0, 6)}
+              getRowKey={(job: { id?: string; library?: string }, index?: number) =>
+                String(job.id ?? job.library ?? index)
+              }
+              toolbar={false}
+            />
+          )}
+        </section>
+      ),
       host: (
         <section className="od-ops-panel od-ops-panel--embedded">
           <h2>Host meters</h2>
@@ -283,7 +336,7 @@ export function DashboardPage() {
   return (
     <Page
       title="Dashboard"
-      lede="Observability glance — libraries, host pulse, and open issues (~15s). Drag a widget to move; drag the corner to resize. Reset layout is centred; hover refresh for Updated time."
+      lede="Observability glance — libraries, host pulse, and open issues (~15s). Drag a widget to move it; drag an edge or corner (or use S/M/L/Full) to resize; pin to lock it. Add widget brings back hidden ones; hover refresh for Updated time."
     >
       {/* GT-B33: the shared status block, not two hand-rolled ones.
           The error branch used to be a `.od-admin-alert` div and the loading
@@ -303,6 +356,8 @@ export function DashboardPage() {
       <DashboardBoard
         widgets={widgets}
         hasErrors={hasErrors}
+        widgetLabels={DASHBOARD_WIDGET_LABELS}
+        defaultHidden={DASHBOARD_OPTIONAL_IDS}
         asOf={summary?.as_of}
         onRefresh={() => refresh('manual')}
         refreshing={manualRefreshing}

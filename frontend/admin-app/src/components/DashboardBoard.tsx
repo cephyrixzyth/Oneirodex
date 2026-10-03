@@ -5,11 +5,19 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { AdminPageActions } from './AdminPageActions'
+import { AddWidgetMenu, WidgetChrome } from './WidgetChrome'
+import { useBoardPrefs } from '../hooks/useBoardPrefs'
 import {
+  DASHBOARD_STORAGE_KEY,
+  appendWidget,
+  applySizePreset,
+  nudgeWidget,
+  type SizePreset,
   DASH_RESIZE_PX_PER_COL,
   DASH_RESIZE_PX_PER_ROW,
   boardCellMetrics,
@@ -36,6 +44,8 @@ interface DragState {
   lastY: number
   grabX?: number
   grabY?: number
+  /** Resize axis: edge handles lock one axis, the corner moves both. */
+  axis?: 'x' | 'y' | 'both'
   start: WidgetItem
   colPitch: number
   rowPitch: number
@@ -44,6 +54,25 @@ interface DragState {
 type PreviewState =
   | { id: string; mode: 'move'; dx: number; dy: number }
   | { id: string; mode: 'resize'; w: number; h: number; start: WidgetItem }
+
+function prettyId(id: string) {
+  const text = id.replace(/^m-/, '').replace(/[-_]+/g, ' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/** Grid steps for a resize drag, honouring the handle's axis. */
+function resizeDims(drag: DragState, x: number, y: number) {
+  const axis = drag.axis ?? 'both'
+  const w =
+    axis === 'y'
+      ? drag.start.w
+      : drag.start.w + Math.round((x - drag.originX) / (drag.colPitch * DASH_RESIZE_PX_PER_COL))
+  const h =
+    axis === 'x'
+      ? drag.start.h
+      : drag.start.h + Math.round((y - drag.originY) / (drag.rowPitch * DASH_RESIZE_PX_PER_ROW))
+  return { w, h }
+}
 
 function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
@@ -82,6 +111,8 @@ export function DashboardBoard({
   statusLabel = 'Dashboard status',
   refreshAriaLabel = 'Refresh dashboard',
   boardAriaLabel = null,
+  widgetLabels = {},
+  defaultHidden = [],
 }: {
   widgets: Record<string, ReactNode>
   hasErrors?: boolean
@@ -96,6 +127,10 @@ export function DashboardBoard({
   statusLabel?: string
   refreshAriaLabel?: string
   boardAriaLabel?: string | null
+  /** Names shown in each widget's controls and the Add widget menu. */
+  widgetLabels?: Record<string, string>
+  /** Widgets that start off the board until the admin adds them. */
+  defaultHidden?: readonly string[]
 }) {
   const asOfId = useId()
   const isCustom = Boolean(storageKey && typeof defaultLayout === 'function')
@@ -106,6 +141,13 @@ export function DashboardBoard({
     }
     return loadDashboardLayout(hasErrors)
   })
+  const prefs = useBoardPrefs(
+    isCustom && storageKey ? storageKey : DASHBOARD_STORAGE_KEY,
+    defaultHidden,
+  )
+  const { pinned, hidden } = prefs
+  const [addOpen, setAddOpen] = useState(false)
+  const labelFor = useCallback((id: string) => widgetLabels[id] || prettyId(id), [widgetLabels])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const boardRef = useRef<HTMLDivElement | null>(null)
@@ -147,23 +189,35 @@ export function DashboardBoard({
     saveDashboardLayout(layout)
   }, [layout, isCustom, storageKey, minsFn])
 
-  // Health banner grows with issue folds; default h:2 clips Degraded content.
+  // Hidden widgets take no space: drop them from the layout whenever either changes.
+  useEffect(() => {
+    setLayout((prev) =>
+      prev.some((item) => hidden.includes(item.id))
+        ? prev.filter((item) => !hidden.includes(item.id))
+        : prev,
+    )
+  }, [layout, hidden])
+
+  // Banner and metric tiles grow to fit their text (wrapped hints, issue folds);
+  // a clipped tile is worse than a taller one. Panels keep their own scroll.
   //
-  // The measure (getBoundingClientRect + scrollHeight) and the setLayout write are
-  // deferred into requestAnimationFrame, and the ResizeObserver callback only
-  // *schedules* that rAF rather than measuring+writing inline. The observer watches
-  // .od-dash__body, whose height the write changes, so doing both synchronously in
-  // the callback is a read->write->re-observe loop within one frame — which pins the
-  // main thread when a browser extension (password managers) is also re-measuring on
-  // every DOM mutation. Deps are [visibleKey, minsFn], not [widgets, layout.length]:
-  // `widgets` is a fresh object each parent render (poll tick, ellipsis tick) and
-  // `layout.length` is written by this very effect, so the old deps re-ran it
-  // constantly and re-triggered it off its own output.
+  // The measure (scrollHeight) and the setLayout write are deferred into
+  // requestAnimationFrame, and the ResizeObserver callback only *schedules* that
+  // rAF rather than measuring+writing inline. The observer watches .od-dash__body,
+  // whose height the write changes, so doing both synchronously in the callback is
+  // a read->write->re-observe loop within one frame — which pins the main thread
+  // when a browser extension (password managers) is also re-measuring on every DOM
+  // mutation. Tiles only ever grow, so the loop converges. Deps are
+  // [visibleKey, hiddenKey, minsFn], not [widgets, layout.length]: `widgets` is a
+  // fresh object each parent render (poll tick, ellipsis tick).
+  const hiddenKey = hidden.join('|')
+  const pinnedRef = useRef<string[]>(pinned)
+  pinnedRef.current = pinned
   useEffect(() => {
     const board = boardRef.current
     if (!board) return undefined
-    const host = board.querySelector('[data-widget="status"] .od-dash__body')
-    if (!host) return undefined
+    const hosts = Array.from(board.querySelectorAll('[data-fit="true"] > .od-dash__body'))
+    if (!hosts.length) return undefined
 
     let raf = 0
     let disposed = false
@@ -172,12 +226,22 @@ export function DashboardBoard({
       raf = 0
       if (disposed) return
       const metrics = boardCellMetrics(board)
-      const minH = minsFn('status').h
-      const need = rowsForContentHeight(host.scrollHeight, metrics.rowPitch, minH)
+      const needs = new Map<string, number>()
+      for (const host of hosts) {
+        const id = (host.parentElement as HTMLElement | null)?.dataset.widget
+        if (!id || pinnedRef.current.includes(id)) continue
+        const inner = host.firstElementChild
+        const height = Math.max(host.scrollHeight, inner ? inner.scrollHeight : 0)
+        needs.set(id, rowsForContentHeight(height, metrics.rowPitch, minsFn(id).h))
+      }
       setLayout((prev) => {
-        const current = prev.find((item) => item.id === 'status')
-        if (!current || current.h >= need) return prev
-        return commitResize(prev, 'status', current.w, need, minsFn)
+        let next = prev
+        for (const [id, need] of needs) {
+          const current = next.find((item) => item.id === id)
+          if (!current || current.h >= need) continue
+          next = commitResize(next, id, current.w, need, minsFn, pinnedRef.current)
+        }
+        return next
       })
     }
 
@@ -197,13 +261,13 @@ export function DashboardBoard({
       }
     }
     const observer = new ResizeObserver(schedule)
-    observer.observe(host)
+    hosts.forEach((host) => observer.observe(host))
     return () => {
       disposed = true
       if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf)
       observer.disconnect()
     }
-  }, [visibleKey, minsFn])
+  }, [visibleKey, hiddenKey, minsFn])
 
   const byId = useMemo(() => {
     const map = new Map<string, WidgetItem>()
@@ -227,15 +291,12 @@ export function DashboardBoard({
       const top = drag.lastY - (drag.grabY ?? 0)
       const x = Math.round((left - rect.left) / colPitch)
       const y = Math.round((top - rect.top) / rowPitch)
-      setLayout((prev) => commitMove(prev, drag.id, x, y, minsFn))
+      setLayout((prev) => commitMove(prev, drag.id, x, y, minsFn, pinnedRef.current))
       return
     }
 
-    const dx = drag.lastX - drag.originX
-    const dy = drag.lastY - drag.originY
-    const w = drag.start.w + Math.round(dx / (drag.colPitch * DASH_RESIZE_PX_PER_COL))
-    const h = drag.start.h + Math.round(dy / (drag.rowPitch * DASH_RESIZE_PX_PER_ROW))
-    setLayout((prev) => commitResize(prev, drag.id, w, h, minsFn))
+    const { w, h } = resizeDims(drag, drag.lastX, drag.lastY)
+    setLayout((prev) => commitResize(prev, drag.id, w, h, minsFn, pinnedRef.current))
   }, [minsFn])
 
   useEffect(() => {
@@ -253,12 +314,7 @@ export function DashboardBoard({
         })
         return
       }
-      const w =
-        drag.start.w +
-        Math.round((event.clientX - drag.originX) / (drag.colPitch * DASH_RESIZE_PX_PER_COL))
-      const h =
-        drag.start.h +
-        Math.round((event.clientY - drag.originY) / (drag.rowPitch * DASH_RESIZE_PX_PER_ROW))
+      const { w, h } = resizeDims(drag, event.clientX, event.clientY)
       setPreview({ id: drag.id, w, h, mode: 'resize', start: drag.start })
     }
 
@@ -281,6 +337,7 @@ export function DashboardBoard({
     (id: string, event: ReactPointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return
       if (isInteractiveTarget(event.target)) return
+      if (pinnedRef.current.includes(id)) return
       const board = boardRef.current
       const item = byId.get(id)
       const host = event.currentTarget
@@ -308,8 +365,13 @@ export function DashboardBoard({
   )
 
   const beginResize = useCallback(
-    (id: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    (
+      id: string,
+      event: ReactPointerEvent<HTMLButtonElement>,
+      axis: 'x' | 'y' | 'both' = 'both',
+    ) => {
       if (event.button !== 0) return
+      if (pinnedRef.current.includes(id)) return
       const board = boardRef.current
       const item = byId.get(id)
       if (!board || !item) return
@@ -317,6 +379,7 @@ export function DashboardBoard({
       dragRef.current = {
         mode: 'resize',
         id,
+        axis,
         originX: event.clientX,
         originY: event.clientY,
         lastX: event.clientX,
@@ -333,7 +396,44 @@ export function DashboardBoard({
     [byId],
   )
 
+  const defaultSize = useCallback(
+    (id: string) => {
+      const source =
+        isCustom && defaultLayout ? defaultLayout() : defaultDashboardLayout({ hasErrors: true })
+      const found = source.find((item) => item.id === id)
+      return found ? { w: found.w, h: found.h } : { w: 4, h: 2 }
+    },
+    [isCustom, defaultLayout],
+  )
+
+  function addWidget(id: string) {
+    prefs.show(id)
+    setLayout((prev) => appendWidget(prev, id, defaultSize(id), minsFn, pinned))
+    setAddOpen(false)
+  }
+
+  function hideWidget(id: string) {
+    setLayout((prev) => prev.filter((item) => item.id !== id))
+    prefs.hide(id)
+  }
+
+  function onItemKeyDown(id: string, event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return
+    const keys: Record<string, [number, number]> = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }
+    const step = keys[event.key]
+    if (!step) return
+    event.preventDefault()
+    setLayout((prev) => nudgeWidget(prev, id, step[0], step[1], event.shiftKey, minsFn, pinned))
+  }
+
   function resetLayout() {
+    prefs.reset()
+    setAddOpen(false)
     if (isCustom && storageKey && defaultLayout) {
       try {
         window.localStorage?.removeItem(storageKey)
@@ -354,6 +454,13 @@ export function DashboardBoard({
   return (
     <div className="od-dash">
       <AdminPageActions label={layoutLabel} slot="page">
+        <AddWidgetMenu
+          hidden={hidden.filter((id) => widgets[id])}
+          labelFor={labelFor}
+          onAdd={addWidget}
+          open={addOpen}
+          onToggle={() => setAddOpen((open) => !open)}
+        />
         <button type="button" className="od-cbtn" onClick={resetLayout}>
           Reset layout
         </button>
@@ -400,7 +507,8 @@ export function DashboardBoard({
       >
         {layout.map((item) => {
           const body = widgets[item.id]
-          if (!body) return null
+          if (!body || hidden.includes(item.id)) return null
+          const isPinned = pinned.includes(item.id)
           const busy = activeId === item.id
           const movePreview =
             busy && preview?.mode === 'move' && preview.id === item.id ? preview : null
@@ -409,7 +517,7 @@ export function DashboardBoard({
           return (
             <div
               key={item.id}
-              className={`od-dash__item${busy ? ' is-dragging' : ''}`}
+              className={`od-dash__item${busy ? ' is-dragging' : ''}${isPinned ? ' is-pinned' : ''}`}
               style={{
                 gridColumn: `${item.x + 1} / span ${item.w}`,
                 gridRow: `${item.y + 1} / span ${item.h}`,
@@ -421,6 +529,11 @@ export function DashboardBoard({
                   : null),
               }}
               data-widget={item.id}
+              data-fit={item.id === 'status' || item.id.startsWith('m-') ? 'true' : undefined}
+              role="group"
+              tabIndex={0}
+              aria-label={`${labelFor(item.id)}${isPinned ? ' (pinned)' : ''}. Arrow keys move, shift and arrow keys resize.`}
+              onKeyDown={(event) => onItemKeyDown(item.id, event)}
               onPointerDown={(event) => beginMove(item.id, event)}
             >
               <div className="od-dash__body">{body}</div>
@@ -434,13 +547,40 @@ export function DashboardBoard({
                   }}
                 />
               ) : null}
-              <button
-                type="button"
-                className="od-dash__resize"
-                aria-label={`Resize ${item.id}`}
-                title="Drag corner to resize"
-                onPointerDown={(event) => beginResize(item.id, event)}
+              <WidgetChrome
+                label={labelFor(item.id)}
+                pinned={isPinned}
+                onTogglePin={() => prefs.togglePin(item.id)}
+                onPreset={(preset: SizePreset) =>
+                  setLayout((prev) => applySizePreset(prev, item.id, preset, minsFn, pinned))
+                }
+                onHide={() => hideWidget(item.id)}
               />
+              {isPinned ? null : (
+                <>
+                  <button
+                    type="button"
+                    className="od-dash__resize od-dash__resize--x"
+                    aria-label={`Resize ${labelFor(item.id)} width`}
+                    title="Drag to change width"
+                    onPointerDown={(event) => beginResize(item.id, event, 'x')}
+                  />
+                  <button
+                    type="button"
+                    className="od-dash__resize od-dash__resize--y"
+                    aria-label={`Resize ${labelFor(item.id)} height`}
+                    title="Drag to change height"
+                    onPointerDown={(event) => beginResize(item.id, event, 'y')}
+                  />
+                  <button
+                    type="button"
+                    className="od-dash__resize"
+                    aria-label={`Resize ${labelFor(item.id)}`}
+                    title="Drag corner to resize"
+                    onPointerDown={(event) => beginResize(item.id, event)}
+                  />
+                </>
+              )}
             </div>
           )
         })}
