@@ -345,6 +345,7 @@ def test_local_image_route_serves_a_real_cover_but_not_a_linked_one(client, app,
     ok = client.get(f'/game/{game.uuid}/local_image/cover')
     assert ok.status_code == 200
     assert ok.data == b'\xff\xd8REAL-COVER'
+    ok.close()
 
     (folder / 'cover.jpg').unlink()
     _link(folder / 'cover.jpg', secret)

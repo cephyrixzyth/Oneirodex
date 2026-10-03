@@ -213,6 +213,7 @@ def test_macos_compares_paths_the_way_its_volume_does(monkeypatch):
     assert not security._is_below(base, on_disk), 'elsewhere paths are compared exactly'
 
     monkeypatch.setattr(security, 'sys', types.SimpleNamespace(platform='darwin'))
+    monkeypatch.setattr(security, 'os', types.SimpleNamespace(name='posix'))
     assert security._is_below(base, on_disk)
     assert not security._is_below(base, '/Users/me/Games/Other/a.bin')
     assert not security._is_below(base, '/users/me/GAMES/CAF\u00c9'), 'a folder is not within itself'
@@ -551,6 +552,7 @@ def test_rom_endpoint_serves_a_folder_rom_with_its_size_and_name(served):
     assert wire.finished
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows denies unlinking a file held by an open descriptor')
 def test_rom_endpoint_serves_what_was_vetted_when_the_file_is_swapped_while_logging(served, secret, monkeypatch):
     folder = served.root / 'Rom Game'
     folder.mkdir()
@@ -678,6 +680,7 @@ def test_single_file_download_serves_the_file_with_its_size(served):
     assert b'game.7z' in wire.header(b'content-disposition')
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows denies unlinking a file held by an open descriptor')
 def test_single_file_download_serves_what_was_vetted_when_the_file_is_swapped_while_logging(served, secret, monkeypatch):
     package = served.root / 'game.7z'
     package.write_bytes(GAME)
@@ -912,6 +915,7 @@ def test_local_cover_honours_a_range_request(client, cover_game):
     assert response.headers['Content-Range'] == f'bytes 2-5/{len(b"""\xff\xd8REAL-COVER""")}'
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows denies unlinking a file held by an open descriptor')
 def test_local_cover_serves_what_was_vetted_when_the_file_is_swapped_while_logging(client, cover_game, secret, monkeypatch):
     from oneirodex.routes_games_ext import details
 
