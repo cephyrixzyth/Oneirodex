@@ -1,0 +1,30 @@
+# Oneirodex — single container (PostgreSQL embedded).
+#
+#   cp .env.single.example .env   # optional; nothing is required
+#   docker compose -f docker-compose.single.yml up -d
+#
+# No DATABASE_URL, no POSTGRES_PASSWORD, no SECRET_KEY: the image creates its own
+# database and secrets under /config on first start. For the two-container stack
+# with a separate Postgres (NAS / Unraid Compose Manager) use docker-compose.yml.
+services:
+  oneirodex:
+    image: ${APP_IMAGE:-chrisjrovira/oneirodex:latest}
+    container_name: oneirodex
+    restart: unless-stopped
+    ports:
+      - "5006:5006"
+    environment:
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
+      - TZ=${TZ:-UTC}
+      - ONEIRODEX_LIBRARY_ROOTS=${ONEIRODEX_LIBRARY_ROOTS:-}
+    volumes:
+      - "${APPDATA_PATH:-./appdata}:/config"
+      - "${DATA_FOLDER_GAMES:-./games}:/storage:ro"
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5006/awake || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s

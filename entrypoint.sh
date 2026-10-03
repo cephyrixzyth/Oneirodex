@@ -19,9 +19,24 @@ if [[ ! -f /app/oneirodex/static/library/themes/default/css/od-tokens.css ]]; th
     echo "⚠️  Warning: themes/default/css/od-tokens.css missing — run init or Admin → Reset Default Themes after boot."
 fi
 
+# Single-container mode: no DATABASE_URL given, so run PostgreSQL inside this
+# container (docker/embedded-db.sh). The Compose stack sets DATABASE_URL and is
+# unaffected.
+EMBEDDED=false
+# shellcheck source=docker/embedded-db.sh
+source /app/docker/embedded-db.sh
+if embedded_db_wanted; then
+    EMBEDDED=true
+    echo "📦 Single-container mode: using the embedded PostgreSQL (data in ${CONFIG_DIR})."
+    # Order matters: start_embedded_db creates ${CONFIG_DIR}/secrets and resolves
+    # the database user, which embedded_db_defaults needs to store SECRET_KEY.
+    start_embedded_db || exit 1
+    embedded_db_defaults
+fi
+
 # Inside Docker Compose, Postgres is the sibling service named "db".
 # Never wait on localhost/127.0.0.1 (common leftover from non-Docker .env files).
-if [[ -f /.dockerenv ]]; then
+if [[ "${EMBEDDED}" == "false" && -f /.dockerenv ]]; then
     export DATABASE_HOST="${DATABASE_HOST:-db}"
     export DATABASE_PORT="${DATABASE_PORT:-5432}"
     export POSTGRES_USER="${POSTGRES_USER:-postgres}"
@@ -119,7 +134,42 @@ except Exception as e:
     echo "✅ PostgreSQL is now available!"
 }
 
-wait_for_postgres
+if [[ "${EMBEDDED}" == "false" ]]; then
+    wait_for_postgres
 
+    echo "🎮 Starting Oneirodex Docker container..."
+    exec /app/startweb-docker.sh "$@"
+fi
+
+# Embedded database: stay as the parent so SIGTERM (docker stop) stops the app
+# first and PostgreSQL second, cleanly, and so a dead database takes the
+# container down for the restart policy to bring back.
 echo "🎮 Starting Oneirodex Docker container..."
-exec /app/startweb-docker.sh "$@"
+/app/startweb-docker.sh "$@" &
+APP_PID=$!
+
+shutdown() {
+    kill -TERM "${APP_PID}" 2>/dev/null || true
+    wait "${APP_PID}" 2>/dev/null || true
+    stop_embedded_db
+    exit 0
+}
+trap shutdown TERM INT
+
+while kill -0 "${APP_PID}" 2>/dev/null; do
+    if ! embedded_db_alive; then
+        echo "❌ Embedded PostgreSQL stopped unexpectedly; exiting so the container restarts."
+        kill -TERM "${APP_PID}" 2>/dev/null || true
+        wait "${APP_PID}" 2>/dev/null || true
+        exit 1
+    fi
+    sleep 5 &
+    wait $! || true
+done
+
+# `set -e` is on: a bare `wait` returning the app's non-zero status would end the
+# script here and skip stopping PostgreSQL, so capture the status explicitly.
+APP_STATUS=0
+wait "${APP_PID}" || APP_STATUS=$?
+stop_embedded_db
+exit "${APP_STATUS}"

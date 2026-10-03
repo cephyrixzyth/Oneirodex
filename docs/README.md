@@ -14,6 +14,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Operators / native install | [runbooks/install-native.md](runbooks/install-native.md) — Linux · macOS · Windows installers, service units, upgrade; standalone preview with a bundled PostgreSQL ([ADR 0011](adr/0011-standalone-bundled-postgres.md)) |
 | Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, saves re-encrypted |
 | Operators / scan locations | [runbooks/remote-scan-locations.md](runbooks/remote-scan-locations.md) — `ONEIRODEX_LIBRARY_ROOTS`: NAS shares and extra disks, not just the server's own disk |
+| Operators / single container, Unraid Community Apps, Docker Hub | [runbooks/unraid-community-apps.md](runbooks/unraid-community-apps.md) — one image with an embedded database, the CA template, publish workflow and submission checklist |
 | Operators / Unraid | [runbooks/unraid-deploy.md](runbooks/unraid-deploy.md) · [NAS-DEPLOY.md](../NAS-DEPLOY.md) (portable checkout examples) |
 | Operators / Docker Compose | [runbooks/docker-compose-deploy.md](runbooks/docker-compose-deploy.md) — optional `--profile livekit` · `--profile clamav` · GPU art on a workstation: [artwork-gpu-workstation.md](runbooks/artwork-gpu-workstation.md) |
 | Operators / observability (optional) | [runbooks/observability-profile.md](runbooks/observability-profile.md) — Prometheus stub; Admin Ops is default |
