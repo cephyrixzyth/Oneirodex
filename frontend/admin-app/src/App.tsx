@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useRailState } from '@oneirodex/ui'
 import { AdminSideRail } from './components/AdminSideRail'
 import { AdminTopNav } from './components/AdminTopNav'
+import { SectionTopNav } from './components/SectionTopNav'
 import { AdminRoutes } from './components/AdminRoutes'
 import { useAdminShellFrame } from './hooks/useAdminShellFrame'
 import { useLegacyContextbarPortal } from './hooks/useLegacyContextbarPortal'
@@ -98,6 +99,7 @@ export function App() {
         />
       ) : null}
       <AdminTopNav onToggleRail={toggleRail} railState={railState} />
+      <SectionTopNav />
       {/* Legacy Jinja pages (resolveRenderMode() === 'legacy') render chrome
           only — no <main>, no <Routes>. The one intentional Jinja-DOM sniff
           lives in hasLegacyBody() above. */}

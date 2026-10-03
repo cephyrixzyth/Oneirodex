@@ -170,8 +170,13 @@ test('renders admin brand and primary nav', () => {
   expect(screen.getByText('Oneirodex Admin')).toBeInTheDocument()
   const nav = screen.getByRole('navigation', { name: 'Admin' })
   expect(nav.querySelector('a[href="/admin/dashboard"]')).toHaveTextContent('Dashboard')
-  // Settings is landing-only (hub owns module rows).
-  expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin/settings')
+  // Settings unfolds into four icon sub-sections; their children live in the top bar.
+  const settingsToggle = screen.getByRole('button', { name: 'Settings' })
+  expect(settingsToggle).toHaveClass('od-rail__group-toggle')
+  fireEvent.click(settingsToggle)
+  for (const title of ['Library & matching', 'Play & emulation', 'Presentation', 'Extend']) {
+    expect(screen.getByRole('link', { name: title })).toBeInTheDocument()
+  }
 
   // Libraries & scans is a hub of sibling pages again.
   const librariesToggle = screen.getByRole('button', { name: 'Libraries & scans' })

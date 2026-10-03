@@ -7,6 +7,7 @@ import {
   RAIL_SECTION_MODE,
   SETTINGS_GROUPS,
   railDestinations,
+  railSubSections,
   resolveNavSection,
 } from './navConfig'
 
@@ -118,13 +119,16 @@ describe('section ownership', () => {
 })
 
 describe('rail destinations vs hub catalogue', () => {
-  test('settings and integrations are landing-only; libraries is a hub again', () => {
+  test('settings and integrations unfold into sub-sections; libraries is a hub', () => {
     expect(RAIL_SECTION_MODE.libraries).toBe('hub')
-    expect(RAIL_SECTION_MODE.settings).toBe('landing')
-    expect(RAIL_SECTION_MODE.integrations).toBe('landing')
+    expect(RAIL_SECTION_MODE.settings).toBe('groups')
+    expect(RAIL_SECTION_MODE.integrations).toBe('groups')
     expect(railDestinations('libraries').length).toBeGreaterThan(0)
     expect(railDestinations('settings')).toEqual([])
     expect(railDestinations('integrations')).toEqual([])
+    expect(railSubSections('settings')).toHaveLength(4)
+    expect(railSubSections('integrations')).toHaveLength(4)
+    expect(railSubSections('libraries')).toEqual([])
   })
 
   test('hub catalogue owns library sibling pages for section highlight', () => {
