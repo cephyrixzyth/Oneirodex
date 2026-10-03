@@ -1,7 +1,12 @@
 import { SIZE_PRESET_LABELS, type SizePreset } from './dashboardLayout'
 
 const PRESETS: SizePreset[] = ['small', 'medium', 'large', 'full']
-const PRESET_SHORT: Record<SizePreset, string> = { small: 'S', medium: 'M', large: 'L', full: 'Full' }
+const PRESET_SHORT: Record<SizePreset, string> = {
+  small: 'S',
+  medium: 'M',
+  large: 'L',
+  full: 'Full',
+}
 
 /**
  * Per-widget toolbar: pin (lock position and size), size presets, hide.
@@ -90,7 +95,12 @@ export function AddWidgetMenu({
         <ul className="od-dash__add-menu" role="menu">
           {hidden.map((id) => (
             <li key={id} role="none">
-              <button type="button" role="menuitem" className="od-dash__add-item" onClick={() => onAdd(id)}>
+              <button
+                type="button"
+                role="menuitem"
+                className="od-dash__add-item"
+                onClick={() => onAdd(id)}
+              >
                 {labelFor(id)}
               </button>
             </li>

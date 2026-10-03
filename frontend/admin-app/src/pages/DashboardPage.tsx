@@ -3,10 +3,7 @@ import { PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { DashboardBoard } from '../components/DashboardBoard'
-import {
-  DASHBOARD_OPTIONAL_IDS,
-  DASHBOARD_WIDGET_LABELS,
-} from '../components/dashboardLayout'
+import { DASHBOARD_OPTIONAL_IDS, DASHBOARD_WIDGET_LABELS } from '../components/dashboardLayout'
 import { Page } from '../components/Page'
 import {
   BuildTile,
