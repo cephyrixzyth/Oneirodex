@@ -8,11 +8,25 @@ name: Desktop build
 #
 # Bundling (bundle.active) IS on — "unsigned" is about certificates, not about
 # whether users get an installer. Targets are nsis / dmg / deb + appimage;
-# .msi and .rpm are left out because both reject the pre-release version.
+# .msi and .rpm were left out while the version was a pre-release (both reject
+# it). The version is 1.0.0 now, so they can be added once a build proves them.
+#
+# Releases: a `v*` tag push, or a manual run with `release_tag`, attaches every
+# installer to that GitHub release (the `release` job). Nothing else creates one.
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Attach the built installers to this existing GitHub release (e.g. v1.0.0). Leave empty to only build.'
+        required: false
+        default: ''
   push:
+    # A `v*` tag builds every installer and attaches them to that tag's release.
+    # `branches` stays listed: naming only `tags` would stop branch pushes
+    # triggering this workflow at all.
+    branches: ['**']
+    tags: ['v*']
     paths:
       # api-client (and the shared workspace it builds on) is a source
       # dependency of the desktop app — a change there can break the build or
@@ -234,3 +248,35 @@ jobs:
           # exists to catch — it is what "we have mac/linux builds" turned out
           # not to mean while bundle.active was false.
           if-no-files-found: error
+
+  release:
+    name: attach installers to the GitHub release
+    needs: build
+    # Only a tag push or an explicit release_tag publishes anything. Ordinary
+    # branch pushes and pull requests stop at workflow artifacts.
+    if: >-
+      (github.event_name == 'push' && github.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download every installer
+        uses: actions/download-artifact@v7
+        with:
+          path: installers
+          pattern: oneirodex-*
+
+      - name: List what will be attached
+        run: find installers -type f | sort
+
+      # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
+      # per platform extension, so they can sit side by side on one release.
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          files: installers/**/*
+          fail_on_unmatched_files: true

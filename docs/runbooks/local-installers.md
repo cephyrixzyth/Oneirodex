@@ -24,8 +24,9 @@ build produced no bundles rather than reporting success over an empty directory.
 | Linux | `.deb`, `.AppImage` | Native, or from any host with `--linux`. |
 | macOS | `.dmg`, `.app` | **Mac required** — see below. |
 
-`.msi` and `.rpm` are not built: both reject the pre-release version string the
-project currently carries (`1.0.0-beta`). They can be added back to
+`.msi` and `.rpm` are not built: both reject a pre-release version string. The
+project is on a plain `1.0.0` now, so they can be turned on; they stay off until a
+build has proven them. They can be added back to
 `bundle.targets` in `clients/desktop/src-tauri/tauri.conf.json` (and
 `tauri.thin.conf.json`) once the version is a plain `X.Y.Z`.
 
