@@ -34,6 +34,8 @@ def test_the_same_title_printed_differently_matches(folder, store):
 
 @pytest.mark.parametrize('folder, store', [
     ("Baldur's Gate 2", "Baldur's Gate"),
+    ('Path', 'The Path'),
+    ('Gate', 'The Gate'),
     ('Alan Wake 2', 'Alan Wake'),
     ('Arizona Sunshine 2', 'Arizona Sunshine'),
     ('Hades', 'Hades II'),

@@ -48,7 +48,10 @@ def title_match_key(value: str | None) -> str:
     text = ''.join(ch for ch in text if not unicodedata.combining(ch))
     text = _TITLE_KEY_NON_ALNUM.sub(' ', text).strip()
     words = text.split()
-    if len(words) > 1 and words[0] == 'the':
+    # A leading "The" is dropped only when a real title remains (two or more
+    # words). Dropping it from "The Path" made the folder "Path" an *exact* match
+    # for it and auto-imported the wrong game in CI.
+    if len(words) > 2 and words[0] == 'the':
         words = words[1:]
     return ' '.join(words)
 
