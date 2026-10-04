@@ -131,6 +131,9 @@ desktop Android resource XML files; those files triggered the scanner's two
    restart keeps the library.
 4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one), add
    its URL to `<Forum>` in `ca_profile.xml`, and put the same URL in the template's `<Support>`.
+   The forum may restrict new topics to Community Developers; if the topic control is missing,
+   follow the [forum's posting guidance](https://forums.unraid.net/topic/40696-why-cant-i-post-new-topics-in-here/)
+   and request access from the moderators with the public template-repository URL.
 5. Submit the repository through Community Apps' *Submit* form
    (<https://ca.unraid.net/> → *Submit an application*), then respond to moderator feedback.
    They check XML validity, an icon, an overview, category, working WebUI and that defaults
