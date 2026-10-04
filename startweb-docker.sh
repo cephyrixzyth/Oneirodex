@@ -59,7 +59,9 @@ print('✅ Initialization completed - starting workers...')
 # the same image and keeps the normal Compose/Unraid port unchanged otherwise.
 if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
     echo "🎮 Preparing isolated public demo data..."
-    python3 /app/scripts/seed_public_demo.py
+    # Executing a file under /app/scripts puts that directory, not /app, at
+    # sys.path[0]. Add the application root so the seed can import oneirodex.
+    PYTHONPATH=/app python3 /app/scripts/seed_public_demo.py
 fi
 
 # Ensure environment variables are set for worker processes

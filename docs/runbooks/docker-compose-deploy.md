@@ -58,27 +58,30 @@ docker compose up -d --build
 
 App: http://localhost:5006
 
-## Free isolated public demo (Render)
+## Free isolated public demo (Blitz)
 
-`render.yaml` defines a separate $0 Render Docker service for a disposable
-public demo. It uses the embedded PostgreSQL database under `/tmp`, creates a
+The public preview runs at
+[`https://demo.oneirodex.blitz.cloud/demo`](https://demo.oneirodex.blitz.cloud/demo)
+on Blitz's free plan, built from the public `cephyrixzyth/oneirodex` repository's
+`main` branch. It uses the embedded PostgreSQL database under `/tmp`, creates a
 member-only visitor and five clearly labeled homebrew sample titles at startup,
 and signs visitors in through `/demo`. It does not seed an admin, include ROM
 files, use household data, or configure external service credentials. The app
-listens on Render's `PORT` value; Compose and Unraid continue to default to
+listens on the host-provided `PORT`; Compose and Unraid continue to default to
 5006.
 
-To provision it, connect the public `cephyrixzyth/oneirodex` GitHub repository
-to Render, create a Blueprint from `render.yaml`, and choose the Free plan.
-The free service sleeps after 15 minutes without inbound traffic; its first
-request after sleep has a cold start. Render's filesystem is ephemeral, so
-demo state resets after a restart or deploy. Do not attach a paid disk or
-database for this demo. Once the service is live, set `liveDemoUrl` in the
-website repo to `https://<render-service>.onrender.com/demo`.
+The isolated service sets `ONEIRODEX_PUBLIC_DEMO=true`,
+`ONEIRODEX_EMBEDDED_DB=true`, `ONEIRODEX_CONFIG_DIR=/tmp/oneirodex-config`,
+`SESSION_COOKIE_SECURE=true`, and `REMEMBER_COOKIE_SECURE=true`. Disable optional
+external integrations and supply the BIOS source path expected by the startup
+configuration. The free service sleeps when idle and can take time to cold-start;
+its local demo data is disposable and may reset after a restart or deploy. The
+free host subdomain is used directly; this is not a production storage target.
 
-Render requires a connected account and repository authorization to create the
-service. Its free tier requires no payment method, but it has no persistent
-filesystem; treat the service as a preview only, never as production storage.
+`render.yaml` remains an alternate Render Blueprint for the same isolated demo.
+Do not attach a paid database or disk to either preview configuration. The demo
+seed runs from the app root via `PYTHONPATH=/app` so the script can import the
+`oneirodex` package when launched by the container entrypoint.
 
 ## Volume sectioning
 
