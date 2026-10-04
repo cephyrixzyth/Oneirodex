@@ -6,6 +6,7 @@ production data. The host's ephemeral database makes the demo resettable.
 """
 from __future__ import annotations
 
+import logging
 import secrets
 from uuid import uuid4
 
@@ -14,6 +15,8 @@ from sqlalchemy import select
 from oneirodex import create_app, db
 from oneirodex.models import Game, GlobalSettings, Library, LibraryPlatform, User, UserPreference
 from oneirodex.utils.setup import mark_setup_complete
+
+logger = logging.getLogger(__name__)
 
 
 SAMPLE_LIBRARIES = (
@@ -88,7 +91,7 @@ def seed() -> None:
 
         db.session.commit()
         mark_setup_complete()
-        print('Public demo seed ready: member-only account and five labeled sample titles.')
+        logger.info('Public demo seed ready: member-only account and five labeled sample titles.')
 
 
 if __name__ == '__main__':
