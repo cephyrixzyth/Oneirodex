@@ -1,6 +1,6 @@
 # Single-container install, Unraid Community Apps and Docker Hub
 
-> **Doc status:** Active (submission steps are a checklist; nothing here has been submitted yet)
+> **Doc status:** Active (the public template repository is prepared; Community Apps submission and real Unraid installation are pending)
 
 Oneirodex ships as **one image that carries its own PostgreSQL**. Without a
 `DATABASE_URL` the container creates a cluster in `/config` on first start, generates
@@ -112,25 +112,25 @@ firmware, keys or `.env`.
 
 ## Unraid Community Apps submission
 
-Community Apps reads templates from a **public** repository and needs a support thread. Submit
-a dedicated, minimal template repository. Its scanner treats every XML file in the repository
-as a possible app template; scanning the application monorepo produces the two
-`not_unraid_application` warnings from the desktop Android resource XML files.
+Community Apps reads templates from a **public** repository and needs a support thread. The
+dedicated public template repository is [cephyrixzyth/unraid-templates](https://github.com/cephyrixzyth/unraid-templates).
+It keeps the app template separate from the application monorepo, which also contains two
+desktop Android resource XML files; those files triggered the scanner's two
+`not_unraid_application` warnings.
 
-1. Create a small public repository (for example `cephyrixzyth/unraid-templates`) with only
-   `ca_profile.xml`, a short README, and `oneirodex/oneirodex.xml`. Keep the XML template in
-   its own folder so the repository root is not mistaken for an app. Set `<TemplateURL>` to
-   that file's raw GitHub URL and `<Icon>` to the public raw icon URL; both must resolve
-   without authentication. The root `ca_profile.xml` needs a non-empty `<Profile>` with the
-   repository overview and support information. Add `<Forum>` once the support thread in step
-   4 exists. `tests/test_unraid_templates.py` checks the source template and profile.
+1. The public template repository contains `LICENSE`, `README.md`, `ca_profile.xml`, `icon.png`,
+   and `oneirodex/oneirodex.xml`. The app XML is nested so the repository root is not mistaken
+   for an app. `<TemplateURL>` and `<Icon>` use public raw GitHub URLs. The root profile has a
+   non-empty `<Profile>`; add `<Forum>` and point the template `<Support>` field to the Docker
+   Containers support topic once it exists. An OSI-approved license is required at the repo root.
+   `tests/test_unraid_templates.py` checks the source template and profile.
 2. Confirm the image pulls anonymously: `docker pull cephyrixzyth/oneirodex:latest` from a
    machine that is not logged in.
 3. Install it on a real Unraid box through *Add Container* with the template URL and check:
    first-run wizard, a scan of the games share, `docker stop` leaves a clean log, and a
    restart keeps the library.
-4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one)
-   and put its URL in `<Support>`.
+4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one), add
+   its URL to `<Forum>` in `ca_profile.xml`, and put the same URL in the template's `<Support>`.
 5. Submit the repository through Community Apps' *Submit* form
    (<https://ca.unraid.net/> → *Submit an application*), then respond to moderator feedback.
    They check XML validity, an icon, an overview, category, working WebUI and that defaults
