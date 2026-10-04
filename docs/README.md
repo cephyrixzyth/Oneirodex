@@ -79,6 +79,8 @@ Archive docs live in the area's `archive/` folder, each with a `README.md` listi
 
 Archives: [dev/archive](dev/archive/README.md) · [superpowers/archive](superpowers/archive/README.md)
 
+Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compose-deploy.md)
+
 ## Naming
 
 | Surface | Value |

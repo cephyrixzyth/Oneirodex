@@ -58,6 +58,28 @@ docker compose up -d --build
 
 App: http://localhost:5006
 
+## Free isolated public demo (Render)
+
+`render.yaml` defines a separate $0 Render Docker service for a disposable
+public demo. It uses the embedded PostgreSQL database under `/tmp`, creates a
+member-only visitor and five clearly labeled homebrew sample titles at startup,
+and signs visitors in through `/demo`. It does not seed an admin, include ROM
+files, use household data, or configure external service credentials. The app
+listens on Render's `PORT` value; Compose and Unraid continue to default to
+5006.
+
+To provision it, connect the public `chrisjrovira/oneirodex` GitHub repository
+to Render, create a Blueprint from `render.yaml`, and choose the Free plan.
+The free service sleeps after 15 minutes without inbound traffic; its first
+request after sleep has a cold start. Render's filesystem is ephemeral, so
+demo state resets after a restart or deploy. Do not attach a paid disk or
+database for this demo. Once the service is live, set `liveDemoUrl` in the
+website repo to `https://<render-service>.onrender.com/demo`.
+
+Render requires a connected account and repository authorization to create the
+service. Its free tier requires no payment method, but it has no persistent
+filesystem; treat the service as a preview only, never as production storage.
+
 ## Volume sectioning
 
 Do **not** conflate games (scan root) with library/uploads. Compose header has an **UNRAID VOLUMES** comment block; container env hard-sets `DATA_FOLDER_GAMES=/storage` and `UPLOAD_FOLDER=/app/oneirodex/static/library` while `.env` supplies **host** bind paths.

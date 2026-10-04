@@ -1,3 +1,4 @@
+import os
 import uuid
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, session
 from flask_login import current_user, login_required, login_user, logout_user
@@ -52,6 +53,22 @@ from oneirodex.utils.rbac import is_admin
 login_bp = Blueprint('login', __name__)
 
 _INVALID_CREDS = 'Invalid username or password. USERNAMES ARE CASE SENSITIVE!'
+
+
+@login_bp.route('/demo', methods=['GET'])
+def public_demo_login():
+    """Issue a member session for the isolated, opt-in public demo instance."""
+    if os.getenv('ONEIRODEX_PUBLIC_DEMO', '').strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        abort(404)
+
+    demo_user = db.session.execute(
+        select(User).filter_by(name='demo-visitor', role='user', state=True)
+    ).scalar_one_or_none()
+    if demo_user is None:
+        abort(503)
+
+    login_user(demo_user, remember=False, fresh=True)
+    return redirect(url_for('discover.discover'))
 
 def is_smtp_configured():
     """Check if SMTP settings are properly configured."""
