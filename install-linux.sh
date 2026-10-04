@@ -989,7 +989,7 @@ main() {
     if [ ! -f "$SCRIPT_DIR/startweb.sh" ] || [ ! -f "$SCRIPT_DIR/requirements.txt" ]; then
         print_error "This script must be run from the Oneirodex directory"
         print_info "Please clone the repository first:"
-        print_info "  git clone https://github.com/chrisjrovira/oneirodex.git"
+        print_info "  git clone https://github.com/cephyrixzyth/oneirodex.git"
         print_info "  cd oneirodex"
         print_info "  ./install-linux.sh"
         exit 1

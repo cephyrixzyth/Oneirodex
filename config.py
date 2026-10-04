@@ -383,12 +383,12 @@ class Config(object):
     # modify Oneirodex and run it for others, you owe them **your** source, not
     # upstream's. Point this at your fork before you deploy a modified build.
     ONEIRODEX_SOURCE_URL = getenv_product(
-        'SOURCE_URL', 'https://github.com/chrisjrovira/oneirodex'
+        'SOURCE_URL', 'https://github.com/cephyrixzyth/oneirodex'
     )
 
     # In-app support → GitHub Issues (optional; tickets still save without a token)
     SUPPORT_GITHUB_TOKEN = os.getenv('SUPPORT_GITHUB_TOKEN', '')
-    SUPPORT_GITHUB_REPO = os.getenv('SUPPORT_GITHUB_REPO', 'chrisjrovira/oneirodex')
+    SUPPORT_GITHUB_REPO = os.getenv('SUPPORT_GITHUB_REPO', 'cephyrixzyth/oneirodex')
 
     # Optional *arr connector defaults (overridden by Admin → Arr config)
     PROWLARR_URL = os.getenv('PROWLARR_URL', '')

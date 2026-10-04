@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / "oneirodex" / "static" / "library" / "fonts"
 
-USER_AGENT = "Oneirodex-fetch-fonts/1.0 (+https://github.com/chrisjrovira/oneirodex)"
+USER_AGENT = "Oneirodex-fetch-fonts/1.0 (+https://github.com/cephyrixzyth/oneirodex)"
 
 # Leading bytes for each accepted container — mirrors theme_fonts._FONT_MAGIC.
 # A 404 HTML page saved as .ttf would otherwise sit there looking installed.

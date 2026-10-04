@@ -31,7 +31,7 @@ from typing import Any
 from flask import current_app, has_app_context
 
 TIMEOUT_SECONDS = 10
-USER_AGENT = 'Oneirodex/1.0 (+https://github.com/chrisjrovira/Oneirodex; mod catalogue, read-only)'
+USER_AGENT = 'Oneirodex/1.0 (+https://github.com/cephyrixzyth/Oneirodex; mod catalogue, read-only)'
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 50
 

@@ -62,7 +62,7 @@ here, then `import` on the server ([standalone-move.md](standalone-move.md)).
 ## Linux
 
 ```bash
-git clone --depth 1 https://github.com/chrisjrovira/oneirodex.git
+git clone --depth 1 https://github.com/cephyrixzyth/oneirodex.git
 cd oneirodex
 chmod +x install-linux.sh
 ./install-linux.sh
@@ -151,7 +151,7 @@ nothing.
 ## macOS
 
 ```bash
-git clone --depth 1 https://github.com/chrisjrovira/oneirodex.git
+git clone --depth 1 https://github.com/cephyrixzyth/oneirodex.git
 cd oneirodex
 chmod +x install-macos.sh
 ./install-macos.sh
@@ -209,7 +209,7 @@ the launchd job in System Settings → Privacy & Security.
 ## Windows
 
 ```powershell
-git clone --depth 1 https://github.com/chrisjrovira/oneirodex.git
+git clone --depth 1 https://github.com/cephyrixzyth/oneirodex.git
 cd oneirodex
 .\install-windows.ps1
 ```

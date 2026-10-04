@@ -88,7 +88,7 @@ Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compos
 | Product (shipped today) | Oneirodex (public string) |
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
 | Version | 1.0.0 |
-| GitHub | chrisjrovira/oneirodex |
+| GitHub | cephyrixzyth/oneirodex |
 | Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |
 | Python package | oneirodex |
