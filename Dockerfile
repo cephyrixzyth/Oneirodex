@@ -55,7 +55,7 @@ ENV ONEIRODEX_BUILD_SHA=$ONEIRODEX_BUILD_SHA \
 
 LABEL org.opencontainers.image.title="Oneirodex" \
       org.opencontainers.image.description="Self-hosted household game library" \
-      org.opencontainers.image.source="https://github.com/chrisjrovira/oneirodex" \
+      org.opencontainers.image.source="https://github.com/cephyrixzyth/oneirodex" \
       org.opencontainers.image.revision="$ONEIRODEX_BUILD_SHA" \
       org.opencontainers.image.created="$ONEIRODEX_BUILT_AT"
 

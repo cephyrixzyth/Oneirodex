@@ -22,9 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Time and shutdown compatibility:** already-shifted database rows are intentionally not rewritten; new PostgreSQL timestamps use UTC. `UVICORN_GRACEFUL_TIMEOUT` sets the server's graceful-shutdown wait and defaults to 5 seconds.
+- **GitHub owner update:** source, support, installer, and published links now use `cephyrixzyth/oneirodex`.
 
 ### Changed
-- **Docker Hub image is `cephyrixzyth/oneirodex`.** The Unraid Community Apps template, `docker-compose.single.yml`, `ca_profile.xml`, the env examples and the runbooks named `chrisjrovira/oneirodex`, an image that was never published; the Docker Hub account is `cephyrixzyth`. Set the repository variable `DOCKERHUB_USERNAME` to `cephyrixzyth` (and the `DOCKERHUB_TOKEN` secret) for the publish workflow. The GitHub repository and `SUPPORT_GITHUB_REPO` are unchanged.
+- **Docker Hub image is `cephyrixzyth/oneirodex`.** The Unraid Community Apps template, `docker-compose.single.yml`, `ca_profile.xml`, env examples, and runbooks now use the publishable image path. Set the repository variable `DOCKERHUB_USERNAME` to `cephyrixzyth` (and the `DOCKERHUB_TOKEN` secret) for the publish workflow. GitHub links and `SUPPORT_GITHUB_REPO` use the current repository owner.
 
 ## [1.0.1] — 2026-10-03
 
@@ -174,7 +175,7 @@ Nothing in this release requires a database restore, and no configuration key wa
 - **Decade room themes.** Preferences is no longer a tiny colour-chip grid. Six era rooms (1980s wood den, 1990s teen bedroom, late-90s carpet den, 2000s media centre, arcade floor, computer desk) plus the existing colour cabinets sit in the same wallpaper/window/floor language as browser play, on member *and* admin chrome. Untitled-game placeholders and Art Studio backup packs follow the room. Needs **Reset Default Themes** (`GENERATOR_VERSION` 17) so volume copies pick up `od-era.css`.
 - **Amazon Games live ownership register sync.** Same shape as Steam / GOG / Epic: IDs and names into `UserOwnedTitle`, never a download. Unofficial Nile / Heroic entitlements; paste a token JSON (or household env). Fail honestly on 401. CSV still works.
 - **Disc chips on game details.** Multi-disc titles show count + Disc N on the details identity row. Tiles stay at the UID-001 badge cap.
-- **Oneirodex identifier phase 2 started (dual names).** Compose `APP_IMAGE` / `APP_CONTAINER_NAME` keep existing `oneirodex-*` defaults. Preferred Hub image once published: `chrisjrovira/oneirodex`. Package / `GT_*` / `gt-` unchanged.
+- **Oneirodex identifier phase 2 started (dual names).** Compose `APP_IMAGE` / `APP_CONTAINER_NAME` keep existing `oneirodex-*` defaults. Preferred Hub image once published: `cephyrixzyth/oneirodex`. Package / `GT_*` / `gt-` unchanged.
 - **GOG and Epic live ownership register sync.** Same shape as Steam: IDs and names into `UserOwnedTitle`, never a download. Unofficial Galaxy / launcher surfaces; paste a refresh token or Epic device-auth JSON (or household env). Fail honestly on 401. CSV still works.
 - **Operator notes for snes9x / genesis_plus_gx non-commercial clauses.** Quotes from upstream plus questions to take to a lawyer — [webretro-core-clauses.md](docs/admin/webretro-core-clauses.md). Not counsel.
 - **Operator privacy / data-handling notes.** What the host stores, what can leave if you enable SMTP / metadata APIs / OIDC / LiveKit / GitHub support, and how `child` accounts are denied download and Acquire — [privacy-data-handling.md](docs/admin/privacy-data-handling.md). Not a public ToS.
@@ -317,7 +318,7 @@ Nothing in this release requires a database restore, and no configuration key wa
 - Discover shelves use a pixel hbar, matching News scrollbar spacing, overlay-open tiles, and a Ways to Play rail glyph (UID-020 — human QA still open).
 - BBC Micro and Game & Watch are companion leaves (no WebRetro WASM). Their dump suffixes (`.ssd` `.mgw` …) seed AllowedFileType on boot. Authentik groups `oneirodex-admin` / `librarian` / `child` map like the `oneirodex-*` aliases.
 - Compose passes remaining OIDC and product-flag env into the app container (no `env_file` dump). Unraid Authentik LAN HTTP: [oidc-authentik-unraid.md](docs/runbooks/oidc-authentik-unraid.md) Appendix A.
-- GitHub default is **`chrisjrovira/oneirodex`** (the old `chrisjrovira/oneirodex` URL still redirects). `SUPPORT_GITHUB_REPO` and `GT_SOURCE_URL` / `ONEIRODEX_SOURCE_URL` follow. Origin URL is `https://github.com/chrisjrovira/oneirodex.git`.
+- GitHub default is **`cephyrixzyth/oneirodex`**. `SUPPORT_GITHUB_REPO` and `GT_SOURCE_URL` / `ONEIRODEX_SOURCE_URL` follow. Origin URL is `https://github.com/cephyrixzyth/oneirodex.git`.
 - Identifier **phase 3a** (landed, then superseded by the clean break above): dual `ONEIRODEX_*` / `GT_*` and `--od-*` aliases. Package path `oneirodex/`.
 - Identifier **phase 3b** (2026-08-31): Python package `oneirodex/`; CSS `.od-*` / `--od-*`; live Unraid `oneirodex-*` containers; Postgres database `oneirodex`. Confirm phrase `RESET ONEIRODEX`. `createGamethecaClient` alias and `RESET GAMETHECA` retired with the clean break.
 - Icon packs: **library / discover / systems** ship distinct SVGs on Filled, Duotone, Pixel, Soft, and Mono. Outline stays the inline stroke set.
@@ -975,7 +976,7 @@ contract had drifted across `0.1.0` and `0.2.0` and now all read `1.0.0-beta`.
 
 - Live Authentik smoke (operator secrets) — OIDC stays **opt-in** (`OIDC_ENABLED` off by default)
 - Native Quest APK (PWA MVP ships in 0.1.0)
-- Publish optional Hub image `chrisjrovira/oneirodex` when ready
+- Publish optional Hub image `cephyrixzyth/oneirodex` when ready
 - ClamAV daemon reachability for malware scan; LiveKit compose profile for voice; deferred WebRetro WASM (PCE/VICE/DOS)
 - Optional Compose `observability` profile (Prometheus/Grafana) — stub only; see [observability-profile.md](docs/runbooks/observability-profile.md)
 
@@ -985,7 +986,7 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 
 ### Added
 
-- Oneirodex package cutover (`oneirodex/`), Docker image `chrisjrovira/oneirodex`
+- Oneirodex package cutover (`oneirodex/`), Docker image `cephyrixzyth/oneirodex`
 - Optional *arr module (Prowlarr/Jackett + qBittorrent) and **arr→hardlink** pipeline (triple-gated)
 - Release calendar, quality profiles, GiantBomb/PCGW providers
 - Detail-page layout editor (order/visibility)
@@ -1007,9 +1008,9 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 - Hardlink and AI apply remain feature-flagged and path-sandboxed
 - `SECRET_KEY` required; container refuses the placeholder
 
-[Unreleased]: https://github.com/chrisjrovira/oneirodex/compare/v1.0.1...HEAD
-[1.0.1]: https://github.com/chrisjrovira/oneirodex/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/chrisjrovira/oneirodex/releases/tag/v1.0.0
-[1.0.0-beta]: https://github.com/chrisjrovira/oneirodex/releases/tag/v1.0.0-beta
-[0.1.0]: https://github.com/chrisjrovira/oneirodex/releases/tag/v0.1.0
+[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0
+[1.0.0-beta]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0-beta
+[0.1.0]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v0.1.0
 

@@ -11,10 +11,10 @@
 
 **Support**
 
-Questions and bug reports go to the project's [issue tracker](https://github.com/chrisjrovira/oneirodex/issues). Setup notes for Unraid are in the [Unraid runbook](https://github.com/chrisjrovira/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md).
+Questions and bug reports go to the project's [issue tracker](https://github.com/cephyrixzyth/oneirodex/issues). Setup notes for Unraid are in the [Unraid runbook](https://github.com/cephyrixzyth/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md).
 
 Oneirodex is for software you are authorised to share. It ships no BIOS or firmware and no piracy tooling.
   </Profile>
-  <Icon>https://raw.githubusercontent.com/chrisjrovira/oneirodex/main/docs/assets/readme/app-icon.png</Icon>
-  <WebPage>https://github.com/chrisjrovira/oneirodex</WebPage>
+  <Icon>https://raw.githubusercontent.com/cephyrixzyth/oneirodex/main/docs/assets/readme/app-icon.png</Icon>
+  <WebPage>https://github.com/cephyrixzyth/oneirodex</WebPage>
 </CommunityApplications>

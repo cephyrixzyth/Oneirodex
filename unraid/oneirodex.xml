@@ -7,9 +7,9 @@
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/chrisjrovira/oneirodex/issues</Support>
-  <Project>https://github.com/chrisjrovira/oneirodex</Project>
-  <ReadMe>https://github.com/chrisjrovira/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md</ReadMe>
+  <Support>https://github.com/cephyrixzyth/oneirodex/issues</Support>
+  <Project>https://github.com/cephyrixzyth/oneirodex</Project>
+  <ReadMe>https://github.com/cephyrixzyth/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md</ReadMe>
   <Overview>The self-hosted game library for a household. Scan folders of DRM-free games and ROMs, identify them against IGDB / Steam / GOG, invite the family, download, play in the browser where a system supports it, and chat.&#xD;
 &#xD;
 Everything runs in this one container, PostgreSQL included: no second database container to set up. Point "Games" at your games share (read-only), keep "Appdata" on the cache, and open the WebUI. The first visit runs the setup wizard.&#xD;
@@ -17,8 +17,8 @@ Everything runs in this one container, PostgreSQL included: no second database c
 Use Oneirodex only with software you are authorised to share. It ships no BIOS or firmware and no pirate tooling.</Overview>
   <Category>Tools: Productivity: MediaApp:Other:</Category>
   <WebUI>http://[IP]:[PORT:5006]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/chrisjrovira/oneirodex/main/unraid/oneirodex.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/chrisjrovira/oneirodex/main/docs/assets/readme/app-icon.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/cephyrixzyth/oneirodex/main/unraid/oneirodex.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/cephyrixzyth/oneirodex/main/docs/assets/readme/app-icon.png</Icon>
   <ExtraParams>--health-start-period=60s</ExtraParams>
   <PostArgs/>
   <CPUset/>

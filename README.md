@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.1-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.0.1" /></a>
-  <a href="https://github.com/chrisjrovira/oneirodex"><img src="https://img.shields.io/badge/github-chrisjrovira%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
+  <a href="https://github.com/cephyrixzyth/oneirodex"><img src="https://img.shields.io/badge/github-cephyrixzyth%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
   <a href="docs/README.md"><img src="https://img.shields.io/badge/docs-index-141820?style=flat-square&labelColor=0b0d10" alt="Docs" /></a>
@@ -250,7 +250,7 @@ Open **http://localhost:5006** — Postgres is the `db` service; games mount at 
 ### 💻 Native installers
 
 ```bash
-git clone --depth 1 https://github.com/chrisjrovira/oneirodex.git
+git clone --depth 1 https://github.com/cephyrixzyth/oneirodex.git
 cd oneirodex
 ```
 

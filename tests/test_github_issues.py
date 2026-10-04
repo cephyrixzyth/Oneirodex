@@ -26,7 +26,7 @@ def test_build_issue_body_includes_fields():
 def test_support_github_repo_defaults_to_oneirodex(monkeypatch):
     monkeypatch.delenv('SUPPORT_GITHUB_REPO', raising=False)
     _token, repo = support_github_config()
-    assert repo == 'chrisjrovira/oneirodex'
+    assert repo == 'cephyrixzyth/oneirodex'
 
 
 def test_create_github_issue_skipped_without_token(monkeypatch):
@@ -38,7 +38,7 @@ def test_create_github_issue_skipped_without_token(monkeypatch):
 
 def test_create_github_issue_posts_when_token_set(monkeypatch):
     monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'ghp_test')
-    monkeypatch.setenv('SUPPORT_GITHUB_REPO', 'chrisjrovira/oneirodex')
+    monkeypatch.setenv('SUPPORT_GITHUB_REPO', 'cephyrixzyth/oneirodex')
 
     class Resp:
         def __enter__(self):
@@ -48,7 +48,7 @@ def test_create_github_issue_posts_when_token_set(monkeypatch):
             return False
 
         def read(self):
-            return b'{"number": 42, "html_url": "https://github.com/chrisjrovira/oneirodex/issues/42"}'
+            return b'{"number": 42, "html_url": "https://github.com/cephyrixzyth/oneirodex/issues/42"}'
 
     with patch('oneirodex.utils.github_issues.urllib.request.urlopen', return_value=Resp()):
         result = create_github_issue(title='hello', body='world', labels=['support'])

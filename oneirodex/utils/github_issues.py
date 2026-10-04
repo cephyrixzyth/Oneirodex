@@ -11,10 +11,10 @@ from typing import Any
 
 def support_github_config() -> tuple[str | None, str]:
     token = (os.getenv('SUPPORT_GITHUB_TOKEN') or '').strip() or None
-    # GitHub rename landed: default is chrisjrovira/oneirodex. The old
-    # chrisjrovira/oneirodex URL still redirects; set SUPPORT_GITHUB_REPO if
+    # GitHub rename landed: default is cephyrixzyth/oneirodex. The old
+    # cephyrixzyth/oneirodex URL still redirects; set SUPPORT_GITHUB_REPO if
     # this install files issues against a fork.
-    repo = (os.getenv('SUPPORT_GITHUB_REPO') or 'chrisjrovira/oneirodex').strip()
+    repo = (os.getenv('SUPPORT_GITHUB_REPO') or 'cephyrixzyth/oneirodex').strip()
     return token, repo
 
 

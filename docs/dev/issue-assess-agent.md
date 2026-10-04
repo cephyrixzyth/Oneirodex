@@ -44,4 +44,4 @@ Output exactly:
 ## Env
 
 - `SUPPORT_GITHUB_TOKEN` — PAT with `issues:write`
-- `SUPPORT_GITHUB_REPO` — default `chrisjrovira/oneirodex`
+- `SUPPORT_GITHUB_REPO` — default `cephyrixzyth/oneirodex`

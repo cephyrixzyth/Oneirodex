@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 #: Steam's store API rate-limits (HTTP 429) and sometimes answers 403 to a bare
 #: client; both used to read as "this app has no data" and the game stayed blank.
-_STEAM_HEADERS = {'User-Agent': 'Oneirodex/1.0 (+https://github.com/chrisjrovira/oneirodex)'}
+_STEAM_HEADERS = {'User-Agent': 'Oneirodex/1.0 (+https://github.com/cephyrixzyth/oneirodex)'}
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 

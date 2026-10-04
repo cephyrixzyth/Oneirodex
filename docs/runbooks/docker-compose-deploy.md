@@ -68,7 +68,7 @@ files, use household data, or configure external service credentials. The app
 listens on Render's `PORT` value; Compose and Unraid continue to default to
 5006.
 
-To provision it, connect the public `chrisjrovira/oneirodex` GitHub repository
+To provision it, connect the public `cephyrixzyth/oneirodex` GitHub repository
 to Render, create a Blueprint from `render.yaml`, and choose the Free plan.
 The free service sleeps after 15 minutes without inbound traffic; its first
 request after sleep has a cold start. Render's filesystem is ephemeral, so

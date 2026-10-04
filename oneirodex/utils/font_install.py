@@ -39,7 +39,7 @@ BUNDLED_EXTRAS = ('OFL.txt',)
 
 RAW = 'https://raw.githubusercontent.com/google/fonts/main/ofl'
 
-USER_AGENT = 'Oneirodex-font-install/1.0 (+https://github.com/chrisjrovira/oneirodex)'
+USER_AGENT = 'Oneirodex-font-install/1.0 (+https://github.com/cephyrixzyth/oneirodex)'
 
 #: ``(filename, url)`` for every built-in face that ships as a file.
 #: Keep in step with ``BUILT_IN_FONTS`` in :mod:`oneirodex.utils.theme_fonts`;

@@ -169,5 +169,5 @@ class TestAttribution:
         page = self._help_page()
         assert 'sourceUrl' in page
         # The source offer must come from config, not a baked GitHub URL.
-        assert 'href="https://github.com/chrisjrovira/oneirodex"' not in page
-        assert 'href="https://github.com/chrisjrovira/oneirodex"' not in page
+        assert 'href="https://github.com/cephyrixzyth/oneirodex"' not in page
+        assert 'href="https://github.com/cephyrixzyth/oneirodex"' not in page

@@ -110,7 +110,7 @@ firmware, keys or `.env`.
 Community Apps reads templates from a **public** repository and needs a support thread.
 
 1. Make the code repository public, or create a small public repo (for example
-   `chrisjrovira/unraid-templates`) containing `oneirodex.xml` at its root. If the template
+   `cephyrixzyth/unraid-templates`) containing `oneirodex.xml` at its root. If the template
    moves, update `<TemplateURL>` and `<Icon>` to the new raw URLs. Both must resolve
    without authentication.
    The repository root also carries `ca_profile.xml`: Community Apps requires a non-empty

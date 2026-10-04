@@ -48,15 +48,15 @@ Prioritize against this — every backlog item should advance at least one row, 
 
 **Public name: Oneirodex** (oh-NY-roh-dex) · slug `oneirodex` · [ADR 0003](../adr/0003-product-name-oneirodex.md).
 
-Write **Oneirodex** in UI, Help, README, and operator docs. **P3b landed 2026-08-31:** Python package `oneirodex/`, CSS `.od-*` / `--od-*`, Compose `oneirodex-*`, Postgres database `oneirodex` (pytest `oneirodextest`). **`ONEIRODEX_*` is the only env prefix** — `GT_*` is not read. Do not invent `OD_*` env aliases. Danger-zone confirm is `RESET ONEIRODEX` (no legacy alias). Preferred Hub image once published: `chrisjrovira/oneirodex`. GitHub is `chrisjrovira/oneirodex`. Origin URL is `https://github.com/chrisjrovira/oneirodex.git`. API tokens keep the on-wire `gt_` prefix. Do not mix OneiroDex into copy. Do not rewrite git history for the old name.
+Write **Oneirodex** in UI, Help, README, and operator docs. **P3b landed 2026-08-31:** Python package `oneirodex/`, CSS `.od-*` / `--od-*`, Compose `oneirodex-*`, Postgres database `oneirodex` (pytest `oneirodextest`). **`ONEIRODEX_*` is the only env prefix** — `GT_*` is not read. Do not invent `OD_*` env aliases. Danger-zone confirm is `RESET ONEIRODEX` (no legacy alias). Preferred Hub image once published: `cephyrixzyth/oneirodex`. GitHub is `cephyrixzyth/oneirodex`. Origin URL is `https://github.com/cephyrixzyth/oneirodex.git`. API tokens keep the on-wire `gt_` prefix. Do not mix OneiroDex into copy. Do not rewrite git history for the old name.
 
 | Default | Value |
 |---|---|
 | Spelling | Oneirodex — one word, capital O. Not OneiroDex, not ONEIRODEX in UI |
 | Phase 1 | Oneirodex everywhere user-facing — **landed** |
-| Phase 2 | Ops dual names — `APP_IMAGE` / `APP_CONTAINER_NAME`; Hub `chrisjrovira/oneirodex` preferred; GitHub `chrisjrovira/oneirodex`; existing `oneirodex-*` names still work as pins |
+| Phase 2 | Ops dual names — `APP_IMAGE` / `APP_CONTAINER_NAME`; Hub `cephyrixzyth/oneirodex` preferred; GitHub `cephyrixzyth/oneirodex`; existing `oneirodex-*` names still work as pins |
 | Phase 3a | Dual env (superseded) |
-| Identifiers left | Hub `chrisjrovira/oneirodex` until published; API token `gt_` prefix. Git history is not rewritten |
+| Identifiers left | Hub `cephyrixzyth/oneirodex` until published; API token `gt_` prefix. Git history is not rewritten |
 | P3b landed | Package `oneirodex/`; `.od-*` / `--od-*`; Compose `oneirodex-*`; Postgres `oneirodex` / pytest `oneirodextest`; origin `oneirodex.git`; npm `@oneirodex/api-client` |
 | Danger zone | `RESET ONEIRODEX` only |
 | Env / CSS | `ONEIRODEX_*` only. CSS `--od-*` canonical. No `OD_*` env aliases. `GT_*` is not read |
@@ -109,7 +109,7 @@ Policy: [scrub-shipped-bundles.md](../runbooks/scrub-shipped-bundles.md) (SCRUB-
 | Primary ops | Unraid + Docker Compose |
 | DB | Postgres (`db` service or local Docker) |
 | App port | 5006 |
-| Support repo | `chrisjrovira/oneirodex` (`chrisjrovira/oneirodex` still redirects) (`SUPPORT_GITHUB_REPO`) |
+| Support repo | `cephyrixzyth/oneirodex` (`SUPPORT_GITHUB_REPO`) |
 
 ## Environment discovery
 
