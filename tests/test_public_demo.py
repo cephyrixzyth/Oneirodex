@@ -5,6 +5,16 @@ import pytest
 from oneirodex.models import GlobalSettings, User
 
 
+def _complete_setup(db_session):
+    settings = db_session.query(GlobalSettings).first()
+    if settings is None:
+        settings = GlobalSettings()
+        db_session.add(settings)
+    settings.setup_completed = True
+    settings.setup_in_progress = False
+    return settings
+
+
 @pytest.fixture
 def demo_member(db_session):
     user_id = str(uuid4())
@@ -16,8 +26,8 @@ def demo_member(db_session):
         user_id=user_id,
         state=True,
     )
-    settings = GlobalSettings(setup_completed=True, setup_in_progress=False)
-    db_session.add_all((user, settings))
+    _complete_setup(db_session)
+    db_session.add(user)
     db_session.commit()
     return user
 
@@ -54,7 +64,7 @@ def test_demo_entrypoint_fails_closed_when_seed_is_missing(client, db_session, m
         state=True,
     )
     db_session.add(existing_member)
-    db_session.add(GlobalSettings(setup_completed=True, setup_in_progress=False))
+    _complete_setup(db_session)
     db_session.commit()
 
     response = client.get('/demo')
