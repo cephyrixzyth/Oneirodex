@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.448 --> 00:00:06.160
+00:00:00.415 --> 00:00:05.911
 Libraries and scans. Add a library, point a scan at a folder, watch the job.
 
 2
-00:00:06.766 --> 00:00:10.270
+00:00:06.525 --> 00:00:09.813
 Libraries and scans is where a library begins.
 
 3
-00:00:11.490 --> 00:00:18.618
+00:00:10.919 --> 00:00:17.927
 Each library is a platform plus a folder. Select rows to scan, edit, group or delete them.
 
 4
-00:00:19.389 --> 00:00:29.421
+00:00:18.687 --> 00:00:28.623
 Scan chooses a library and a folder — on this box, a NAS share, or any declared scan location — and whether games are folders or files.
 
 5
-00:00:30.190 --> 00:00:35.134
+00:00:29.380 --> 00:00:34.540
 Options cover missing games, missing images, extras, and HowLongToBeat.
 
 6
-00:00:35.894 --> 00:00:42.902
+00:00:35.292 --> 00:00:42.852
 Scan jobs shows every run with progress, and Unmatched holds what could not be identified for you to fix by hand.
 
 7
-00:00:43.998 --> 00:00:52.974
+00:00:43.938 --> 00:00:52.842
 That is libraries and scans. The written guide is in the docs folder, at docs/admin/libraries-and-scans.md.

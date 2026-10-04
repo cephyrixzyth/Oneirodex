@@ -1,33 +1,33 @@
 WEBVTT
 
 1
-00:00:00.452 --> 00:00:05.564
+00:00:00.417 --> 00:00:05.721
 Ops health. Is everything healthy — services, queues, companions, the log.
 
 2
-00:00:06.169 --> 00:00:12.697
+00:00:06.322 --> 00:00:12.370
 The admin Dashboard is the at-a-glance board: libraries, games, health, scans, disk.
 
 3
-00:00:13.457 --> 00:00:21.017
+00:00:13.124 --> 00:00:20.660
 Ops goes deeper — CPU, memory, database, watch folders, and every service with its status.
 
 4
-00:00:22.160 --> 00:00:27.224
+00:00:21.774 --> 00:00:26.910
 Tiles resize and the layout is yours; Reset layout puts it back.
 
 5
-00:00:27.987 --> 00:00:33.051
+00:00:27.673 --> 00:00:32.737
 Services shows LiveKit, the malware scanner, companions and queues.
 
 6
-00:00:33.810 --> 00:00:40.050
+00:00:33.490 --> 00:00:39.898
 The recent log is filterable by level, type and text, and Full log opens the whole thing.
 
 7
-00:00:40.806 --> 00:00:45.246
+00:00:40.657 --> 00:00:45.121
 The same numbers are on slash pulse and slash awake for your monitoring.
 
 8
-00:00:46.371 --> 00:00:53.619
+00:00:46.228 --> 00:00:53.884
 That is ops health. The written guide is in the docs folder, at docs/admin/ops-summary.md.

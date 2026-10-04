@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.430 --> 00:00:08.134
+00:00:00.414 --> 00:00:08.094
 Systems and set completion. Console families, the licensed catalog, export packs and DAT completion.
 
 2
-00:00:08.749 --> 00:00:12.397
+00:00:08.697 --> 00:00:12.513
 Systems is the same library grouped by console family.
 
 3
-00:00:13.808 --> 00:00:21.944
+00:00:13.723 --> 00:00:21.787
 Each console tile shows how many games you hold, whether they run in the browser, and a Catalog link to the licensed release list.
 
 4
-00:00:22.701 --> 00:00:30.501
+00:00:22.545 --> 00:00:30.009
 Export packs write a gamelist for ES-DE or Pegasus, so other front ends can show the same library without moving a file.
 
 5
-00:00:31.262 --> 00:00:37.598
+00:00:30.775 --> 00:00:36.871
 Completion compares your ROM sets against No-Intro and Redump DATs an admin uploads.
 
 6
-00:00:38.357 --> 00:00:43.037
+00:00:37.624 --> 00:00:42.208
 Region chips and percentages tell you exactly what is missing per system.
 
 7
-00:00:44.141 --> 00:00:53.789
+00:00:43.300 --> 00:00:52.372
 That is systems and set completion. The written guide is in the docs folder, at docs/user/library-and-systems.md.

@@ -1,41 +1,41 @@
 WEBVTT
 
 1
-00:00:00.431 --> 00:00:08.519
+00:00:00.419 --> 00:00:08.387
 Chat, rooms and spaces. Household rooms, reactions and threads, voice, and invite-only spaces.
 
 2
-00:00:09.128 --> 00:00:11.768
+00:00:09.002 --> 00:00:11.738
 Chat slides out over whatever you are doing.
 
 3
-00:00:12.523 --> 00:00:14.443
+00:00:12.496 --> 00:00:14.368
 Expand gives it the whole pane.
 
 4
-00:00:15.820 --> 00:00:20.476
+00:00:15.734 --> 00:00:20.510
 Rooms are household channels — general, looking for players, whatever you add.
 
 5
-00:00:21.243 --> 00:00:25.011
+00:00:21.268 --> 00:00:24.964
 Messages take reactions, replies and threads.
 
 6
-00:00:25.774 --> 00:00:31.150
+00:00:25.728 --> 00:00:31.056
 Voice and Screenshare open a LiveKit session for the room when an admin has enabled it.
 
 7
-00:00:31.903 --> 00:00:33.775
+00:00:31.815 --> 00:00:33.687
 Switch to another room.
 
 8
-00:00:34.542 --> 00:00:43.134
+00:00:34.448 --> 00:00:42.608
 Spaces are servers of their own — text and voice channels, household-wide or invite-only. Paste an invite code to join one.
 
 9
-00:00:43.894 --> 00:00:48.358
+00:00:43.369 --> 00:00:47.785
 Pop out opens chat as its own window, handy on a second screen.
 
 10
-00:00:49.456 --> 00:00:58.000
+00:00:48.862 --> 00:00:57.862
 That is chat, rooms and spaces. The written guide is in the docs folder, at docs/user/social-and-voice.md.

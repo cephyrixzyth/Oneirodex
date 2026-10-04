@@ -1,33 +1,33 @@
 WEBVTT
 
 1
-00:00:00.444 --> 00:00:07.716
+00:00:00.421 --> 00:00:07.357
 Read a game page. Download, play, install, versions, saved states and cheats — in one place.
 
 2
-00:00:08.326 --> 00:00:11.302
+00:00:07.972 --> 00:00:10.852
 Open any tile and you land on the game page.
 
 3
-00:00:13.318 --> 00:00:23.758
+00:00:12.029 --> 00:00:22.229
 The header has the cover, size and status chips, and the actions: Download the files, Install through the desktop companion, or Play in browser where the system supports it.
 
 4
-00:00:25.125 --> 00:00:31.677
+00:00:23.402 --> 00:00:30.122
 Add to collection keeps household lists; Check updates and DLC asks the store side for newer versions.
 
 5
-00:00:32.441 --> 00:00:39.497
+00:00:30.884 --> 00:00:38.204
 Details on the right shows the library folder and playtime. Open path hands the folder to the desktop companion.
 
 6
-00:00:40.260 --> 00:00:44.892
+00:00:38.966 --> 00:00:43.550
 Versions lists the base game and every extra Oneirodex has matched.
 
 7
-00:00:45.646 --> 00:00:53.206
+00:00:44.315 --> 00:00:51.659
 Saved states and household cheat files live here too — browser play and the companion both read the same ones.
 
 8
-00:00:54.294 --> 00:01:02.478
+00:00:52.754 --> 00:01:00.770
 That is read a game page. The written guide is in the docs folder, at docs/user/library-and-systems.md.

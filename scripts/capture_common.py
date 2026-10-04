@@ -74,6 +74,8 @@ def page_is_healthy(page) -> tuple[bool, str]:
         return False, f"could not read body ({type(exc).__name__})"
 
     low = body.lower()
+    if re.search(r"\bloading\s+discover\b", low):
+        return False, "Discover is still loading"
     for marker in _ERROR_MARKERS:
         if marker in low and len(body) < 600:
             return False, f"error page ({marker!r})"

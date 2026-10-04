@@ -1,45 +1,45 @@
 WEBVTT
 
 1
-00:00:00.434 --> 00:00:06.674
+00:00:00.429 --> 00:00:06.789
 Find a game in your library. Filters, segments, tile size and the actions on a tile.
 
 2
-00:00:07.283 --> 00:00:12.347
+00:00:07.400 --> 00:00:12.440
 Game Catalog lists every title Oneirodex has scanned and identified.
 
 3
-00:00:13.108 --> 00:00:18.508
+00:00:13.200 --> 00:00:18.744
 The segments across the top split games from soft titles, emulators and utilities.
 
 4
-00:00:19.262 --> 00:00:21.134
+00:00:19.496 --> 00:00:21.368
 Back to All.
 
 5
-00:00:21.892 --> 00:00:33.388
+00:00:22.131 --> 00:00:33.363
 Filters opens the full set — library, system, genre, theme, play path, and sort. Update, Missing, New and Lang are one-tap chips.
 
 6
-00:00:34.668 --> 00:00:37.932
+00:00:34.609 --> 00:00:37.969
 Type part of a name to narrow the grid as you go.
 
 7
-00:00:38.696 --> 00:00:40.832
+00:00:38.730 --> 00:00:41.178
 Clear it, and close the panel.
 
 8
-00:00:41.586 --> 00:00:51.954
+00:00:41.931 --> 00:00:52.179
 Every tile carries a Play button when browser play is available, a system chip, and a freshness badge — NEW here, UPDATE or MISSING after later scans.
 
 9
-00:00:52.719 --> 00:00:58.479
+00:00:52.944 --> 00:00:58.920
 The heart marks a favourite, and the menu holds download, collection and status actions.
 
 10
-00:00:59.250 --> 00:01:02.994
+00:00:59.678 --> 00:01:03.326
 Close the menu, then open a title to read its page.
 
 11
-00:01:04.124 --> 00:01:12.740
+00:01:04.433 --> 00:01:13.385
 That is find a game in your library. The written guide is in the docs folder, at docs/user/library-and-systems.md.
