@@ -1,33 +1,33 @@
 WEBVTT
 
 1
-00:00:00.427 --> 00:00:05.947
+00:00:00.427 --> 00:00:06.307
 Ways to play. Browser play, the desktop companion, and Big Picture for the TV.
 
 2
-00:00:06.556 --> 00:00:10.252
+00:00:06.916 --> 00:00:10.588
 Ways to Play lists every path to actually running a game.
 
 3
-00:00:11.541 --> 00:00:19.437
+00:00:11.710 --> 00:00:19.222
 Browser play uses WebRetro for supported consoles — cores are fetched at first boot, and cloud saves and cheats ride along.
 
 4
-00:00:20.206 --> 00:00:27.334
+00:00:19.979 --> 00:00:27.131
 The desktop companion installs, launches and updates PC titles; Catalog is browse-only.
 
 5
-00:00:28.102 --> 00:00:31.678
+00:00:27.893 --> 00:00:31.469
 On a tile, Play opens the game straight in a new tab.
 
 6
-00:00:32.438 --> 00:00:39.422
+00:00:32.227 --> 00:00:39.523
 Play buttons appear only where the system, the core and any BIOS are actually ready — no fake Play buttons.
 
 7
-00:00:40.190 --> 00:00:43.670
+00:00:40.282 --> 00:00:43.954
 Playtime keeps the record of what you ran and for how long.
 
 8
-00:00:44.782 --> 00:00:52.462
+00:00:45.030 --> 00:00:52.350
 That is ways to play. The written guide is in the docs folder, at docs/user/browser-play.md.

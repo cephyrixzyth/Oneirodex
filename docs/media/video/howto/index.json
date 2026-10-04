@@ -30,7 +30,7 @@
     "file": "howto-library.mp4",
     "poster": "howto-library.png",
     "vtt": "howto-library.vtt",
-    "seconds": 74,
+    "seconds": 75,
     "transcript": [
       "Find a game in your library. Filters, segments, tile size and the actions on a tile.",
       "Game Catalog lists every title Oneirodex has scanned and identified.",
@@ -54,7 +54,7 @@
     "file": "howto-game-details.mp4",
     "poster": "howto-game-details.png",
     "vtt": "howto-game-details.vtt",
-    "seconds": 64,
+    "seconds": 62,
     "transcript": [
       "Read a game page. Download, play, install, versions, saved states and cheats \u2014 in one place.",
       "Open any tile and you land on the game page.",
@@ -75,14 +75,13 @@
     "file": "howto-discover.mp4",
     "poster": "howto-discover.png",
     "vtt": "howto-discover.vtt",
-    "seconds": 55,
+    "seconds": 56,
     "transcript": [
       "Discover \u2014 the storefront. Shelves, zones, pin and hide, and See all.",
       "Discover is Oneirodex as a storefront for your own library.",
       "Each row is a shelf. New Library Games, Most Downloaded, Curated for you \u2014 an admin orders them and can add custom ones with dates.",
       "Pin keeps a shelf at the top for you; Hide removes it for your account only.",
       "Arrows scroll a shelf, and See all opens it as a full page.",
-      "Zones at the top are curated views \u2014 New and updated, and Elsewhere for titles outside the vault.",
       "Everything here is your library, arranged \u2014 never a store queue.",
       "That is discover \u2014 the storefront. The written guide is in the docs folder, at docs/user/library-and-systems.md."
     ]
@@ -96,7 +95,7 @@
     "file": "howto-systems.mp4",
     "poster": "howto-systems.png",
     "vtt": "howto-systems.vtt",
-    "seconds": 55,
+    "seconds": 54,
     "transcript": [
       "Systems and set completion. Console families, the licensed catalog, export packs and DAT completion.",
       "Systems is the same library grouped by console family.",
@@ -179,7 +178,7 @@
     "file": "howto-friends.mp4",
     "poster": "howto-friends.png",
     "vtt": "howto-friends.vtt",
-    "seconds": 42,
+    "seconds": 41,
     "transcript": [
       "Friends and presence. The friends dock, adding people, and the pop-out companion.",
       "Friends is a dock, not a page \u2014 it opens from the rail and stays put.",
@@ -360,7 +359,7 @@
     "file": "howto-admin-users.mp4",
     "poster": "howto-admin-users.png",
     "vtt": "howto-admin-users.vtt",
-    "seconds": 42,
+    "seconds": 43,
     "transcript": [
       "Users, invites and support. Household membership, invite links, roles and the support inbox.",
       "Users lists every member with their role \u2014 admin, librarian, member or child.",
@@ -379,7 +378,7 @@
     "file": "howto-admin-settings.mp4",
     "poster": "howto-admin-settings.png",
     "vtt": "howto-admin-settings.vtt",
-    "seconds": 70,
+    "seconds": 69,
     "transcript": [
       "Settings, features and integrations. Server settings, module toggles, metadata providers, SSO.",
       "Settings is the index \u2014 library and matching, play and emulation, presentation, extend.",

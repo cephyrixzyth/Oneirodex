@@ -141,7 +141,7 @@ SHOTS: list[Shot] = [
     Shot("library-tile-menu", "/library", prep_tile_menu),
     Shot("game-details", "/library", prep_game, readme=("screenshot-game.png",), settle_ms=1_500),
     Shot("game-details-full", "/library", prep_game, full_page=True, settle_ms=1_500),
-    Shot("discover", "/discover", readme=("screenshot-discover.png",), settle_ms=2_000),
+    Shot("discover", "/discover", readme=("screenshot-discover.png",), settle_ms=5_000),
     Shot("systems-platforms", "/systems", readme=("screenshot-systems.png",), settle_ms=1_800),
     Shot("systems-completion", "/systems/completion", settle_ms=1_800),
     Shot("chat-channels", "/library", prep_chat, readme=("screenshot-chat.png",)),

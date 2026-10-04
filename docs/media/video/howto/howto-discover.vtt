@@ -1,33 +1,29 @@
 WEBVTT
 
 1
-00:00:00.421 --> 00:00:05.653
+00:00:00.418 --> 00:00:05.554
 Discover — the storefront. Shelves, zones, pin and hide, and See all.
 
 2
-00:00:06.257 --> 00:00:10.169
+00:00:06.160 --> 00:00:10.096
 Discover is Oneirodex as a storefront for your own library.
 
 3
-00:00:11.607 --> 00:00:20.439
+00:00:11.445 --> 00:00:20.181
 Each row is a shelf. New Library Games, Most Downloaded, Curated for you — an admin orders them and can add custom ones with dates.
 
 4
-00:00:21.207 --> 00:00:25.551
+00:00:20.943 --> 00:00:25.287
 Pin keeps a shelf at the top for you; Hide removes it for your account only.
 
 5
-00:00:26.310 --> 00:00:30.510
+00:00:26.047 --> 00:00:30.583
 Arrows scroll a shelf, and See all opens it as a full page.
 
 6
-00:00:31.276 --> 00:00:38.236
-Zones at the top are curated views — New and updated, and Elsewhere for titles outside the vault.
-
-7
-00:00:38.997 --> 00:00:43.317
+00:00:40.183 --> 00:00:44.479
 Everything here is your library, arranged — never a store queue.
 
-8
-00:00:44.417 --> 00:00:53.465
+7
+00:00:45.579 --> 00:00:54.723
 That is discover — the storefront. The written guide is in the docs folder, at docs/user/library-and-systems.md.
