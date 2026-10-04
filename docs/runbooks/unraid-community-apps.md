@@ -1,6 +1,6 @@
 # Single-container install, Unraid Community Apps and Docker Hub
 
-> **Doc status:** Active (submission steps are a checklist; nothing here has been submitted yet)
+> **Doc status:** Active (the public template repository is prepared; Community Apps submission and real Unraid installation are pending)
 
 Oneirodex ships as **one image that carries its own PostgreSQL**. Without a
 `DATABASE_URL` the container creates a cluster in `/config` on first start, generates
@@ -87,10 +87,12 @@ path so covers, themes, and uploads remain in place. A standalone desktop instal
 ## Publishing the image
 
 `.github/workflows/docker-publish.yml` builds `linux/amd64` + `linux/arm64` on every `v*` tag
-(or by hand) and pushes to GHCR using the built-in token. To also push to Docker Hub, add the
-repository variable `DOCKERHUB_USERNAME` and the secret `DOCKERHUB_TOKEN` (a Hub access token
-with write scope). The template points at Docker Hub (`cephyrixzyth/oneirodex`); change
-`<Repository>` if you publish elsewhere.
+(or by hand) and pushes to GHCR using the built-in token. To also push to Docker Hub, set the
+repository variable `DOCKERHUB_USERNAME=cephyrixzyth` and the `DOCKERHUB_TOKEN` secret in the
+GitHub Actions environment named `DOCKERHUB`. The secret must be a Docker Hub access token with
+write scope. The workflow publish job selects that environment and pushes to Hub when both
+settings exist. Do not paste the token into the repository or chat. The template points at
+`cephyrixzyth/oneirodex`; change `<Repository>` if you publish elsewhere.
 
 Before the first public tag, work through [release-checklist.md](release-checklist.md) and
 [scrub-shipped-bundles.md](scrub-shipped-bundles.md). Image layers must contain no BIOS,
@@ -102,28 +104,36 @@ firmware, keys or `.env`.
 2. Short description: *The self-hosted game library for a household.* Paste the README as the
    full description (Hub does not sync it from GitHub on its own; a
    `peter-evans/dockerhub-description` step can be added later).
-3. Tag at least `latest` and the version; the `org.opencontainers.image.*` labels in the
-   Dockerfile carry source and revision.
+3. After the GitHub Actions variable and secret are set, run **Actions → Docker publish → Run
+   workflow** from `main` to publish `latest`, or publish a `v*` tag to publish the version and
+   `latest`. The workflow builds `linux/amd64` and `linux/arm64`; the
+   `org.opencontainers.image.*` labels carry source and revision. Confirm `latest` is public
+   and can be pulled without logging in before submitting the CA template.
 
 ## Unraid Community Apps submission
 
-Community Apps reads templates from a **public** repository and needs a support thread.
+Community Apps reads templates from a **public** repository and needs a support thread. The
+dedicated public template repository is [cephyrixzyth/unraid-templates](https://github.com/cephyrixzyth/unraid-templates).
+It keeps the app template separate from the application monorepo, which also contains two
+desktop Android resource XML files; those files triggered the scanner's two
+`not_unraid_application` warnings.
 
-1. Make the code repository public, or create a small public repo (for example
-   `cephyrixzyth/unraid-templates`) containing `oneirodex.xml` at its root. If the template
-   moves, update `<TemplateURL>` and `<Icon>` to the new raw URLs. Both must resolve
-   without authentication.
-   The repository root also carries `ca_profile.xml`: Community Apps requires a non-empty
-   `<Profile>` (repository overview and author/support information). Keep it at the root of
-   whichever repository holds the template, and add `<Forum>` there once the support thread
-   in step 4 exists. `tests/test_unraid_templates.py` fails if it goes empty or invalid.
+1. The public template repository contains `LICENSE`, `README.md`, `ca_profile.xml`, `icon.png`,
+   and `oneirodex/oneirodex.xml`. The app XML is nested so the repository root is not mistaken
+   for an app. `<TemplateURL>` and `<Icon>` use public raw GitHub URLs. The root profile has a
+   non-empty `<Profile>`; add `<Forum>` and point the template `<Support>` field to the Docker
+   Containers support topic once it exists. An OSI-approved license is required at the repo root.
+   `tests/test_unraid_templates.py` checks the source template and profile.
 2. Confirm the image pulls anonymously: `docker pull cephyrixzyth/oneirodex:latest` from a
    machine that is not logged in.
 3. Install it on a real Unraid box through *Add Container* with the template URL and check:
    first-run wizard, a scan of the games share, `docker stop` leaves a clean log, and a
    restart keeps the library.
-4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one)
-   and put its URL in `<Support>`.
+4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one), add
+   its URL to `<Forum>` in `ca_profile.xml`, and put the same URL in the template's `<Support>`.
+   The forum may restrict new topics to Community Developers; if the topic control is missing,
+   follow the [forum's posting guidance](https://forums.unraid.net/topic/40696-why-cant-i-post-new-topics-in-here/)
+   and request access from the moderators with the public template-repository URL.
 5. Submit the repository through Community Apps' *Submit* form
    (<https://ca.unraid.net/> → *Submit an application*), then respond to moderator feedback.
    They check XML validity, an icon, an overview, category, working WebUI and that defaults
