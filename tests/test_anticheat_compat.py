@@ -120,6 +120,7 @@ def test_refresh_writes_cache_and_keeps_old_file_on_failure(app, tmp_path, monke
     with app.app_context(), patch.object(ac, 'safe_request', return_value=good) as req:
         assert ac.refresh_if_stale() is True
         assert req.call_args.kwargs['validator'] is ac.validate_user_outbound_http_url
+        assert req.call_args.kwargs['stream'] is True
     assert target.exists()
     assert ac.lookup(steam_app_id=440000)['status'] == 'denied'
 
@@ -139,3 +140,9 @@ def test_refresh_writes_cache_and_keeps_old_file_on_failure(app, tmp_path, monke
         assert ac.refresh_if_stale() is False
     assert target.read_bytes() == body
     ac.load_index(force=True)
+
+
+def test_parse_feed_enforces_row_limit(monkeypatch):
+    monkeypatch.setattr(ac, 'MAX_FEED_ROWS', 1)
+    with pytest.raises(ValueError, match='row limit'):
+        ac.parse_feed(FIXTURE.read_bytes())

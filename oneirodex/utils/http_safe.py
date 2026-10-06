@@ -146,6 +146,10 @@ class BlockedOutboundUrl(requests.RequestException):
         super().__init__(f'Blocked outbound URL: {reason}')
 
 
+class ResponseTooLarge(requests.RequestException):
+    """Raised when a streamed response exceeds its caller-supplied byte cap."""
+
+
 class _HostHeaderSSLAdapter(HTTPAdapter):
     """Verify TLS against the Host header while the URL host is a pinned IP."""
 
@@ -510,3 +514,41 @@ class _NoRedirectAuth(requests.auth.AuthBase):
 def safe_get(url: str, *, validator: Validator, **kwargs) -> requests.Response:
     """``safe_request('GET', …)``."""
     return safe_request('GET', url, validator=validator, **kwargs)
+
+
+def read_response_limited(response: requests.Response, max_bytes: int) -> bytes:
+    """Read a streamed response while enforcing a cap on decoded body bytes.
+
+    Callers that need this guarantee must request ``stream=True`` and pass a
+    caller-owned ``requests.Session`` to :func:`safe_request`; the returned
+    response can then be consumed before the session is closed. The fallback
+    for lightweight response doubles keeps unit tests and adapters compatible.
+    """
+    if max_bytes <= 0:
+        raise ValueError('max_bytes must be positive')
+    length = getattr(response, 'headers', {}).get('Content-Length')
+    try:
+        if length is not None and int(length) > max_bytes:
+            raise ResponseTooLarge(f'Response exceeds {max_bytes} bytes')
+    except (TypeError, ValueError):
+        pass
+
+    iterator = getattr(response, 'iter_content', None)
+    if not callable(iterator):
+        body = response.content
+        if len(body) > max_bytes:
+            raise ResponseTooLarge(f'Response exceeds {max_bytes} bytes')
+        return body
+
+    body = bytearray()
+    try:
+        for chunk in iterator(chunk_size=min(64 * 1024, max_bytes + 1)):
+            if not chunk:
+                continue
+            if len(body) + len(chunk) > max_bytes:
+                raise ResponseTooLarge(f'Response exceeds {max_bytes} bytes')
+            body.extend(chunk)
+    except ResponseTooLarge:
+        response.close()
+        raise
+    return bytes(body)

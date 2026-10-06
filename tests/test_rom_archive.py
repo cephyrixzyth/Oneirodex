@@ -14,11 +14,14 @@ from oneirodex.utils.rom_archive import (
     bundle_playable_rom_zip,
     choose_rom_member,
     extract_rom_from_rar,
+    extract_rom_from_7z,
     extract_rom_from_zip,
     find_archive_extractors,
     path_supports_browser_extract,
     resolve_playable_rom_path,
 )
+from oneirodex.utils.rom_archive_types import RomExpansionBudget
+from oneirodex.utils.rom_archive_zip import extract_rom_from_gz
 
 
 def test_choose_prefers_platform_extension():
@@ -110,6 +113,161 @@ def test_resolve_gz_rom(tmp_path):
     path, name = resolve_playable_rom_path(str(gz_path), cache_dir=str(cache))
     assert name == 'Adventure.nes'
     assert Path(path).read_bytes() == b'NESGZDATA'
+
+
+def test_zip_expansion_budget_exact_limit_and_overflow_cleanup(tmp_path):
+    zip_path = tmp_path / 'budget.zip'
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zf.writestr('game.nes', b'12345')
+    exact = tmp_path / 'exact'
+    result = extract_rom_from_zip(str(zip_path), str(exact), budget=RomExpansionBudget(5))
+    assert Path(result).read_bytes() == b'12345'
+
+    over = tmp_path / 'over'
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_zip(str(zip_path), str(over), budget=RomExpansionBudget(4))
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (over / 'game.nes').exists()
+
+
+def test_zip_budget_aggregates_cue_companions(tmp_path):
+    zip_path = tmp_path / 'cue.zip'
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zf.writestr('disc.cue', b'CUE')
+        zf.writestr('disc.bin', b'IMAGE')
+    cache = tmp_path / 'cache'
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_zip(str(zip_path), str(cache), platform='PSX', budget=RomExpansionBudget(7))
+    assert exc.value.code == 'archive_too_large'
+    assert not (cache / 'disc.bin').exists()
+    assert not (cache / 'disc.cue').exists()
+
+
+def test_nested_zip_budget_is_shared(tmp_path):
+    inner = tmp_path / 'inner.zip'
+    with zipfile.ZipFile(inner, 'w') as zf:
+        zf.writestr('game.gba', b'12345')
+    outer = tmp_path / 'outer.zip'
+    with zipfile.ZipFile(outer, 'w') as zf:
+        zf.write(inner, 'inner.zip')
+    cache = tmp_path / 'cache'
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_zip(str(outer), str(cache), platform='GBA', budget=RomExpansionBudget(inner.stat().st_size + 4))
+    assert exc.value.code == 'archive_too_large'
+    assert not (cache / 'game.gba').exists()
+
+
+def test_gzip_budget_exact_limit_and_overflow_cleanup(tmp_path):
+    gz_path = tmp_path / 'game.nes.gz'
+    with gzip.open(gz_path, 'wb') as fh:
+        fh.write(b'12345')
+    exact = extract_rom_from_gz(str(gz_path), str(tmp_path / 'exact'), budget=RomExpansionBudget(5))
+    assert Path(exact).read_bytes() == b'12345'
+    over = tmp_path / 'over'
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_gz(str(gz_path), str(over), budget=RomExpansionBudget(4))
+    assert exc.value.code == 'archive_too_large'
+    assert not (over / 'game.nes').exists()
+
+
+def test_cli_archive_streaming_uses_budget_and_kills_overflow(tmp_path, monkeypatch):
+    from io import BytesIO
+    from oneirodex.utils import rom_archive
+
+    processes = []
+
+    class FakeProcess:
+        def __init__(self, output):
+            self.stdout = BytesIO(output)
+            self.returncode = 0
+            self.killed = False
+
+        def wait(self):
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(b'12345')
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(rom_archive.subprocess, 'Popen', fake_popen)
+    exact = tmp_path / 'exact' / 'game.nes'
+    rom_archive._extract_cli_member(['7z', 'x', '-so'], str(exact), RomExpansionBudget(5))
+    assert exact.read_bytes() == b'12345'
+    assert not processes[-1].killed
+
+    over = tmp_path / 'over' / 'game.nes'
+    with pytest.raises(ArchiveRomError) as exc:
+        rom_archive._extract_cli_member(['7z', 'x', '-so'], str(over), RomExpansionBudget(4))
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert processes[-1].killed
+    assert not over.exists()
+
+
+def test_py7zr_declared_expansion_limit_is_reported_and_cleaned(tmp_path):
+    py7zr = pytest.importorskip('py7zr')
+    archive_path = tmp_path / 'large.7z'
+    with py7zr.SevenZipFile(archive_path, mode='w') as archive:
+        archive.writestr(b'X' * 128, 'game.nes')
+
+    cache = tmp_path / 'cache'
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_7z(str(archive_path), str(cache), budget=RomExpansionBudget(32))
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'game.nes').exists()
+
+
+def test_rar_stream_overflow_is_reported_and_cleaned(tmp_path, monkeypatch):
+    import io
+    import sys
+    import types
+
+    rar_path = tmp_path / 'large.rar'
+    rar_path.write_bytes(b'fake rar')
+
+    class Info:
+        filename = 'game.nes'
+        file_size = 128
+
+        @staticmethod
+        def is_dir():
+            return False
+
+    class FakeRarFile:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        @staticmethod
+        def infolist():
+            return [Info()]
+
+        @staticmethod
+        def open(_name):
+            return io.BytesIO(b'X' * 128)
+
+    fake_rarfile = types.ModuleType('rarfile')
+    fake_rarfile.RarFile = FakeRarFile
+    monkeypatch.setitem(sys.modules, 'rarfile', fake_rarfile)
+    monkeypatch.setattr('oneirodex.utils.rom_archive._configure_rarfile_tools', lambda _module: ['fake'])
+    monkeypatch.setattr('oneirodex.utils.rom_archive.find_archive_extractors', lambda: {})
+    cache = tmp_path / 'cache'
+
+    with pytest.raises(ArchiveRomError) as exc:
+        extract_rom_from_rar(str(rar_path), str(cache), budget=RomExpansionBudget(32))
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'game.nes').exists()
 
 
 def test_resolve_tar_gz_rejected(tmp_path):
@@ -285,11 +443,11 @@ def test_rar_extract_via_stubbed_7z(tmp_path, monkeypatch):
                 '\n'
             )
             return CompletedProcess(cmdline, 0, stdout=stdout, stderr='')
-        if 'e' in cmdline or 'x' in cmdline:
-            dest = cache / 'Hero.nes'
-            dest.write_bytes(b'NESROMDAT')
-            return CompletedProcess(cmdline, 0, stdout='', stderr='')
         return CompletedProcess(cmdline, 1, stdout='', stderr=f'unexpected {cmdline}')
+
+    def fake_extract(cmdline, destination, budget):
+        Path(destination).write_bytes(b'NESROMDAT')
+        budget.consume(9)
 
     import builtins
     real_import = builtins.__import__
@@ -305,6 +463,7 @@ def test_rar_extract_via_stubbed_7z(tmp_path, monkeypatch):
         lambda: {'7z': str(fake_7z)},
     )
     monkeypatch.setattr('oneirodex.utils.rom_archive._run_extractor', fake_run)
+    monkeypatch.setattr('oneirodex.utils.rom_archive._extract_cli_member', fake_extract)
 
     path, name = resolve_playable_rom_path(
         str(rar_path),
@@ -393,25 +552,21 @@ def test_a_listing_tool_that_cannot_decode_falls_back_to_the_other(tmp_path, mon
     def fake_run(cmdline, **kwargs):
         if '-slt' in cmdline:
             return CompletedProcess(cmdline, 0, stdout=f'Path = {member}\nSize = 12\nAttributes = A\n\n', stderr='')
+        return CompletedProcess(cmdline, 0, stdout='', stderr='')
+
+    def fake_extract(cmdline, destination, budget):
         if cmdline[0] == seven:
             used.append('7z')
-            # What p7zip without the RAR codec actually does: exit 0-ish and
-            # leave a zero-byte husk behind.
-            (cache / 'Game [!][NGCD-058].cue').write_bytes(b'')
-            return CompletedProcess(cmdline, 2, stdout='', stderr='ERROR: Unsupported Method')
+            raise ArchiveRomError('Unsupported Method', code='extract_failed')
         used.append('bsdtar')
-        # The member name is full of glob metacharacters, so it must reach
-        # bsdtar backslash-escaped -- raw, it reads as a character class and
-        # bsdtar answers "Not found in archive".
         assert any(r'\[!\]' in arg for arg in cmdline), cmdline
-        nested = cache / 'Game [!][NGCD-058]'
-        nested.mkdir(exist_ok=True)
-        (nested / 'Game [!][NGCD-058].cue').write_bytes(b'FILE "x.bin"')
-        return CompletedProcess(cmdline, 0, stdout='', stderr='')
+        Path(destination).write_bytes(b'FILE "x.bin"')
+        budget.consume(Path(destination).stat().st_size)
 
     _no_rarfile(monkeypatch)
     monkeypatch.setattr('oneirodex.utils.rom_archive.find_archive_extractors', lambda: {'7z': seven, 'bsdtar': tar})
     monkeypatch.setattr('oneirodex.utils.rom_archive._run_extractor', fake_run)
+    monkeypatch.setattr('oneirodex.utils.rom_archive._extract_cli_member', fake_extract)
 
     path, name = resolve_playable_rom_path(str(rar_path), cache_dir=str(cache), platform='NEOGEO_CD')
     assert name == 'Game [!][NGCD-058].cue'
@@ -434,12 +589,15 @@ def test_an_empty_extract_is_never_served_as_a_rom(tmp_path, monkeypatch):
     def fake_run(cmdline, **kwargs):
         if '-slt' in cmdline:
             return CompletedProcess(cmdline, 0, stdout='Path = Hero.nes\nSize = 9\nAttributes = A\n\n', stderr='')
-        (cache / 'Hero.nes').write_bytes(b'')
         return CompletedProcess(cmdline, 0, stdout='', stderr='')
+
+    def fake_extract(_cmdline, destination, _budget):
+        Path(destination).write_bytes(b'')
 
     _no_rarfile(monkeypatch)
     monkeypatch.setattr('oneirodex.utils.rom_archive.find_archive_extractors', lambda: {'7z': seven, 'bsdtar': tar})
     monkeypatch.setattr('oneirodex.utils.rom_archive._run_extractor', fake_run)
+    monkeypatch.setattr('oneirodex.utils.rom_archive._extract_cli_member', fake_extract)
 
     with pytest.raises(ArchiveRomError) as exc:
         resolve_playable_rom_path(str(rar_path), cache_dir=str(cache), platform='NES')
@@ -540,36 +698,26 @@ def test_one_damaged_track_does_not_cost_the_whole_cd_rip(tmp_path, monkeypatch)
         if '-tf' in cmdline:
             names = chr(10).join((good, bad, cue))
             return CompletedProcess(cmdline, 0, stdout=names, stderr='')
-        # bsdtar receives the names backslash-escaped, so match on the
-        # unescaped form the way bsdtar itself would.
-        asked = [
-            arg.replace(chr(92), '')
-            for arg in cmdline
-            if 'Aero' in arg and arg != str(rar_path)
-        ]
-        passes.append(asked)
-        nested = cache / folder
-        nested.mkdir(exist_ok=True)
-        # bsdtar walks the archive in order and dies on the damaged track, so
-        # nothing listed after it is written.
-        for name in (good, bad, cue):
-            if not any(Path(name).name in arg for arg in asked):
-                continue
-            if name == bad:
-                return CompletedProcess(
-                    cmdline, 1, stdout='', stderr=f'bsdtar: {bad}: File CRC error',
-                )
-            (cache / name).write_bytes(b'REAL BYTES')
         return CompletedProcess(cmdline, 0, stdout='', stderr='')
+
+    def fake_extract(cmdline, destination, budget):
+        member_name = next(arg for arg in cmdline if arg.endswith('.cue') or arg.endswith('.wav'))
+        member_name = member_name.replace(chr(92), '')
+        passes.append([member_name])
+        if 'Track 12' in member_name:
+            raise ArchiveRomError('File CRC error', code='extract_failed')
+        Path(destination).write_bytes(b'REAL BYTES')
+        budget.consume(11)
 
     _no_rarfile(monkeypatch)
     monkeypatch.setattr('oneirodex.utils.rom_archive.find_archive_extractors', lambda: {'bsdtar': tar})
     monkeypatch.setattr('oneirodex.utils.rom_archive._run_extractor', fake_run)
+    monkeypatch.setattr('oneirodex.utils.rom_archive._extract_cli_member', fake_extract)
 
     path, name = resolve_playable_rom_path(str(rar_path), cache_dir=str(cache), platform='NEOGEO_CD')
     assert name == 'Aero [!][SW2].cue'
     assert Path(path).read_bytes() == b'REAL BYTES'
-    assert len(passes) == 2, 'should retry once, without the damaged track'
-    assert not any('Track 12' in arg for arg in passes[1]), passes[1]
+    assert len(passes) == 3, 'extract each selected member separately within the shared budget'
+    assert any('Track 12' in member for [member] in passes)
     assert not (cache / folder / Path(bad).name).exists()
 

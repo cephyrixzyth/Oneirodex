@@ -14,7 +14,7 @@ import shutil
 import zipfile
 from pathlib import Path
 from oneirodex.utils.rom_archive_select import _is_rom_name
-from oneirodex.utils.rom_archive_types import ArchiveRomError
+from oneirodex.utils.rom_archive_types import ArchiveRomError, RomExpansionBudget
 from oneirodex.utils.rom_archive_select import _member_ext
 from oneirodex.utils.rom_archive_types import CUE_COMPANION_EXTENSIONS
 from oneirodex.utils.rom_archive_select import choose_rom_member
@@ -50,19 +50,30 @@ def _list_nested_zip_members(zip_path: str) -> list[tuple[str, int]]:
         ]
 
 
-def _extract_zip_member(archive: zipfile.ZipFile, member: str, dest: str) -> None:
+def _extract_zip_member(
+    archive: zipfile.ZipFile, member: str, dest: str,
+    budget: RomExpansionBudget | None = None,
+) -> None:
     parent = os.path.dirname(dest)
     if parent:
         os.makedirs(parent, exist_ok=True)
     # open(dest, 'wb') writes *through* a link sitting at dest; replace it instead.
     if os.path.islink(dest):
         os.unlink(dest)
-    with archive.open(member) as src, open(dest, 'wb') as out:
-        while True:
-            chunk = src.read(1024 * 1024)
-            if not chunk:
-                break
-            out.write(chunk)
+    budget = budget or RomExpansionBudget()
+    try:
+        info = archive.getinfo(member)
+        if info.file_size > budget.remaining:
+            budget.consume(info.file_size)
+        with archive.open(member) as src, open(dest, 'wb') as out:
+            budget.copy_stream(src, out)
+    except Exception:
+        try:
+            if os.path.isfile(dest):
+                os.remove(dest)
+        except OSError:
+            pass
+        raise
 
 
 def _extract_cue_companions(
@@ -70,6 +81,7 @@ def _extract_cue_companions(
     chosen: str,
     cache_dir: str,
     member_names: set[str],
+    budget: RomExpansionBudget,
 ) -> None:
     """Extract disc companions (.bin/.img/…) next to a chosen .cue in the same zip folder."""
     if _member_ext(chosen) != '.cue':
@@ -96,7 +108,7 @@ def _extract_cue_companions(
         if os.path.isfile(companion_dest) and os.path.getsize(companion_dest) > 0:
             continue
         try:
-            _extract_zip_member(archive, name, companion_dest)
+            _extract_zip_member(archive, name, companion_dest, budget)
         except KeyError:
             continue
 
@@ -137,6 +149,7 @@ def extract_rom_from_zip(
     member: str | None = None,
     platform: str | None = None,
     nest_depth: int = 0,
+    budget: RomExpansionBudget | None = None,
 ) -> str:
     """
     Extract one ROM member from a zip into cache_dir and return absolute path.
@@ -145,6 +158,7 @@ def extract_rom_from_zip(
     When a .cue is selected, sibling disc images in the same folder are extracted too.
     """
     os.makedirs(cache_dir, exist_ok=True)
+    budget = budget or RomExpansionBudget()
     rom_members = _drop_archive_members(_list_roms_with_sizes_in_zip(zip_path), platform, keep=member)
 
     if rom_members:
@@ -153,15 +167,31 @@ def extract_rom_from_zip(
         dest = os.path.join(cache_dir, safe_name)
         with zipfile.ZipFile(zip_path, 'r') as archive:
             all_names = {info.filename for info in archive.infolist() if not info.is_dir()}
+            preexisting_outputs = {
+                os.path.join(cache_dir, Path(name).name)
+                for name in all_names
+                if os.path.isfile(os.path.join(cache_dir, Path(name).name))
+            }
             if not (os.path.isfile(dest) and os.path.getsize(dest) > 0):
                 try:
-                    _extract_zip_member(archive, chosen, dest)
+                    _extract_zip_member(archive, chosen, dest, budget)
                 except KeyError as exc:
                     raise ArchiveRomError(
                         f'ROM member not found in zip: {safe_name}',
                         code='invalid_member',
                     ) from exc
-            _extract_cue_companions(archive, chosen, cache_dir, all_names)
+            try:
+                _extract_cue_companions(archive, chosen, cache_dir, all_names, budget)
+            except ArchiveRomError:
+                # A cue and its tracks form one playable result; never leave a
+                # cue behind when the aggregate companion budget is exceeded.
+                for output in {dest, *(os.path.join(cache_dir, Path(n).name) for n in all_names)} - preexisting_outputs:
+                    try:
+                        if os.path.isfile(output):
+                            os.remove(output)
+                    except OSError:
+                        pass
+                raise
         if not os.path.isfile(dest):
             raise ArchiveRomError(
                 'Failed to extract ROM from zip archive',
@@ -192,15 +222,23 @@ def extract_rom_from_zip(
         try:
             with zipfile.ZipFile(zip_path, 'r') as archive:
                 if not (os.path.isfile(nested_dest) and os.path.getsize(nested_dest) > 0):
-                    _extract_zip_member(archive, nested_name, nested_dest)
+                    _extract_zip_member(archive, nested_name, nested_dest, budget)
             return extract_rom_from_zip(
                 nested_dest,
                 cache_dir,
                 member=member,
                 platform=platform,
                 nest_depth=nest_depth + 1,
+                budget=budget,
             )
         except ArchiveRomError as exc:
+            if exc.code == 'archive_too_large':
+                try:
+                    if os.path.isfile(nested_dest):
+                        os.remove(nested_dest)
+                except OSError:
+                    pass
+                raise
             last_error = exc
             continue
 
@@ -212,7 +250,9 @@ def extract_rom_from_zip(
     )
 
 
-def extract_rom_from_gz(gz_path: str, cache_dir: str) -> str:
+def extract_rom_from_gz(
+    gz_path: str, cache_dir: str, *, budget: RomExpansionBudget | None = None,
+) -> str:
     """Gunzip a single-file ROM wrapper (e.g. Adventure.nes.gz) into cache_dir."""
     inner_name = Path(gz_path).stem
     if inner_name.lower().endswith('.tar') or not _is_rom_name(inner_name):
@@ -224,6 +264,7 @@ def extract_rom_from_gz(gz_path: str, cache_dir: str) -> str:
         )
 
     os.makedirs(cache_dir, exist_ok=True)
+    budget = budget or RomExpansionBudget()
     safe_name = _safe_basename(inner_name)
     dest = os.path.join(cache_dir, safe_name)
     if os.path.isfile(dest) and os.path.getsize(dest) > 0:
@@ -233,12 +274,20 @@ def extract_rom_from_gz(gz_path: str, cache_dir: str) -> str:
         if os.path.islink(dest):
             os.unlink(dest)
         with gzip.open(gz_path, 'rb') as src, open(dest, 'wb') as out:
-            while True:
-                chunk = src.read(1024 * 1024)
-                if not chunk:
-                    break
-                out.write(chunk)
+            budget.copy_stream(src, out)
+    except ArchiveRomError:
+        try:
+            if os.path.isfile(dest):
+                os.remove(dest)
+        except OSError:
+            pass
+        raise
     except OSError as exc:
+        try:
+            if os.path.isfile(dest):
+                os.remove(dest)
+        except OSError:
+            pass
         raise ArchiveRomError(
             'Invalid or corrupt gzip ROM',
             code='corrupt_archive',

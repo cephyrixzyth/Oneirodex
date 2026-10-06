@@ -115,6 +115,7 @@ def test_refresh_builds_the_index_and_keeps_it_on_failure(app, tmp_path, monkeyp
     with app.app_context(), patch.object(sp, 'safe_request', return_value=good) as req:
         assert sp.refresh_if_stale() is True
         assert req.call_args.kwargs['validator'] is sp.validate_user_outbound_http_url
+        assert req.call_args.kwargs['stream'] is True
     assert (tmp_path / 'manifest.index.json').exists() and (tmp_path / 'manifest.yaml').exists()
     assert sp.lookup(steam_app_id=367520)['name'] == 'Hollow Knight'
     before = (tmp_path / 'manifest.index.json').read_bytes()

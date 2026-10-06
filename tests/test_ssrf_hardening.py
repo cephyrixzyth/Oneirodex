@@ -28,6 +28,8 @@ from requests.utils import select_proxy
 from oneirodex.utils import security
 from oneirodex.utils.http_safe import (
     BlockedOutboundUrl,
+    ResponseTooLarge,
+    read_response_limited,
     safe_get,
     safe_request,
 )
@@ -39,6 +41,34 @@ from oneirodex.utils.security import (
     validate_connector_http_url,
     validate_user_outbound_http_url,
 )
+
+
+class _ChunkedResponse:
+    def __init__(self, chunks, headers=None):
+        self.chunks = chunks
+        self.headers = headers or {}
+        self.closed = False
+
+    def iter_content(self, chunk_size):
+        yield from self.chunks
+
+    def close(self):
+        self.closed = True
+
+
+def test_read_response_limited_caps_streamed_decoded_body_and_closes():
+    response = _ChunkedResponse([b'abcd', b'efgh'])
+    with pytest.raises(ResponseTooLarge):
+        read_response_limited(response, 6)
+    assert response.closed is True
+
+
+def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length():
+    response = _ChunkedResponse([b'ab', b'cd'])
+    assert read_response_limited(response, 4) == b'abcd'
+    oversized = _ChunkedResponse([b''], headers={'Content-Length': '5'})
+    with pytest.raises(ResponseTooLarge):
+        read_response_limited(oversized, 4)
 
 
 PUBLIC = '93.184.216.34'

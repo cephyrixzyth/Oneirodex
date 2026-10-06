@@ -28,9 +28,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+import requests
 from flask import current_app, has_app_context
 
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import read_response_limited, safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
 from oneirodex.utils.library_paths import library_dir
 
@@ -206,13 +207,22 @@ def refresh_if_stale(*, force: bool = False) -> bool:
     if not force and not cache_is_stale():
         return False
     try:
-        resp = safe_request('GET', manifest_url(), validator=validate_user_outbound_http_url, timeout=TIMEOUT_SECONDS)
-        if resp.status_code != 200:
-            logger.warning('[SAVE PATHS] manifest returned HTTP %s', resp.status_code)
-            return False
-        body = resp.content
-        if not body or len(body) > MAX_MANIFEST_BYTES:
-            logger.warning('[SAVE PATHS] manifest body empty or over %s bytes', MAX_MANIFEST_BYTES)
+        with requests.Session() as session:
+            resp = safe_request(
+                'GET', manifest_url(), validator=validate_user_outbound_http_url,
+                timeout=TIMEOUT_SECONDS, session=session, stream=True,
+            )
+            try:
+                if resp.status_code != 200:
+                    logger.warning('[SAVE PATHS] manifest returned HTTP %s', resp.status_code)
+                    return False
+                body = read_response_limited(resp, MAX_MANIFEST_BYTES)
+            finally:
+                close = getattr(resp, 'close', None)
+                if callable(close):
+                    close()
+        if not body:
+            logger.warning('[SAVE PATHS] manifest body empty')
             return False
         index = build_index(parse_manifest_yaml(body))
     except Exception as exc:  # noqa: BLE001 -- offline / schema drift is a miss, not a crash

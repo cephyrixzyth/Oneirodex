@@ -693,6 +693,25 @@ def test_rom_endpoint_serves_a_cue_bundle_from_the_cache(served):
     with zipfile.ZipFile(io.BytesIO(wire.body)) as archive:
         assert sorted(archive.namelist()) == ['disc.bin', 'disc.cue']
         assert archive.read('disc.bin') == GAME
+    assert not list(served.tmp.glob('runtime/rom_cache/*')), 'successful play also removes request-scoped files'
+
+
+def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served, monkeypatch):
+    from oneirodex.utils import rom_archive
+    from oneirodex.utils.rom_archive_types import RomExpansionBudget
+
+    archive_path = served.root / 'compressed.zip'
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('game.nes', b'X' * 64)
+    game = _make_game(served.db, archive_path)
+    monkeypatch.setattr(rom_archive, 'RomExpansionBudget', lambda: RomExpansionBudget(32))
+
+    wire = _get_rom(served, game)
+
+    assert _status(wire) == 413
+    assert b'archive_too_large' in wire.body
+    cache_root = served.tmp / 'runtime' / 'rom_cache'
+    assert not list(cache_root.iterdir()), 'failed request must remove its temporary extraction directory'
 
 
 def _get_zip(served, request_id, wire=None) -> _Wire:
