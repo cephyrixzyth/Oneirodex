@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-06
+
+### Added
+- **First-run onboarding and library creation.** Setup now guides admins through optional API connections and creation of the first library; library creation is restored as a supported flow.
+- **Admin experience refresh.** Image queue, Library & Matching, Play & Emulation, scan management, and newsletter pages were rebuilt to match the current interface and remain usable without SMTP. Discover cards and discount/news artwork now follow their intended layouts; free games are excluded from discount rows.
+
+### Security
+- **Archive and remote-feed limits.** ROM extraction has a shared 64 GiB expansion ceiling and cleans temporary files on failure; remote metadata feeds are streamed with response and record limits.
+- **Release publishing guard.** Manual Docker publishing is restricted to `main`; `latest` is published only from `main` or a version tag.
+
+### Fixed
+- **Unraid setup defaults.** The CA template supplies the persistent library path; optional ClamAV settings are documented without enabling scanning unless its sidecar is configured.
+
 ### Fixed
 - **Admin protection:** deleting the only active admin is refused, including when that admin attempts to delete their own account.
 - **Database time zone:** PostgreSQL connections now use UTC across Flask, CLI, and migration entry points; embedded PostgreSQL servers also start in UTC. Existing timestamps already shifted by older local-time settings are left as stored and are not migrated.
@@ -1008,7 +1021,8 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 - Hardlink and AI apply remain feature-flagged and path-sandboxed
 - `SECRET_KEY` required; container refuses the placeholder
 
-[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0
 [1.0.0-beta]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0-beta

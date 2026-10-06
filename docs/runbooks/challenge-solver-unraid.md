@@ -52,6 +52,42 @@ Baseline is slightly slower but avoids Bun runtime crashes on older kernels.
 
 ---
 
+## Unraid Community Apps / standalone Docker install
+
+The Unraid host in this deployment is a Celeron J4125 without AVX2. Use the upstream
+`1.7.0-baseline` image; it is built for J4125-class CPUs. Keep TRAWL on the existing
+`oneirodex-net` network, publish no ports, and use a dedicated Redis instance so the
+existing household Redis service remains isolated. The commands below create the Redis
+data volume once and start both containers with restart policies:
+
+```bash
+docker volume create oneirodex-challenge-redis-data
+docker run -d --name oneirodex-challenge-redis \
+  --restart unless-stopped --network oneirodex-net \
+  -v oneirodex-challenge-redis-data:/data \
+  redis:8.10.2-alpine
+
+docker run -d --name oneirodex-trawl --network oneirodex-net \
+  --network-alias trawl --restart unless-stopped --shm-size=1g \
+  --memory=1536m --memory-swap=1536m \
+  -e REDIS_URL=redis://oneirodex-challenge-redis:6379 \
+  -e BROWSER_POOL_SIZE=1 \
+  ghcr.io/germondai/trawl:1.7.0-baseline
+```
+
+Neither container has a host port mapping. Confirm TRAWL's `/health` reports healthy and
+inspect its memory diagnostics after the browser pool warms. Do not enable its MITM proxy
+or install a TRAWL CA certificate. With Oneirodex's solver flag left off, the sidecar is
+idle and does not alter acquisition behavior. Enabling it requires both
+`ENABLE_CHALLENGE_SOLVER=true` and `ALLOW_PRIVATE_LAN_URLS=true`; that second setting
+widens which private-network endpoints the app may contact, so enable it only when the
+admin intends to use TRAWL.
+
+To remove the optional services later, stop/remove the two containers. Keep
+`oneirodex-challenge-redis-data` until its cached session data is no longer needed.
+
+---
+
 ## Enable in Oneirodex
 
 1. Start profile **`challenge`** (above).

@@ -2,18 +2,18 @@
 
 > **Doc status:** Active
 
-Use before tagging a release (example: **v0.1.0**).
+Use before tagging a release (example: **v1.1.0**).
 
 ## Version bump
 
 - [ ] Root [`VERSION`](../../VERSION) matches intended semver
 - [ ] [`CHANGELOG.md`](../../CHANGELOG.md) has a dated section for this release
-- [ ] `clients/desktop/package.json`, `src-tauri/tauri.conf.json`, **`src-tauri/tauri.thin.conf.json`**, `Cargo.toml` **and `Cargo.lock`** (the lock records the crate's own version; a stale one breaks `--locked` builds)
+- [ ] `clients/desktop/package.json`, `src-tauri/tauri.conf.json`, **`src-tauri/tauri.thin.conf.json`**, `Cargo.toml` **and `Cargo.lock`** (the lock records the crate's own version; a stale one breaks `--locked` builds); `oneirodex/__init__.py` fallback and `docs/openapi/openapi.json`
 - [ ] `frontend/member-app`, `frontend/admin-app`, `frontend/ops-glance`, `frontend/api-client`, `frontend/shared` package versions (npm workspaces — the single root [`package-lock.json`](../../package-lock.json) is the only lockfile; there are no per-app lockfiles to bump)
 - [ ] Desktop `client_version` needs no edit — it is injected from `package.json` at build time (`__APP_VERSION__`)
-- [ ] Leaving pre-release (`X.Y.Z-beta` → `X.Y.Z`)? Add `msi` and `rpm` back to `bundle.targets` in both Tauri configs — they are excluded only because pre-release versions break those two bundlers ([desktop-code-signing.md](desktop-code-signing.md))
-- [ ] `docker-compose.yml` image tag (`APP_IMAGE`, preferred Hub `cephyrixzyth/oneirodex:X.Y.Z`; local default `oneirodex:1.0.1`)
-- [ ] Root `README.md` and `docs/README.md` version references
+- [ ] Release installer set is still six verified bundles (full + thin × NSIS, macOS app/DMG, DEB and AppImage); `.msi` / `.rpm` remain disabled pending native-environment verification ([desktop-code-signing.md](desktop-code-signing.md))
+- [ ] `docker-compose.yml` image tag (`APP_IMAGE`, preferred Hub `cephyrixzyth/oneirodex:X.Y.Z`; local default `oneirodex:1.1.0`)
+- [ ] Root `README.md`, `docs/README.md`, active env examples, Unraid template/library path and project release snapshot
 
 ## CI (PR gate)
 
