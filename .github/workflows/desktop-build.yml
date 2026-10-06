@@ -8,8 +8,8 @@ name: Desktop build
 #
 # Bundling (bundle.active) IS on — "unsigned" is about certificates, not about
 # whether users get an installer. Targets are nsis / dmg / deb + appimage;
-# .msi and .rpm were left out while the version was a pre-release (both reject
-# it). The version is 1.0.0 now, so they can be added once a build proves them.
+# .msi and .rpm remain out until their native build environments are verified.
+# The current stable semver is compatible, but does not enable untested targets.
 #
 # Releases: a `v*` tag push, or a manual run with `release_tag`, attaches every
 # installer to that GitHub release (the `release` job). Nothing else creates one.
@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Attach the built installers to this existing GitHub release (e.g. v1.0.0). Leave empty to only build.'
+        description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.0). Leave empty to only build.'
         required: false
         default: ''
   push:

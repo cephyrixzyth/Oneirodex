@@ -148,5 +148,8 @@ desktop Android resource XML files; those files triggered the scanner's two
   ships a newer major needs a `pg_upgrade` step that does not exist yet. Pin the Debian
   base when changing majors.
 - `linux/arm64` is built but not exercised on real hardware.
-- Optional sidecars (LiveKit, ClamAV, challenge solver) are Compose profiles only; the
-  template does not start them. Point the matching env vars at external services.
+- The Community Apps template starts only Oneirodex. Optional sidecars are separate
+  services: ClamAV and TRAWL can join a private Docker network; TRAWL/J4125 setup is in
+  [challenge-solver-unraid.md](challenge-solver-unraid.md). Keep the solver disabled until
+  an admin opts into private-LAN URL access. LiveKit remains an independently configured
+  Compose service and requires real credentials plus media-port planning.

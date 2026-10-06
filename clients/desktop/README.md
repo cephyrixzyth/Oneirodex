@@ -54,7 +54,7 @@ Bundling is on, so a build produces a real (unsigned) installer under `src-tauri
 | macOS | `.app` + `.dmg` |
 | Linux | `.deb` + `.AppImage` |
 
-`.msi` and `.rpm` are excluded while the version is a pre-release (`1.0.0-beta`) — both bundlers reject one. The flavors bundle under distinct product names (`Oneirodex` / `OneirodexThin`), so they no longer overwrite each other; only the **bare** `target/release/oneirodex-desktop[.exe]` path is still shared.
+`.msi` and `.rpm` remain excluded pending validation on their native build environments; the six supported release bundles are NSIS, macOS app/DMG, DEB and AppImage for full and thin clients. The flavors bundle under distinct product names (`Oneirodex` / `OneirodexThin`), so they no longer overwrite each other; only the **bare** `target/release/oneirodex-desktop[.exe]` path is still shared.
 
 For all three platforms in one go, use [`scripts/build-installers.sh`](../../scripts/build-installers.sh) — [local-installers.md](../../docs/runbooks/local-installers.md).
 

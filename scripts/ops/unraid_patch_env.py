@@ -12,7 +12,7 @@ SSH = ["ssh", "-o", "BatchMode=yes", "root@192.168.50.116"]
 SECRET_REMOTE = "/mnt/user/appdata/authentik/media/.oneirodex_oidc_secret"
 
 UPSERT = {
-    "APP_IMAGE": "oneirodex:1.0.1",
+    "APP_IMAGE": "oneirodex:1.1.0",
     "APP_CONTAINER_NAME": "oneirodex-app",
     "COMPOSE_FILE": "docker-compose.single.yml",
     "APPDATA_PATH": "/mnt/cache/appdata/oneirodex/config",

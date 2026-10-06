@@ -29,7 +29,7 @@ The two flavors still share the **bare** Cargo output path (`target/release/onei
 | macOS | `.app` + `.dmg` |
 | Linux | `.deb` + `.AppImage` |
 
-**`.msi` and `.rpm` are deliberately excluded.** Both reject a pre-release version string (the project was `1.0.0-beta` when this was written; it is now a plain `1.0.0`). Add them back to `bundle.targets` in both configs when the version becomes a plain `X.Y.Z`.
+**`.msi` and `.rpm` remain excluded pending native-environment validation.** The project now uses plain `1.1.0`; release version syntax is no longer a blocker, but those formats are not part of the six verified bundles.
 
 Thin build uses capabilities `thin-main` / `thin-library` / `social` (no install/FS lifecycle ACL). Full uses `default` + `social`.
 
