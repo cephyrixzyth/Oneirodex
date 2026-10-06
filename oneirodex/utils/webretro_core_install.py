@@ -58,7 +58,10 @@ def default_core_ids() -> frozenset[str]:
     return frozenset(getattr(plat, 'WEBRETR_INSTALLED_CORES', ()) or ())
 
 
-def missing_cores(cores_dir: str | Path | None = None) -> frozenset[str]:
+def missing_cores(
+    cores_dir: str | Path | None = None,
+    core_ids: tuple[str, ...] | frozenset[str] | None = None,
+) -> frozenset[str]:
     """Default cores without both halves present on disk."""
     from oneirodex.utils.webretro_cores import core_dirs
 
@@ -71,7 +74,8 @@ def missing_cores(cores_dir: str | Path | None = None) -> frozenset[str]:
                 return False
         return True
 
-    return frozenset(c for c in default_core_ids() if not any(_complete(r, c) for r in roots))
+    requested = frozenset(core_ids) if core_ids is not None else default_core_ids()
+    return frozenset(c for c in requested if not any(_complete(r, c) for r in roots))
 
 
 def _fetch(url: str) -> bytes:
@@ -114,7 +118,10 @@ def install_core(core_id: str, cores_dir: str | Path | None = None) -> bool:
     return True
 
 
-def install_missing_cores(cores_dir: str | Path | None = None) -> tuple[int, list[str]]:
+def install_missing_cores(
+    cores_dir: str | Path | None = None,
+    core_ids: tuple[str, ...] | frozenset[str] | None = None,
+) -> tuple[int, list[str]]:
     """Fetch every missing default core. Returns (installed, failed_ids).
 
     One core failing must not abandon the other twenty-three — a partial set is
@@ -122,7 +129,7 @@ def install_missing_cores(cores_dir: str | Path | None = None) -> tuple[int, lis
     """
     installed = 0
     failed: list[str] = []
-    for core_id in sorted(missing_cores(cores_dir)):
+    for core_id in sorted(missing_cores(cores_dir, core_ids=core_ids)):
         try:
             install_core(core_id, cores_dir)
             installed += 1

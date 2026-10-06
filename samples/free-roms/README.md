@@ -26,7 +26,12 @@ Options:
 python scripts/fetch-free-roms.py --manifest samples/free-roms/manifest.yaml
 python scripts/fetch-free-roms.py --out samples/free-roms/library
 python scripts/fetch-free-roms.py --dry-run
+python scripts/fetch-free-roms.py --out /storage/demo-games --id nestest --id dmg-acid2
 ```
+
+Use repeatable `--id` options to fetch only named manifest entries. The Blitz
+public demo uses this to provision its five playable samples without fetching
+unrelated smoke-test ROMs.
 
 Each downloaded file gets a sibling `*.LICENSE.txt` with license, source, and notes from the manifest.
 

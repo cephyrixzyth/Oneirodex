@@ -329,6 +329,21 @@ class InitializationManager:
                 # CSS stack, so this must never take a boot down.
                 _safe_print(f"[WARN] Theme font install skipped: {font_err}")
 
+            # The public demo must have its cores ready before the server starts
+            # accepting clicks. Other installs provision their cores through
+            # the normal setup flow or scripts/fetch-webretro-cores.sh.
+            if os.getenv('ONEIRODEX_PUBLIC_DEMO', '').lower() == 'true':
+                try:
+                    from oneirodex.utils.webretro_core_install import install_missing_cores
+
+                    demo_cores = ('nestopia', 'mgba', 'genesis_plus_gx', 'stella2014')
+                    installed, failed = install_missing_cores(core_ids=demo_cores)
+                    _safe_print(f"[OK] Public demo browser cores installed: {installed}")
+                    if failed:
+                        _safe_print(f"[WARN] Public demo browser cores unavailable: {', '.join(failed)}")
+                except Exception as core_err:
+                    _safe_print(f"[WARN] Public demo core install skipped: {core_err}")
+
             _safe_print("[OK] Filesystem setup completed")
             return True
 

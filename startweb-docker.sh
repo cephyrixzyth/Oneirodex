@@ -43,6 +43,14 @@ fi
 
 echo "Starting Oneirodex with uvicorn in Docker container..."
 
+# The public preview keeps its redistributable sample ROMs on the configured
+# persistent library volume. DATA_FOLDER_GAMES is also the app's safe download
+# allowlist for the /api/downloadrom route.
+if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
+    DEMO_LIBRARY_DIR="${ONEIRODEX_LIBRARY_DIR:-/config/library}"
+    export DATA_FOLDER_GAMES="${DATA_FOLDER_GAMES:-${DEMO_LIBRARY_DIR}/demo-games}"
+fi
+
 # Run complete startup initialization once before starting workers
 python3 -c "
 from oneirodex.init_manager import run_complete_startup_initialization
@@ -59,6 +67,11 @@ print('✅ Initialization completed - starting workers...')
 # the same image and keeps the normal Compose/Unraid port unchanged otherwise.
 if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
     echo "🎮 Preparing isolated public demo data..."
+    if ! PYTHONPATH=/app python3 /app/scripts/fetch-free-roms.py \
+        --out "${DATA_FOLDER_GAMES}" \
+        --id nestest --id dmg-acid2 --id cascade7 --id genmddj --id atari2600-4paddle-tester; then
+        echo "⚠️ One or more free demo ROMs could not be fetched; available samples will still be seeded."
+    fi
     # Executing a file under /app/scripts puts that directory, not /app, at
     # sys.path[0]. Add the application root so the seed can import oneirodex.
     PYTHONPATH=/app python3 /app/scripts/seed_public_demo.py

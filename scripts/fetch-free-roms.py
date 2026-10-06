@@ -205,6 +205,10 @@ def main(argv: list[str] | None = None) -> int:
         help=f"download root (default: {DEFAULT_OUT})",
     )
     parser.add_argument("--dry-run", action="store_true", help="list planned downloads only")
+    parser.add_argument(
+        "--id", dest="rom_ids", action="append", default=[],
+        help="download only this manifest ROM id (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     if not args.manifest.is_file():
@@ -235,6 +239,15 @@ def main(argv: list[str] | None = None) -> int:
     ok: list[str] = []
     failed: list[tuple[str, str]] = []
     platforms: list[str] = []
+
+    selected_ids = set(args.rom_ids)
+    if selected_ids:
+        available_ids = {str(entry.get("id") or entry.get("filename") or "") for entry in roms}
+        unknown_ids = selected_ids - available_ids
+        if unknown_ids:
+            print(f"ERROR: unknown ROM id(s): {', '.join(sorted(unknown_ids))}", file=sys.stderr)
+            return 2
+        roms = [entry for entry in roms if str(entry.get("id") or entry.get("filename") or "") in selected_ids]
 
     for entry in roms:
         platform = str(entry.get("platform") or "unknown").strip()

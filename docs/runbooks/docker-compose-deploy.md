@@ -63,25 +63,30 @@ App: http://localhost:5006
 The public preview runs at
 [`https://demo.oneirodex.blitz.cloud/demo`](https://demo.oneirodex.blitz.cloud/demo)
 on Blitz's free plan, built from the public `cephyrixzyth/oneirodex` repository's
-`main` branch. It uses the embedded PostgreSQL database under `/tmp`, creates a
-member-only visitor and five clearly labeled homebrew sample titles at startup,
-and signs visitors in through `/demo`. It does not seed an admin, include ROM
-files, use household data, or configure external service credentials. The app
-listens on the host-provided `PORT`; Compose and Unraid continue to default to
-5006.
+`main` branch. It uses the attached free PostgreSQL database and a persistent
+`/config` volume for app data. Startup creates a member-only visitor, fetches the
+five licensed homebrew sample ROMs into `/config/library/demo-games`, provisions
+the four browser cores those samples use, and signs visitors in through `/demo`.
+It does not seed an admin, use household data, or configure external service
+credentials. The app listens on the host-provided `PORT`; Compose and Unraid
+continue to default to 5006.
 
 The isolated service sets `ONEIRODEX_PUBLIC_DEMO=true`,
-`ONEIRODEX_EMBEDDED_DB=true`, `ONEIRODEX_CONFIG_DIR=/tmp/oneirodex-config`,
-`SESSION_COOKIE_SECURE=true`, and `REMEMBER_COOKIE_SECURE=true`. Disable optional
-external integrations and supply the BIOS source path expected by the startup
-configuration. The free service sleeps when idle and can take time to cold-start;
-its local demo data is disposable and may reset after a restart or deploy. The
-free host subdomain is used directly; this is not a production storage target.
+`ONEIRODEX_EMBEDDED_DB=false`, `ONEIRODEX_CONFIG_DIR=/config`,
+`ONEIRODEX_LIBRARY_DIR=/config/library`, `SESSION_COOKIE_SECURE=true`, and
+`REMEMBER_COOKIE_SECURE=true`. The demo sets `DATA_FOLDER_GAMES` to the persistent
+`/config/library/demo-games` directory so the sample ROM download route accepts
+those files. Disable optional external integrations. These five samples do not
+require console BIOS files. The free service sleeps when idle and can take time
+to cold-start; its database and persistent volume may reset after a restart or
+deploy. The free host subdomain is used directly; this is not a production
+storage target.
 
 `render.yaml` remains an alternate Render Blueprint for the same isolated demo.
-Do not attach a paid database or disk to either preview configuration. The demo
-seed runs from the app root via `PYTHONPATH=/app` so the script can import the
-`oneirodex` package when launched by the container entrypoint.
+The demo seed runs from the app root via `PYTHONPATH=/app` so the script can
+import the `oneirodex` package when launched by the container entrypoint. The
+free ROM fetcher supports repeatable `--id` filters so the demo downloads only
+its listed samples rather than every ROM in the manifest.
 
 ## Volume sectioning
 

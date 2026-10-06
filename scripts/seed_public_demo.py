@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -20,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 SAMPLE_LIBRARIES = (
-    ('Free NES samples', LibraryPlatform.NES, 'nestest'),
-    ('Free Game Boy samples', LibraryPlatform.GB, 'dmg-acid2'),
-    ('Free GBA samples', LibraryPlatform.GBA, 'CASCADE7'),
-    ('Free Genesis samples', LibraryPlatform.SEGA_MD, 'genmddj'),
-    ('Free Atari 2600 samples', LibraryPlatform.ATARI_2600, 'paddle-tester'),
+    ('Free NES samples', LibraryPlatform.NES, 'nestest', 'nes/nestest.nes'),
+    ('Free Game Boy samples', LibraryPlatform.GB, 'dmg-acid2', 'gb/dmg-acid2.gb'),
+    ('Free GBA samples', LibraryPlatform.GBA, 'CASCADE7', 'gba/CASCADE7.gba'),
+    ('Free Genesis samples', LibraryPlatform.SEGA_MD, 'genmddj', 'genesis/genmddj-v0.17.bin'),
+    ('Free Atari 2600 samples', LibraryPlatform.ATARI_2600, 'paddle-tester', 'atari2600/atari2600-4paddle-tester.a26'),
 )
 
 
@@ -63,7 +64,12 @@ def seed() -> None:
             library.name: library
             for library in db.session.execute(select(Library)).scalars().all()
         }
-        for label, platform, title in SAMPLE_LIBRARIES:
+        games_root = Path(app.config.get('DATA_FOLDER_GAMES') or '/storage').resolve()
+        for label, platform, title, relative_rom_path in SAMPLE_LIBRARIES:
+            rom_path = games_root / relative_rom_path
+            if not rom_path.is_file():
+                logger.warning('Public demo sample is unavailable; skipping %s (%s)', title, relative_rom_path)
+                continue
             library = libraries.get(label)
             if library is None:
                 library = Library(
@@ -79,15 +85,20 @@ def seed() -> None:
                 select(Game).filter_by(name=title, library_uuid=library.uuid)
             ).scalars().first()
             if exists is None:
-                db.session.add(Game(
+                exists = Game(
                     uuid=str(uuid4()),
                     name=title,
                     summary='Sample homebrew test title in the disposable public demo.',
                     library_uuid=library.uuid,
-                    full_disk_path=None,
-                    size=0,
+                    full_disk_path=str(rom_path),
+                    size=rom_path.stat().st_size,
                     times_downloaded=0,
-                ))
+                )
+                db.session.add(exists)
+            else:
+                # Repair rows created by older demo seeds that had no ROM path.
+                exists.full_disk_path = str(rom_path)
+                exists.size = rom_path.stat().st_size
 
         db.session.commit()
         mark_setup_complete()
