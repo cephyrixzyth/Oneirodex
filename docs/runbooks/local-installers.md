@@ -26,8 +26,8 @@ build produced no bundles rather than reporting success over an empty directory.
 
 `.msi` and `.rpm` remain excluded while their native build and signing behavior is
 validated. The current plain `1.1.0` version is compatible with those formats, but does
-not itself enable them. The six supported release bundles are NSIS, macOS app/DMG, DEB
-and AppImage for full and thin clients.
+not itself enable them. The release runs six OS/flavor builds and attaches eight assets: Windows NSIS, universal
+macOS DMG, Linux DEB and AppImage for both full and thin clients.
 
 Both flavors bundle under distinct product names (`Oneirodex` vs
 `OneirodexThin`), so full and thin installers can share one output directory.
