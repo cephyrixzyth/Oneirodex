@@ -61,3 +61,18 @@ def test_manifest_parser_reads_the_new_fields(tmp_path):
     )
     entry = fetch.load_simple_manifest(path)['roms'][0]
     assert (entry['archive'], entry['member']) == ('zip', 'a.lnx')
+
+
+def test_unknown_rom_id_is_reported_before_download(tmp_path, capsys):
+    manifest = tmp_path / 'm.yaml'
+    manifest.write_text(
+        'version: 1\nroms:\n  - id: known\n    platform: lynx\n    filename: a.lnx\n'
+        '    url: https://x.invalid/a.zip\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        fetch.main(['--manifest', str(manifest), '--id', 'missing', '--out', str(tmp_path)])
+
+    assert exc.value.code == 2
+    assert 'unknown ROM id(s): missing' in capsys.readouterr().err
