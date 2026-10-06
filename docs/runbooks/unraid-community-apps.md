@@ -101,15 +101,25 @@ firmware, keys or `.env`.
 
 ## Docker Hub listing
 
-1. Create the public repository `cephyrixzyth/oneirodex` on Docker Hub.
-2. Short description: *The self-hosted game library for a household.* Paste the README as the
-   full description (Hub does not sync it from GitHub on its own; a
-   `peter-evans/dockerhub-description` step can be added later).
-3. After the GitHub Actions variable and secret are set, run **Actions → Docker publish → Run
-   workflow** from `main` to publish `latest`, or publish a `v*` tag to publish the version and
-   `latest`. The workflow builds `linux/amd64` and `linux/arm64`; the
-   `org.opencontainers.image.*` labels carry source and revision. Confirm `latest` is public
-   and can be pulled without logging in before submitting the CA template.
+The long listing lives in [`docs/dockerhub-overview.md`](../dockerhub-overview.md). It uses
+screenshots captured from a populated Oneirodex instance and links each screenshot to the
+corresponding feature tour. Keep its version markers (`__VERSION__`) intact: the release workflow
+stamps the version before syncing the overview to Docker Hub. The listing should include the
+single-container architecture, persistent storage, read-only game mount, supported image tags,
+Unraid update instructions, and links to source, release notes, and support.
+
+The short Docker Hub description is limited to 100 characters. Image publication and repository
+metadata editing are separate operations: the `DOCKERHUB_TOKEN` used by the `DOCKERHUB` Actions
+environment must be able both to push the image and edit the repository's description/overview.
+If the build/push step succeeds but `dockerhub-description` returns `403 Forbidden`, the image is
+published but the listing is stale. Update the token's repository metadata permission or edit the
+description and overview from Docker Hub's repository page, then rerun the metadata sync and read
+the public page back to verify it. Never put a Docker Hub token in the repository or chat.
+
+After the GitHub Actions variable and secret are configured, a stable `v*` tag publishes the
+version and `latest` images for `linux/amd64` and `linux/arm64`. Confirm both architectures are
+public before updating the CA listing. The current versioned image is available from Docker Hub;
+the listing itself is refreshed independently by the metadata action.
 
 ## Unraid Community Apps listing
 
@@ -136,13 +146,21 @@ A1111-compatible workstation. AI artwork remains off unless explicitly enabled.
 The GitHub Actions repository secret `UNRAID_TEMPLATES_TOKEN` should be a fine-grained token
 restricted to `cephyrixzyth/unraid-templates` with Contents read/write access. A release succeeds
 without it when the public CA feed already matches; if the release changes the template, the sync
-job fails until the token is configured. For an installed app, run Unraid's Docker image update check / update action after the
-new `latest` digest is available. Refreshing or reinstalling the CA template alone does not pull
-the image.
+job fails until the token is configured. The CA template describes installation defaults and
+links to screenshots/how-to videos; it is not the running image update mechanism.
 
-The Docker Hub repository overview is synchronized from
-[`docs/dockerhub-overview.md`](../dockerhub-overview.md) after the multi-architecture images
-publish. The workflow uses the `DOCKERHUB` environment's existing username and write token.
+To update an installed app, use the Unraid **Apps** Action Center's **Actions → Update** entry
+when it is available, or use the container's **Docker** page action. If Unraid does not detect the
+new digest, switch to **Advanced View → Force update** for that container. Check that its image is
+`cephyrixzyth/oneirodex:latest` (a pinned version tag will not advance), then verify
+`http://SERVER-IP:5006/awake` reports the expected version after it restarts. A CA catalog refresh
+updates template metadata only; it does not pull the image. See the [Unraid Community Apps
+guide](https://docs.unraid.net/unraid-os/manual/applications/) for the current update UI.
+
+The Docker Hub overview is synchronized from [`docs/dockerhub-overview.md`](../dockerhub-overview.md)
+after the multi-architecture images publish. The workflow uses the `DOCKERHUB` environment's
+username and token; verify the Hub readback after a release because a successful image push does
+not prove that the overview update succeeded.
 
 ## Known gaps
 

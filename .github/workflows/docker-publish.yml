@@ -113,7 +113,7 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ vars.DOCKERHUB_USERNAME }}/oneirodex
-          short-description: "Oneirodex: a self-hosted family game library for Docker and Unraid."
+          short-description: "Self-hosted household game library for Docker and Unraid, with metadata, artwork and play."
           readme-filepath: ${{ runner.temp }}/dockerhub-overview.md
           enable-url-completion: true
 

@@ -1,55 +1,110 @@
-# Oneirodex Docker image
+# Oneirodex — a game library for your household
 
 > **Doc status:** Active
 
-The Oneirodex `__VERSION__` release is a self-hosted game library for a household. It scans game folders, organizes matched titles, manages household accounts and collections, and brings browse, news, play and social features together in one private server.
+![Oneirodex Discover, captured from the live app](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/hero-banner.png)
 
-This image includes the web application and its PostgreSQL database. It is available as a multi-architecture Docker image for `linux/amd64` and `linux/arm64`.
+Oneirodex is a self-hosted home for the games you already own. Scan mounted game folders, organize a shared catalog, enrich it with metadata and artwork, and give your household a polished place to browse, collect, discuss, download, and play supported titles.
 
-## Quick start
+It runs as **one container with PostgreSQL included**. Your games stay on your storage, mounted read-only for scanning. App data, generated artwork, settings, and the database stay on persistent storage you control.
 
-The recommended install is Docker Compose. Set a strong `SECRET_KEY`, map persistent application data to `/config`, and map game files read-only to `/storage`. The app listens on port `5006`.
+**Current release: `__VERSION__`** · Docker Hub tags: [`latest`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=latest) · [`1.1`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=1.1) · [`__VERSION__`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=__VERSION__) · **Platforms:** `linux/amd64`, `linux/arm64` · [AGPL-3.0](https://github.com/cephyrixzyth/Oneirodex/blob/main/LICENSE)
+
+## Take a look
+
+### Browse your library
+
+![Oneirodex library with game covers and collection controls](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-library.png)
+
+Search and filter one catalog, open a title for its details, and organize household favorites and collections.
+
+### Discover what to play
+
+![Oneirodex Discover storefront](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-discover.png)
+
+Curated shelves bring the catalog, household activity, upcoming releases, news, and deals together. Rows adapt to posters and artwork where available.
+
+### Play from the couch
+
+![Oneirodex Big Picture interface](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-big-picture.png)
+
+Big Picture provides a readable, controller-friendly way to browse from a TV. Browser play appears only for systems supported by the configured play engine.
+
+### Manage libraries and scans
+
+![Oneirodex admin library and scan controls](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-admin-libraries.png)
+
+Admins can configure scan roots, review matches, manage artwork, invitations, integrations, and server health.
+
+### Watch a short tour
+
+[![Watch the Oneirodex tour](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/poster-tour.png)](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/media/video/howto/howto-tour.mp4)
+
+[Browse the narrated how-to videos](https://github.com/cephyrixzyth/Oneirodex/tree/main/docs/media/video/howto) · [See all captured screens](https://github.com/cephyrixzyth/Oneirodex/tree/main/docs/media/screenshots)
+
+## What you get
+
+- **A shared game catalog:** scan mounted folders, review metadata matches, and organize games by library and system.
+- **Household accounts:** invite people, share collections and favorites, and use chat and presence features.
+- **A modern browser UI:** browse, discover, follow news, view release information, and download files from your own server.
+- **Optional play paths:** browser emulation for supported systems, plus the Oneirodex desktop companion for local handoff and play.
+- **Artwork you control:** use built-in art tools or connect a trusted workstation running a compatible Forge / AUTOMATIC1111 API.
+- **Optional integrations:** connect metadata and game-store services from the admin setup. Provider credentials remain yours to configure.
+- **One persistent application directory:** bundled PostgreSQL, generated secrets, logs, settings, themes, covers, and uploads live under `/config`.
+
+Oneirodex does not include game files, firmware, BIOS files, encryption keys, or copyrighted content. Use only software you are authorized to store and access.
+
+## Install with Docker Compose
+
+Create persistent folders first. Store the app data and artwork on a reliable SSD or cache pool; mount the game share read-only.
 
 ```yaml
 services:
   oneirodex:
     image: cephyrixzyth/oneirodex:__VERSION__
+    container_name: oneirodex
+    restart: unless-stopped
     ports:
       - "5006:5006"
     environment:
-      SECRET_KEY: replace-with-a-long-random-value
-      PORT: "5006"
+      PUID: "99"
+      PGID: "100"
+      TZ: "UTC"
       ONEIRODEX_LIBRARY_DIR: /config/library
     volumes:
       - ./appdata:/config
       - /path/to/games:/storage:ro
+      - ./appdata/library:/app/oneirodex/static/library
+    stop_grace_period: 60s
 ```
 
-For upgrades, set the `APP_IMAGE` tag in the existing Compose environment and recreate the app container. Preserve `/config`; it contains the bundled database and persistent library data. Follow the [Docker Compose quick start](../README.md#-quick-start) and [Unraid guide](runbooks/unraid-community-apps.md) for full configuration and backup steps.
+Then run:
 
-## Image tags
+```sh
+docker compose up -d
+```
 
-- `__VERSION__` is the immutable release image for the current version.
+Open `http://SERVER-IP:5006/`. The first visit starts the setup flow. Keep `/config` backed up; it contains the database and generated secrets. Never mount your game share read-write for scanning.
+
+## Install on Unraid
+
+Install **Oneirodex** from Community Applications, set the Appdata path on your cache/SSD, and point **Games** at the host share to scan. The template mounts games read-only and keeps the database and generated artwork under appdata. Optional Forge artwork, ClamAV, and TRAWL integrations are off until configured.
+
+For a running container, check for image updates from Unraid's **Docker** page and run the available update action. Updating the Community Applications catalog refreshes the install template; it does not itself pull a new image. See the [Unraid install, storage, backup, and update guide](https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/runbooks/unraid-community-apps.md).
+
+## Image tags and updates
+
+- `__VERSION__` pins this release.
+- `1.1` follows compatible patch updates in the 1.1 minor line.
 - `latest` advances with each stable release.
-- `1.1` follows compatible patch releases in the current minor line.
 
-Release tags are built only after the repository test workflow passes. The GitHub release also includes full and thin desktop installers for Windows, macOS and Linux.
+GitHub Actions runs the release checks before publishing multi-architecture images. Compare the running app's version on its `/awake` endpoint after updating. Read the [release notes](https://github.com/cephyrixzyth/Oneirodex/releases/tag/v__VERSION__) before upgrading and keep a current `/config` backup.
 
-## Features
+## Learn more
 
-- Scan configured, mounted game folders and review metadata matches.
-- Keep artwork, themes, uploads and the bundled database on persistent app data.
-- Invite household members and share libraries, collections, updates and chat.
-- Use the member web app or optional desktop companion.
-- Connect optional metadata providers, game stores and a trusted LAN artwork generator.
-- Add optional ClamAV or TRAWL sidecars on a private Docker network.
-
-The app does not include game files, console firmware, BIOS files or encryption keys. Only scan and manage software you are authorized to use.
-
-## Links
-
-- [Project and source](https://github.com/cephyrixzyth/Oneirodex)
-- [Release notes](https://github.com/cephyrixzyth/Oneirodex/blob/main/CHANGELOG.md)
-- [Install and operator documentation](https://github.com/cephyrixzyth/Oneirodex/tree/main/docs)
+- [Project source and issue tracker](https://github.com/cephyrixzyth/Oneirodex)
+- [All Oneirodex documentation](https://github.com/cephyrixzyth/Oneirodex/tree/main/docs)
+- [User getting-started guide](https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/user/getting-started.md)
+- [Docker Compose and Unraid operator guide](https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/runbooks/unraid-community-apps.md)
 - [Unraid Community Apps template](https://github.com/cephyrixzyth/unraid-templates/blob/main/oneirodex/oneirodex.xml)
-- [Support and bug reports](https://github.com/cephyrixzyth/Oneirodex/issues)
+- [License](https://github.com/cephyrixzyth/Oneirodex/blob/main/LICENSE)
