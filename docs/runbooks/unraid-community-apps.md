@@ -140,6 +140,10 @@ job fails until the token is configured. For an installed app, run Unraid's Dock
 new `latest` digest is available. Refreshing or reinstalling the CA template alone does not pull
 the image.
 
+The Docker Hub repository overview is synchronized from
+[`docs/dockerhub-overview.md`](../dockerhub-overview.md) after the multi-architecture images
+publish. The workflow uses the `DOCKERHUB` environment's existing username and write token.
+
 ## Known gaps
 
 - The first start needs the image's PostgreSQL major to match the cluster: an image that
