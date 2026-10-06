@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchRelatedMedia } from '../api/gameDetails'
+import { safeHttpUrl } from '../utils/safeUrl'
 import './RelatedMediaStrip.css'
 
 /**
@@ -165,10 +166,10 @@ export function RelatedMediaStrip({ gameUuid }: LooseProps) {
                   {[active.creator, active.year].filter(Boolean).join(' · ')}
                 </p>
                 {active.summary ? <p className="od-relmedia__summary">{active.summary}</p> : null}
-                {active.external_url ? (
+                {safeHttpUrl(active.external_url) ? (
                   <a
                     className="od-btn od-btn--primary"
-                    href={active.external_url}
+                    href={safeHttpUrl(active.external_url) || undefined}
                     target="_blank"
                     rel="noreferrer"
                   >

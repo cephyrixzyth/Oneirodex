@@ -21,14 +21,7 @@ from oneirodex.platform import LibraryPlatform
 
 def safe_cleanup_database(db_session):
     """Completely clean up ALL test data - this is a test database, nuke everything!"""
-    from sqlalchemy import text, delete
-    from oneirodex.models import (
-        Game, User, Library, DownloadRequest, Newsletter, 
-        SystemEvents, InviteToken, Image, GameURL, ScanJob,
-        UnmatchedFolder, GameUpdate, GameExtra, GlobalSettings,
-        AllowedFileType, IgnoredFileType, Genre, Platform, Developer,
-        Publisher, Theme, GameMode, PlayerPerspective, MultiplayerMode
-    )
+    from sqlalchemy import delete
     
     try:
         # First ensure the session is in good state

@@ -318,6 +318,68 @@ def job_next_run_from_row(job):
 
 
 
+def scan_run_values(*, now=None):
+    """Fresh execution state shared by every transition into Running."""
+    now = now or datetime.now(timezone.utc)
+    return dict(
+        status='Running', is_enabled=True, last_run=now,
+        last_progress_update=now, owner_token=PROCESS_TOKEN,
+        total_folders=0, folders_success=0, folders_failed=0, removed_count=0,
+        current_processing=None, error_message='', next_run=None,
+    )
+
+
+def restart_or_queue_scan(job_id, *, queue_policy='queue', allow_force=False, app=None,
+                          scheduled=False):
+    """Conditionally claim an existing terminal/due row, preserving its schedule.
+
+    Queued and busy rows cannot be restarted: their worker or queue claim already
+    owns them. Concurrent callers must win the conditional UPDATE before dispatch.
+    """
+    force = parse_queue_policy(queue_policy) == 'force'
+    if force and not allow_force:
+        return {'status': 'rejected', 'message': 'Force parallel requires an admin session.'}
+    eligible = ('Scheduled',) if scheduled else ('Completed', 'Failed', 'Cancelled', 'Scheduled')
+    busy = is_scan_busy()
+    values = scan_run_values()
+    if busy and not force:
+        values.update(status='Queued', owner_token=None, last_progress_update=None)
+    conditions = [ScanJob.id == job_id, ScanJob.status.in_(eligible)]
+    if scheduled:
+        conditions.extend((ScanJob.is_enabled.is_(True), ScanJob.next_run <= values['last_run']))
+    claimed = db.session.execute(
+        update(ScanJob).where(*conditions).values(**values)
+        .execution_options(synchronize_session='fetch')
+    )
+    won = claimed.rowcount == 1
+    db.session.commit()
+    if not won:
+        return {'status': 'rejected', 'message': 'Scan is already running, stopping, or queued.'}
+    db.session.expire_all()
+    job = db.session.get(ScanJob, job_id)
+    if job.status == 'Running' and not force and _has_older_busy_scan(job):
+        job.status = 'Queued'
+        job.owner_token = None
+        job.last_progress_update = None
+        db.session.commit()
+    if job.status == 'Queued':
+        return {'status': 'queued', 'job_id': job_id, 'message': QUEUE_DEFAULT_MESSAGE}
+    try:
+        from oneirodex.utils.event_bus import publish_scan_event
+        publish_scan_event(job_id, 'Running')
+    except Exception:
+        pass
+    try:
+        _start_job_thread(job, app or current_app._get_current_object(), force_parallel=force)
+    except Exception:
+        job.status = 'Failed'
+        job.is_enabled = False
+        job.error_message = 'Unable to start scan worker.'
+        db.session.commit()
+        raise
+    return {'status': 'started', 'job_id': job_id, 'message': 'Scan restarted.'}
+
+
 def create_scan_job_row(
     *,
     folder_path: str,
@@ -361,6 +423,9 @@ def create_scan_job_row(
         owner_token=PROCESS_TOKEN if status == 'Running' else None,
     )
     apply_schedule_to_job(job, fields or {})
+    if status == 'Running':
+        for key, value in scan_run_values(now=now).items():
+            setattr(job, key, value)
     db.session.add(job)
     db.session.commit()
     return job
@@ -702,15 +767,7 @@ def promote_next_queued_scan(app=None) -> ScanJob | None:
             ScanJob.id == next_job.id,
             ScanJob.status == 'Queued',
         )
-        .values(
-            status='Running',
-            last_run=now,
-            error_message='',
-            is_enabled=True,
-            current_processing=None,
-            # This process is about to start the thread, so it owns the job.
-            owner_token=PROCESS_TOKEN,
-        )
+        .values(**scan_run_values(now=now))
     )
     rowcount = claimed.rowcount or 0
     try:

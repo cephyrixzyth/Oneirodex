@@ -1116,16 +1116,12 @@
 
 /* Elegant button styling */
 .btn-elegant {
-    background: linear-gradient(
-        135deg,
-        var(--od-accent) 0%,
-        color-mix(in srgb, var(--od-accent) 88%, var(--od-bg)) 100%
-    );
-    border: 1px solid color-mix(in srgb, var(--od-accent) 30%, transparent);
-    color: var(--od-accent-contrast);
+    background: var(--od-surface-2);
+    border: 2px solid color-mix(in srgb, var(--od-accent) 70%, var(--od-border));
+    color: var(--od-text);
     padding: 12px 30px;
     border-radius: var(--od-radius-xl);
-    font-weight: 500;
+    font-weight: 750;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
@@ -1136,14 +1132,10 @@
 }
 
 .btn-elegant:hover {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--od-accent) 88%, var(--od-bg)) 0%,
-        var(--od-accent) 100%
-    );
+    background: color-mix(in srgb, var(--od-surface-2) 84%, var(--od-accent));
     transform: translateY(-1px);
     box-shadow: 0 6px 20px color-mix(in srgb, var(--od-accent) 30%, transparent);
-    color: var(--od-accent-contrast);
+    color: var(--od-text);
     text-decoration: none;
 }
 

@@ -79,15 +79,30 @@ export function ImagesQueuePanel({
   syncGameParam: (uuid: string, name: string) => void
   typeFilter: string
 }) {
+  const queueCounts = images.reduce(
+    (counts, image) => {
+      const state = image.status || (image.is_downloaded ? 'downloaded' : 'pending')
+      if (state === 'failed') counts.failed += 1
+      else if (state === 'downloaded') counts.downloaded += 1
+      else counts.pending += 1
+      return counts
+    },
+    { pending: 0, failed: 0, downloaded: 0 },
+  )
+
   return (
     <section className="od-admin-panel od-admin-panel--stacked">
-      <h2 className="od-admin-panel-title">Mass image queue</h2>
-      <p className="od-admin-lede">
-        Filter pending/failed downloads, retry, and batch download. Library / platform / service
-        scope auto-pick and mass search for missing covers (SteamGridDB → IGDB → generate). Queue
-        list itself is not yet filterable by platform — needs Backend enrichment on{' '}
-        <code>image_queue_list</code>.
-      </p>
+      <header className="od-image-queue-head">
+        <div>
+          <h2 className="od-admin-panel-title">Image queue</h2>
+          <p className="od-admin-lede">
+            Review downloads and run artwork actions for the selected scope.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" disabled={Boolean(queueBusy)} onClick={loadQueue}>
+          Refresh queue
+        </Button>
+      </header>
 
       {pathStatus?.error ? (
         <PageStatus
@@ -106,119 +121,152 @@ export function ImagesQueuePanel({
         </p>
       ) : null}
 
-      <div className="od-images-filters">
-        <label>
-          Status
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-            <option value="downloaded">Downloaded</option>
-          </select>
-        </label>
-        <label>
-          Type
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-            <option value="all">All</option>
-            {IMAGE_KIND_OPTIONS.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Library (auto-pick / missing)
-          <select value={libraryFilter} onChange={(e) => setLibraryFilter(e.target.value)}>
-            <option value="">All libraries</option>
-            {libraries.map((lib) => (
-              <option key={lib.uuid} value={lib.uuid}>
-                {lib.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Platform (auto-pick)
-          <select
-            value={platformFilter}
-            onChange={(e) => setPlatformFilter(e.target.value)}
-            aria-label="Platform filter for mass auto-pick"
-          >
-            <option value="">All platforms</option>
-            {platforms.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Service (auto-pick / search)
-          <select
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-            aria-label="Service filter for mass cover tools"
-          >
-            <option value="">All services</option>
-            {serviceOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="od-images-filters__check">
-          <input
-            type="checkbox"
-            checked={groupToggle}
-            onChange={(e) => setGroupToggle(e.target.checked)}
-          />
-          Group by game
-        </label>
+      <div className="od-image-queue-stats" aria-label="Visible queue totals">
+        <div>
+          <strong>{queueCounts.pending}</strong>
+          <span>Pending</span>
+        </div>
+        <div className="is-warning">
+          <strong>{queueCounts.failed}</strong>
+          <span>Failed</span>
+        </div>
+        <div className="is-success">
+          <strong>{queueCounts.downloaded}</strong>
+          <span>Downloaded</span>
+        </div>
       </div>
 
-      <div className="od-admin-actions-row">
-        <Button type="button" disabled={Boolean(queueBusy)} onClick={() => downloadBatch(10)}>
-          Download 10
-        </Button>
-        <Button type="button" disabled={Boolean(queueBusy)} onClick={() => downloadBatch(50)}>
-          Download 50
-        </Button>
-        <Button type="button" variant="primary" disabled={Boolean(queueBusy)} onClick={retryFailed}>
-          Retry failed
-        </Button>
-        <Button
-          type="button"
-          disabled={Boolean(queueBusy)}
-          onClick={massSearch}
-          title="POST /admin/api/covers/batch/search"
-        >
-          {queueBusy === 'mass-search' ? 'Searching…' : 'Mass cover search'}
-        </Button>
-        <Button
-          type="button"
-          disabled={Boolean(queueBusy)}
-          onClick={autoPick}
-          title={`POST /admin/api/covers/batch/apply policy=${BEST_AVAILABLE_POLICY}`}
-        >
-          {queueBusy === 'autopick' ? 'Auto-picking…' : 'Auto-pick best available'}
-        </Button>
-        <Button
-          type="button"
-          disabled={Boolean(queueBusy) || !gameUuid}
-          onClick={generateArtwork}
-          title={
-            gameUuid
-              ? 'POST /admin/api/artwork/generate — needs ENABLE_AI_ARTWORK + AI_ARTWORK_URL'
-              : 'Select a title above first'
-          }
-        >
-          {queueBusy === 'generate' ? 'Generating…' : 'Generate artwork'}
-        </Button>
-        <Button type="button" disabled={Boolean(queueBusy)} onClick={loadQueue}>
-          Refresh
-        </Button>
+      <details className="od-image-queue-filters">
+        <summary>
+          Filters{' '}
+          <span>
+            {statusFilter} · {typeFilter}
+          </span>
+        </summary>
+        <div className="od-images-filters">
+          <label>
+            Status
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">All</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+              <option value="downloaded">Downloaded</option>
+            </select>
+          </label>
+          <label>
+            Type
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="all">All</option>
+              {IMAGE_KIND_OPTIONS.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Library (auto-pick / missing)
+            <select value={libraryFilter} onChange={(e) => setLibraryFilter(e.target.value)}>
+              <option value="">All libraries</option>
+              {libraries.map((lib) => (
+                <option key={lib.uuid} value={lib.uuid}>
+                  {lib.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Platform (auto-pick)
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              aria-label="Platform filter for mass auto-pick"
+            >
+              <option value="">All platforms</option>
+              {platforms.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Service (auto-pick / search)
+            <select
+              value={serviceFilter}
+              onChange={(e) => setServiceFilter(e.target.value)}
+              aria-label="Service filter for mass cover tools"
+            >
+              <option value="">All services</option>
+              {serviceOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="od-images-filters__check">
+            <input
+              type="checkbox"
+              checked={groupToggle}
+              onChange={(e) => setGroupToggle(e.target.checked)}
+            />
+            Group by game
+          </label>
+        </div>
+      </details>
+
+      <div className="od-image-queue-actions">
+        <div>
+          <h3>Queue actions</h3>
+          <p>Download or retry items already in the queue.</p>
+          <Button type="button" disabled={Boolean(queueBusy)} onClick={() => downloadBatch(10)}>
+            Download 10
+          </Button>
+          <Button type="button" disabled={Boolean(queueBusy)} onClick={() => downloadBatch(50)}>
+            Download 50
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={Boolean(queueBusy)}
+            onClick={retryFailed}
+          >
+            Retry failed
+          </Button>
+        </div>
+        <div>
+          <h3>Find missing artwork</h3>
+          <p>Uses the selected library, platform, and service scope.</p>
+          <Button
+            type="button"
+            disabled={Boolean(queueBusy)}
+            onClick={massSearch}
+            title="POST /admin/api/covers/batch/search"
+          >
+            {queueBusy === 'mass-search' ? 'Searching…' : 'Mass cover search'}
+          </Button>
+          <Button
+            type="button"
+            disabled={Boolean(queueBusy)}
+            onClick={autoPick}
+            title={`POST /admin/api/covers/batch/apply policy=${BEST_AVAILABLE_POLICY}`}
+          >
+            {queueBusy === 'autopick' ? 'Auto-picking…' : 'Auto-pick best available'}
+          </Button>
+          <Button
+            type="button"
+            disabled={Boolean(queueBusy) || !gameUuid}
+            onClick={generateArtwork}
+            title={
+              gameUuid
+                ? 'POST /admin/api/artwork/generate — needs ENABLE_AI_ARTWORK + AI_ARTWORK_URL'
+                : 'Select a title above first'
+            }
+          >
+            {queueBusy === 'generate' ? 'Generating…' : 'Generate artwork'}
+          </Button>
+        </div>
       </div>
 
       {loadingQueue ? (

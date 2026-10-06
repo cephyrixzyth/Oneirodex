@@ -17,6 +17,17 @@ import base64
 import io
 from . import admin2_bp
 
+
+@admin2_bp.route('/api/admin/library_platforms', methods=['GET'])
+@login_required
+@admin_required
+def library_platform_options():
+    """Return the complete platform list for the admin's create-library form."""
+    return api_ok({'platforms': [
+        {'key': platform.name, 'label': platform.value}
+        for platform in LibraryPlatform
+    ]})
+
 def _process_library_image(file, library):
     """Process and save library image file."""
     if not file:

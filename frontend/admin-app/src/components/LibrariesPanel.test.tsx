@@ -64,7 +64,11 @@ const ROWS = [
 beforeEach(() => {
   vi.mocked(getJson).mockReset()
   vi.mocked(postJsonResult).mockReset()
-  vi.mocked(getJson).mockResolvedValue(ROWS)
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    String(url).includes('/api/admin/library_platforms')
+      ? { platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] }
+      : ROWS,
+  )
   vi.mocked(postJsonResult).mockResolvedValue({ ok: true, status: 200, data: { ok: true } })
   document.getElementById('od-admin-topbar-trail')?.remove()
   const trail = document.createElement('div')
@@ -81,6 +85,15 @@ test('hides selected copy until a row is checked', async () => {
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
   expect(screen.queryByText('0 selected')).toBeNull()
+})
+
+test('the real Jinja libraries panel exposes the add-and-first-scan form', async () => {
+  render(<LibrariesPanel />)
+  expect(await screen.findByRole('heading', { name: 'Add one library' })).toBeInTheDocument()
+  expect(
+    await screen.findByRole('option', { name: 'Nintendo Entertainment System (NES)' }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeDisabled()
 })
 
 test('libraries count lives in the topbar trail and opens a platform filter menu', async () => {

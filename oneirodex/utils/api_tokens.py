@@ -21,6 +21,7 @@ from oneirodex.utils.rbac import normalize_role
 VALID_SCOPES = frozenset({
     'read:library',
     'read:social',
+    'write:social',
     'write:presence',
     'write:download',
     'write:library',
@@ -244,6 +245,20 @@ def user_has_scope(scope: str) -> bool:
     if scope == 'admin':
         return False
     return True
+
+
+def require_browser_session(fn):
+    """Keep account invitation secrets outside delegated bearer authority."""
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        # Resolve Flask-Login before inspecting g: request_loader sets api_token.
+        if not current_user.is_authenticated:
+            return api_error('Unauthorized', code='unauthorized')
+        if getattr(g, 'api_token', None) is not None:
+            return api_error('Sign in with your site account to manage invites', code='forbidden')
+        return fn(*args, **kwargs)
+
+    return wrapped
 
 
 def require_api_scope(scope: str):

@@ -36,7 +36,6 @@ def start_scan_scheduler(app):
 def _run_due_jobs(app):
     from oneirodex import db
     from oneirodex.models import ScanJob
-    from oneirodex.utilities import scan_and_add_games
     from oneirodex.utils.scan_queue import drain_scan_queue, is_scan_busy
 
     # Prefer explicit FIFO Queued requests over recurring Scheduled jobs.
@@ -76,25 +75,6 @@ def _run_due_jobs(app):
         print(f'[SCAN SCHEDULER] Job {job.id} has no scan_folder; skipping')
         return
 
-    print(f'[SCAN SCHEDULER] Starting due job {job.id} for {folder}')
-    scan_mode = 'files' if job.setting_filefolder else 'folders'
-    # Mark running so UI reflects immediately; scan_and_add_games will use existing_job
-    job.status = 'Running'
-    job.last_run = datetime.now(timezone.utc)
-    db.session.commit()
-    try:
-        from oneirodex.utils.event_bus import publish_scan_event
-        publish_scan_event(job.id, 'Running')
-    except Exception:
-        pass
+    from oneirodex.utils.scan_queue import restart_or_queue_scan
 
-    scan_and_add_games(
-        folder,
-        scan_mode=scan_mode,
-        library_uuid=job.library_uuid,
-        remove_missing=bool(job.setting_remove),
-        existing_job=job,
-        download_missing_images=bool(job.setting_download_missing_images),
-        force_updates_extras_scan=bool(job.setting_force_updates_extras),
-        schedule=job.schedule,
-    )
+    restart_or_queue_scan(job.id, app=app, scheduled=True)

@@ -13,6 +13,9 @@ ph = PasswordHasher()
 
 class User(db.Model):
     __tablename__ = 'users'
+    __table_args__ = (
+        db.Index('ux_users_oidc_issuer_subject', 'oidc_issuer_url', 'oidc_subject', unique=True),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
@@ -30,9 +33,10 @@ class User(db.Model):
     is_email_verified = db.Column(db.Boolean, default=False)
     email_verification_token = db.Column(db.String(256), nullable=True)
     password_reset_token = db.Column(db.String(256), nullable=True)
-    # The OIDC provider's stable subject ("sub") this account signs in as; see
-    # utils/oidc.provision_or_update_user. NULL until the first OIDC sign-in.
-    oidc_subject = db.Column(db.String(255), nullable=True, unique=True, index=True)
+    # OIDC subjects are unique only inside one issuer. Existing subject-only
+    # links have NULL issuer until a verified email or operator review binds them.
+    oidc_issuer_url = db.Column(db.String(512), nullable=True)
+    oidc_subject = db.Column(db.String(255), nullable=True)
 
     preferences = db.relationship(
         'UserPreference',

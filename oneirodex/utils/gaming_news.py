@@ -5,15 +5,19 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from typing import Any
-from urllib.request import Request, urlopen
+
+import requests
 
 from product_env import getenv_product
+from oneirodex.utils.http_safe import safe_get
+from oneirodex.utils.security import validate_user_outbound_http_url
 
 DEFAULT_FEED_URLS = (
     'https://www.polygon.com/rss/index.xml',
     'https://www.pcgamer.com/rss/',
     'https://www.rockpapershotgun.com/feed',
 )
+MAX_FEED_BYTES = 512_000
 
 
 def feed_urls() -> tuple[str, ...]:
@@ -159,9 +163,22 @@ def fetch_gaming_headlines(*, limit: int = 12) -> list[dict[str, Any]]:
             break
         source = source_name(url)
         try:
-            req = Request(url, headers={'User-Agent': 'OneirodexNews/0.2'})
-            with urlopen(req, timeout=6) as resp:
-                xml_bytes = resp.read(512_000)
+            with requests.Session() as session:
+                with safe_get(
+                    url,
+                    validator=validate_user_outbound_http_url,
+                    session=session,
+                    headers={'User-Agent': 'OneirodexNews/0.2'},
+                    timeout=6,
+                    stream=True,
+                ) as resp:
+                    resp.raise_for_status()
+                    xml = bytearray()
+                    for chunk in resp.iter_content(chunk_size=64 * 1024):
+                        if len(xml) + len(chunk) > MAX_FEED_BYTES:
+                            raise ValueError('News feed exceeds size limit')
+                        xml.extend(chunk)
+                    xml_bytes = bytes(xml)
             collected.extend(_parse_feed(xml_bytes, source))
         except Exception:
             continue

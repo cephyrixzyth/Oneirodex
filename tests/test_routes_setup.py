@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from oneirodex import create_app, db
-from oneirodex.models import User, GlobalSettings, InviteToken, SystemEvents, DownloadRequest, Newsletter
+from oneirodex.models import User, GlobalSettings, InviteToken, SystemEvents, DownloadRequest, Newsletter, Library
 from oneirodex.forms import SetupForm, IGDBSetupForm
 from sqlalchemy import select, delete
 
@@ -101,9 +101,35 @@ def test_a_signed_out_visitor_cannot_change_mail_settings_mid_wizard(app, db_ses
     assert resp.status_code == 302 and '/login' in resp.location
     db_session.expire_all()
     assert db_session.get(GlobalSettings, settings.id).smtp_server == 'mail.household.lan'
-    for path in ('/setup/features', '/setup/igdb'):
-        _park_wizard_at(db_session, 3 if path.endswith('features') else 4)
+    for path, step in (('/setup/features', 3), ('/setup/igdb', 4), ('/setup/integrations', 5), ('/setup/library', 6)):
+        _park_wizard_at(db_session, step)
         assert '/login' in visitor.get(path).location
+
+
+def test_igdb_can_be_skipped_and_setup_routes_through_api_and_first_library(client, db_session, admin_user, monkeypatch):
+    """No API credential should block a fresh install from reaching library creation."""
+    from oneirodex.utils.setup import get_current_setup_step
+    _park_wizard_at(db_session, 4)
+    response = client.post('/setup/igdb', data={'skip_igdb': '1'})
+
+    assert response.status_code == 302
+    assert response.location.endswith('/setup/integrations')
+    assert get_current_setup_step() == 5
+    response = client.post('/setup/integrations', data={'skip_integrations': '1'})
+    assert response.location.endswith('/setup/library')
+    assert get_current_setup_step() == 6
+
+    monkeypatch.setattr('oneirodex.routes_setup.mark_setup_complete', lambda: None)
+    for name in (
+        'initialize_library_folders', 'initialize_discovery_sections',
+        'insert_default_scanning_filters', 'initialize_default_settings',
+        'initialize_allowed_file_types',
+    ):
+        monkeypatch.setattr(f'oneirodex.init_data.{name}', lambda: None)
+    response = client.post('/setup/library', data={'skip_library': 'on'})
+    assert response.location.endswith('/libraries')
+    with client.session_transaction() as session:
+        assert session.get('_user_id') == admin_user.get_id()
 
 
 @pytest.fixture(autouse=True)
@@ -438,6 +464,17 @@ class TestSetupIgdbRoute:
         assert 'form' in kwargs
         assert isinstance(kwargs['form'], IGDBSetupForm)
         assert kwargs['is_setup_mode'] is True
+
+    def test_igdb_skip_bypasses_required_browser_validation(self, client, db_session, admin_user):
+        from oneirodex.utils.setup import set_setup_step
+
+        set_setup_step(4)
+        response = client.get('/setup/igdb')
+        assert response.status_code == 200
+        assert b'name="skip_igdb"' in response.data
+        assert b'formnovalidate' in response.data
+        assert b'id="igdb_client_secret"' in response.data
+        assert b'type="password"' in response.data
     
     @patch('oneirodex.routes_setup.IGDBSetupForm')
     @patch('oneirodex.routes_setup.log_system_event')
@@ -446,11 +483,11 @@ class TestSetupIgdbRoute:
     @patch('oneirodex.init_data.insert_default_scanning_filters')
     @patch('oneirodex.init_data.initialize_default_settings')
     @patch('oneirodex.init_data.initialize_allowed_file_types')
-    def test_setup_igdb_post_success_complete_setup(self, mock_init_filetypes, mock_init_settings, 
+    def test_setup_igdb_post_success_continues_to_api_setup(self, mock_init_filetypes, mock_init_settings,
                                                    mock_init_filters, mock_init_discovery, 
                                                    mock_init_folders, mock_log, mock_form_class, 
                                                    client, db_session, admin_user):
-        """Test successful IGDB setup completing the entire setup process."""
+        """IGDB is optional setup and continues to API selection."""
         # Use existing admin_user fixture and set database to step 3
         from oneirodex.utils.setup import set_setup_step, get_current_setup_step, is_setup_required
         set_setup_step(4)  # IGDB is step 4 since the Features step landed
@@ -466,23 +503,22 @@ class TestSetupIgdbRoute:
             response = client.post('/setup/igdb', data={})
             
             assert response.status_code == 302
-            assert '/libraries' in response.location
+            assert '/setup/integrations' in response.location
             
             # Verify the route executed successfully by checking redirect location
             # The specific settings verification is subject to transaction rollback behavior
             
-            # Check setup was completed (get_current_setup_step returns None when completed)
-            assert get_current_setup_step() is None
+            assert get_current_setup_step() == 5
             
             # Verify all initialization functions were called
-            mock_init_folders.assert_called_once()
-            mock_init_discovery.assert_called_once()
-            mock_init_filters.assert_called_once()
-            mock_init_settings.assert_called_once()
-            mock_init_filetypes.assert_called_once()
+            mock_init_folders.assert_not_called()
+            mock_init_discovery.assert_not_called()
+            mock_init_filters.assert_not_called()
+            mock_init_settings.assert_not_called()
+            mock_init_filetypes.assert_not_called()
             
-            mock_flash.assert_called_with('Setup completed successfully! Please create your first game library.', 'success')
-            mock_log.assert_called_with("IGDB settings configured - Setup completed", event_type='setup', event_level='information')
+            mock_flash.assert_called_with('IGDB settings saved. Choose any additional API connections, or continue without them.', 'success')
+            mock_log.assert_called_with("IGDB settings saved during setup", event_type='setup', event_level='information')
     
     
     @patch('oneirodex.routes_setup.IGDBSetupForm')
@@ -581,7 +617,7 @@ class TestSetupWorkflow:
         assert '/setup/igdb' in response.location
         assert get_current_setup_step() == 4
 
-        # Step 5: Complete IGDB setup
+        # Step 5: Save IGDB, then continue to optional API choices.
         with patch('oneirodex.routes_setup.IGDBSetupForm') as mock_igdb_form_class:
             mock_igdb_form = MagicMock()
             mock_igdb_form.validate_on_submit.return_value = True
@@ -589,20 +625,14 @@ class TestSetupWorkflow:
             mock_igdb_form.igdb_client_secret.data = 'test_client_secret_12345'
             mock_igdb_form_class.return_value = mock_igdb_form
             
-            with patch('oneirodex.init_data.initialize_library_folders'), \
-                 patch('oneirodex.init_data.initialize_discovery_sections'), \
-                 patch('oneirodex.init_data.insert_default_scanning_filters'), \
-                 patch('oneirodex.init_data.initialize_allowed_file_types'), \
-                 patch('oneirodex.init_data.initialize_default_settings'), \
-                 patch('oneirodex.routes_setup.log_system_event'):
+            with patch('oneirodex.routes_setup.log_system_event'):
                  
                 # Mock initialize_default_settings to prevent interference with test data
                 response = client.post('/setup/igdb', data={})
                 assert response.status_code == 302
-                assert '/libraries' in response.location
+                assert '/setup/integrations' in response.location
         
-        # Verify setup was completed (get_current_setup_step returns None when completed)
-        assert get_current_setup_step() is None
+        assert get_current_setup_step() == 5
         
         # Verify admin user was created
         admin_user = db.session.execute(select(User).filter_by(email='admin@test.com')).scalars().first()
@@ -615,6 +645,190 @@ class TestSetupWorkflow:
         assert settings is not None
         assert settings.igdb_client_id == 'test_client_id_12345'
         assert settings.igdb_client_secret == 'test_client_secret_12345'
+
+        response = client.post('/setup/integrations', data={'skip_integrations': '1'})
+        assert response.status_code == 302
+        assert '/setup/library' in response.location
+        assert get_current_setup_step() == 6
+
+        with patch('oneirodex.init_data.initialize_library_folders'), \
+             patch('oneirodex.init_data.initialize_discovery_sections'), \
+             patch('oneirodex.init_data.insert_default_scanning_filters'), \
+             patch('oneirodex.init_data.initialize_allowed_file_types'), \
+             patch('oneirodex.init_data.initialize_default_settings'):
+            response = client.post('/setup/library', data={'skip_library': 'on'})
+        assert response.status_code == 302
+        assert '/libraries' in response.location
+        assert get_current_setup_step() is None
+
+
+class TestSetupFirstLibrary:
+    def test_first_library_is_created_and_initial_scan_queued(
+        self, client, db_session, admin_user, tmp_path, monkeypatch,
+    ):
+        from oneirodex.utils.setup import set_setup_step, get_current_setup_step
+
+        folder = tmp_path / 'roms'
+        folder.mkdir()
+        monkeypatch.setattr(
+            'oneirodex.utils.security.get_allowed_base_directories',
+            lambda _app: [str(tmp_path)],
+        )
+        set_setup_step(6)
+        for name in (
+            'initialize_library_folders', 'initialize_discovery_sections',
+            'insert_default_scanning_filters', 'initialize_default_settings',
+            'initialize_allowed_file_types',
+        ):
+            monkeypatch.setattr(f'oneirodex.init_data.{name}', lambda: None)
+
+        with patch(
+            'oneirodex.utils.scan_queue.start_or_queue_scan',
+            return_value={'status': 'started'},
+        ) as start_scan:
+            response = client.post('/setup/library', data={
+                'name': 'First NES library',
+                'platform': 'NES',
+                'folder_path': str(folder),
+                'scan_mode': 'folders',
+                'scan_depth': '1',
+            })
+
+        assert response.status_code == 302
+        assert response.location.endswith('/libraries')
+        library = db_session.execute(
+            select(Library).filter_by(name='First NES library')
+        ).scalars().first()
+        assert library is not None
+        assert library.last_scan_folder == str(folder)
+        start_scan.assert_called_once()
+        assert start_scan.call_args.kwargs['library_uuid'] == library.uuid
+        assert get_current_setup_step() is None
+
+    def test_first_library_rejects_paths_outside_declared_roots(
+        self, client, db_session, admin_user, tmp_path,
+    ):
+        from oneirodex.utils.setup import set_setup_step
+
+        set_setup_step(6)
+        folder = tmp_path / 'outside'
+        folder.mkdir()
+        response = client.post('/setup/library', data={
+            'name': 'Unsafe library', 'platform': 'NES',
+            'folder_path': str(folder), 'scan_mode': 'folders', 'scan_depth': '1',
+        })
+        assert response.status_code == 200
+        assert b'outside the configured library locations' in response.data
+        assert db_session.execute(
+            select(Library).filter_by(name='Unsafe library')
+        ).scalars().first() is None
+
+
+class TestSetupApiConnections:
+    def test_api_secrets_are_not_rendered_and_selected_credentials_are_saved(
+        self, client, db_session, admin_user,
+    ):
+        from oneirodex.utils.setup import get_current_setup_step
+
+        settings = _park_wizard_at(db_session, 5)
+        settings.steamgriddb_api_key = 'existing-secret-value'
+        settings.enable_hltb_integration = True
+        db_session.commit()
+
+        page = client.get('/setup/integrations')
+        assert page.status_code == 200
+        assert b'existing-secret-value' not in page.data
+        assert b'type="password"' in page.data
+
+        response = client.post('/setup/integrations', data={
+            'configure_steam_web_api_key': 'on',
+            'steam_web_api_key': 'new-steam-api-key',
+            'configure_oidc': 'on',
+            'oidc_issuer_url': 'https://sso.example.test',
+            'oidc_client_id': 'oneirodex-stage',
+            'oidc_client_secret': 'oidc-stage-secret',
+        })
+        assert response.status_code == 302
+        assert response.location.endswith('/setup/library')
+        db_session.expire_all()
+        saved = db_session.execute(
+            select(GlobalSettings).filter_by(id=settings.id)
+        ).scalars().first()
+        assert saved.steam_web_api_key == 'new-steam-api-key'
+        assert saved.steamgriddb_api_key == 'existing-secret-value'
+        assert saved.enable_hltb_integration is False
+        assert saved.oidc_issuer_url == 'https://sso.example.test'
+        assert saved.oidc_client_id == 'oneirodex-stage'
+        assert saved.oidc_client_secret == 'oidc-stage-secret'
+        assert saved.oidc_enabled is False
+        assert get_current_setup_step() == 6
+
+    def test_skip_preserves_existing_api_preferences(self, client, db_session, admin_user):
+        from oneirodex.utils.setup import get_current_setup_step
+
+        settings = _park_wizard_at(db_session, 5)
+        settings.enable_hltb_integration = True
+        db_session.commit()
+        response = client.post('/setup/integrations', data={'skip_integrations': '1'})
+        assert response.location.endswith('/setup/library')
+        db_session.refresh(settings)
+        assert settings.enable_hltb_integration is True
+        assert get_current_setup_step() == 6
+
+    def test_oidc_setup_rejects_non_http_urls_without_completing_step(
+        self, client, db_session, admin_user,
+    ):
+        from oneirodex.utils.setup import get_current_setup_step
+
+        _park_wizard_at(db_session, 5)
+        response = client.post('/setup/integrations', data={
+            'configure_oidc': 'on',
+            'oidc_issuer_url': 'file:///etc/passwd',
+            'oidc_client_id': 'invalid-scheme',
+        })
+        assert response.status_code == 200
+        assert b'OIDC issuer must use HTTPS' in response.data
+        assert get_current_setup_step() == 5
+
+    def test_oidc_setup_rejects_http_issuer(self, client, db_session, admin_user):
+        from oneirodex.utils.setup import get_current_setup_step
+
+        _park_wizard_at(db_session, 5)
+        response = client.post('/setup/integrations', data={
+            'configure_oidc': 'on',
+            'oidc_issuer_url': 'http://idp.example.test',
+            'oidc_client_id': 'cleartext-risk',
+            'oidc_client_secret': 'must-not-be-saved',
+        })
+
+        assert response.status_code == 200
+        assert b'OIDC issuer must use HTTPS' in response.data
+        assert get_current_setup_step() == 5
+        settings = db_session.execute(
+            select(GlobalSettings).order_by(GlobalSettings.id).limit(1)
+        ).scalars().first()
+        assert settings.oidc_client_secret != 'must-not-be-saved'
+
+    def test_admin_oidc_save_rejects_http_issuer(self, client, db_session, admin_user):
+        settings = _park_wizard_at(db_session, 6)
+        settings.setup_in_progress = False
+        settings.setup_completed = True
+        settings.oidc_issuer_url = 'https://saved-idp.example.test'
+        db_session.commit()
+
+        response = client.post('/admin/integrations/oidc/save', json={
+            'oidc_enabled': True,
+            'oidc_issuer_url': 'http://idp.example.test',
+            'oidc_client_id': 'cleartext-risk',
+            'oidc_client_secret': 'must-not-be-saved',
+            'oidc_redirect_uri': 'https://oneirodex.example.test/login/oidc/callback',
+        })
+
+        assert response.status_code == 400
+        assert response.get_json()['error_code'] == 'bad_request'
+        db_session.refresh(settings)
+        assert settings.oidc_issuer_url == 'https://saved-idp.example.test'
+        assert settings.oidc_client_secret != 'must-not-be-saved'
 
 
 class TestSetupSessionHandling:
@@ -675,7 +889,7 @@ class TestSetupSessionHandling:
         response = client.post('/setup/features', data={'enable_game_updates': 'y'})
         assert get_current_setup_step() == 4
         
-        # IGDB completion clears setup_step (marks as completed)
+        # IGDB advances to the optional API and first-library steps.
         with patch('oneirodex.routes_setup.IGDBSetupForm') as mock_form_class:
             mock_form = MagicMock()
             mock_form.validate_on_submit.return_value = True
@@ -683,17 +897,11 @@ class TestSetupSessionHandling:
             mock_form.igdb_client_secret.data = 'test_client_secret_12345'
             mock_form_class.return_value = mock_form
             
-            with patch('oneirodex.init_data.initialize_library_folders'), \
-                 patch('oneirodex.init_data.initialize_discovery_sections'), \
-                 patch('oneirodex.init_data.insert_default_scanning_filters'), \
-                 patch('oneirodex.init_data.initialize_default_settings'), \
-                 patch('oneirodex.init_data.initialize_allowed_file_types'), \
-                 patch('oneirodex.routes_setup.log_system_event'):
+            with patch('oneirodex.routes_setup.log_system_event'):
                 
                 response = client.post('/setup/igdb', data={})
                 
-        # Setup should be completed, so get_current_setup_step returns None
-        assert get_current_setup_step() is None
+        assert get_current_setup_step() == 5
         assert not is_setup_required()  # Should no longer be required
 
 

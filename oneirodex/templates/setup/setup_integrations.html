@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ 'css/setup/setup.css'|theme_asset }}">
+<div class="container-login">
+  <main class="content-login od-setup od-setup--wide" aria-labelledby="od-setup-integrations-title">
+    <nav class="od-setup-progress" aria-label="Setup progress">
+      <span>1 · Admin</span><span>2 · Email</span><span>3 · Features</span><span>4 · Metadata</span><span aria-current="step">5 · APIs</span><span>6 · Library</span>
+    </nav>
+    <div class="od-setup__brand">
+      <img src="{{ url_for('static', filename='newstyle/oneirodex_mark.svg') }}" alt="" class="od-setup__mark" width="56" height="56" decoding="async">
+      <h1 id="od-setup-integrations-title" class="od-setup__title">Choose API connections</h1>
+      <p class="od-setup__lede">Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.</p>
+      <p class="od-setup__lede od-setup__lede--muted">Secrets are saved in the local settings database and never filled back into this form. Leave a credential blank to keep an existing value.</p>
+    </div>
+
+    {% for error in errors|default([]) %}<p class="error-message" role="alert">{{ error }}</p>{% endfor %}
+    <form method="post" action="{{ url_for('setup.setup_integrations') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="od-setup-grid">
+        <fieldset class="od-setup-provider">
+          <legend>Steam Web API</legend>
+          <label><input type="checkbox" name="configure_steam_web_api_key" {% if settings.steam_web_api_key %}checked{% endif %}> Configure Steam ownership lookup</label>
+          <label for="steam_web_api_key">API key</label>
+          <input class="od-setup__field" id="steam_web_api_key" name="steam_web_api_key" type="password" autocomplete="new-password">
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>SteamGridDB</legend>
+          <label><input type="checkbox" name="configure_steamgriddb_api_key" {% if settings.steamgriddb_api_key %}checked{% endif %}> Configure game artwork lookup</label>
+          <label for="steamgriddb_api_key">API key</label>
+          <input class="od-setup__field" id="steamgriddb_api_key" name="steamgriddb_api_key" type="password" autocomplete="new-password">
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>Giant Bomb</legend>
+          <label><input type="checkbox" name="configure_giantbomb_api_key" {% if settings.giantbomb_api_key %}checked{% endif %}> Configure metadata lookup</label>
+          <label for="giantbomb_api_key">API key</label>
+          <input class="od-setup__field" id="giantbomb_api_key" name="giantbomb_api_key" type="password" autocomplete="new-password">
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>MobyGames</legend>
+          <label><input type="checkbox" name="configure_mobygames_api_key" {% if settings.mobygames_api_key %}checked{% endif %}> Configure metadata lookup</label>
+          <label for="mobygames_api_key">API key</label>
+          <input class="od-setup__field" id="mobygames_api_key" name="mobygames_api_key" type="password" autocomplete="new-password">
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>TheGamesDB</legend>
+          <label><input type="checkbox" name="configure_thegamesdb_api_key" {% if settings.thegamesdb_api_key %}checked{% endif %}> Configure metadata and artwork lookup</label>
+          <label for="thegamesdb_api_key">API key</label>
+          <input class="od-setup__field" id="thegamesdb_api_key" name="thegamesdb_api_key" type="password" autocomplete="new-password">
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>HowLongToBeat</legend>
+          <label><input type="checkbox" name="enable_hltb_integration" {% if settings.enable_hltb_integration %}checked{% endif %}> Enable playtime estimates (no API key required)</label>
+        </fieldset>
+        <fieldset class="od-setup-provider">
+          <legend>OIDC / SSO</legend>
+          <label><input type="checkbox" name="configure_oidc" {% if settings.oidc_issuer_url or settings.oidc_client_id %}checked{% endif %}> Save identity-provider details</label>
+          <label for="oidc_issuer_url">Issuer URL</label>
+          <input class="od-setup__field" id="oidc_issuer_url" name="oidc_issuer_url" type="url" autocomplete="url">
+          <span class="od-setup__lede od-setup__lede--muted">The issuer must use HTTPS to protect discovery and client credentials.</span>
+          <label for="oidc_client_id">Client ID</label>
+          <input class="od-setup__field" id="oidc_client_id" name="oidc_client_id" autocomplete="off">
+          <label for="oidc_client_secret">Client secret</label>
+          <input class="od-setup__field" id="oidc_client_secret" name="oidc_client_secret" type="password" autocomplete="new-password">
+          <label for="oidc_redirect_uri">Redirect URI (optional)</label>
+          <input class="od-setup__field" id="oidc_redirect_uri" name="oidc_redirect_uri" type="url" autocomplete="url">
+          <span class="od-setup__lede od-setup__lede--muted">Credentials are saved for later review; SSO stays off until an operator enables OIDC after setup.</span>
+        </fieldset>
+      </div>
+
+      <details class="od-setup-help">
+        <summary>Other optional services</summary>
+        <p>IGDB and email were offered in earlier steps. Keyless catalogue sources work automatically. LiveKit voice, *arr connections, unofficial store links, support integrations, and several community services use installation environment settings; you can review them under Admin → Integrations after setup.</p>
+      </details>
+      <div class="od-setup__actions">
+        <button type="submit" class="btn btn-primary">Save choices and continue</button>
+        <button type="submit" name="skip_integrations" value="1" formnovalidate class="btn btn-secondary">Skip API setup</button>
+      </div>
+    </form>
+  </main>
+</div>
+{% endblock %}

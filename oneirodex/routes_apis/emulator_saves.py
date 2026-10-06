@@ -21,12 +21,14 @@ from oneirodex.utils.emulator_saves import (
     store_save,
 )
 from oneirodex.utils.library_acl import user_can_access_game
+from oneirodex.utils.api_tokens import require_api_scope
 
 from . import apis_bp
 
 
 @apis_bp.route('/games/<game_uuid>/saves', methods=['GET'])
 @login_required
+@require_api_scope('read:library')
 def list_game_saves(game_uuid):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
@@ -53,6 +55,7 @@ def list_game_saves(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/saves', methods=['POST'])
 @login_required
+@require_api_scope('write:library')
 def upload_game_save(game_uuid):
     if not save_sync_enabled():
         return api_error('Emulator save sync is disabled', code='forbidden')
@@ -85,6 +88,7 @@ def upload_game_save(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/saves/<slot_name>', methods=['GET'])
 @login_required
+@require_api_scope('read:library')
 def download_game_save(game_uuid, slot_name):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
@@ -118,6 +122,7 @@ def download_game_save(game_uuid, slot_name):
 
 @apis_bp.route('/games/<game_uuid>/saves/<slot_name>', methods=['DELETE'])
 @login_required
+@require_api_scope('write:library')
 def delete_game_save(game_uuid, slot_name):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:

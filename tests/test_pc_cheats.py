@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 from oneirodex import db
 from oneirodex.models import Game, Library, LibraryPlatform, PcCheat, User
+from oneirodex.utils.api_tokens import generate_api_token
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -75,6 +76,22 @@ def _login(client, user):
 
 
 class TestSurfaceSeparation:
+    def test_pc_cheat_read_requires_library_scope_for_bearer_tokens(
+        self, app, db_session, pc_game,
+    ):
+        reader = _user(db_session, 'user')
+        narrow_row, narrow_token = generate_api_token(
+            reader, 'narrow pc cheat reader', ['write:presence'],
+        )
+        assert narrow_row.scopes == ['write:presence']
+        with app.test_client() as narrow_client:
+            denied = narrow_client.get(
+                f'/api/games/{pc_game.uuid}/pc_cheats',
+                headers={'Authorization': f'Bearer {narrow_token}'},
+        )
+        assert denied.status_code == 403
+        assert denied.get_json()['error_code'] == 'forbidden'
+
     def test_pc_cheats_refused_on_a_retroarch_platform(self, client, admin_user, snes_game):
         """The PC surface must not become a second way to author .cht content."""
         _login(client, admin_user)

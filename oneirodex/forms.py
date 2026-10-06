@@ -447,7 +447,7 @@ class IGDBSetupForm(FlaskForm):
         DataRequired(),
         Length(min=20, max=50, message='Client ID must be between 20 and 50 characters')
     ])
-    igdb_client_secret = StringField('Client Secret', validators=[
+    igdb_client_secret = PasswordField('Client Secret', validators=[
         DataRequired(),
         Length(min=20, max=50, message='Client Secret must be between 20 and 50 characters')
     ])

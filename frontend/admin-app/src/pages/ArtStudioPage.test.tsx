@@ -91,7 +91,7 @@ test('Art studio tabs switch Studio and Pick & queue', async () => {
 
     await user.click(screen.getByRole('tab', { name: /Pick & queue/i }))
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Mass image queue' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Image queue' })).toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: /Auto-pick best available/i })).toBeInTheDocument()
   } finally {

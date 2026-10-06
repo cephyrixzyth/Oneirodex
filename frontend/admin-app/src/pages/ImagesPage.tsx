@@ -344,8 +344,8 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
         <>
           <h1>Art &amp; images</h1>
           <p className="od-admin-lede">
-            Pick artwork for one title, manage the download queue, and open the classic Image Queue
-            when you need the full scan-mgmt table. Admin only.
+            Pick artwork for one title and manage pending or failed downloads. The full scan-mgmt
+            image table remains available when you need its legacy review controls. Admin only.
           </p>
         </>
       ) : (
@@ -356,7 +356,7 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
 
       <div className="od-admin-actions-row">
         <a className="od-btn" href="/scan_management?active_tab=image_queue">
-          Classic Image Queue
+          Full scan-mgmt image table
         </a>
         {!embedded ? (
           <a className="od-btn" href="/admin/art_studio">

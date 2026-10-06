@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { EmulatorProfilesForm } from './EmulatorsPage'
+import { EmulatorProfilesForm, EmulatorsPage } from './EmulatorsPage'
 
 function jsonOk(body: unknown, status = 200) {
   return {
@@ -64,5 +64,26 @@ describe('EmulatorProfilesForm', () => {
     ) as unknown as typeof fetch
     render(<EmulatorProfilesForm />)
     expect(await screen.findByText('No emulator platforms available.')).toBeInTheDocument()
+  })
+})
+
+describe('EmulatorsPage navigation', () => {
+  test('keeps the long settings panels behind compact accessible tabs', () => {
+    render(<EmulatorsPage />)
+    expect(screen.getByRole('tab', { name: 'Preferred cores' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tabpanel', { name: 'Preferred cores' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Firmware' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  test('selects the requested settings section', async () => {
+    const user = userEvent.setup()
+    render(<EmulatorsPage />)
+    await user.click(screen.getByRole('tab', { name: 'Firmware' }))
+    expect(screen.getByRole('tab', { name: 'Firmware' })).toHaveAttribute('aria-selected', 'true')
+    expect(document.getElementById('emu-panel-firmware')).not.toHaveAttribute('hidden')
+    expect(document.getElementById('emu-panel-cores')).toHaveAttribute('hidden')
   })
 })

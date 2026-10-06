@@ -3,6 +3,9 @@
 <link rel="stylesheet" href="{{ 'css/setup/setup.css'|theme_asset }}">
 <div class="container-login">
   <div class="content-login od-setup" role="main" aria-labelledby="od-setup-features-title">
+    <nav class="od-setup-progress" aria-label="Setup progress">
+      <span>1 · Admin</span><span>2 · Email</span><span aria-current="step">3 · Features</span><span>4 · Metadata</span><span>5 · APIs</span><span>6 · Library</span>
+    </nav>
     <div class="od-setup__brand">
       <img
         src="{{ url_for('static', filename='newstyle/oneirodex_mark.svg') }}"

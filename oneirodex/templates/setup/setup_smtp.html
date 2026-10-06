@@ -5,6 +5,9 @@
 
 <div class="container-login">
     <div class="content-login od-setup" role="main" aria-labelledby="od-setup-smtp-title">
+        <nav class="od-setup-progress" aria-label="Setup progress">
+      <span>1 · Admin</span><span aria-current="step">2 · Email</span><span>3 · Features</span><span>4 · Metadata</span><span>5 · APIs</span><span>6 · Library</span>
+        </nav>
         <div class="od-setup__brand">
             <img
                 src="{{ url_for('static', filename='newstyle/oneirodex_mark.svg') }}"
@@ -22,7 +25,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div class="form-group">
-                <label><input type="checkbox" name="smtp_enabled" value="true" checked class="form-check-input"> Enable SMTP</label>
+                <label><input type="checkbox" name="smtp_enabled" value="true" class="form-check-input"> Enable SMTP (only if you have mail server credentials)</label>
             </div>
 
             <div class="form-group">

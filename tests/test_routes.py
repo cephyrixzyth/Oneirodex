@@ -563,14 +563,13 @@ class TestMainBlueprint:
         assert test_scan_job.status == 'Completed'
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.run_in_background')
+    @patch('oneirodex.utils.scan_queue._start_job_thread')
     def test_restart_scan_job(self, mock_background, mock_current_user,
                              client, app, db_session, admin_user, test_scan_job):
         """Test restarting a scan job.
 
-        The worker is intercepted at run_in_background, which owns the thread
-        and the worker's own session now. The route's job is the state reset
-        below; actually running a scan is not what this test is about.
+        The queue helper hands work to its thread dispatcher, so intercept it
+        here and assert the route reset the row before dispatch.
         """
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'

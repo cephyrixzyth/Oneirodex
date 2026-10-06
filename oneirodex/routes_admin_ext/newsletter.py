@@ -15,26 +15,25 @@ from oneirodex.utils.smtp import send_email_quiet
 @admin_required
 def newsletter():
     settings_record = global_settings_row()
-    # Check if SMTP is configured and enabled
-    if not settings_record or not settings_record.smtp_enabled:
-        flash('SMTP is not configured or enabled. Please configure SMTP settings first.', 'warning')
-        return redirect(url_for('site.admin_dashboard'))
-
-    # Check if newsletter feature is enabled
-    enable_newsletter = settings_record.settings.get('enableNewsletterFeature', False) if settings_record else False
-
-    if not enable_newsletter:
-        flash('Newsletter feature is disabled.', 'warning')
-        return redirect(url_for('site.admin_dashboard'))
-
-    # Verify SMTP sender is configured
-    if not settings_record.smtp_default_sender:
-        flash('SMTP default sender email is not configured.', 'warning')
-        return redirect(url_for('site.admin_dashboard'))
+    # Keep this page useful even before SMTP is configured: admins can inspect
+    # history and see exactly what remains before sending becomes available.
+    enable_newsletter = bool(
+        (settings_record.settings or {}).get('enableNewsletterFeature', False)
+    ) if settings_record else False
+    smtp_ready = bool(
+        settings_record
+        and settings_record.smtp_enabled
+        and settings_record.smtp_server
+        and settings_record.smtp_default_sender
+    )
+    can_send = bool(enable_newsletter and smtp_ready)
 
     form = NewsletterForm()
     users = db.session.execute(select(User)).scalars().all()
     if form.validate_on_submit():
+        if not can_send:
+            flash('Enable the newsletter feature and configure SMTP before sending.', 'warning')
+            return redirect(url_for('admin2.newsletter'))
         recipients = [
             addr.strip()
             for addr in (form.recipients.data or '').split(',')
@@ -71,11 +70,14 @@ def newsletter():
     
     # Get all sent newsletters for display
     newsletters = db.session.execute(select(Newsletter).order_by(Newsletter.sent_date.desc())).scalars().all()
-    return render_template('admin/admin_newsletter.html', 
+    return render_template('admin/admin_newsletter.html',
                          title='Newsletter', 
                          form=form, 
                          users=users,
-                         newsletters=newsletters)
+                         newsletters=newsletters,
+                         can_send=can_send,
+                         smtp_ready=smtp_ready,
+                         newsletter_enabled=enable_newsletter)
 
 @admin2_bp.route('/admin/newsletter/<int:newsletter_id>')
 @login_required

@@ -219,10 +219,10 @@ SPA_COMPONENTS = REPO_ROOT / 'frontend' / 'member-app' / 'src' / 'components'
 
 
 def test_discover_news_art_cannot_grow_past_the_cover_box():
-    """News images used to inflate the wrap past 3:4 and sit on the slider."""
+    """News images stay within the portrait 2:3 cover frame and the slider."""
     news = (SPA_COMPONENTS / 'NewsCard.css').read_text(encoding='utf-8')
     wrap = _rule(news, '.od-news-card__art-wrap')
-    assert 'aspect-ratio: 3 / 4' in wrap
+    assert 'aspect-ratio: 2 / 3' in wrap
     assert 'max-height: 100%' in wrap
     art = _rule(news, '.od-news-card__art')
     assert 'position: absolute' in art

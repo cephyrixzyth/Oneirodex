@@ -167,9 +167,10 @@ class TestNewsletterRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/newsletter', follow_redirects=True)
+        response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'SMTP is not configured or enabled' in response.data
+        assert b'Newsletter sending is not ready' in response.data
+        assert b'/admin/smtp_settings' in response.data
 
     def test_newsletter_feature_disabled(self, client, admin_user, global_settings_newsletter_disabled):
         """Test newsletter page when newsletter feature is disabled."""
@@ -177,9 +178,9 @@ class TestNewsletterRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/newsletter', follow_redirects=True)
+        response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'Newsletter feature is disabled' in response.data
+        assert b'Enable the newsletter feature' in response.data
 
     def test_newsletter_no_sender_configured(self, client, admin_user, global_settings_no_sender):
         """Test newsletter page when no default sender is configured."""
@@ -187,9 +188,9 @@ class TestNewsletterRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/newsletter', follow_redirects=True)
+        response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'SMTP default sender email is not configured' in response.data
+        assert b'Configure an enabled mail server and sender' in response.data
 
     def test_newsletter_get_request_success(self, client, admin_user, global_settings_smtp_enabled, sample_newsletter):
         """Test successful GET request to newsletter page."""

@@ -42,6 +42,8 @@ from oneirodex.utils.custom_emoji import (
 from oneirodex.schemas.chat import MuteChannelBody
 from oneirodex.utils.validation import validate_body
 
+from oneirodex.utils.api_tokens import require_api_scope
+
 from . import apis_bp
 
 
@@ -83,6 +85,7 @@ def _active_channel(channel_id: int):
 
 @apis_bp.route('/chat/channels', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_channels_list():
     channels = list_channels_for_user(current_user)
     # `rooms` alias for slide-out dock (same payloads)
@@ -91,6 +94,7 @@ def chat_channels_list():
 
 @apis_bp.route('/chat/channels', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_channels_create():
     data = request.get_json(silent=True) or {}
     try:
@@ -112,6 +116,7 @@ def chat_channels_create():
 
 @apis_bp.route('/chat/channels/<int:channel_id>/archive', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_channel_archive(channel_id: int):
     ch, refusal = _active_channel(channel_id)
     if refusal is not None:
@@ -127,6 +132,7 @@ def chat_channel_archive(channel_id: int):
 
 @apis_bp.route('/chat/channels/<int:channel_id>/leave', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_channel_leave(channel_id: int):
     ch, refusal = _active_channel(channel_id)
     if refusal is not None:
@@ -142,6 +148,7 @@ def chat_channel_leave(channel_id: int):
 
 @apis_bp.route('/chat/dm', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_open_dm():
     data = request.get_json(silent=True) or {}
     other = None
@@ -165,6 +172,7 @@ def chat_open_dm():
 
 @apis_bp.route('/chat/channels/<int:channel_id>/mute', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @validate_body(MuteChannelBody)
 def chat_channel_mute(channel_id: int, body: MuteChannelBody):
     ch, refusal = _visible_channel(channel_id)
@@ -179,6 +187,7 @@ def chat_channel_mute(channel_id: int, body: MuteChannelBody):
 
 @apis_bp.route('/chat/channels/<int:channel_id>/messages', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_messages_list(channel_id: int):
     ch, refusal = _visible_channel(channel_id)
     if refusal is not None:
@@ -202,6 +211,7 @@ def chat_messages_list(channel_id: int):
 
 @apis_bp.route('/chat/channels/<int:channel_id>/attachments', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_attachment_upload(channel_id: int):
     """Upload a pending chat attachment (multipart). Bind via attachment_ids on send."""
     ch, refusal = _visible_channel(channel_id)
@@ -226,6 +236,7 @@ def chat_attachment_upload(channel_id: int):
 
 @apis_bp.route('/chat/attachments/<file_name>', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_attachment_file(file_name: str):
     """One chat attachment, for someone who can read its channel.
 
@@ -260,6 +271,7 @@ def chat_attachment_file(file_name: str):
 
 @apis_bp.route('/chat/channels/<int:channel_id>/messages', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_messages_post(channel_id: int):
     ch, refusal = _visible_channel(channel_id)
     if refusal is not None:
@@ -298,6 +310,7 @@ def chat_messages_post(channel_id: int):
 
 @apis_bp.route('/chat/messages/<int:message_id>/reactions', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_message_reaction_toggle(message_id: int):
     msg = db.session.get(ChatMessage, message_id)
     if not msg:
@@ -314,6 +327,7 @@ def chat_message_reaction_toggle(message_id: int):
 
 @apis_bp.route('/chat/emoji', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_emoji_list():
     custom = list_custom_emoji()
     return jsonify({
@@ -325,6 +339,7 @@ def chat_emoji_list():
 
 @apis_bp.route('/chat/emoji', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_emoji_upload():
     slug = request.form.get('slug') or ''
@@ -344,6 +359,7 @@ def chat_emoji_upload():
 
 @apis_bp.route('/chat/emoji/<slug>', methods=['DELETE'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_emoji_delete(slug: str):
     if not delete_custom_emoji(slug):
@@ -353,6 +369,7 @@ def chat_emoji_delete(slug: str):
 
 @apis_bp.route('/chat/search', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_search():
     q = (request.args.get('q') or '').strip()
     limit = min(50, max(1, int(request.args.get('limit') or 20)))

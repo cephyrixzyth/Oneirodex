@@ -131,7 +131,9 @@ def nosp_admin_staff(no_savepoint_db):
 @pytest.fixture
 def nosp_path_library(no_savepoint_db):
     """`path_library`, committed for real — bucket-E opt-out (see above)."""
-    settings = GlobalSettings()
+    from oneirodex.utils.global_settings import global_settings_row_or_create
+
+    settings = global_settings_row_or_create()
     settings.admin_notify_new_games = True
     no_savepoint_db.add(settings)
     no_savepoint_db.commit()

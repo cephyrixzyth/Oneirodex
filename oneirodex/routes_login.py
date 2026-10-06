@@ -1,3 +1,4 @@
+from oneirodex.utils.api_tokens import require_browser_session
 import os
 import uuid
 from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app, abort, session
@@ -460,6 +461,7 @@ def reset_password(token):
 
 @login_bp.route('/user/invites', methods=['GET', 'POST'])
 @login_required
+@require_browser_session
 def invites():
     site_url = public_origin()
     smtp_enabled = is_smtp_configured()
@@ -509,6 +511,7 @@ def invites():
 
 @login_bp.route('/delete_invite/<token>', methods=['POST'])
 @login_required
+@require_browser_session
 def delete_invite(token):
     try:
         invite = db.session.execute(select(InviteToken).filter_by(token=token, creator_user_id=current_user.user_id)).scalar_one_or_none()

@@ -304,3 +304,15 @@ test('a loader mismatch is said plainly on the panel', async () => {
   expect(await screen.findByRole('note')).toHaveTextContent(/Loader mismatch/)
   expect(screen.getByRole('note')).toHaveTextContent('Configuration Manager (melonloader)')
 })
+
+test('a hostile source scheme from a stored mod pack is not rendered as a link', async () => {
+  routeFetch({
+    pack: {
+      ...PACK,
+      mods: [{ ...PACK.mods[0], source_url: 'javascript:alert(1)' }],
+    },
+  })
+  render(<ModsPanel gameUuid="g1" />)
+  expect(await screen.findByText('Configuration Manager')).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'Source' })).toBeNull()
+})

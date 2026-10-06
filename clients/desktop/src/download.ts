@@ -305,7 +305,7 @@ export async function kickoffDownload(
 export async function pickDownloadVersion(
   api: OneirodexClient,
   gameUuid: string,
-): Promise<{ kind: 'base' | 'update' | 'extra'; versionUuid?: string }> {
+): Promise<{ kind: 'base' | 'update' | 'extra'; versionUuid?: string } | null> {
   try {
     const payload = await api.downloads.listGameVersions(gameUuid)
     const versions = payload.versions || []
@@ -314,7 +314,7 @@ export async function pickDownloadVersion(
     }
     const chosen = await promptForDownloadVersion(gameUuid, versions)
     if (!chosen) {
-      return { kind: 'base' }
+      return null
     }
     if (chosen.kind === 'update' || chosen.kind === 'extra') {
       return { kind: chosen.kind, versionUuid: chosen.uuid }
@@ -333,8 +333,8 @@ export async function pickDownloadVersion(
  * versions, arrow-key navigation, Enter to confirm, Escape / backdrop to cancel.
  *
  * Resolves with the chosen version, or `null` when dismissed or when there is no
- * DOM to render into (tests, non-webview runs) — callers treat `null` as "use
- * the base version".
+ * DOM to render into (tests, non-webview runs). Callers must stop the download
+ * when the result is `null`.
  */
 export function promptForDownloadVersion(
   gameUuid: string,

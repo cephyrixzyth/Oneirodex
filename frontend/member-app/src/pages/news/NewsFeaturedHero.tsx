@@ -1,6 +1,7 @@
 import { formatEndsAt, storeLabel, truncate } from './newsHelpers'
 import type { FeaturedNews } from './newsTypes'
 import { formatLocaleDate } from '../../utils/formatLocaleDate'
+import { safeHttpUrl } from '../../utils/safeUrl'
 
 /** The lead story: an admin note, else the first headline, else the first free game. */
 export function NewsFeaturedHero({
@@ -25,10 +26,10 @@ export function NewsFeaturedHero({
                 ? 'Free now'
                 : 'Headline'}
           </p>
-          {featured.kind === 'headline' ? (
+          {featured.kind === 'headline' && safeHttpUrl(featured.item.url) ? (
             <a
               className="od-news__hero-link"
-              href={featured.item.url ?? undefined}
+              href={safeHttpUrl(featured.item.url) || undefined}
               target="_blank"
               rel="noreferrer"
             >

@@ -57,8 +57,8 @@ export function NewsCard({ item }: LooseProps) {
   const when = whenLabel(item.published_at)
   const [fit, setFit] = useState('cover')
   // The art actually shown. Starts on the 2:3 candidate; a load error swaps
-  // once to `image_fallback_url` (Steam's always-present header.jpg) rather
-  // than leaving an empty frame for a title the store does have art for.
+  // once to the store thumbnail rather than leaving an empty frame when a
+  // vertical library cover is not available.
   const [artSrc, setArtSrc] = useState<string | null>(item.image_url || null)
   const href = item.href || '/news'
   const external = /^https?:\/\//i.test(href)

@@ -1,4 +1,5 @@
 import type { AnticheatReport } from './detailsTypes'
+import { safeHttpUrl } from '../../utils/safeUrl'
 
 /** Plain words for the community vocabulary. Reports, never a guarantee. */
 export const ANTICHEAT_LABEL: Record<string, string> = {
@@ -27,8 +28,12 @@ export function AnticheatFact({ report }: { report: AnticheatReport }) {
       </span>
       {names.length ? <span>{names.join(', ')}</span> : null}
       <span className="od-details-page__anticheat-note">
-        {report.source_url ? (
-          <a href={report.source_url} target="_blank" rel="noreferrer noopener">
+        {safeHttpUrl(report.source_url) ? (
+          <a
+            href={safeHttpUrl(report.source_url) || undefined}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
             {note}
           </a>
         ) : (

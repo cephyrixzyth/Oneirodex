@@ -16,6 +16,7 @@ import {
 import type { LibraryRow, PlatformSummary } from './libraries/librariesModel'
 import { LibrariesTrailSummary, kickCatalogRefresh } from './libraries/LibrariesTrailSummary'
 import { GroupDialog } from './libraries/GroupDialog'
+import { CreateLibraryForm } from './CreateLibraryForm'
 import './LibrariesPanel.css'
 
 export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element | null }) {
@@ -356,6 +357,7 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
 
   return (
     <div className="od-libraries-react">
+      <CreateLibraryForm onCreated={() => void reload()} />
       <LibrariesTrailSummary
         libraryCount={libraryCount}
         totalGames={totalGames}
@@ -407,7 +409,7 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         columnFilters
         showCount={false}
         dense
-        emptyMessage="No libraries yet. Add one from Libraries → Add library."
+        emptyMessage="No libraries yet. Create one above to start scanning."
         initialSort={{ key: 'name', dir: 'asc' }}
       />
 

@@ -60,16 +60,21 @@ def playtime_me():
         .order_by(UserGameProgress.last_played_at.desc())
         .limit(100)
     ).scalars().all()
-    total = sum(int(r.total_seconds or 0) for r in rows)
     game_uuids = [r.game_uuid for r in rows]
-    names = {}
+    games_by_uuid = {}
     if game_uuids:
         for game in db.session.execute(select(Game).filter(Game.uuid.in_(game_uuids))).scalars().all():
-            names[game.uuid] = game.name
+            games_by_uuid[game.uuid] = game
+    visible_rows = [
+        row for row in rows
+        if row.game_uuid in games_by_uuid
+        and user_can_access_game(current_user, games_by_uuid[row.game_uuid])
+    ]
+    total = sum(int(row.total_seconds or 0) for row in visible_rows)
     games = []
-    for row in rows:
+    for row in visible_rows:
         payload = row.to_dict()
-        payload['game_name'] = names.get(row.game_uuid) or row.game_uuid
+        payload['game_name'] = games_by_uuid[row.game_uuid].name
         games.append(payload)
     return jsonify({
         'total_seconds': total,

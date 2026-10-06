@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { SETTINGS_GROUPS } from '../components/navConfig'
@@ -25,18 +25,22 @@ function ModuleBadge({ status }: { status?: ModuleStatusEntry | null }) {
 }
 
 export function SettingsPage() {
-  // Grouped rows, not a card grid (UX-C9): cards forced every module to the
-  // same visual weight and spread a short list over a lot of empty space.
-  //
-  // One sheet, not four stacked `.od-admin-panel`s — nested glass on this hub
-  // was the same "tables in tables" look UID-031 flattened on Libraries.
-  //
-  // The on/off badges are the Jinja hub's, restored: the template rendered them
-  // from a `module_status` variable, and when the body moved to React the
-  // variable kept being computed with nothing left to read it. They sit beside
-  // the title, not inside the title column — that 13rem slot was clipping
-  // "Scan / match policy" plus the pill.
   const [moduleStatus, setModuleStatus] = useState<Record<string, ModuleStatusEntry> | null>(null)
+  const [section, setSection] = useState(SETTINGS_GROUPS[0]?.id || '')
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const current = SETTINGS_GROUPS.findIndex((group) => group.id === section)
+    let next = -1
+    if (event.key === 'ArrowRight') next = (current + 1) % SETTINGS_GROUPS.length
+    if (event.key === 'ArrowLeft')
+      next = (current - 1 + SETTINGS_GROUPS.length) % SETTINGS_GROUPS.length
+    if (event.key === 'Home') next = 0
+    if (event.key === 'End') next = SETTINGS_GROUPS.length - 1
+    if (next < 0 || current < 0) return
+    event.preventDefault()
+    setSection(SETTINGS_GROUPS[next].id)
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+  }
 
   useEffect(() => {
     getJson('/api/settings/module-status')
@@ -47,11 +51,39 @@ export function SettingsPage() {
 
   return (
     <Page title="Settings" lede="Server modules, matching policy, presentation, and extensions.">
-      <div className="od-admin-panel od-settings">
+      <div
+        className="od-admin-tabs"
+        role="tablist"
+        aria-label="Settings sections"
+        onKeyDown={onTabKeyDown}
+      >
         {SETTINGS_GROUPS.map((group) => (
-          <section key={group.id} className="od-settings-group">
+          <button
+            key={group.id}
+            type="button"
+            role="tab"
+            id={`settings-tab-${group.id}`}
+            aria-controls={`settings-panel-${group.id}`}
+            aria-selected={section === group.id}
+            tabIndex={section === group.id ? 0 : -1}
+            className={`od-admin-tabs__tab${section === group.id ? ' is-active' : ''}`}
+            onClick={() => setSection(group.id)}
+          >
+            <RailIcon name={group.icon} size={16} /> {group.title}
+          </button>
+        ))}
+      </div>
+      {SETTINGS_GROUPS.map((group) =>
+        section === group.id ? (
+          <section
+            id={`settings-panel-${group.id}`}
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${group.id}`}
+            key={group.id}
+            className="od-admin-panel od-settings"
+          >
             <h2 className="od-settings-group__title">
-              <RailIcon name={group.icon} size={16} /> {group.title}
+              <RailIcon name={group.icon} size={16} /> {group.title} settings
             </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
@@ -69,8 +101,8 @@ export function SettingsPage() {
               ))}
             </ul>
           </section>
-        ))}
-      </div>
+        ) : null,
+      )}
     </Page>
   )
 }

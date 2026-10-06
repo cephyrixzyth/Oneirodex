@@ -27,4 +27,19 @@ describe('AnticheatFact (INSP-35)', () => {
     expect(screen.getByText('community reports')).toBeTruthy()
     expect(screen.queryByRole('link')).toBeNull()
   })
+
+  it('does not turn a non-http source into a clickable link', () => {
+    render(
+      <AnticheatFact
+        report={{
+          status: 'unknown',
+          anticheats: [],
+          reports: 1,
+          source_url: 'javascript:alert(1)',
+        }}
+      />,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText('community reports, 1 update')).toBeTruthy()
+  })
 })

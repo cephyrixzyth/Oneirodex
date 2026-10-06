@@ -34,6 +34,7 @@ from oneirodex.async_streaming import (
     get_content_type_for_file,
 )
 from oneirodex.models import DownloadRequest, Game, User
+from oneirodex.utils.api_tokens import forbidden_scopes_for_role
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.play_url import library_platform_key
@@ -500,12 +501,24 @@ class LazyASGIApp:
             return
 
         with self._flask_app.app_context():
+            user = db.session.get(User, user_id)
+            if not user or 'write:download' in forbidden_scopes_for_role(user.role):
+                await self._send_error(send, 403, "Access denied")
+                return
+
             download_request = db.session.execute(
                 select(DownloadRequest).filter_by(id=download_id, user_id=user_id)
             ).scalars().first()
 
             if not download_request:
                 await self._send_error(send, 404, "Download not found")
+                return
+
+            game = db.session.execute(
+                select(Game).filter_by(uuid=download_request.game_uuid)
+            ).scalars().first()
+            if not game or not user_can_access_game(user, game):
+                await self._send_error(send, 403, "Access denied")
                 return
 
             if download_request.status != 'available':
@@ -724,7 +737,12 @@ class LazyASGIApp:
 
                 raw = auth_header.split(" ", 1)[1].strip()
                 user, token = verify_bearer_token(raw)
-                if user and token and token.has_scope('write:download'):
+                if (
+                    user
+                    and token
+                    and token.has_scope('write:download')
+                    and 'write:download' not in forbidden_scopes_for_role(user.role)
+                ):
                     return user.id
             return None
 

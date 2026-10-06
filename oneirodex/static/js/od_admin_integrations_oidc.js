@@ -1,6 +1,15 @@
 /* Extracted from the matching Jinja template so the page has no inline
  * <script>. Lives under static/js, not a theme copy — no Reset Themes. */
 document.addEventListener('DOMContentLoaded', function() {
+    function showStatus(message, kind) {
+        const statusEl = document.getElementById('oidc-save-status');
+        if (!statusEl) return;
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-' + kind;
+        alert.textContent = String(message ?? '');
+        statusEl.replaceChildren(alert);
+    }
+
     const readinessEl = document.getElementById('oidc-readiness');
     if (readinessEl) {
         fetch('/api/oidc/status', { credentials: 'same-origin' })
@@ -41,9 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
             oidc_role_map: roleMap,
         };
 
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        const headers = {'Content-Type': 'application/json'};
-        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+        const headers = window.CSRFUtils.getHeaders({'Content-Type': 'application/json'});
 
         saveBtn.disabled = true;
         statusEl.textContent = 'Saving...';
@@ -55,12 +62,12 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await response.json();
             if (response.ok) {
-                statusEl.innerHTML = '<div class="alert alert-success">' + (data.message || 'Saved.') + '</div>';
+                showStatus(data.message || 'Saved.', 'success');
             } else {
-                statusEl.innerHTML = '<div class="alert alert-danger">' + (data.message || 'Save failed.') + '</div>';
+                showStatus(data.message || data.error || 'Save failed.', 'danger');
             }
         } catch (err) {
-            statusEl.innerHTML = '<div class="alert alert-danger">Network error while saving OIDC settings.</div>';
+            showStatus('Network error while saving OIDC settings.', 'danger');
         } finally {
             saveBtn.disabled = false;
         }

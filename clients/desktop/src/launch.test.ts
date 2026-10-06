@@ -45,6 +45,37 @@ describe('launch helper', () => {
     expect(canLaunchGame('downloaded')).toBe(false)
   })
 
+  it.each(['network', 'invalid-id', 'registry'])(
+    'keeps native launch successful after %s failure',
+    async (failure) => {
+      vi.mocked(getInstallRecord).mockResolvedValue({
+        archivePath: '/downloads/game.zip',
+        extractPath: '/installs/game',
+      })
+      vi.mocked(invoke).mockResolvedValue({
+        pid: 9001,
+        resolved_exe_path: failure === 'registry' ? '/installs/game/game.exe' : null,
+      })
+      vi.mocked(loadInstallsFromDisk).mockResolvedValue({})
+      vi.mocked(saveInstallsToDisk).mockRejectedValue(new Error('disk full'))
+      const api = createOneirodexClient({
+        baseUrl: 'https://example.com',
+        getToken: () => 'test',
+        fetchImpl: vi.fn(async () => {
+          if (failure === 'network') throw new TypeError('offline')
+          return new Response(JSON.stringify(failure === 'invalid-id' ? {} : { id: 15 }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }),
+      })
+      const sessionId = failure === 'registry' ? 15 : null
+      await expect(kickoffLaunch(api, 'game-offline')).resolves.toEqual({ pid: 9001, sessionId })
+      expect(invoke).toHaveBeenCalledTimes(1)
+      expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, sessionId)
+    },
+  )
+
   it('launches exe, starts playtime session, and watches the process', async () => {
     vi.mocked(getInstallRecord).mockResolvedValue({
       archivePath: 'C:\\appdata\\downloads\\game-42.zip',

@@ -415,8 +415,8 @@ class TestGameDetailsUtilityFunctionLogging:
         # Verify logging calls were made
         assert mock_log.call_count >= 2
         # Check that search logging was called
-        search_calls = [call for call in mock_log.call_args_list 
-                       if 'Searching for game UUID' in str(call)]
+        search_calls = [logged_call for logged_call in mock_log.call_args_list
+                       if 'Searching for game UUID' in str(logged_call)]
         assert len(search_calls) >= 1
     
     def test_get_game_by_uuid_not_found_logging(self, app, test_user, db_session):

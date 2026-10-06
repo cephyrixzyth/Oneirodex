@@ -8,6 +8,7 @@ product.
 from uuid import uuid4
 
 import pytest
+from unittest.mock import patch
 
 from oneirodex.models import SupportTicket, User
 
@@ -78,3 +79,17 @@ class TestReportKind:
 
         rows = client.get('/api/support/tickets').get_json()['tickets']
         assert any(row.get('kind') == 'enhancement' for row in rows)
+
+    def test_ticket_submission_is_limited_per_account(self, client, member):
+        login(client, member)
+        with patch(
+            'oneirodex.routes_apis.support.create_github_issue',
+            return_value={'ok': False, 'skipped': True},
+        ) as create_issue:
+            responses = [_create(client, title=f'Report {index}') for index in range(5)]
+            rejected = _create(client, title='One too many')
+
+        assert all(response.status_code == 201 for response in responses)
+        assert rejected.status_code == 429
+        assert rejected.get_json()['error_code'] == 'rate_limited'
+        assert create_issue.call_count == 5

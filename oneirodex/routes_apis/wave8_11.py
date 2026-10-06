@@ -22,6 +22,7 @@ from oneirodex.utils.library_acl import apply_game_access_filters
 from oneirodex.utils.plugins import get_plugin, list_plugins
 from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.security import get_allowed_base_directories
+from oneirodex.utils.api_tokens import require_api_scope
 
 from . import apis_bp
 
@@ -117,6 +118,7 @@ def plugins_get(plugin_id):
 
 @apis_bp.route('/activity', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def activity_feed():
     role = normalize_role(getattr(current_user, 'role', None))
     # Child accounts only see their own sessions via playtime/me; keep feed for others.
@@ -135,6 +137,7 @@ def activity_feed():
 
 @apis_bp.route('/activity/stream', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def activity_stream():
     """WSGI fallback — real SSE is native ASGI (`asgi.py`) to avoid worker starvation."""
     role = normalize_role(getattr(current_user, 'role', None))

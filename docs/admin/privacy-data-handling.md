@@ -36,8 +36,8 @@ There is no Oneirodex cloud account, no product analytics SaaS, and no Discord.
 |---|---|---|
 | SMTP | You set a mailer | Invite links, optional social/digest mail — only to addresses you or members provided |
 | Store ownership sync | Member saves a Steam ID or a store token (or the operator sets a household token) | Store account ids and owned-title lists come back. Tokens stay on this host. Unofficial launcher APIs for GOG, Epic, Amazon, Xbox and PlayStation. **Household tokens:** a member who links a store *without* their own token syncs the household account, and that library is recorded in *their* register; the member's store card and the admin **Store connections** page say which sign-in each link uses. A member's own token, even an incomplete one, is never mixed with the household one. Replacing a household env token supersedes the copies refreshed into member rows. Copies stored by versions before LIB-04 were not marked, so on a server with a household token for GOG, Amazon or Xbox a pre-upgrade sign-in is reported as *unknown* (not as the member's own) until the member reconnects |
-| News feeds | `ONEIRODEX_NEWS_FEEDS` (http/https only) | The **server** fetches those URLs; members can hide individual sources |
-| OIDC | `OIDC_ENABLED` | Username / email / groups from *your* IdP (Authentik, etc.) |
+| News feeds | `ONEIRODEX_NEWS_FEEDS` (http/https only) | The **server** fetches public destinations and checks each redirect under the same policy. Private-network feeds and responses above 512,000 decoded bytes are skipped; members can hide individual sources |
+| OIDC | `OIDC_ENABLED` | Username / email / groups from *your* IdP (Authentik, etc.); the configured issuer must use HTTPS |
 | LiveKit | Voice profile | Room tokens for household voice; media goes to the LiveKit you deployed |
 | GitHub support | `SUPPORT_GITHUB_*` | Report titles/bodies you chose to file upstream |
 | WebRetro cores | First boot fetch | WASM cores from the operator-provisioned install path — [webretro-cores.md](../runbooks/webretro-cores.md) |
@@ -50,6 +50,25 @@ headers; original query parameters are not appended again. Body-preserving
 307/308 redirects are supported within one origin; replay to another origin is
 rejected because request bodies may contain store credentials.
 
+## Delegated tokens and private reads
+
+Chat messages, attachments, space membership, notifications, friends and presence,
+member profiles, and household activity require `read:social` for bearer-token
+reads. Social mutations require `write:social`, which is not included in the thin
+client preset. A library-only companion token cannot access social data; channel
+membership and child-safety rules still apply to social tokens. Emulator save-state
+listing and downloads require `read:library`; uploads and deletion require
+`write:library`. RetroArch cheat files follow the same boundary: list/download
+requires `read:library`, while upload/delete requires `write:library`. PC cheat
+notes are readable with `read:library`; authoring/deletion stays librarian-only.
+Registration invite management requires a signed-in browser session, including
+the classic invite page. API tokens cannot list, create or delete these invites.
+Private account summaries and support report reads also require the signed-in
+browser session; delegated library/social tokens cannot retrieve account email
+or report bodies/logs. Report submissions are capped at five per account per
+hour before any optional GitHub issue sync runs.
+Normal browser account flows and public invite redemption remain available.
+
 ## Child accounts
 
 `child` is not a cosmetic label. On top of parental library allowlists:
@@ -58,6 +77,7 @@ rejected because request bodies may contain store credentials.
 - Cannot mint those scopes (including the Desktop companion preset)
 - `GET /api/acquire/search` returns 403
 - Companion download / install / update / uninstall / patch / mod-pack commands are denied
+- Personal playtime and download history hide games outside the child's current library/content access
 
 Thin-client tokens (browse / social) still work.
 

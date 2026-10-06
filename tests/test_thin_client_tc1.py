@@ -189,7 +189,9 @@ def test_companion_token_receives_commands(client, app, db_session, user, tmp_pa
     monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path))
     cc.enqueue_client_command(user.id, 'game-y', 'install')
 
-    _, raw = generate_api_token(user, 'Desk', ['read:library', 'write:download'])
+    _, raw = generate_api_token(
+        user, 'Desk', ['read:library', 'write:download', 'write:presence']
+    )
     headers = {'Authorization': f'Bearer {raw}', 'Content-Type': 'application/json'}
 
     response = client.post(
