@@ -1,10 +1,10 @@
-# SD.Next on a Windows GPU box — not the NAS, not the full stack
+# AI artwork on a Windows GPU workstation — not the NAS, not the full stack
 
 > **Doc status:** Active
 
 The Unraid/NAS Compose file **never** requests a GPU. Art generation wants one. This household’s accelerator is an **RTX 2080 (8 GB) on the Windows workstation** (the machine that also runs Cursor). Do **not** `compose up` the Oneirodex app/db stack on that PC just to draw covers. Do **not** batch FLUX.1 on this card — 8 GB is too tight; keep FLUX for a 4080-class box.
 
-## Stability Matrix + SwarmUI (this GPU PC)
+## Stability Matrix, Forge, and SwarmUI (this GPU PC)
 
 Installed under `C:\Users\YOUR_USER\Apps` (not the NAS checkout):
 
@@ -13,7 +13,9 @@ Installed under `C:\Users\YOUR_USER\Apps` (not the NAS checkout):
 | **Stability Matrix** | `C:\Users\YOUR_USER\Apps\StabilityMatrix\StabilityMatrix.exe` | Portable zip from [LykosAI/StabilityMatrix](https://github.com/LykosAI/StabilityMatrix/releases/latest). Use **Package Manager → SwarmUI** for the supported install. |
 | **SwarmUI** (source) | `C:\Users\YOUR_USER\Apps\SwarmUI` | `git clone` + `launch-windows.bat` (http://127.0.0.1:7801). First run downloads Comfy + a starter checkpoint — do not pull FLUX fp8 here. |
 
-Oneirodex Art Studio still talks **A1111-compatible** `/sdapi/v1/txt2img`. Keep the SD.Next sidecar on **:7860** as `AI_ARTWORK_URL` until SwarmUI is wired as an engine (not this wave).
+Oneirodex Art Studio talks the **A1111-compatible** `/sdapi/v1/txt2img` API. It supports AUTOMATIC1111, SD.Next, and Forge through `AI_ARTWORK_ENGINE=a1111`. SwarmUI/ComfyUI is not yet an implemented generation engine.
+
+Forge installed through Stability Matrix can provide the same API. In its package launch arguments, enable `--api`. To accept requests from the NAS, Forge also needs `--listen`; that option binds the server to `0.0.0.0`, so first make sure Windows Firewall permits TCP 7860 **only from the NAS address** and remove or narrow any broader allow rules. Oneirodex does not send API credentials, and these image APIs do not have application-level authorization in this integration. Keep the port private to the trusted NAS; do not forward it through a router or expose it to the internet.
 
 Use the sidecar file at the repo root:
 
@@ -43,27 +45,37 @@ docker compose -f docker-compose.artwork-local.yml up -d
 
 UI: http://127.0.0.1:7860
 
-**The port is published on loopback only by default.** SD.Next has no login, and anyone who can reach its port can queue generation jobs on this GPU, so `docker-compose.artwork-local.yml` binds `127.0.0.1:7860` unless you set `SDNEXT_HOST_BIND`. Generating from the SD.Next UI on this PC needs nothing more. Serving the NAS needs the opt-in in the next section.
+**The port is published on loopback only by default.** SD.Next has no login, and anyone who can reach its port can queue generation jobs on this GPU, so `docker-compose.artwork-local.yml` binds `127.0.0.1:7860` unless you set `SDNEXT_HOST_BIND`. Generating from the SD.Next UI on this PC needs nothing more. Serving the NAS needs the opt-in in the next section. The same network restriction applies when serving Forge from Stability Matrix.
 
 The first pull of `saladtechnologies/sdnext` is large. Models live in the `sdnext_models` volume.
 
 ## Point the NAS app at this PC
 
-**1. Open SD.Next to the LAN on this PC (opt-in).** Set `SDNEXT_HOST_BIND` to this PC's LAN IP (preferred: only that adapter listens) before starting, in the shell or in the `.env` next to the compose file, then recreate the container:
+**1. Open the generator to the NAS on this PC (opt-in).** For the SD.Next Docker sidecar, set `SDNEXT_HOST_BIND` to this PC's LAN IP before starting. For Forge in Stability Matrix, add `--api --listen` to the Forge package launch arguments and restart it only after Windows Firewall has been restricted to the NAS address. Forge's `--listen` binds all adapters, unlike the Docker sidecar's host-port bind. Do not enable network listening while a broad allow rule remains active.
+
+For the SD.Next Docker sidecar, use:
 
 ```powershell
-$env:SDNEXT_HOST_BIND = '192.168.50.42'    # this PC's LAN IP; '0.0.0.0' = every adapter, VPN included
+$env:SDNEXT_HOST_BIND = '192.0.2.42'    # this PC's LAN IP; '0.0.0.0' = every adapter, VPN included
 docker compose -f docker-compose.artwork-local.yml up -d --force-recreate
 ```
 
 > **Upgrading:** before this default existed the file published `7860` on every interface, so the NAS reached it with no setting. After a `git pull`, the next `up -d` / recreate binds loopback only and the NAS gets connection refused until `SDNEXT_HOST_BIND` is set as above. A container that is already running keeps its old binding until it is recreated.
 
-**2. Point the NAS at it.** On the Unraid/NAS `.env` (the running Oneirodex stack):
+**2. Point Oneirodex at it.** For an Unraid Community Apps install, edit the Oneirodex container template and set these environment variables, then apply the updated container. Environment-only changes do not require rebuilding the image:
 
 ```text
 ENABLE_AI_ARTWORK=true
 AI_ARTWORK_ENGINE=a1111
-AI_ARTWORK_URL=http://192.168.50.42:7860
+AI_ARTWORK_URL=http://<gpu-workstation-lan-ip>:7860
+```
+
+For a Compose-managed install, put the same values in the Unraid/NAS `.env`:
+
+```text
+ENABLE_AI_ARTWORK=true
+AI_ARTWORK_ENGINE=a1111
+AI_ARTWORK_URL=http://192.0.2.42:7860
 ```
 
 (Replace the IP if this GPU box’s LAN address changes.)
@@ -78,15 +90,15 @@ docker compose --env-file .env up -d --force-recreate --no-deps app
 
 Compose Manager must point at **`_projects/Oneirodex`** (not the empty `_projects/Oneirodex` stub). Drop the `artwork` profile on the NAS when the GPU lives on this workstation.
 
-Allow inbound **TCP 7860** on the Windows firewall (Any profile), with the remote address limited to the NAS's LAN IP rather than Any: SD.Next has no login, so the firewall rule is the access control. If the NAS still cannot reach the URL while `127.0.0.1:7860` works on this PC:
+Allow inbound **TCP 7860** on the Windows firewall for the **Private** profile, with the local address set to this GPU PC and the remote address limited to the NAS's LAN IP; remove or narrow any duplicate broad allow rule. The generator has no login, so this firewall rule is the access control. If the NAS still cannot reach the URL while `127.0.0.1:7860` works on this PC:
 
 1. **IVPN** — Firewall → Allow LAN (CLI: `ivpn firewall -lan_allow`). Hairpin to this PC’s own LAN IP often still times out; test from the Unraid shell, not from the GPU box.
-2. **Portmaster** — turn off **Force Block Incoming Connections** (`filter.blockInbound=false`). Keep Incoming/Service endpoints allowing `192.168.50.0/24`. With Block Incoming on, Unraid cannot open `:7860` even when IVPN Allow LAN is true and Windows Firewall allows the port. After the 2026-08-28 change on this workstation, `http://192.168.50.42:7860/sdapi/v1/sd-models` returns 200 from the LAN IP.
+2. **Portmaster** — turn off **Force Block Incoming Connections** (`filter.blockInbound=false`). Keep Incoming/Service endpoints allowing only the NAS address where possible. With Block Incoming on, Unraid cannot open `:7860` even when IVPN Allow LAN is true and Windows Firewall allows the port. A previous workstation setup returned 200 from its LAN IP on 2026-08-28; retest from Unraid after changing the active generator or firewall.
 
 Then retest from the Unraid shell:
 
 ```bash
-curl -sf http://192.168.50.42:7860/sdapi/v1/sd-models | head
+curl -sf http://192.0.2.42:7860/sdapi/v1/sd-models | head
 ```
 
 Do **not** start `--profile artwork` on the NAS. That profile is the CPU sidecar on the same Compose project; you already have a generator on the LAN.
