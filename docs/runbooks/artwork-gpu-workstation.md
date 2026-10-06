@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-The Unraid/NAS Compose file **never** requests a GPU. Art generation wants one. This household’s accelerator is an **RTX 2080 (8 GB) on the Windows workstation** (the machine that also runs Cursor). Do **not** `compose up` the Oneirodex app/db stack on that PC just to draw covers. Do **not** batch FLUX.1 on this card — 8 GB is too tight; keep FLUX for a 4080-class box.
+The Unraid/NAS Compose file **never** requests a GPU. Art generation wants one. The workstation currently reports an **RTX 4080 SUPER with about 16 GB VRAM**. Choose models and batch sizes that fit the available memory. Do **not** `compose up` the Oneirodex app/db stack on that PC just to draw covers.
 
 ## Stability Matrix, Forge, and SwarmUI (this GPU PC)
 
@@ -11,6 +11,7 @@ Installed under `C:\Users\YOUR_USER\Apps` (not the NAS checkout):
 | Tool | Path | Notes |
 |---|---|---|
 | **Stability Matrix** | `C:\Users\YOUR_USER\Apps\StabilityMatrix\StabilityMatrix.exe` | Portable zip from [LykosAI/StabilityMatrix](https://github.com/LykosAI/StabilityMatrix/releases/latest). Use **Package Manager → SwarmUI** for the supported install. |
+| **Forge Neo** | `C:\Users\YOUR_USER\Apps\StabilityMatrix\Data\Packages\Stable Diffusion WebUI Forge - Neo` | Forge Neo supports the A1111 API; enable its API and network-listen flags in that package's **Launch Options** before connecting Oneirodex. |
 | **SwarmUI** (source) | `C:\Users\YOUR_USER\Apps\SwarmUI` | `git clone` + `launch-windows.bat` (http://127.0.0.1:7801). First run downloads Comfy + a starter checkpoint — do not pull FLUX fp8 here. |
 
 Oneirodex Art Studio talks the **A1111-compatible** `/sdapi/v1/txt2img` API. It supports AUTOMATIC1111, SD.Next, and Forge through `AI_ARTWORK_ENGINE=a1111`. SwarmUI/ComfyUI is not yet an implemented generation engine.
