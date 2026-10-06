@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { LibrariesPage } from './LibrariesPage'
 import { ScansPage } from './ScansPage'
+import { CreateLibraryForm } from '../components/CreateLibraryForm'
 
 /**
  * Per-library Scan, and Scan again on a finished job (W28).
@@ -46,6 +47,17 @@ function installFetch(overrides: { jobs?: any; scan?: any } = {}) {
           platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }],
         })
       }
+      if (href.includes('/api/library_roots')) {
+        return jsonResponse({
+          roots: [{ id: 'games', label: 'Games', path: '/storage/games', default: true }],
+        })
+      }
+      if (href.includes('/api/browse_folders_ss')) {
+        const url = new URL(href, 'http://localhost')
+        return jsonResponse(
+          url.searchParams.get('path') === 'ps2' ? [] : [{ name: 'ps2', isDir: true }],
+        )
+      }
       if (href.includes('/api/get_libraries')) return jsonResponse(LIBRARIES)
       if (href.includes('/api/scan_jobs_status')) {
         return jsonResponse(overrides.jobs ?? [])
@@ -62,6 +74,33 @@ function installFetch(overrides: { jobs?: any; scan?: any } = {}) {
 
 beforeEach(() => {
   installFetch()
+})
+
+test('library creation can browse server folders and returns focus to the opener', async () => {
+  const user = userEvent.setup()
+  render(<CreateLibraryForm />)
+
+  const opener = await screen.findByRole('button', { name: 'Browse server' })
+  await user.click(opener)
+  await screen.findByRole('dialog', { name: 'Choose a server folder' })
+  await user.click(await screen.findByRole('button', { name: /ps2/i }))
+  await user.click(screen.getByRole('button', { name: 'Use this folder' }))
+
+  expect(screen.getByLabelText('Folder path inside the server')).toHaveValue('/storage/games/ps2')
+  expect(opener).toHaveFocus()
+})
+
+test('server folder picker supports Escape and restores focus', async () => {
+  const user = userEvent.setup()
+  render(<CreateLibraryForm />)
+
+  const opener = await screen.findByRole('button', { name: 'Browse server' })
+  await user.click(opener)
+  expect(await screen.findByRole('button', { name: 'Close' })).toHaveFocus()
+  await user.keyboard('{Escape}')
+
+  expect(screen.queryByRole('dialog', { name: 'Choose a server folder' })).not.toBeInTheDocument()
+  expect(opener).toHaveFocus()
 })
 
 afterEach(() => {

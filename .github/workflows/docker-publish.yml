@@ -89,3 +89,58 @@ jobs:
             ONEIRODEX_BUILT_AT=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  sync-ca-template:
+    name: Sync Unraid Community Apps template
+    needs: [tests, publish]
+    if: >-
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: cephyrixzyth/unraid-templates
+          ref: main
+          path: template-repo
+          # The catalog is public. Read-only comparison needs no external write token.
+
+      - name: Publish the release-matched CA template
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          TEMPLATE_TOKEN: ${{ secrets.UNRAID_TEMPLATES_TOKEN }}
+        run: |
+          version="${RELEASE_VERSION#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must be vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          if [ "$version" != "$(cat VERSION)" ]; then
+            echo "::error::Release tag version does not match VERSION."
+            exit 1
+          fi
+          sed "s/__VERSION__/${version}/g" unraid/oneirodex.xml > "$RUNNER_TEMP/oneirodex.xml"
+          if cmp -s "$RUNNER_TEMP/oneirodex.xml" template-repo/oneirodex/oneirodex.xml; then
+            echo "CA feed already matches ${version}; no write token is needed."
+            exit 0
+          fi
+          if [ -z "$TEMPLATE_TOKEN" ]; then
+            echo "::error::Set UNRAID_TEMPLATES_TOKEN with Contents read/write access to cephyrixzyth/unraid-templates."
+            exit 1
+          fi
+          echo "::add-mask::${TEMPLATE_TOKEN}"
+          cp "$RUNNER_TEMP/oneirodex.xml" template-repo/oneirodex/oneirodex.xml
+          cd template-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add oneirodex/oneirodex.xml
+          git commit -m "chore(unraid): sync Oneirodex ${version} template"
+          git remote set-url origin "https://x-access-token:${TEMPLATE_TOKEN}@github.com/cephyrixzyth/unraid-templates.git"
+          git push origin HEAD:main

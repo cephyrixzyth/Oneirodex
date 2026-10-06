@@ -10,6 +10,7 @@ import {
 } from '../api/scanMatchSettingsApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
+import { AdminPageActions } from '../components/AdminPageActions'
 
 function FieldNumber({
   id,
@@ -128,6 +129,14 @@ export function ScanMatchSettingsPage() {
         </>
       }
     >
+      <AdminPageActions label="Scan and matching actions">
+        <a className="od-cbtn" href="/admin/libraries">
+          Libraries
+        </a>
+        <a className="od-cbtn" href="/scan_management">
+          Scan management
+        </a>
+      </AdminPageActions>
       {/* The two `od-admin-banner` blocks below stay as banners: they disclose
           rollout state (which policy fields Backend exposes), which is page
           content rather than a transient loading/error state. */}

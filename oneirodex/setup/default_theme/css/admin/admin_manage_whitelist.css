@@ -53,14 +53,51 @@
 }
 
 .add-whitelist-form {
-    max-width: 600px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 50rem;
+    margin: 0;
 }
 
-.input-group {
-    background: var(--od-surface);
-    border-radius: var(--od-radius-md);
+.add-whitelist-form__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.add-whitelist-form__row .form-control {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-sm);
+    background: var(--od-surface-2);
+    color: var(--od-text);
+}
+
+.add-whitelist-form__row .od-cbtn {
+    min-height: 2.75rem;
+    margin: 0;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
     overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 560px) {
+    .add-whitelist-form__row {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 

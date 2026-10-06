@@ -1,11 +1,11 @@
 WEBVTT
 
 1
-00:00:00.431 --> 00:00:07.583
+00:00:00.421 --> 00:00:07.573
 Users, invites and support. Household membership, invite links, roles and the support inbox.
 
 2
-00:00:08.190 --> 00:00:14.142
+00:00:08.188 --> 00:00:14.140
 Users lists every member with their role — admin, librarian, member or child.
 
 3
@@ -13,13 +13,13 @@ Users lists every member with their role — admin, librarian, member or child.
 Invites are how people join: generate a link, set its quota, hand it over.
 
 4
-00:00:21.492 --> 00:00:25.236
+00:00:21.487 --> 00:00:25.231
 Whitelist pre-approves addresses when registration is open.
 
 5
-00:00:25.989 --> 00:00:31.605
+00:00:25.983 --> 00:00:31.599
 Support inbox receives what members send from Report, and can mirror to GitHub Issues.
 
 6
-00:00:32.690 --> 00:00:41.402
+00:00:32.699 --> 00:00:41.411
 That is users, invites and support. The written guide is in the docs folder, at docs/admin/support-inbox.md.

@@ -9,7 +9,7 @@ import pytest
 from flask import Flask
 
 from oneirodex.utils import library_paths
-from oneirodex.utils.library_paths import LIBRARY_DIR_ENV, PACKAGE_ROOT, library_dir, static_write_dir
+from oneirodex.utils.library_paths import LIBRARY_DIR_ENV, PACKAGE_ROOT, image_save_dir, library_dir, static_write_dir
 from oneirodex.utils.static_files import resolve_served_static, serve_relocated_static
 
 
@@ -29,6 +29,12 @@ def test_default_is_the_package_library(tmp_path, unmoved):
     assert library_dir(tmp_path) == str(tmp_path / 'static' / 'library')
     assert library_dir() == str(PACKAGE_ROOT / 'static' / 'library')
     assert static_write_dir('newstyle', package_root=tmp_path) == tmp_path / 'static' / 'newstyle'
+
+
+def test_image_save_path_is_nested_in_the_configured_library_volume(tmp_path):
+    configured_library = tmp_path / 'mounted-library'
+
+    assert image_save_dir(configured_library) == str(configured_library / 'images')
 
 
 def test_the_env_moves_everything_even_when_a_package_root_is_named(tmp_path, moved):

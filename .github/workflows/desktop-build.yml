@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.0). Leave empty to only build.'
+        description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.1). Leave empty to only build.'
         required: false
         default: ''
   push:

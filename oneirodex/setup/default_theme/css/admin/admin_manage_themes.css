@@ -123,6 +123,35 @@
     height: 1.75rem;
 }
 
+/* Installed themes are status cards, not a full-width list with a long blank tail. */
+.od-themes-page .themes-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+    gap: 0.55rem;
+}
+
+.od-themes-page .theme-list-row {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-md);
+    background: var(--od-surface-2);
+}
+
+.od-themes-page .theme-list-row__main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.od-themes-page .theme-list-row__meta {
+    margin: 0.25rem 0 0;
+    font-size: var(--od-font-sm);
+    overflow-wrap: anywhere;
+}
+
 .theme-apply-status {
     min-height: 1.1rem;
     margin: 0.45rem 0 0;

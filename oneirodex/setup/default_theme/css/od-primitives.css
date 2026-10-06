@@ -574,6 +574,21 @@
   color: var(--od-accent);
 }
 
+.od-page-status__spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--od-radius-circle);
+  animation: od-status-spin 0.8s linear infinite;
+}
+
+@keyframes od-status-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Page-owning wait: cover the viewport so loading is not a banner at the top
    of a section. Nested panels keep the compact .od-page-status--loading row. */
 .od-page-status--takeover {
@@ -595,10 +610,22 @@
   height: 4.5rem;
 }
 
+.od-page-status--takeover .od-page-status__spinner {
+  width: 3rem;
+  height: 3rem;
+  border-width: 3px;
+}
+
 .od-page-status--takeover .od-page-status__message {
   font-size: var(--od-font-lg);
   font-weight: 600;
   color: var(--od-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .od-page-status__spinner {
+    animation-duration: 2s;
+  }
 }
 
 .od-page-status--empty {

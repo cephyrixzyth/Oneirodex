@@ -1,5 +1,48 @@
 import '@testing-library/jest-dom/vitest'
 
+/** Node 26+ jsdom may omit Storage unless `--localstorage-file` is set. */
+function installMemoryLocalStorage() {
+  const store = new Map<string, string>()
+  const memory = {
+    getItem(key: string) {
+      return store.has(String(key)) ? store.get(String(key)) : null
+    },
+    setItem(key: string, value: string) {
+      store.set(String(key), String(value))
+    },
+    removeItem(key: string) {
+      store.delete(String(key))
+    },
+    clear() {
+      store.clear()
+    },
+    key(index: number) {
+      return [...store.keys()][index] ?? null
+    },
+    get length() {
+      return store.size
+    },
+  }
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    enumerable: true,
+    get: () => memory,
+  })
+}
+
+if (typeof window !== 'undefined') {
+  let needsPolyfill = false
+  try {
+    const probe = '__od_ls_probe__'
+    window.localStorage?.setItem(probe, '1')
+    if (window.localStorage?.getItem(probe) !== '1') needsPolyfill = true
+    window.localStorage?.removeItem(probe)
+  } catch {
+    needsPolyfill = true
+  }
+  if (needsPolyfill || !window.localStorage) installMemoryLocalStorage()
+}
+
 /**
  * Clear web storage between tests.
  *

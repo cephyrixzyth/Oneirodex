@@ -17,6 +17,7 @@ import {
 import { ImagesMissingCoversPanel } from './images/ImagesMissingCoversPanel'
 import { ImagesQueuePanel } from './images/ImagesQueuePanel'
 import { ImagesSingleTitlePanel } from './images/ImagesSingleTitlePanel'
+import { AdminPageActions } from '../components/AdminPageActions'
 
 export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
   const [params, setParams] = useSearchParams()
@@ -354,19 +355,19 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
         </p>
       )}
 
-      <div className="od-admin-actions-row">
-        <a className="od-btn" href="/scan_management?active_tab=image_queue">
+      <AdminPageActions label="Image page actions">
+        <a className="od-cbtn" href="/scan_management?active_tab=image_queue">
           Full scan-mgmt image table
         </a>
         {!embedded ? (
-          <a className="od-btn" href="/admin/art_studio">
+          <a className="od-cbtn" href="/admin/art_studio">
             Art studio
           </a>
         ) : null}
-        <a className="od-btn" href="/admin/integrations#steamgriddb">
+        <a className="od-cbtn" href="/admin/integrations#steamgriddb">
           SteamGridDB settings
         </a>
-      </div>
+      </AdminPageActions>
 
       <ImagesSingleTitlePanel
         gameHits={gameHits}

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-10-06
+
+### Fixed
+- **Admin library and scan workflows.** Restored the authenticated server-folder picker, centered the first-library state, moved queue and invite actions into the top bar, and tightened Library & Matching, installed themes, and whitelist layouts.
+- **Admin Help and loading feedback.** Admin Help now uses the member Help page; loading slates display an animated progress indicator. Removed obsolete SMTP / IGDB moved-page banners.
+- **Unraid release discovery.** Keep the CA template synchronized with each stable release while publishing versioned and latest Docker images.
+- **Persistent artwork paths.** Docker and Unraid now derive `IMAGE_SAVE_PATH` from the mounted library directory, so the dashboard no longer reports the image path missing and generated/downloaded art stays on appdata. The CA template also exposes the optional LAN AI-art settings.
+- **Member VR navigation.** VR filters now use the shared thin header navigation, keeping the page controls visible without adding another toolbar to the content.
+
 ## [1.1.0] — 2026-10-06
 
 ### Added
@@ -1021,10 +1030,10 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 - Hardlink and AI apply remain feature-flagged and path-sandboxed
 - `SECRET_KEY` required; container refuses the placeholder
 
-[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0
 [1.0.0-beta]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v1.0.0-beta
 [0.1.0]: https://github.com/cephyrixzyth/oneirodex/releases/tag/v0.1.0
-

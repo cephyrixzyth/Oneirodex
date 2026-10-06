@@ -10,7 +10,7 @@
   <Support>https://github.com/cephyrixzyth/oneirodex/issues</Support>
   <Project>https://github.com/cephyrixzyth/oneirodex</Project>
   <ReadMe>https://github.com/cephyrixzyth/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md</ReadMe>
-  <Overview>The self-hosted game library for a household. Scan folders of DRM-free games and ROMs, identify them against IGDB / Steam / GOG, invite the family, download, play in the browser where a system supports it, and chat.&#xD;
+  <Overview>Oneirodex stable release __VERSION__. The self-hosted game library for a household. Scan folders of DRM-free games and ROMs, identify them against IGDB / Steam / GOG, invite the family, download, play in the browser where a system supports it, and chat.&#xD;
 &#xD;
 Everything runs in this one container, PostgreSQL included: no second database container to set up. Point "Games" at your games share (read-only), keep "Appdata" on the cache, and open the WebUI. The first visit runs the setup wizard.&#xD;
 &#xD;
@@ -32,6 +32,9 @@ Use Oneirodex only with software you are authorised to share. It ships no BIOS o
   <Config Name="Extra scan location 2" Target="/storage2" Default="" Mode="ro" Description="Optional second read-only scan location. Also add it to ONEIRODEX_LIBRARY_ROOTS, e.g. NAS ROMs=/storage2" Type="Path" Display="advanced" Required="false" Mask="false"/>
   <Config Name="ONEIRODEX_LIBRARY_ROOTS" Target="ONEIRODEX_LIBRARY_ROOTS" Default="" Mode="" Description="Extra scan locations as the container sees them: Name=/storage2|Other=/storage3" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="ONEIRODEX_LIBRARY_DIR" Target="ONEIRODEX_LIBRARY_DIR" Default="/config/library" Mode="" Description="Persistent location for covers, themes, generated artwork and uploads." Type="Variable" Display="advanced" Required="false" Mask="false">/config/library</Config>
+  <Config Name="Enable AI artwork" Target="ENABLE_AI_ARTWORK" Default="false" Mode="" Description="Optional cover generation through a private Stable Diffusion API endpoint on your LAN." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="AI artwork API URL" Target="AI_ARTWORK_URL" Default="" Mode="" Description="Optional workstation Forge / AUTOMATIC1111 API URL, e.g. http://192.168.1.20:7860. Keep it on a trusted LAN." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="AI artwork engine" Target="AI_ARTWORK_ENGINE" Default="a1111" Mode="" Description="Compatible API mode for Forge or AUTOMATIC1111." Type="Variable" Display="advanced" Required="false" Mask="false">a1111</Config>
   <Config Name="Enable malware scanning" Target="ENABLE_MALWARE_SCAN" Default="false" Mode="" Description="Optional ClamAV scanning. Enable after attaching this container and a ClamAV sidecar to the same private Docker network." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
   <Config Name="ClamAV host" Target="CLAMAV_HOST" Default="clamav" Mode="" Description="Private Docker DNS name of the optional ClamAV sidecar." Type="Variable" Display="advanced" Required="false" Mask="false">clamav</Config>
   <Config Name="ClamAV port" Target="CLAMAV_PORT" Default="3310" Mode="" Description="ClamAV TCP port on the private Docker network." Type="Variable" Display="advanced" Required="false" Mask="false">3310</Config>

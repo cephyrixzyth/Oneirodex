@@ -19,9 +19,10 @@
     <div class="od-adminpage-panel">
         <form method="post" class="add-whitelist-form">
             {{ form.hidden_tag() }}
-            <div class="input-group">
-                {{ form.email(size=30, class="form-control", placeholder="Enter email address") }}
-                {{ form.submit(class="btn btn-success") }}
+            <div class="add-whitelist-form__row">
+                <label class="sr-only" for="{{ form.email.id }}">Email address</label>
+                {{ form.email(size=30, class="form-control", placeholder="Enter email address", autocomplete="email") }}
+                {{ form.submit(class="od-cbtn od-cbtn--primary") }}
             </div>
             {% for error in form.email.errors %}
                 <span class="error-message">{{ error }}</span>

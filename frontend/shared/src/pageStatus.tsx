@@ -122,6 +122,7 @@ function DefaultLoadingStatus({ inline, className, loadingMessage }: RenderLoadi
       aria-busy="true"
       aria-live="polite"
     >
+      <span className="od-page-status__spinner" aria-hidden="true" />
       <p className="od-page-status__message">
         <span className="od-page-status__message-base">{base}</span>
         <span className="od-page-status__ellipsis" aria-hidden="true">

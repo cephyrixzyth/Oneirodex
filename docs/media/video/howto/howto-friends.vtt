@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.427 --> 00:00:05.899
+00:00:00.435 --> 00:00:05.907
 Friends and presence. The friends dock, adding people, and the pop-out companion.
 
 2
-00:00:06.500 --> 00:00:11.708
+00:00:06.515 --> 00:00:11.723
 Friends is a dock, not a page — it opens from the rail and stays put.
 
 3
-00:00:12.929 --> 00:00:16.145
+00:00:13.372 --> 00:00:16.588
 It shows who in the household is online and what they are playing.
 
 4
-00:00:16.897 --> 00:00:18.769
+00:00:17.347 --> 00:00:19.219
 Add someone by username.
 
 5
-00:00:19.535 --> 00:00:26.375
+00:00:19.980 --> 00:00:26.820
 Pinned keeps the dock open across pages; Pop out makes it an always-on-top window with the desktop companion.
 
 6
-00:00:27.131 --> 00:00:30.875
+00:00:27.586 --> 00:00:31.330
 Chat and Activity jump straight to those surfaces.
 
 7
-00:00:31.966 --> 00:00:39.334
+00:00:32.466 --> 00:00:39.834
 That is friends and presence. The written guide is in the docs folder, at docs/user/social-and-voice.md.

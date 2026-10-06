@@ -47,6 +47,11 @@ def library_dir(package_root: str | Path | None = None) -> str:
     return os.path.join(str(package_root), 'static', 'library')
 
 
+def image_save_dir(upload_folder: str | Path) -> str:
+    """Return the persistent image folder below the configured library root."""
+    return os.path.join(str(upload_folder), 'images')
+
+
 #: Folders the install ships inside ``static/library`` (git-tracked art). Only
 #: these are copied into a moved library: a developer checkout keeps its own
 #: runtime files in the same folder, and those must not be swept along.

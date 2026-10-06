@@ -1,37 +1,37 @@
 WEBVTT
 
 1
-00:00:00.436 --> 00:00:07.156
+00:00:00.448 --> 00:00:07.168
 Meet Oneirodex. A quick lap of the member app — Discover, the catalog, Systems, and the household.
 
 2
-00:00:07.768 --> 00:00:15.136
+00:00:07.777 --> 00:00:15.145
 Oneirodex is a self-hosted game library for a household. This is the member app, and Discover is where it opens.
 
 3
-00:00:15.894 --> 00:00:22.878
+00:00:15.905 --> 00:00:22.889
 Shelves surface what is new, what friends are playing, store deals, and curated rows an admin arranges.
 
 4
-00:00:23.645 --> 00:00:31.181
+00:00:23.654 --> 00:00:31.190
 Game Catalog is the whole library — every scanned title, with filters, badges and play buttons on each tile.
 
 5
-00:00:32.420 --> 00:00:39.236
+00:00:32.610 --> 00:00:39.426
 Systems groups the same library by console family, with a licensed catalog behind each console.
 
 6
-00:00:39.991 --> 00:00:44.959
+00:00:40.178 --> 00:00:45.146
 Chat, Friends and Notifications make it a household rather than a file share.
 
 7
-00:00:45.718 --> 00:00:50.350
+00:00:45.918 --> 00:00:50.550
 And everything you just saw is one Ctrl-K away from anywhere.
 
 8
-00:00:51.113 --> 00:00:54.641
+00:00:51.316 --> 00:00:54.844
 The rest of these clips take each of those areas one at a time.
 
 9
-00:00:55.729 --> 00:01:03.985
+00:00:55.979 --> 00:01:04.235
 That is meet oneirodex. The written guide is in the docs folder, at docs/user/getting-started.md.

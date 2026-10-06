@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.417 --> 00:00:08.625
+00:00:00.424 --> 00:00:08.632
 Settings, features and integrations. Server settings, module toggles, metadata providers, SSO.
 
 2
-00:00:09.229 --> 00:00:16.069
+00:00:09.234 --> 00:00:16.074
 Settings is the index — library and matching, play and emulation, presentation, extend.
 
 3
-00:00:17.178 --> 00:00:24.930
+00:00:17.340 --> 00:00:25.092
 Features toggles whole modules: arr, AI assist, VR browse, free games, remote play.
 
 4
-00:00:25.684 --> 00:00:36.532
+00:00:25.846 --> 00:00:36.694
 Integrations holds the keys — IGDB, SteamGridDB, RetroAchievements, email, and OIDC single sign-on, which stays off until you turn it on.
 
 5
-00:00:37.285 --> 00:00:44.101
+00:00:37.456 --> 00:00:44.272
 Themes uploads packs and resets shipped defaults after a deploy; picking a look is per member.
 
 6
-00:00:51.225 --> 00:00:56.385
+00:00:51.514 --> 00:00:56.674
 Emulator profiles map cores and BIOS per system, and say honestly what can run.
 
 7
-00:00:57.469 --> 00:01:07.813
+00:00:57.776 --> 00:01:08.120
 That is settings, features and integrations. The written guide is in the docs folder, at docs/admin/settings-modules.md.

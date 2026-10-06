@@ -62,6 +62,9 @@ def write_env() -> None:
         "FETCH_WEBRETRO_CORES_ON_BOOT=false",
         "ENABLE_LIVEKIT=false",
         "ENABLE_LOGIN_RATE_LIMIT=false",
+        # Stop all pollers so screenshots cannot trigger outbound requests or
+        # populate the developer checkout with downloaded cache data.
+        "ONEIRODEX_ENABLE_BACKGROUND_WORKERS=false",
         "OIDC_ENABLED=false",
     ]
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")

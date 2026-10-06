@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.424 --> 00:00:05.992
+00:00:00.431 --> 00:00:05.999
 Calendar, news and activity. What is coming, what happened, and what the household did.
 
 2
-00:00:06.592 --> 00:00:13.480
+00:00:06.614 --> 00:00:13.502
 Release calendar is IGDB's schedule, filtered to what you own or wish for. List or Month view.
 
 3
-00:00:14.664 --> 00:00:16.992
+00:00:14.748 --> 00:00:17.076
 Month lays the same releases on a grid.
 
 4
-00:00:17.747 --> 00:00:21.923
+00:00:17.831 --> 00:00:22.007
 News collects store and publisher feeds an admin has turned on.
 
 5
-00:00:22.679 --> 00:00:28.055
+00:00:22.766 --> 00:00:28.142
 Activity is the household timeline — scans, downloads, plays and posts.
 
 6
-00:00:28.807 --> 00:00:34.231
+00:00:28.902 --> 00:00:34.326
 Notifications are yours alone: mentions, invites, finished scans.
 
 7
-00:00:35.315 --> 00:00:44.483
+00:00:35.442 --> 00:00:44.610
 That is calendar, news and activity. The written guide is in the docs folder, at docs/user/library-and-systems.md.
