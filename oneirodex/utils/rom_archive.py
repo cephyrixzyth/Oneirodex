@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
@@ -34,6 +35,7 @@ from oneirodex.utils.rom_archive_types import (  # noqa: F401
     GZIP_EXTENSIONS,
     MAX_NEST_DEPTH,
     MIN_ROM_BYTES_PREFERRED,
+    RomExpansionBudget,
     PLATFORM_DUMP_SUFFIXES,
     PLATFORM_ROM_EXTENSIONS,
     ROM_EXTENSIONS,
@@ -291,24 +293,71 @@ def _extract_members_via_7z(
     cache_dir: str,
     members: list[str],
     seven_z: str,
+    budget: RomExpansionBudget | None = None,
 ) -> None:
-    # Extract specific members to cache_dir (flattened via -y).
-    cmdline = [seven_z, 'e', '-y', f'-o{cache_dir}', archive_path, '--', *members]
-    result = _run_extractor(cmdline)
-    if result.returncode != 0:
-        # The extractor's own words name the archive and the cache directory;
-        # they go to the server log, not to the member who asked for the ROM.
-        logger.warning(
-            'rom_archive: 7z extract failed for %s: %s',
-            os.path.basename(archive_path),
-            (result.stderr or result.stdout or '7z extract failed').strip()[:240],
-        )
-        raise ArchiveRomError(
-            'Failed to extract ROM with 7z',
-            status_code=415,
-            code='extract_failed',
-            hint='Archive may be corrupt, password-protected or use an unsupported method; prefer re-packing as .zip.',
-        )
+    budget = budget or RomExpansionBudget()
+    for index, member in enumerate(members):
+        safe = _safe_member_name(member)
+        if safe is None:
+            continue
+        dest = os.path.join(cache_dir, Path(safe).name)
+        try:
+            _extract_cli_member([seven_z, 'x', '-so', archive_path, '--', member], dest, budget)
+        except ArchiveRomError as exc:
+            if index == 0 or exc.code == 'archive_too_large':
+                raise
+            logger.warning('rom_archive: skipped unextractable cue companion %s', Path(member).name)
+
+
+def _extract_cli_member(
+    command: list[str],
+    destination: str,
+    budget: RomExpansionBudget,
+    *,
+    timeout: int = 600,
+) -> None:
+    """Stream one extracted member through the shared budget instead of disk extraction."""
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    if os.path.islink(destination):
+        os.unlink(destination)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    timer = threading.Timer(timeout, process.kill)
+    timer.daemon = True
+    timer.start()
+    try:
+        assert process.stdout is not None
+        with open(destination, 'wb') as output:
+            budget.copy_stream(process.stdout, output)
+        code = process.wait()
+        if code != 0:
+            raise ArchiveRomError(
+                'Failed to extract ROM with the configured archive tool',
+                status_code=415,
+                code='extract_failed',
+                hint='Archive may be corrupt, password-protected or use an unsupported method.',
+            )
+    except BaseException:
+        process.kill()
+        process.wait()
+        try:
+            if os.path.isfile(destination):
+                os.remove(destination)
+        except OSError:
+            pass
+        raise
+    finally:
+        timer.cancel()
+        if process.stdout:
+            process.stdout.close()
+
+
+def _check_declared_expansion(
+    members: list[tuple[str, int]], targets: list[str], budget: RomExpansionBudget,
+) -> None:
+    wanted = set(targets)
+    declared_total = sum(max(0, size) for name, size in members if name in wanted)
+    if declared_total > budget.remaining:
+        budget.consume(declared_total)
 
 
 # bsdtar matches member arguments as shell-style patterns, and ROM names are
@@ -361,59 +410,20 @@ def _extract_members_via_bsdtar(
     cache_dir: str,
     members: list[str],
     bsdtar: str,
+    budget: RomExpansionBudget | None = None,
 ) -> None:
-    pending = list(members)
-    damaged: list[str] = []
-    while True:
-        cmdline = [bsdtar, '-xf', archive_path, '-C', cache_dir, '--']
-        cmdline += [_bsdtar_literal(name) for name in pending]
-        result = _run_extractor(cmdline, timeout=600)
-        if result.returncode == 0:
-            break
-        detail = (result.stderr or result.stdout or 'bsdtar extract failed').strip()
-        bad = _bsdtar_damaged_member(detail, pending)
-        if bad is not None and len(damaged) < _MAX_DAMAGED_MEMBERS:
-            # Half a member is not a member; remove it so nothing serves it
-            # later, then ask for everything that has not landed yet.
-            _drop_member_files(cache_dir, bad)
-            damaged.append(bad)
-            pending = [
-                name
-                for name in pending
-                if name != bad and not _member_has_bytes(cache_dir, name)
-            ]
-            if pending:
-                continue
-            break
-        logger.warning(
-            'rom_archive: bsdtar extract failed for %s: %s',
-            os.path.basename(archive_path),
-            detail[:240],
-        )
-        raise ArchiveRomError(
-            'Failed to extract ROM with bsdtar',
-            status_code=415,
-            code='extract_failed',
-            hint='Archive may be corrupt or use an unsupported method; prefer re-packing as .zip or use 7z.',
-        )
-    if damaged:
-        logger.warning(
-            'rom_archive: %s has %d damaged member(s), extracted without them: %s',
-            os.path.basename(archive_path),
-            len(damaged),
-            ', '.join(Path(name).name for name in damaged),
-        )
-    # Flatten nested paths into cache_dir basenames. Every move is asserted to
-    # stay inside cache_dir (realpath), so a hostile member name or a link the
-    # archive planted cannot relocate a file from somewhere else.
-    for member in members:
+    budget = budget or RomExpansionBudget()
+    for index, member in enumerate(members):
         safe = _safe_member_name(member)
         if safe is None:
             continue
-        src = os.path.join(cache_dir, safe.replace('/', os.sep))
         dest = os.path.join(cache_dir, Path(safe).name)
-        if src != dest and _replace_in_cache(cache_dir, src, dest):
-            _prune_empty_dirs(cache_dir, os.path.dirname(src))
+        try:
+            _extract_cli_member([bsdtar, '-xOf', archive_path, '--', _bsdtar_literal(member)], dest, budget)
+        except ArchiveRomError as exc:
+            if index == 0 or exc.code == 'archive_too_large':
+                raise
+            logger.warning('rom_archive: skipped unextractable cue companion %s', Path(member).name)
 
 
 def _extract_archive_via_cli(
@@ -423,8 +433,10 @@ def _extract_archive_via_cli(
     member: str | None = None,
     platform: str | None = None,
     archive_kind: str = 'archive',
+    budget: RomExpansionBudget | None = None,
 ) -> str:
     """Extract one ROM (and cue companions) using host ``7z`` or ``bsdtar``."""
+    budget = budget or RomExpansionBudget()
     found = find_archive_extractors()
     seven = found.get('7z') or found.get('7za')
     bsdtar = found.get('bsdtar')
@@ -464,6 +476,7 @@ def _extract_archive_via_cli(
         return dest
 
     targets = _cue_companion_targets(members, chosen)
+    _check_declared_expansion(members, targets, budget)
     os.makedirs(cache_dir, exist_ok=True)
 
     # The tool that could *list* the archive is not necessarily the tool that
@@ -487,12 +500,14 @@ def _extract_archive_via_cli(
     for name, tool in attempts:
         try:
             if name == '7z':
-                _extract_members_via_7z(archive_path, cache_dir, targets, str(tool))
+                _extract_members_via_7z(archive_path, cache_dir, targets, str(tool), budget)
             else:
-                _extract_members_via_bsdtar(archive_path, cache_dir, targets, str(tool))
+                _extract_members_via_bsdtar(archive_path, cache_dir, targets, str(tool), budget)
         except ArchiveRomError as exc:
             extract_error = exc
             _clear_empty_extracts(cache_dir, targets)
+            if exc.code == 'archive_too_large':
+                raise
             # A tool can fail the *archive* and still have written the member we
             # asked for: one bad audio track in a 34-track CD rip makes bsdtar
             # exit non-zero long after the .cue and the data track landed. The
@@ -661,7 +676,9 @@ def extract_rom_from_7z(
     *,
     member: str | None = None,
     platform: str | None = None,
+    budget: RomExpansionBudget | None = None,
 ) -> str:
+    budget = budget or RomExpansionBudget()
     try:
         import py7zr
         from py7zr.exceptions import Bad7zFile
@@ -672,6 +689,7 @@ def extract_rom_from_7z(
             member=member,
             platform=platform,
             archive_kind='7z',
+            budget=budget,
         )
 
     os.makedirs(cache_dir, exist_ok=True)
@@ -687,6 +705,7 @@ def extract_rom_from_7z(
                 member=member,
                 platform=platform,
                 archive_kind='7z',
+                budget=budget,
             )
         raise
     if not members:
@@ -703,16 +722,42 @@ def extract_rom_from_7z(
         return dest
 
     targets = _cue_companion_targets(members, chosen)
+    _check_declared_expansion(members, targets, budget)
 
     try:
-        with py7zr.SevenZipFile(archive_path, mode='r') as archive:
+        with py7zr.SevenZipFile(
+            archive_path, mode='r', max_extract_size=budget.remaining,
+        ) as archive:
             archive.extract(targets=targets, path=cache_dir)
-    except Bad7zFile as exc:
-        raise ArchiveRomError(
-            'Invalid or corrupt 7z archive',
-            status_code=400,
-            code='corrupt_archive',
-        ) from exc
+    except Exception as exc:
+        for target_name in targets:
+            _drop_member_files(cache_dir, target_name)
+        if 'exceeds limit of' in str(exc):
+            raise ArchiveRomError(
+                'Expanded archive output exceeds the 64 GiB limit',
+                status_code=413,
+                code='archive_too_large',
+            ) from exc
+        if isinstance(exc, Bad7zFile):
+            raise ArchiveRomError(
+                'Invalid or corrupt 7z archive',
+                status_code=400,
+                code='corrupt_archive',
+            ) from exc
+        raise
+
+    extracted_bytes = sum(
+        os.path.getsize(path)
+        for target_name in targets
+        for path in _extract_paths_for(cache_dir, [target_name])
+        if is_plain_file_within(cache_dir, path)
+    )
+    try:
+        budget.consume(extracted_bytes)
+    except ArchiveRomError:
+        for target_name in targets:
+            _drop_member_files(cache_dir, target_name)
+        raise
 
     # Nothing below may move a file that is not inside cache_dir, whatever the
     # archive called its members (see _replace_in_cache).
@@ -735,6 +780,7 @@ def extract_rom_from_7z(
                 member=member,
                 platform=platform,
                 archive_kind='7z',
+                budget=budget,
             )
         raise ArchiveRomError(
             'Failed to extract ROM from 7z archive',
@@ -749,7 +795,9 @@ def extract_rom_from_rar(
     *,
     member: str | None = None,
     platform: str | None = None,
+    budget: RomExpansionBudget | None = None,
 ) -> str:
+    budget = budget or RomExpansionBudget()
     """
     Extract one ROM from a .rar archive.
 
@@ -766,10 +814,11 @@ def extract_rom_from_rar(
         if has_cli:
             return _extract_archive_via_cli(
                 archive_path,
-                cache_dir,
-                member=member,
-                platform=platform,
-                archive_kind='rar',
+            cache_dir,
+            member=member,
+            platform=platform,
+            archive_kind='rar',
+            budget=budget,
             )
         raise ArchiveRomError(
             '.rar support requires rarfile plus an extractor tool (7z/bsdtar/unrar)',
@@ -798,6 +847,8 @@ def extract_rom_from_rar(
                     hint='Archive should contain a ROM with a known extension (e.g. .nes, .sfc, .gba).',
                 )
             chosen = choose_rom_member(members, platform=platform, preferred_member=member)
+            targets = _cue_companion_targets(members, chosen)
+            _check_declared_expansion(members, targets, budget)
             safe_name = _safe_basename(chosen)
             dest = os.path.join(cache_dir, safe_name)
             # open(dest, 'wb') would write through a link sitting at dest.
@@ -806,11 +857,7 @@ def extract_rom_from_rar(
                 return dest
             expected = next((size for name, size in members if name == chosen), 0)
             with archive.open(chosen) as src, open(dest, 'wb') as out:
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
+                budget.copy_stream(src, out)
             # A backend that cannot decode this RAR returns a short stream
             # rather than raising; a half ROM is worse than an honest failure.
             if expected and os.path.getsize(dest) < expected:
@@ -827,13 +874,11 @@ def extract_rom_from_rar(
                 if is_plain_file_within(cache_dir, companion_dest) and os.path.getsize(companion_dest) > 0:
                     continue
                 with archive.open(companion_name) as src, open(companion_dest, 'wb') as out:
-                    while True:
-                        chunk = src.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        out.write(chunk)
+                    budget.copy_stream(src, out)
             return dest
     except ArchiveRomError:
+        for target_name in locals().get('targets', []):
+            _drop_member_files(cache_dir, target_name)
         raise
     except Exception as exc:
         # rarfile.Error / RarCannotExec / OSError — prefer CLI before failing.
@@ -847,6 +892,7 @@ def extract_rom_from_rar(
                 member=member,
                 platform=platform,
                 archive_kind='rar',
+                budget=budget,
             )
         if not find_archive_extractors():
             raise _missing_extractor_error(archive_kind='rar') from exc
@@ -866,6 +912,7 @@ def resolve_playable_rom_path(
     *,
     cache_dir: str,
     platform: str | None = None,
+    budget: RomExpansionBudget | None = None,
 ) -> tuple[str, str]:
     """
     Return (absolute_file_path, filename) suitable for WebRetro streaming.
@@ -873,6 +920,7 @@ def resolve_playable_rom_path(
     Supports plain ROM files, .zip (including nested zip), optional .7z (py7zr),
     optional .rar (rarfile), and single-file .gz ROM wrappers.
     """
+    budget = budget or RomExpansionBudget()
     if not source_path or not os.path.exists(source_path):
         raise ArchiveRomError(
             'ROM path not found',
@@ -890,16 +938,16 @@ def resolve_playable_rom_path(
                 code='unsupported_format',
             )
         if ext == '.zip':
-            extracted = extract_rom_from_zip(path, cache_dir, platform=platform)
+            extracted = extract_rom_from_zip(path, cache_dir, platform=platform, budget=budget)
             return extracted, os.path.basename(extracted)
         if ext == '.7z':
-            extracted = extract_rom_from_7z(path, cache_dir, platform=platform)
+            extracted = extract_rom_from_7z(path, cache_dir, platform=platform, budget=budget)
             return extracted, os.path.basename(extracted)
         if ext == '.rar':
-            extracted = extract_rom_from_rar(path, cache_dir, platform=platform)
+            extracted = extract_rom_from_rar(path, cache_dir, platform=platform, budget=budget)
             return extracted, os.path.basename(extracted)
         if ext in GZIP_EXTENSIONS:
-            extracted = extract_rom_from_gz(path, cache_dir)
+            extracted = extract_rom_from_gz(path, cache_dir, budget=budget)
             return extracted, os.path.basename(extracted)
         return path, os.path.basename(path)
 
@@ -922,7 +970,7 @@ def resolve_playable_rom_path(
         if len(roms) == 1:
             return roms[0], os.path.basename(roms[0])
         if len(archives) == 1:
-            return resolve_playable_rom_path(archives[0], cache_dir=cache_dir, platform=platform)
+            return resolve_playable_rom_path(archives[0], cache_dir=cache_dir, platform=platform, budget=budget)
         if roms:
             sized = [(p, os.path.getsize(p)) for p in roms]
             chosen_path = choose_rom_member(

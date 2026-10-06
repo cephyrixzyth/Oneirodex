@@ -39,9 +39,10 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+import requests
 from flask import current_app, has_app_context
 
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import read_response_limited, safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
 from oneirodex.utils.library_paths import library_dir
 
@@ -54,6 +55,10 @@ DEFAULT_PAGE_URL = 'https://areweanticheatyet.com'
 STATUSES = ('supported', 'running', 'planned', 'broken', 'denied', 'unknown')
 CACHE_TTL_SECONDS = 24 * 3600
 TIMEOUT_SECONDS = 20
+# The feed is a compact game catalog; cap decoded response bytes and rows so
+# a compromised upstream cannot multiply one response into unbounded objects.
+MAX_FEED_BYTES = 16 * 1024 * 1024
+MAX_FEED_ROWS = 100_000
 # Anti-cheat is a PC story; the name fallback never fires for console shelves.
 PC_PLATFORMS = frozenset({'PCWIN', 'PCDOS', 'MAC', 'LINUX', 'OTHER'})
 
@@ -182,6 +187,8 @@ def parse_feed(raw: str | bytes) -> dict[str, Any]:
         data = data['games']
     if not isinstance(data, list):
         raise ValueError('anti-cheat feed is not a list')
+    if len(data) > MAX_FEED_ROWS:
+        raise ValueError('anti-cheat feed exceeds the row limit')
     by_steam: dict[str, dict[str, Any]] = {}
     by_name: dict[str, dict[str, Any]] = {}
     count = 0
@@ -257,11 +264,20 @@ def refresh_if_stale(*, force: bool = False) -> bool:
         return False
     url = feed_url()
     try:
-        resp = safe_request('GET', url, validator=validate_user_outbound_http_url, timeout=TIMEOUT_SECONDS)
-        if resp.status_code != 200:
-            logger.warning('[ANTICHEAT] feed returned HTTP %s', resp.status_code)
-            return False
-        body = resp.content
+        with requests.Session() as session:
+            resp = safe_request(
+                'GET', url, validator=validate_user_outbound_http_url,
+                timeout=TIMEOUT_SECONDS, session=session, stream=True,
+            )
+            try:
+                if resp.status_code != 200:
+                    logger.warning('[ANTICHEAT] feed returned HTTP %s', resp.status_code)
+                    return False
+                body = read_response_limited(resp, MAX_FEED_BYTES)
+            finally:
+                close = getattr(resp, 'close', None)
+                if callable(close):
+                    close()
         parsed = parse_feed(body)
     except Exception as exc:  # noqa: BLE001 -- offline / blocked / schema drift is a miss, not a crash
         logger.warning('[ANTICHEAT] feed refresh failed: %s', exc)

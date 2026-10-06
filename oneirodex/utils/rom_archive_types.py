@@ -130,6 +130,7 @@ CUE_COMPANION_EXTENSIONS = frozenset({'.bin', '.img', '.iso', '.raw', '.wav'})
 
 MAX_NEST_DEPTH = 3
 MIN_ROM_BYTES_PREFERRED = 1024
+DEFAULT_MAX_ROM_OUTPUT_BYTES = 64 * 1024**3
 
 
 class ArchiveRomError(Exception):
@@ -154,3 +155,31 @@ class ArchiveRomError(Exception):
         if self.hint:
             payload['hint'] = self.hint
         return payload
+
+
+class RomExpansionBudget:
+    """Mutable byte budget shared by every output produced for one request."""
+
+    def __init__(self, limit: int = DEFAULT_MAX_ROM_OUTPUT_BYTES):
+        self.limit = max(0, int(limit))
+        self.remaining = self.limit
+
+    def consume(self, size: int) -> None:
+        size = max(0, int(size))
+        if size > self.remaining:
+            raise ArchiveRomError(
+                'Expanded archive output exceeds the 64 GiB limit',
+                status_code=413,
+                code='archive_too_large',
+            )
+        self.remaining -= size
+
+    def copy_stream(self, src, dest, chunk_size: int = 1024 * 1024) -> int:
+        total = 0
+        while True:
+            chunk = src.read(min(chunk_size, self.remaining + 1))
+            if not chunk:
+                return total
+            self.consume(len(chunk))
+            dest.write(chunk)
+            total += len(chunk)

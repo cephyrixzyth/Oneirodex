@@ -21,6 +21,8 @@ import json
 import mimetypes
 import os
 import re
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -665,66 +667,70 @@ class LazyASGIApp:
                 return
 
             game_is_dir = os.path.isdir(real_game)
-            cache_dir = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache', game_uuid)
-            platform_key = library_platform_key(game)
+            cache_root = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache')
+            os.makedirs(cache_root, exist_ok=True)
+            # Extraction output is request-scoped: retries and concurrent plays
+            # cannot reuse partial files or accumulate unbounded cache contents.
+            cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
             try:
-                rom_path, filename = resolve_playable_rom_path(
-                    game.full_disk_path,
-                    cache_dir=cache_dir,
-                    platform=platform_key,
-                )
-                target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
-                # Multi-track discs (.cue + .bin/.img/...) need every file in one
-                # response — WebRetro never gets a second chance to fetch companions.
-                bundled_path, bundled_name = bundle_playable_rom_zip(
-                    target, cache_dir, root=root if root_is_resolved else None
-                )
-                if bundled_path != target:
-                    # The bundle is the app's own file in its cache folder.
-                    target, root, root_is_resolved = bundled_path, cache_dir, False
-                    filename = bundled_name
-            except ArchiveRomError as exc:
-                log_system_event(
-                    f"ROM resolve failed for {game.name}: {exc.message}",
-                    event_type='download',
-                    event_level='warning',
-                )
-                await self._send_error(
-                    send,
-                    exc.status_code,
-                    exc.message,
-                    code=exc.code,
-                    hint=exc.hint,
-                )
-                return
+                platform_key = library_platform_key(game)
+                try:
+                    rom_path, filename = resolve_playable_rom_path(
+                        game.full_disk_path,
+                        cache_dir=cache_dir,
+                        platform=platform_key,
+                    )
+                    target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
+                    # Multi-track discs (.cue + .bin/.img/...) need every file in one
+                    # response — WebRetro never gets a second chance to fetch companions.
+                    bundled_path, bundled_name = bundle_playable_rom_zip(
+                        target, cache_dir, root=root if root_is_resolved else None
+                    )
+                    if bundled_path != target:
+                        target, root, root_is_resolved = bundled_path, cache_dir, False
+                        filename = bundled_name
+                except ArchiveRomError as exc:
+                    log_system_event(
+                        f"ROM resolve failed for {game.name}: {exc.message}",
+                        event_type='download',
+                        event_level='warning',
+                    )
+                    await self._send_error(
+                        send,
+                        exc.status_code,
+                        exc.message,
+                        code=exc.code,
+                        hint=exc.hint,
+                    )
+                    return
 
-            # Open it now and stream from the descriptor: the checks above were
-            # about a path, and the share can change a path while the log rows
-            # below are written.
-            try:
-                handle = open_plain_file_within(root, target, base_is_resolved=root_is_resolved)
-            except FileNotFoundError:
-                await self._send_error(send, 404, "ROM file not found on disk")
-                return
-            except OSError:
-                log_system_event(
-                    f"ROM download refused, file is not a plain file in place: {game.name}",
-                    event_type='security',
-                    event_level='warning',
-                )
-                await self._send_error(send, 403, "Access denied")
-                return
+                # Keep temporary output alive until streaming closes the file.
+                try:
+                    handle = open_plain_file_within(root, target, base_is_resolved=root_is_resolved)
+                except FileNotFoundError:
+                    await self._send_error(send, 404, "ROM file not found on disk")
+                    return
+                except OSError:
+                    log_system_event(
+                        f"ROM download refused, file is not a plain file in place: {game.name}",
+                        event_type='security',
+                        event_level='warning',
+                    )
+                    await self._send_error(send, 403, "Access denied")
+                    return
 
-            try:
-                log_system_event(
-                    f"ROM file downloaded for WebRetro: {game.name}",
-                    event_type='download',
-                    event_level='information',
-                )
-            except BaseException:
-                handle.close()
-                raise
-            await self._stream_file(send, handle, filename)
+                try:
+                    log_system_event(
+                        f"ROM file downloaded for WebRetro: {game.name}",
+                        event_type='download',
+                        event_level='information',
+                    )
+                except BaseException:
+                    handle.close()
+                    raise
+                await self._stream_file(send, handle, filename)
+            finally:
+                shutil.rmtree(cache_dir, ignore_errors=True)
 
     async def _get_user_id(self, scope):
         """Resolve user id from Bearer token (API clients) or Flask session cookie (web)."""
