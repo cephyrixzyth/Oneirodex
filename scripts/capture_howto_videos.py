@@ -374,7 +374,7 @@ SECTIONS: list[Section] = [
                  mouse_click('button[aria-label^="Scroll"][aria-label$="right"]:not([disabled])', "shelf arrow",
                              after_ms=900), hold=1.5),
             Step("Zones at the top are curated views — New and updated, and Elsewhere for titles "
-                 "outside the vault.", seq(scroll(-1200, 1), role("link", "New & updated")), hold=2.5),
+                 "outside the vault.", seq(scroll(-1200, 1), role("button", "New & updated")), hold=2.5),
             Step("Everything here is your library, arranged — never a store queue.",
                  nav("/discover", 1_200), hold=1.5),
         ],

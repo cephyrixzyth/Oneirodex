@@ -36,6 +36,98 @@
   grid-column: 1 / -1;
 }
 
+.od-create-library__path-row {
+  display: flex;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.od-create-library__path-row input {
+  flex: 1 1 auto;
+}
+
+.od-library-browser__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--od-bg) 76%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.od-library-browser {
+  display: grid;
+  grid-template-rows: auto auto minmax(10rem, 1fr) auto;
+  gap: 0.8rem;
+  width: min(46rem, 100%);
+  max-height: min(82vh, 48rem);
+  padding: 1rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-lg);
+  background: var(--od-surface);
+  color: var(--od-text);
+  box-shadow: var(--od-shadow-lg);
+}
+
+.od-library-browser__header,
+.od-library-browser__footer,
+.od-library-browser__crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.od-library-browser__header,
+.od-library-browser__footer {
+  justify-content: space-between;
+}
+
+.od-library-browser__header h2 {
+  margin: 0;
+  font-size: var(--od-font-lg);
+}
+
+.od-library-browser__crumbs {
+  max-height: 5rem;
+  overflow: auto;
+  color: var(--od-text-muted);
+}
+
+.od-library-browser__list {
+  min-height: 8rem;
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface-2);
+}
+
+.od-library-browser__folder {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: var(--od-radius-sm);
+  background: transparent;
+  color: var(--od-text);
+  text-align: left;
+}
+
+.od-library-browser__folder:hover,
+.od-library-browser__folder:focus-visible {
+  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
+}
+
+.od-library-browser__footer > .od-admin-lede {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .od-create-library__actions {
   display: flex;
   flex-wrap: wrap;
@@ -60,5 +152,11 @@
   .od-create-library__path,
   .od-create-library__actions {
     grid-column: 1;
+  }
+
+  .od-create-library__path-row,
+  .od-library-browser__footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

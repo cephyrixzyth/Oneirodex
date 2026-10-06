@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Button, PageStatus } from '@oneirodex/ui'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import {
   confirmCreateSelected,
@@ -14,6 +14,18 @@ interface PlatformOption {
   label: string
 }
 
+interface BrowseRoot {
+  id: string
+  label: string
+  path: string
+  default?: boolean
+}
+
+interface BrowseItem {
+  name: string
+  isDir: boolean
+}
+
 /** A direct, single-library path through the same create + first-scan contract as bulk import. */
 export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [platforms, setPlatforms] = useState<PlatformOption[]>([])
@@ -26,6 +38,16 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<LeafCreateResult | null>(null)
+  const [browseOpen, setBrowseOpen] = useState(false)
+  const [browseRoots, setBrowseRoots] = useState<BrowseRoot[]>([])
+  const [browseRoot, setBrowseRoot] = useState('')
+  const [browsePath, setBrowsePath] = useState('')
+  const [browseItems, setBrowseItems] = useState<BrowseItem[]>([])
+  const [browseBusy, setBrowseBusy] = useState(false)
+  const [browseError, setBrowseError] = useState('')
+  const browseTitleId = useId()
+  const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
+  const closeBrowser = useCallback(() => setBrowseOpen(false), [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -74,6 +96,49 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
     }
   }
 
+  async function openBrowser() {
+    setBrowseOpen(true)
+    setBrowseBusy(true)
+    setBrowseError('')
+    try {
+      const data = await getJson('/api/library_roots')
+      const roots: BrowseRoot[] = Array.isArray(data.roots) ? data.roots : []
+      setBrowseRoots(roots)
+      const selected = roots.find((root) => root.default) || roots[0]
+      if (selected) {
+        setBrowseRoot(selected.id)
+        setBrowsePath('')
+        const items = await getJson(
+          `/api/browse_folders_ss?${new URLSearchParams({ root: selected.id })}`,
+        )
+        setBrowseItems(Array.isArray(items) ? items.filter((item) => item.isDir) : [])
+      } else {
+        setBrowseItems([])
+        setBrowseError('No server scan locations are configured.')
+      }
+    } catch (err) {
+      setBrowseError(errorText(err) || 'Unable to browse server folders.')
+    } finally {
+      setBrowseBusy(false)
+    }
+  }
+
+  async function openBrowseFolder(rootId: string, relativePath: string) {
+    setBrowseBusy(true)
+    setBrowseError('')
+    try {
+      const query = new URLSearchParams({ root: rootId, path: relativePath })
+      const items = await getJson(`/api/browse_folders_ss?${query}`)
+      setBrowseRoot(rootId)
+      setBrowsePath(relativePath)
+      setBrowseItems(Array.isArray(items) ? items.filter((item) => item.isDir) : [])
+    } catch (err) {
+      setBrowseError(errorText(err) || 'Unable to read this server folder.')
+    } finally {
+      setBrowseBusy(false)
+    }
+  }
+
   return (
     <section className="od-admin-panel od-create-library" aria-labelledby="od-create-library-title">
       <div>
@@ -117,13 +182,18 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
         </label>
         <label className="od-create-library__path">
           Folder path inside the server
-          <input
-            required
-            value={path}
-            onChange={(event) => setPath(event.target.value)}
-            placeholder="/storage/games/nes"
-            autoComplete="off"
-          />
+          <span className="od-create-library__path-row">
+            <input
+              required
+              value={path}
+              onChange={(event) => setPath(event.target.value)}
+              placeholder="/storage/games/nes"
+              autoComplete="off"
+            />
+            <Button type="button" className="od-btn--ghost" onClick={() => void openBrowser()}>
+              Browse server
+            </Button>
+          </span>
         </label>
         <label>
           Folder layout
@@ -157,6 +227,128 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
       </form>
       {result?.note ? (
         <PageStatus emptyMessage={result.note} className="od-create-library__message" />
+      ) : null}
+      {browseOpen ? (
+        <Modal
+          open
+          onClose={closeBrowser}
+          labelledBy={browseTitleId}
+          className="od-library-browser__backdrop"
+          panelClassName="od-library-browser"
+          initialFocusRef={closeBrowseRef}
+          lockScroll
+        >
+          <>
+            <header className="od-library-browser__header">
+              <div>
+                <h2 id={browseTitleId}>Choose a server folder</h2>
+                <p className="od-admin-lede">Browse folders mounted inside Oneirodex.</p>
+              </div>
+              <Button
+                ref={closeBrowseRef}
+                type="button"
+                className="od-btn--ghost"
+                onClick={closeBrowser}
+              >
+                Close
+              </Button>
+            </header>
+            {browseRoots.length > 1 ? (
+              <label className="od-admin-field">
+                Scan location
+                <select
+                  value={browseRoot}
+                  onChange={(event) => void openBrowseFolder(event.target.value, '')}
+                >
+                  {browseRoots.map((root) => (
+                    <option key={root.id} value={root.id}>
+                      {root.label} · {root.path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {(() => {
+              const root = browseRoots.find((item) => item.id === browseRoot)
+              const parts = browsePath.split('/').filter(Boolean)
+              return root ? (
+                <nav className="od-library-browser__crumbs" aria-label="Folder path">
+                  <Button
+                    type="button"
+                    className="od-btn--ghost"
+                    onClick={() => void openBrowseFolder(root.id, '')}
+                  >
+                    {root.path}
+                  </Button>
+                  {parts.map((part, index) => (
+                    <Button
+                      key={`${part}-${index}`}
+                      type="button"
+                      className="od-btn--ghost"
+                      onClick={() =>
+                        void openBrowseFolder(root.id, parts.slice(0, index + 1).join('/'))
+                      }
+                    >
+                      {part}
+                    </Button>
+                  ))}
+                </nav>
+              ) : null
+            })()}
+            {browseError ? (
+              <PageStatus
+                error={browseError}
+                className="od-create-library__message od-create-library__message--error"
+                errorMessage="Unable to browse server folders."
+              />
+            ) : null}
+            <div className="od-library-browser__list" aria-busy={browseBusy}>
+              {browseBusy ? (
+                <p className="od-admin-lede">Loading folders…</p>
+              ) : browseItems.length ? (
+                browseItems.map((item) => (
+                  <Button
+                    key={item.name}
+                    type="button"
+                    className="od-library-browser__folder"
+                    onClick={() =>
+                      void openBrowseFolder(
+                        browseRoot,
+                        [...browsePath.split('/').filter(Boolean), item.name].join('/'),
+                      )
+                    }
+                  >
+                    <span aria-hidden="true">📁</span>
+                    {item.name}
+                  </Button>
+                ))
+              ) : !browseError ? (
+                <p className="od-admin-lede">No folders here.</p>
+              ) : null}
+            </div>
+            <footer className="od-library-browser__footer">
+              <span className="od-admin-lede">
+                {browseRoots.find((root) => root.id === browseRoot)?.path}
+                {browsePath ? `/${browsePath}` : ''}
+              </span>
+              <Button
+                type="button"
+                className="od-btn--accent"
+                disabled={!browseRoot}
+                onClick={() => {
+                  const root = browseRoots.find((item) => item.id === browseRoot)
+                  if (root)
+                    setPath(
+                      [root.path.replace(/[\\/]+$/, ''), browsePath].filter(Boolean).join('/'),
+                    )
+                  setBrowseOpen(false)
+                }}
+              >
+                Use this folder
+              </Button>
+            </footer>
+          </>
+        </Modal>
       ) : null}
     </section>
   )

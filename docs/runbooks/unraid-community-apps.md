@@ -1,6 +1,6 @@
 # Single-container install, Unraid Community Apps and Docker Hub
 
-> **Doc status:** Active (the public template repository is prepared; Community Apps submission and real Unraid installation are pending)
+> **Doc status:** Active (public CA template and a real Unraid installation are in use; release-sync automation requires a repository token)
 
 Oneirodex ships as **one image that carries its own PostgreSQL**. Without a
 `DATABASE_URL` the container creates a cluster in `/config` on first start, generates
@@ -111,36 +111,38 @@ firmware, keys or `.env`.
    `org.opencontainers.image.*` labels carry source and revision. Confirm `latest` is public
    and can be pulled without logging in before submitting the CA template.
 
-## Unraid Community Apps submission
+## Unraid Community Apps listing
 
-Community Apps reads templates from a **public** repository and needs a support thread. The
-dedicated public template repository is [cephyrixzyth/unraid-templates](https://github.com/cephyrixzyth/unraid-templates).
-It keeps the app template separate from the application monorepo, which also contains two
-desktop Android resource XML files; those files triggered the scanner's two
-`not_unraid_application` warnings.
+The public template repository is [cephyrixzyth/unraid-templates](https://github.com/cephyrixzyth/unraid-templates).
+Its nested `oneirodex/oneirodex.xml` is the catalog entry and has been used to install Oneirodex
+on a real Unraid server. The application monorepo also contains Android resource XML files, so
+the Community Apps scanner consumes the dedicated template repository rather than this repo.
+The source copy is [`unraid/oneirodex.xml`](../../unraid/oneirodex.xml); keep the raw
+`TemplateURL`, image repository, WebUI port and volume mappings aligned between both copies.
 
-1. The public template repository contains `LICENSE`, `README.md`, `ca_profile.xml`, `icon.png`,
-   and `oneirodex/oneirodex.xml`. The app XML is nested so the repository root is not mistaken
-   for an app. `<TemplateURL>` and `<Icon>` use public raw GitHub URLs. The root profile has a
-   non-empty `<Profile>`; add `<Forum>` and point the template `<Support>` field to the Docker
-   Containers support topic once it exists. An OSI-approved license is required at the repo root.
-   `tests/test_unraid_templates.py` checks the source template and profile.
-2. Confirm the image pulls anonymously: `docker pull cephyrixzyth/oneirodex:latest` from a
-   machine that is not logged in.
-3. Install it on a real Unraid box through *Add Container* with the template URL and check:
-   first-run wizard, a scan of the games share, `docker stop` leaves a clean log, and a
-   restart keeps the library.
-4. Open a support thread in the Unraid forum's Docker Containers section (CA requires one), add
-   its URL to `<Forum>` in `ca_profile.xml`, and put the same URL in the template's `<Support>`.
-   The forum may restrict new topics to Community Developers; if the topic control is missing,
-   follow the [forum's posting guidance](https://forums.unraid.net/topic/40696-why-cant-i-post-new-topics-in-here/)
-   and request access from the moderators with the public template-repository URL.
-5. Submit the repository through Community Apps' *Submit* form
-   (<https://ca.unraid.net/> → *Submit an application*), then respond to moderator feedback.
-   They check XML validity, an icon, an overview, category, working WebUI and that defaults
-   do not expose secrets.
-6. Keep `<Category>` to values from the Community Apps list and re-check it at submission;
-   the categories change.
+### Keep CA installs current
+
+Unraid tracks the Docker image digest for the installed repository and tag. Oneirodex's CA
+template uses `cephyrixzyth/oneirodex:latest`; each stable version tag publishes a new
+multi-architecture image and advances `latest`. The template feed separately carries install
+defaults and app metadata, so release automation copies `unraid/oneirodex.xml` into the public
+template repository and stamps its overview with the release version. The app
+derives `IMAGE_SAVE_PATH` as `<ONEIRODEX_LIBRARY_DIR>/images` (default
+`/config/library/images`) from the persistent library mount; do not point it at
+the read-only `/storage` games share. Optional `ENABLE_AI_ARTWORK`,
+`AI_ARTWORK_URL`, and `AI_ARTWORK_ENGINE` fields connect a trusted LAN Forge or
+A1111-compatible workstation. AI artwork remains off unless explicitly enabled.
+
+The GitHub Actions repository secret `UNRAID_TEMPLATES_TOKEN` should be a fine-grained token
+restricted to `cephyrixzyth/unraid-templates` with Contents read/write access. A release succeeds
+without it when the public CA feed already matches; if the release changes the template, the sync
+job fails until the token is configured. For an installed app, run Unraid's Docker image update check / update action after the
+new `latest` digest is available. Refreshing or reinstalling the CA template alone does not pull
+the image.
+
+The Docker Hub repository overview is synchronized from
+[`docs/dockerhub-overview.md`](../dockerhub-overview.md) after the multi-architecture images
+publish. The workflow uses the `DOCKERHUB` environment's existing username and write token.
 
 ## Known gaps
 

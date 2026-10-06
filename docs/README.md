@@ -1,6 +1,6 @@
 # Oneirodex documentation
 
-**Product version:** 1.1.0 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
+**Product version:** 1.1.1 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
 
@@ -15,6 +15,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, saves re-encrypted |
 | Operators / scan locations | [runbooks/remote-scan-locations.md](runbooks/remote-scan-locations.md) — `ONEIRODEX_LIBRARY_ROOTS`: NAS shares and extra disks, not just the server's own disk |
 | Operators / single container, Unraid Community Apps, Docker Hub | [runbooks/unraid-community-apps.md](runbooks/unraid-community-apps.md) — one image with an embedded database, the CA template, release workflow, sidecar boundaries and submission checklist; [challenge-solver-unraid.md](runbooks/challenge-solver-unraid.md) — private TRAWL sidecar setup |
+| Docker Hub listing | [dockerhub-overview.md](dockerhub-overview.md) — release-stamped public overview synchronized after image publication |
 | Operators / Unraid | [runbooks/unraid-deploy.md](runbooks/unraid-deploy.md) · [NAS-DEPLOY.md](../NAS-DEPLOY.md) (portable checkout examples) |
 | Operators / Docker Compose | [runbooks/docker-compose-deploy.md](runbooks/docker-compose-deploy.md) — optional `--profile livekit` · `--profile clamav` · GPU art on a workstation: [artwork-gpu-workstation.md](runbooks/artwork-gpu-workstation.md) |
 | Operators / observability (optional) | [runbooks/observability-profile.md](runbooks/observability-profile.md) — Prometheus stub; Admin Ops is default |
@@ -87,7 +88,7 @@ Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compos
 |---|---|
 | Product (shipped today) | Oneirodex (public string) |
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
-| Version | 1.1.0 |
+| Version | 1.1.1 |
 | GitHub | cephyrixzyth/oneirodex |
 | Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |

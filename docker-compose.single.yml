@@ -14,7 +14,7 @@ services:
       args:
         ONEIRODEX_BUILD_SHA: ${ONEIRODEX_BUILD_SHA:-}
         ONEIRODEX_BUILT_AT: ${ONEIRODEX_BUILT_AT:-}
-    image: ${APP_IMAGE:-oneirodex:1.1.0}
+    image: ${APP_IMAGE:-oneirodex:1.1.1}
     container_name: ${APP_CONTAINER_NAME:-oneirodex-app}
     restart: unless-stopped
     ports:

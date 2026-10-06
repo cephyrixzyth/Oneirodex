@@ -46,6 +46,7 @@ test('error is assertive, loading is polite', () => {
   expect(status).toHaveAttribute('aria-busy', 'true')
   expect(status).toHaveAttribute('aria-live', 'polite')
   expect(status).toHaveClass('od-page-status--takeover')
+  expect(status.querySelector('.od-page-status__spinner')).toBeInTheDocument()
 })
 
 test('retry is offered only when there is something to retry', () => {

@@ -16,7 +16,7 @@ Installed under `C:\Users\YOUR_USER\Apps` (not the NAS checkout):
 
 Oneirodex Art Studio talks the **A1111-compatible** `/sdapi/v1/txt2img` API. It supports AUTOMATIC1111, SD.Next, and Forge through `AI_ARTWORK_ENGINE=a1111`. SwarmUI/ComfyUI is not yet an implemented generation engine.
 
-Forge installed through Stability Matrix can provide the same API. In its package launch arguments, enable `--api`. To accept requests from the NAS, Forge also needs `--listen`; that option binds the server to `0.0.0.0`, so first make sure Windows Firewall permits TCP 7860 **only from the NAS address** and remove or narrow any broader allow rules. Oneirodex does not send API credentials, and these image APIs do not have application-level authorization in this integration. Keep the port private to the trusted NAS; do not forward it through a router or expose it to the internet.
+Forge installed through Stability Matrix can provide the same API. In its package launch arguments, enable `--api --listen`; `--listen` binds the server to `0.0.0.0`. Forge normally uses TCP 7860, but it may select the next port if another instance is already using that port. Use the port shown in Forge's startup URL for both the Windows Firewall rule and `AI_ARTWORK_URL`, and allow that port **only from the NAS address**. Remove or narrow any broader allow rules. Oneirodex does not send API credentials, and these image APIs do not have application-level authorization in this integration. Keep the port private to the trusted NAS; do not forward it through a router or expose it to the internet.
 
 Use the sidecar file at the repo root:
 
@@ -32,7 +32,7 @@ It starts **only** SD.Next, with an NVIDIA reservation, on port **7860**.
 docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
 ```
 
-If that fails, Docker Desktop does not see the 2080. Fix the NVIDIA Container Toolkit / WSL2 GPU path first. A reservation on a host with no loaded driver hard-fails container create (`nvml error: driver not loaded`).
+If that fails, Docker Desktop does not see the RTX 4080 SUPER. Fix the NVIDIA Container Toolkit / WSL2 GPU path first. A reservation on a host with no loaded driver hard-fails container create (`nvml error: driver not loaded`).
 
 Do **not** add `docker-compose.gpu.yml` to the Unraid `.env` `COMPOSE_FILE`. That overlay is for when the *Docker host that runs the app* has the card. The NAS does not.
 
@@ -52,7 +52,7 @@ The first pull of `saladtechnologies/sdnext` is large. Models live in the `sdnex
 
 ## Point the NAS app at this PC
 
-**1. Open the generator to the NAS on this PC (opt-in).** For the SD.Next Docker sidecar, set `SDNEXT_HOST_BIND` to this PC's LAN IP before starting. For Forge in Stability Matrix, add `--api --listen` to the Forge package launch arguments and restart it only after Windows Firewall has been restricted to the NAS address. Forge's `--listen` binds all adapters, unlike the Docker sidecar's host-port bind. Do not enable network listening while a broad allow rule remains active.
+**1. Open the generator to the NAS on this PC (opt-in).** For the SD.Next Docker sidecar, set `SDNEXT_HOST_BIND` to this PC's LAN IP before starting. For Forge in Stability Matrix, add `--api --listen` to the Forge package launch arguments and restart it only after Windows Firewall has been restricted to the NAS address. Confirm Forge's reported listening port after restart; when 7860 is occupied, Forge may listen on 7861 instead. Forge's `--listen` binds all adapters, unlike the Docker sidecar's host-port bind. Do not enable network listening while a broad allow rule remains active.
 
 For the SD.Next Docker sidecar, use:
 
@@ -68,10 +68,10 @@ docker compose -f docker-compose.artwork-local.yml up -d --force-recreate
 ```text
 ENABLE_AI_ARTWORK=true
 AI_ARTWORK_ENGINE=a1111
-AI_ARTWORK_URL=http://<gpu-workstation-lan-ip>:7860
+AI_ARTWORK_URL=http://<gpu-workstation-lan-ip>:<forge-port>
 ```
 
-For a Compose-managed install, put the same values in the Unraid/NAS `.env`:
+For a Compose-managed install, put the same values in the Unraid/NAS `.env`. This uses Forge's usual port as an example; set the port Forge actually reports:
 
 ```text
 ENABLE_AI_ARTWORK=true
@@ -79,27 +79,33 @@ AI_ARTWORK_ENGINE=a1111
 AI_ARTWORK_URL=http://192.0.2.42:7860
 ```
 
-(Replace the IP if this GPU box’s LAN address changes.)
+(Replace the example IP with this GPU box’s LAN address and use the exact listening port Forge reported. If only environment variables changed in a Community Apps install, reapply/recreate the container; no image rebuild is needed.)
 
-`docker-compose.yml` must list `ENABLE_AI_ARTWORK` / `AI_ARTWORK_URL` / `AI_ARTWORK_ENGINE` on the **app** service — Compose does not dump the whole `.env` into the container. After editing either file, **rebuild** then recreate — a recreate alone keeps the old image layers (theme CSS / SPA dist stay stale):
+`docker-compose.yml` must list `ENABLE_AI_ARTWORK` / `AI_ARTWORK_URL` / `AI_ARTWORK_ENGINE` on the **app** service — Compose does not dump the whole `.env` into the container. For an environment-only change, force-recreate the app without rebuilding:
 
 ```bash
-# On Unraid (Compose Manager project root = this checkout):
+docker compose --env-file .env up -d --force-recreate --no-deps app
+```
+
+If the app image's code or bundled assets also changed, build first:
+
+```bash
 docker compose --env-file .env build app
 docker compose --env-file .env up -d --force-recreate --no-deps app
 ```
 
 Compose Manager must point at **`_projects/Oneirodex`** (not the empty `_projects/Oneirodex` stub). Drop the `artwork` profile on the NAS when the GPU lives on this workstation.
 
-Allow inbound **TCP 7860** on the Windows firewall for the **Private** profile, with the local address set to this GPU PC and the remote address limited to the NAS's LAN IP; remove or narrow any duplicate broad allow rule. The generator has no login, so this firewall rule is the access control. If the NAS still cannot reach the URL while `127.0.0.1:7860` works on this PC:
+Allow inbound **TCP on Forge's actual port** (usually 7860, or 7861 when 7860 is occupied) on the Windows firewall for the **Private** profile, with the local address set to this GPU PC and the remote address limited to the NAS's LAN IP; remove or narrow any duplicate broad allow rule. The generator has no login, so this firewall rule is the access control. If the NAS still cannot reach the URL while the local Forge URL works on this PC:
 
 1. **IVPN** — Firewall → Allow LAN (CLI: `ivpn firewall -lan_allow`). Hairpin to this PC’s own LAN IP often still times out; test from the Unraid shell, not from the GPU box.
-2. **Portmaster** — turn off **Force Block Incoming Connections** (`filter.blockInbound=false`). Keep Incoming/Service endpoints allowing only the NAS address where possible. With Block Incoming on, Unraid cannot open `:7860` even when IVPN Allow LAN is true and Windows Firewall allows the port. A previous workstation setup returned 200 from its LAN IP on 2026-08-28; retest from Unraid after changing the active generator or firewall.
+2. **Portmaster** — turn off **Force Block Incoming Connections** (`filter.blockInbound=false`). Keep Incoming/Service endpoints allowing only the NAS address where possible. With Block Incoming on, Unraid cannot open Forge's port even when IVPN Allow LAN is true and Windows Firewall allows it. A previous workstation setup returned 200 from its LAN IP on 2026-08-28; retest from Unraid after changing the active generator or firewall.
 
-Then retest from the Unraid shell:
+Then retest from the Unraid shell, setting `FORGE_PORT` to the actual port from Forge's startup URL:
 
 ```bash
-curl -sf http://192.0.2.42:7860/sdapi/v1/sd-models | head
+FORGE_PORT=7860
+curl -sf "http://192.0.2.42:${FORGE_PORT}/sdapi/v1/sd-models" | head
 ```
 
 Do **not** start `--profile artwork` on the NAS. That profile is the CPU sidecar on the same Compose project; you already have a generator on the LAN.

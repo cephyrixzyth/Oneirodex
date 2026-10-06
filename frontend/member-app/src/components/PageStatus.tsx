@@ -70,6 +70,7 @@ function LoadingStatus({ inline, className, seedMotif, loadingMessage }: LoosePr
       aria-busy="true"
       aria-live="polite"
     >
+      <span className="od-page-status__spinner" aria-hidden="true" />
       <LoadingMotif motifId={motifId} size={inline ? 'md' : 'lg'} title={label} />
       <p className="od-page-status__message">
         <span className="od-page-status__message-base">{base}</span>

@@ -146,7 +146,7 @@ Admin short form: [libraries-and-scans.md](../admin/libraries-and-scans.md#conso
 
 ## Image
 
-Local build tag `oneirodex:1.1.0` (Compose default). Hub image: `cephyrixzyth/oneirodex` — set `APP_IMAGE`. The image includes `bash` for `entrypoint.sh`. Live stacks still named `oneirodex-app` pin `APP_CONTAINER_NAME` until the scan FIFO is idle.
+Local build tag `oneirodex:1.1.1` (Compose default). Hub image: `cephyrixzyth/oneirodex` — set `APP_IMAGE`. The image includes `bash` for `entrypoint.sh`. Live stacks still named `oneirodex-app` pin `APP_CONTAINER_NAME` until the scan FIFO is idle.
 
 ## Compose Manager paths
 

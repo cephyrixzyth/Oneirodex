@@ -621,16 +621,19 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
    in the live admin route instead of inheriting legacy inline form spacing. */
 .od-scan-match {
   display: grid;
-  gap: var(--od-space-4);
+  gap: 0;
+  padding: var(--od-space-3) var(--od-space-5);
+  overflow: hidden;
 }
 
 .od-scan-match .od-admin-fieldset {
   min-width: 0;
   margin: 0;
-  padding: var(--od-space-4);
-  border: 1px solid var(--od-border);
-  border-radius: var(--od-radius-lg);
-  background: var(--od-surface-1);
+  padding: var(--od-space-3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--od-border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .od-scan-match .od-admin-fieldset legend {
@@ -642,11 +645,12 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
 
 .od-scan-match .od-admin-field:not(.od-admin-field--check) {
   display: grid;
-  grid-template-columns: minmax(12rem, 0.55fr) minmax(10rem, 0.8fr) minmax(16rem, 1.6fr);
-  align-items: center;
-  gap: var(--od-space-3);
+  grid-template-columns: minmax(12rem, 0.55fr) minmax(0, 1.45fr);
+  align-items: start;
+  gap: var(--od-space-2) var(--od-space-4);
   margin: 0;
-  padding: var(--od-space-2) 0;
+  padding: var(--od-space-3) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--od-border) 72%, transparent);
   color: var(--od-text);
 }
 
@@ -656,6 +660,8 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   width: 100%;
   min-width: 0;
   margin: 0;
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 .od-scan-match .od-admin-field--check {
@@ -673,6 +679,8 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
 
 .od-scan-match .od-admin-hint {
   display: block;
+  grid-column: 2;
+  grid-row: 3;
   color: var(--od-text-muted);
   font-size: var(--od-font-sm);
   font-weight: 400;
@@ -725,6 +733,13 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   .od-scan-match .od-admin-field:not(.od-admin-field--check) {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--od-space-1);
+  }
+
+  .od-scan-match .od-admin-field:not(.od-admin-field--check) input,
+  .od-scan-match .od-admin-field:not(.od-admin-field--check) select,
+  .od-scan-match .od-admin-hint {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 

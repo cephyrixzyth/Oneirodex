@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { ContextBar } from '../chrome/ContextBar'
+import { usesNewChrome } from '../chrome/usesNewChrome'
+import { useShellConfig } from '@oneirodex/ui'
 import { fetchVrCatalog, fetchVrGame } from '../api/vr'
 import { VrWayToPlayLine, vrCompatCopy } from '../components/VrWayToPlay'
 import { PageStatus } from '../components/PageStatus'
 import './VrPage.css'
 
 const PER_PAGE = 48
+const VR_VIEWS = [
+  { id: 'all', label: 'All' },
+  { id: 'native_vr', label: 'Native VR' },
+  { id: 'injector_profile', label: 'Community profile' },
+]
 
 export function VrPage() {
+  const shellConfig = useShellConfig()
+  const useNewChrome = usesNewChrome(shellConfig)
   const [catalog, setCatalog] = useState<any>(null)
   const [error, setError] = useState<any>(null)
   const [page, setPage] = useState(1)
@@ -18,6 +28,14 @@ export function VrPage() {
   // Rider R3: `?vr_compat=native_vr|injector_profile` narrows the hub to one way to play.
   const [searchParams, setSearchParams] = useSearchParams()
   const vrCompatFilter = searchParams.get('vr_compat') || ''
+
+  const selectVrView = (value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value === 'all') next.delete('vr_compat')
+    else next.set('vr_compat', value)
+    setSearchParams(next, { replace: true })
+    setPage(1)
+  }
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -84,37 +102,37 @@ export function VrPage() {
 
   return (
     <div className="od-more-page od-vr">
-      <div className="od-page-header">
-        <h1>VR Library</h1>
-      </div>
+      {useNewChrome ? (
+        <ContextBar
+          views={VR_VIEWS}
+          activeView={vrCompatFilter || 'all'}
+          onSelectView={selectVrView}
+        />
+      ) : (
+        <div className="od-page-header">
+          <h1>VR Library</h1>
+        </div>
+      )}
       <p className="od-more-page__lede">
         Large-tap browse for headset browsers. Install as a PWA from the browser menu. Browse only —
         no downloads.
       </p>
 
-      <div className="od-seg od-vr__ways" role="group" aria-label="Way to play">
-        {[
-          ['', 'All'],
-          ['native_vr', 'Native VR'],
-          ['injector_profile', 'Community profile'],
-        ].map(([value, label]) => (
-          <button
-            key={value || 'all'}
-            type="button"
-            className="od-cbtn"
-            aria-pressed={vrCompatFilter === value}
-            onClick={() => {
-              const next = new URLSearchParams(searchParams)
-              if (value) next.set('vr_compat', value)
-              else next.delete('vr_compat')
-              setSearchParams(next, { replace: true })
-              setPage(1)
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {useNewChrome ? null : (
+        <div className="od-cbtn-group od-vr__ways" role="group" aria-label="Way to play">
+          {VR_VIEWS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`od-cbtn${(vrCompatFilter || 'all') === id ? ' is-on' : ''}`}
+              aria-pressed={(vrCompatFilter || 'all') === id}
+              onClick={() => selectVrView(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <PageStatus
         loading={!error && !catalog}

@@ -4,6 +4,7 @@ import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { MetricStrip } from '../components/opsWidgets'
 import { CreateUserForm } from '../components/CreateUserForm'
+import { AdminPageActions } from '../components/AdminPageActions'
 import { Page } from '../components/Page'
 
 interface InviteUser {
@@ -70,17 +71,17 @@ export function InvitesPage() {
         onCreated={() => setReloadKey((key) => key + 1)}
         title="Create user without invite"
       />
-      <div className="od-admin-actions-row">
-        <a className="od-btn" href="/admin/manage_invites">
+      <AdminPageActions label="Invite page actions">
+        <a className="od-cbtn" href="/admin/manage_invites">
           Classic invite editor
         </a>
-        <a className="od-btn" href="/admin/users">
+        <a className="od-cbtn" href="/admin/users">
           Users
         </a>
-        <a className="od-btn" href="/admin/support">
+        <a className="od-cbtn" href="/admin/support">
           Support inbox
         </a>
-      </div>
+      </AdminPageActions>
       {/* UID-014. "Unused tokens" is the number that decides whether anyone
           can actually invite someone, so it carries the tone: zero across the
           household means invites are effectively closed, which the table alone

@@ -95,6 +95,16 @@
              active='jobs',
              label='Scan Jobs') %}
         {% endcall %}
+{% elif enable_new_chrome and active_tab == 'image_queue' %}
+        {% call chrome.contextbar(views=[], active='image_queue', label='Image queue actions') %}
+          <button type="button" class="od-cbtn od-cbtn--primary" data-od-click="downloadBatch" data-od-arg="10">{{ icons.icon('download') }} Download 10</button>
+          <button type="button" class="od-cbtn od-cbtn--primary" data-od-click="downloadBatch" data-od-arg="50">{{ icons.icon('download') }} Download 50</button>
+          <button type="button" class="od-cbtn od-cbtn--primary" data-od-click="downloadBatch" data-od-arg="100">{{ icons.icon('download') }} Download 100</button>
+          <button type="button" id="retryFailedBtn" class="od-cbtn" data-od-click="retryFailed" title="Retry every image the queue could not download">{{ icons.icon('refresh') }} Retry failed</button>
+          <button type="button" id="autoPickBtn" class="od-cbtn" data-od-click="autoPickBest" title="Automatically select the best available artwork">{{ icons.icon('image') }} Auto-pick best</button>
+          <a class="od-cbtn" href="/admin/art_studio#images">{{ icons.icon('image') }} Art &amp; images picker</a>
+          <button type="button" class="od-cbtn" data-od-click="refreshQueue">{{ icons.icon('refresh') }} Refresh</button>
+        {% endcall %}
 {% endif %}
 <div class="admin_manage_scanjobs-nav-panel">
     <div class="container-settings od-adminpage od-adminpage--xl">
@@ -805,35 +815,10 @@
                         <p>Manage game cover and screenshot downloads.</p>
                     </div>
 
-                    <!-- Controls -->
+                    <!-- Filters stay with the queue; actions live in the top navigation bar. -->
                     <div class="row mb-3">
-                        <div class="col-md-7">
-                            <div class="btn-group flex-wrap">
-                                <button type="button" class="btn btn-success" data-od-click="downloadBatch" data-od-arg="10">
-                                    {{ icons.icon('download') }} Download 10
-                                </button>
-                                <button type="button" class="btn btn-success" data-od-click="downloadBatch" data-od-arg="50">
-                                    {{ icons.icon('download') }} Download 50
-                                </button>
-                                <button type="button" class="btn btn-primary" data-od-click="downloadBatch" data-od-arg="100">
-                                    {{ icons.icon('download') }} Download 100
-                                </button>
-                                <button type="button" id="retryFailedBtn" class="btn btn-warning" data-od-click="retryFailed" title="Retry every image the queue could not download">
-                                    {{ icons.icon('refresh') }} Retry failed
-                                </button>
-                                <button type="button" id="autoPickBtn" class="btn btn-outline-info" data-od-click="autoPickBest" title="POST /admin/api/covers/batch/apply policy=sgdb_then_igdb_then_generate">
-                                    {{ icons.icon('image') }} Auto-pick best
-                                </button>
-                                <a class="btn btn-outline-light" href="/admin/art_studio#images">
-                                    {{ icons.icon('image') }} Art &amp; images picker
-                                </a>
-                                <button type="button" class="btn btn-secondary" data-od-click="refreshQueue">
-                                    {{ icons.icon('refresh') }} Refresh
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-md-5">
-                            <div class="d-flex gap-2 flex-wrap justify-content-md-end">
+                        <div class="col-12">
+                            <div class="d-flex gap-2 flex-wrap justify-content-start">
                                 <select id="status-filter" class="form-select" data-od-change="applyFilters">
                                     <option value="all">All Images</option>
                                     <option value="pending">Pending Only</option>

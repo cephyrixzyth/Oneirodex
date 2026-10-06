@@ -41,9 +41,9 @@ def _read_version() -> str:
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VERSION')
         with open(path, encoding='utf-8') as handle:
             text = handle.read().strip()
-        return text or '1.1.0'
+        return text or '1.1.1'
     except OSError:
-        return '1.1.0'
+        return '1.1.1'
 
 
 app_version = _read_version()
@@ -81,13 +81,16 @@ def create_app(config_object=None):
     csrf.init_app(app)
     apply_proxy_fix(app)
     apply_security_headers(app)
-    from oneirodex.utils.library_paths import library_dir, relocated_library_dir
+    from oneirodex.utils.library_paths import image_save_dir, library_dir, relocated_library_dir
     app.config['UPLOAD_FOLDER'] = library_dir(app.root_path)
+    # Keep image persistence on the configured, mounted library volume in
+    # Docker/Unraid too. The value in config.py points at the source tree and
+    # is not necessarily writable or persistent in a container.
+    app.config['IMAGE_SAVE_PATH'] = image_save_dir(app.config['UPLOAD_FOLDER'])
     if relocated_library_dir():
         # Standalone install (ADR 0011): runtime files live in the data folder,
         # still served at /static/library/.
         from oneirodex.utils.static_files import serve_relocated_static
-        app.config['IMAGE_SAVE_PATH'] = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
         serve_relocated_static(app)
 
     from oneirodex.utils.i18n import init_babel

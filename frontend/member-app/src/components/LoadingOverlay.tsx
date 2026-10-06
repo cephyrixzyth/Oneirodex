@@ -49,6 +49,7 @@ export function LoadingOverlay({
       aria-live="polite"
     >
       <div className="od-loading-overlay__card">
+        <span className="od-page-status__spinner" aria-hidden="true" />
         <LoadingMotif motifId={motifId} />
         <span className="od-loading-overlay__label">{label}</span>
       </div>
