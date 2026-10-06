@@ -1,7 +1,7 @@
-/* Discover news tiles: 3:4 art in the same box as game covers, so the
+/* Discover news tiles: 2:3 poster art, matching the library poster shape, so the
    scrollbar lane sits the same distance under every row. Badge, date, and
    title overlay the art; the leftover caption strip stays empty like a
-   game tile. In-flow images used to inflate this wrap past 3:4 and park
+   game tile. In-flow images used to inflate this wrap past 2:3 and park
    the slider against the art. */
 
 .od-news-card {
@@ -27,7 +27,7 @@
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 2 / 3;
   height: auto;
   max-height: 100%;
   flex: 0 0 auto;

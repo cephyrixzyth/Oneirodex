@@ -306,7 +306,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         # Local import: scan_queue imports scan_and_add_games from this module,
         # so a module-level import here would close the cycle. Every other
         # scan_queue use in this file is function-local for the same reason.
-        from oneirodex.utils.scan_queue import PROCESS_TOKEN
+        from oneirodex.utils.scan_queue import PROCESS_TOKEN, scan_run_values
 
         # Create initial scan job
         scan_job_entry = ScanJob(
@@ -335,6 +335,8 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             owner_token=PROCESS_TOKEN,
         )
 
+        for key, value in scan_run_values().items():
+            setattr(scan_job_entry, key, value)
         db.session.add(scan_job_entry)
         try:
             db.session.commit()
@@ -429,11 +431,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         db.session.commit()
         if not game_names_with_paths:
             logger.info(f"No games found in folder: {folder_path}")
-            scan_job_entry.status = 'Completed'
             scan_job_entry.error_message = "No games found."
-            db.session.commit()
-            _drain_scan_queue_safe()
-            return job_id
     except Exception as e:
         scan_job_entry.status = 'Failed'
         scan_job_entry.error_message = str(e)
@@ -712,123 +710,39 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 scan_job_entry.is_enabled = False
                 db.session.commit()
     else:
-        # Sequential processing (original behavior)
-        logger.info("Using single-threaded sequential scanning")
-        
-        # Progress tracking variables
-        processed_count = 0
-        already_exist_count = 0
-        new_games_count = 0
-        already_unmatched_count = 0
-        scan_start_time = datetime.now()
-        
-        for game_info in game_names_with_paths:
+        # Use the same processor as the pool: thread count must not change
+        # force-refresh behavior. Each call owns its app context/session too.
+        app_obj = current_app._get_current_object()
+        for processed_count, game_info in enumerate(game_names_with_paths, start=1):
             db.session.remove()
             scan_job_entry = db.session.get(ScanJob, scan_job_id)
-            if not scan_job_entry or not scan_job_entry.is_enabled:
+            from oneirodex.utils.shutdown import should_continue_processing
+            if not scan_job_entry or not scan_job_entry.is_enabled or not should_continue_processing():
                 if scan_job_entry:
                     scan_job_entry.status = 'Cancelled'
                     scan_job_entry.error_message = 'Scan cancelled by user'
                     scan_job_entry.current_processing = None
+                    scan_job_entry.is_enabled = False
                     db.session.commit()
                 scan_was_cancelled = True
-                break  # Stop processing if cancelled
-            
-            game_name = game_info['name']
-            full_disk_path = game_info['full_path']
-            processed_count += 1
-            progress_label = f"Processing: {game_name} ({processed_count}/{total_to_process})"
-            
-            # Fast path - check cached sets BEFORE database queries
-            if existing_game_paths and full_disk_path in existing_game_paths:
-                logger.warning(f"Game already exists (cached): {game_name} at {full_disk_path}")
-                already_exist_count += 1
-                bump_scan_job_progress(
-                    scan_job_id, success=True, current_processing=progress_label
-                )
-            elif existing_unmatched_paths and full_disk_path in existing_unmatched_paths:
-                logger.info(f"Folder already logged as unmatched (cached): {full_disk_path}")
-                already_unmatched_count += 1
-                bump_scan_job_progress(
-                    scan_job_id, failed=True, current_processing=progress_label
-                )
-            else:
-                try:
-                    success = process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_uuid, existing_game_paths, existing_unmatched_paths, fetch_hltb=fetch_hltb, settings=settings_dict)
-                    if success:
-                        new_games_count += 1
-                        bump_scan_job_progress(
-                            scan_job_id, success=True, current_processing=progress_label
-                        )
-                        # Use cached settings instead of querying database again
-                        # Check for updates folder using the cached setting
-                        if enable_game_updates:
-                            updates_folder = os.path.join(full_disk_path, update_folder_name)
-                            if os.path.exists(updates_folder) and os.path.isdir(updates_folder):
-                                logger.info(f"Updates folder found for game: {game_name}")
-                                process_game_updates(game_name, full_disk_path, updates_folder, library_uuid, update_folder_name)
-                            else:
-                                logger.info(f"No updates folder found for game: {game_name}")
-                        else:
-                            logger.warning(f"Updates scanning disabled, skipping for game: {game_name}")
-                            
-                        # Check for extras folder
-                        if enable_game_extras:
-                            extras_folder = os.path.join(full_disk_path, extras_folder_name)
-                            if os.path.exists(extras_folder) and os.path.isdir(extras_folder):
-                                logger.info(f"Extras folder found for game: {game_name}")
-                                process_game_extras(game_name, full_disk_path, extras_folder, library_uuid, extras_folder_name)
-                            else:
-                                logger.info(f"No extras folder found for game: {game_name}")
-                            # PC-first: also associate common DLC/extra folder names + sibling DLC sidecars
-                            process_pc_dlc_and_extra_roots(
-                                game_name,
-                                full_disk_path,
-                                library_uuid,
-                                extras_folder_name=extras_folder_name,
-                                update_folder_name=update_folder_name,
-                            )
-                        else:
-                            logger.warning(f"Extras scanning disabled, skipping for game: {game_name}")
-                    else:
-                        bump_scan_job_progress(
-                            scan_job_id, failed=True, current_processing=progress_label
-                        )
-                        logger.info(f"[SCAN INFO] Game '{game_name}' could not be matched to IGDB database or was already unmatched.")
-                        logger.info(f"[SCAN INFO] Game path: {full_disk_path}")
-                        logger.error("[SCAN INFO] This is informational, not an error")
-
-                except Exception as e:
-                    logger.error(f"[SCAN EXCEPTION] Exception processing game '{game_name}': {str(e)}")
-                    logger.error(f"[SCAN EXCEPTION] Game path: {full_disk_path}")
-                    logger.error(f"[SCAN EXCEPTION] Full exception: {repr(e)}")
-                    import traceback
-                    logger.error(f"[SCAN EXCEPTION] Traceback: {traceback.format_exc()}")
-                    bump_scan_job_progress(
-                        scan_job_id, failed=True, current_processing=progress_label
-                    )
-                    scan_job_entry = db.session.get(ScanJob, scan_job_id)
-                    if scan_job_entry:
-                        scan_job_entry.status = 'Failed'
-                        error_line = f"Exception processing '{game_name}': {str(e)}"
-                        scan_job_entry.error_message = (scan_job_entry.error_message or "") + f"{error_line}\n"
-                        db.session.commit()
-            
-            # Log detailed progress every 10 games
-            if processed_count % 10 == 0 or processed_count == total_to_process:
-                logger.info(f"Committed: {processed_count}/{total_to_process} games processed")
-                
-                elapsed_time = (datetime.now() - scan_start_time).total_seconds()
-                games_per_second = processed_count / elapsed_time if elapsed_time > 0 else 0
-                estimated_remaining = (total_to_process - processed_count) / games_per_second if games_per_second > 0 else 0
-                
-                logger.info(f"Progress: {processed_count}/{total_to_process} games processed")
-                logger.info(f"Speed: {games_per_second:.1f} games/sec")
-                if estimated_remaining > 0:
-                    logger.info(f"Estimated time remaining: {estimated_remaining:.0f} seconds")
-                logger.warning(f"Skipped (already exist): {already_exist_count}")
-                logger.info(f"New games found: {new_games_count}")
-                logger.info(f"Already unmatched: {already_unmatched_count}")
+                break
+            result = process_single_game(
+                game_info, scan_job_id, library_uuid, update_folder_name,
+                extras_folder_name, enable_game_updates, enable_game_extras,
+                existing_game_paths, existing_unmatched_paths, igdb_rate_limiter,
+                app_obj, force_updates_extras_scan, fetch_hltb, force_hltb_refetch,
+                settings_dict,
+            )
+            bump_scan_job_progress(
+                scan_job_id, success=bool(result.get('success')),
+                failed=not result.get('success'),
+                current_processing=f"Processing: {game_info['name']} ({processed_count}/{total_to_process})",
+            )
+            if result.get('error'):
+                scan_job_entry = db.session.get(ScanJob, scan_job_id)
+                scan_job_entry.error_message = (scan_job_entry.error_message or '') + str(result['error']) + '\n'
+                db.session.commit()
+            cooperative_yield()
 
     db.session.remove()
     scan_job_entry = db.session.get(ScanJob, scan_job_id)

@@ -9,6 +9,23 @@ describe('playtime session watcher', () => {
     vi.useFakeTimers()
   })
 
+  it('watches an offline process without sending a nonexistent remote session', async () => {
+    const fetchImpl = vi.fn()
+    const api = createOneirodexClient({
+      baseUrl: 'https://example.com',
+      getToken: () => 'test',
+      fetchImpl,
+    })
+    const isProcessRunning = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false)
+    const watcher = watchPlaySession(api, 42, null, { pollIntervalMs: 1000, isProcessRunning })
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(isProcessRunning).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).not.toHaveBeenCalled()
+    await watcher.stop()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.useRealTimers()
+  })
+
   it('heartbeats while the process is running and stops when it exits', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)

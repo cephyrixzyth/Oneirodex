@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ 'css/setup/setup.css'|theme_asset }}">
+<div class="container-login">
+  <main class="content-login od-setup od-setup--wide" aria-labelledby="od-setup-library-title">
+    <nav class="od-setup-progress" aria-label="Setup progress">
+      <span>1 · Admin</span><span>2 · Email</span><span>3 · Features</span><span>4 · Metadata</span><span>5 · APIs</span><span aria-current="step">6 · Library</span>
+    </nav>
+    <div class="od-setup__brand">
+      <img src="{{ url_for('static', filename='newstyle/oneirodex_mark.svg') }}" alt="" class="od-setup__mark" width="56" height="56" decoding="async">
+      <h1 id="od-setup-library-title" class="od-setup__title">Create your first library</h1>
+      <p class="od-setup__lede">Optional. Point Oneirodex at a folder the server can read. It will create the library and queue its first scan.</p>
+      <p class="od-setup__lede od-setup__lede--muted">Use a path visible inside the server, such as <code>/storage/nes</code>. Game files remain read-only.</p>
+    </div>
+
+    {% for error in errors %}<p class="error-message" role="alert">{{ error }}</p>{% endfor %}
+    <form method="post" action="{{ url_for('setup.setup_library') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="od-setup-grid">
+        <div class="form-group">
+          <label for="library-name">Library name</label>
+          <input class="od-setup__field" id="library-name" name="name" maxlength="255" required autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="library-platform">Platform</label>
+          <select class="od-setup__field" id="library-platform" name="platform" required>
+            <option value="" selected disabled>Choose a platform</option>
+            {% for key, label in platforms %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group od-setup-grid__wide">
+          <label for="library-folder">Folder path inside the server</label>
+          <input class="od-setup__field" id="library-folder" name="folder_path" maxlength="2048" placeholder="/storage/games/nes" required autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="library-scan-mode">Folder layout</label>
+          <select class="od-setup__field" id="library-scan-mode" name="scan_mode">
+            <option value="folders">Game folders</option>
+            <option value="files">Game files directly in this folder</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="library-scan-depth">Scan depth</label>
+          <select class="od-setup__field" id="library-scan-depth" name="scan_depth">
+            <option value="1">One folder deep</option>
+            <option value="2">Two folders deep</option>
+          </select>
+        </div>
+      </div>
+      <div class="od-setup__actions">
+        <button type="submit" class="btn btn-primary">Create library and start scan</button>
+        <button type="submit" name="skip_library" value="on" formnovalidate class="btn btn-secondary">Finish without a library</button>
+      </div>
+    </form>
+  </main>
+</div>
+{% endblock %}

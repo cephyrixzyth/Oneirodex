@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
@@ -110,18 +110,15 @@ export function EmulatorProfilesForm() {
           <p className="text-muted">No emulator platforms available.</p>
         ) : (
           <div className="od-emu-list">
-            {platforms.map((platform) => (
-              <div
-                key={platform}
-                className="od-emu-row mb-2 d-flex gap-2 align-items-center flex-wrap"
-              >
-                <label style={{ minWidth: 140 }} htmlFor={`emu-${platform}`}>
-                  <strong>{platform}</strong>
-                </label>
+            <div className="od-emu-grid">
+              {platforms.map((platform) => (
+                <div key={platform} className="od-emu-row">
+                  <label htmlFor={`emu-${platform}`}>
+                    <strong>{platform.replaceAll('_', ' ')}</strong>
+                  </label>
                 <select
                   id={`emu-${platform}`}
-                  className="form-select"
-                  style={{ maxWidth: 280 }}
+                  className="od-emu-select"
                   value={profiles[platform] || ''}
                   onChange={(e) =>
                     setProfiles((prev) => ({ ...prev, [platform]: e.target.value || null }))
@@ -134,8 +131,9 @@ export function EmulatorProfilesForm() {
                     </option>
                   ))}
                 </select>
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
             <Button variant="primary" className="mt-2" disabled={busy} onClick={save}>
               Save profiles
             </Button>
@@ -147,20 +145,92 @@ export function EmulatorProfilesForm() {
 }
 
 export function EmulatorsPage() {
+  const [section, setSection] = useState('cores')
+  const sections = [
+    ['cores', 'Preferred cores'],
+    ['player', 'Browser player'],
+    ['achievements', 'Achievements'],
+    ['firmware', 'Firmware'],
+  ] as const
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const current = sections.findIndex(([id]) => id === section)
+    let next = -1
+    if (event.key === 'ArrowRight') next = (current + 1) % sections.length
+    if (event.key === 'ArrowLeft') next = (current - 1 + sections.length) % sections.length
+    if (event.key === 'Home') next = 0
+    if (event.key === 'End') next = sections.length - 1
+    if (next < 0 || current < 0) return
+    event.preventDefault()
+    setSection(sections[next][0])
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+  }
+
   return (
     <Page
+      className="od-emulators-page"
       title="Emulators"
       lede={
         <>
-          Which core plays each console in the browser, the browser-player pilot, RetroAchievements,
-          and the firmware each core needs.
+          Configure browser playback, achievements, and core firmware. Choose a section to keep
+          related settings together.
         </>
       }
     >
-      <EmulatorProfilesForm />
-      <BrowserPlayerPilot />
-      <RetroAchievementsPanel />
-      <EmulatorFirmwarePanel />
+      <div
+        className="od-admin-tabs"
+        role="tablist"
+        aria-label="Emulator settings"
+        onKeyDown={onTabKeyDown}
+      >
+        {sections.map(([id, label]) => (
+          <button
+            type="button"
+            role="tab"
+            id={`emu-tab-${id}`}
+            aria-controls={`emu-panel-${id}`}
+            aria-selected={section === id}
+            tabIndex={section === id ? 0 : -1}
+            className={`od-admin-tabs__tab${section === id ? ' is-active' : ''}`}
+            key={id}
+            onClick={() => setSection(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div
+        id="emu-panel-cores"
+        role="tabpanel"
+        aria-labelledby="emu-tab-cores"
+        hidden={section !== 'cores'}
+      >
+        <EmulatorProfilesForm />
+      </div>
+      <div
+        id="emu-panel-player"
+        role="tabpanel"
+        aria-labelledby="emu-tab-player"
+        hidden={section !== 'player'}
+      >
+        <BrowserPlayerPilot />
+      </div>
+      <div
+        id="emu-panel-achievements"
+        role="tabpanel"
+        aria-labelledby="emu-tab-achievements"
+        hidden={section !== 'achievements'}
+      >
+        <RetroAchievementsPanel />
+      </div>
+      <div
+        id="emu-panel-firmware"
+        role="tabpanel"
+        aria-labelledby="emu-tab-firmware"
+        hidden={section !== 'firmware'}
+      >
+        <EmulatorFirmwarePanel />
+      </div>
     </Page>
   )
 }

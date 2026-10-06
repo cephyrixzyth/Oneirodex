@@ -51,6 +51,16 @@ def _payload():
             'steamAppID': '99',
             'thumb': None,
         },
+        {
+            'dealID': 'free1',
+            'title': 'Free Promotion Duplicate',
+            'storeID': '25',
+            'savings': '100.0',
+            'salePrice': '0.00',
+            'normalPrice': '29.99',
+            'steamAppID': None,
+            'thumb': 'https://example.test/free.jpg',
+        },
     ]
 
 
@@ -82,6 +92,19 @@ def test_list_deep_discount_articles_keeps_steep_savings_and_skips_owned(monkeyp
     assert params['sortBy'] == 'Savings'
     assert captured['kwargs']['headers']['User-Agent'] == store_deals.USER_AGENT
     assert 'python-requests' not in captured['kwargs']['headers']['User-Agent']
+
+
+def test_steam_deals_prefer_portrait_library_art_and_keep_thumbnail_fallback(monkeypatch):
+    monkeypatch.setattr(store_deals, 'request_with_backoff', lambda *args, **kwargs: _FakeResponse(_payload()))
+
+    deals = store_deals.fetch_cheapshark_deals()
+
+    steam = next(row for row in deals if row['deal_id'] == 'a1')
+    gog = next(row for row in deals if row['deal_id'] == 'b2')
+    assert steam['image_url'] == 'https://cdn.cloudflare.steamstatic.com/steam/apps/42/library_600x900_2x.jpg'
+    assert steam['image_fallback_url'] == 'https://example.test/a.jpg'
+    assert gog['image_url'] == 'https://example.test/b.jpg'
+    assert gog['image_fallback_url'] is None
 
 
 def test_failed_fetch_keeps_stale_snapshot(monkeypatch):

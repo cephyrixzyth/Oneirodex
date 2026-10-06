@@ -96,3 +96,30 @@ def test_malware_scan_requires_path(client, app, admin_user):
     _login(client, app, admin_user)
     response = client.post('/api/admin/malware-scan', json={})
     _assert_unprocessable(response, 'path')
+
+
+def test_malware_scan_rejects_path_when_safety_check_returns_false_tuple(
+    client, app, admin_user, monkeypatch
+):
+    from oneirodex.routes_apis import malware_scan
+
+    _login(client, app, admin_user)
+    monkeypatch.setattr(malware_scan, 'is_safe_path', lambda *_args: (False, 'outside'))
+    monkeypatch.setattr(
+        malware_scan, 'scan_path',
+        lambda *_args: pytest.fail('scanner must not receive an unsafe path'),
+    )
+
+    response = client.post('/api/admin/malware-scan', json={'path': '/etc/passwd'})
+
+    assert response.status_code == 403
+    assert response.get_json()['error_code'] == 'forbidden'
+
+
+def test_admin_images_page_renders_react_shell(client, app, admin_user):
+    _login(client, app, admin_user)
+
+    response = client.get('/admin/images')
+
+    assert response.status_code == 200
+    assert b'Oneirodex Admin' in response.data

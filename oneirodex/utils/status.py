@@ -8,6 +8,7 @@ from oneirodex import db
 from oneirodex.utils.global_settings import global_settings_row
 from config import Config
 from urllib.parse import urlparse
+from flask import current_app, has_app_context
 
 def get_system_info():
     """Get basic system information."""
@@ -63,11 +64,14 @@ def get_config_values():
     }
 
     safe_config_values = {}
-    for item, _ in whitelist.items():
-        if hasattr(Config, item):
-            path = getattr(Config, item)
-            if path:
-                safe_config_values[item] = _probe_path(path)
+    # Ops runs against the live application configuration. Config is only the
+    # class used to seed Flask at startup; create_app may relocate the library
+    # directory or an install/test may override paths after that point.
+    active_config = current_app.config if has_app_context() else None
+    for item in whitelist:
+        path = active_config.get(item) if active_config is not None else getattr(Config, item, None)
+        if path:
+            safe_config_values[item] = _probe_path(path)
 
     # Extra scan locations get their own rows so Ops shows a share that stopped
     # being mounted. An unmounted root is the failure that otherwise reads as
@@ -76,7 +80,8 @@ def get_config_values():
     # `Archive=/mnt/a|Archive=/mnt/b` is a plausible typo — wrote the same dict
     # key, so one of them vanished from the very view that exists to report a
     # root that stopped being mounted.
-    for root in getattr(Config, 'LIBRARY_ROOTS', None) or []:
+    roots = active_config.get('LIBRARY_ROOTS') if active_config is not None else getattr(Config, 'LIBRARY_ROOTS', None)
+    for root in roots or []:
         path = root.get('path')
         if not path:
             continue

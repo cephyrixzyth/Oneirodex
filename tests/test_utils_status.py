@@ -145,6 +145,27 @@ class TestGetConfigValues:
                 assert result['DATA_FOLDER_GAMES']['read'] is True
                 assert result['DATA_FOLDER_GAMES']['write'] is False
 
+    def test_get_config_values_uses_runtime_library_paths(self, tmp_path):
+        """Ops must probe the relocated paths used by this running app."""
+        from flask import Flask
+
+        images = tmp_path / 'library' / 'images'
+        uploads = tmp_path / 'library'
+        images.mkdir(parents=True)
+        app = Flask(__name__)
+        app.config.update({
+            'IMAGE_SAVE_PATH': str(images),
+            'UPLOAD_FOLDER': str(uploads),
+            'LIBRARY_ROOTS': [],
+        })
+
+        with app.app_context():
+            result = get_config_values()
+
+        assert result['IMAGE_SAVE_PATH']['path'] == str(images)
+        assert result['UPLOAD_FOLDER']['path'] == str(uploads)
+        assert result['IMAGE_SAVE_PATH']['exists'] is True
+
 
 class TestGetActiveUsers:
     """Tests for get_active_users function."""

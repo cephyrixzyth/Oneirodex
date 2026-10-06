@@ -56,6 +56,7 @@ def client_capabilities_get():
 
 @apis_bp.route('/client/heartbeat', methods=['POST'])
 @login_required
+@require_api_scope('write:presence')
 def client_heartbeat():
     # CSRF-exempt for companion tokens only: a session-cookie caller (a
     # browser) must pass the normal CSRF check, or any site could post here.

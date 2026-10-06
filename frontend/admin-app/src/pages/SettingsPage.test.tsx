@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { SettingsPage } from './SettingsPage'
@@ -49,22 +50,23 @@ describe('SettingsPage module badges', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getAllByTestId('settings-module-badge')).toHaveLength(2)
+      expect(screen.getAllByTestId('settings-module-badge')).toHaveLength(1)
     })
 
     // Only the modules with a statusKey are badged — the rest of the hub
     // is plain links, which is why the count is asserted exactly.
     const badges = screen.getAllByTestId('settings-module-badge')
     expect(badges.filter((b) => b.className.includes('settings-shell-badge--on'))).toHaveLength(1)
-    expect(badges.filter((b) => b.className.includes('settings-shell-badge--off'))).toHaveLength(1)
+    expect(badges.filter((b) => b.className.includes('settings-shell-badge--off'))).toHaveLength(0)
     // `detail` is how the hub says "helpers on, apply still off".
     expect(screen.getByText(/Apply off/)).toBeInTheDocument()
 
-    // Badge beside the title, not inside it — the title column used to clip
-    // both the label and the pill.
+    // Badge beside the module title, not inside its title column.
     const storageBadge = badges.find((b) => b.textContent!.includes('Apply off'))
     expect(storageBadge!.closest('.od-settings-row__title')).toBeNull()
     expect(storageBadge!.closest('.od-settings-row')).not.toBeNull()
+    await userEvent.setup().click(screen.getByRole('tab', { name: /Extend/ }))
+    expect(screen.getByText('Off').closest('.od-settings-row')).not.toBeNull()
     expect(document.querySelectorAll('.od-settings-group.od-admin-panel')).toHaveLength(0)
     expect(document.querySelectorAll('.od-admin-panel.od-settings')).toHaveLength(1)
   })
@@ -78,8 +80,24 @@ describe('SettingsPage module badges', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Remote play')).toBeInTheDocument()
     expect(screen.getByText('Storage')).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('tab', { name: /Play & emulation/ }))
+    expect(await screen.findByText('Remote play')).toBeInTheDocument()
     expect(screen.queryByTestId('settings-module-badge')).not.toBeInTheDocument()
+  })
+
+  test('opens to Library & matching and keeps other settings behind section tabs', () => {
+    stubModuleStatus({})
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: /Library & matching/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tabpanel', { name: /Library & matching/ })).toBeInTheDocument()
+    expect(screen.queryByText('Remote play')).not.toBeInTheDocument()
   })
 })

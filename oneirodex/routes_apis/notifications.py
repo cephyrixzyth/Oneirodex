@@ -12,11 +12,14 @@ from oneirodex.models import UserPreference
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.notifications import list_notifications, mark_read, unread_count
 
+from oneirodex.utils.api_tokens import require_api_scope, user_has_scope
+
 from . import apis_bp
 
 
 @apis_bp.route('/notifications', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def notifications_list():
     unread_only = str(request.args.get('unread') or '').lower() in ('1', 'true', 'yes')
     try:
@@ -36,6 +39,7 @@ def notifications_list():
 
 @apis_bp.route('/notifications/read', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def notifications_read():
     data = request.get_json(silent=True) or {}
     all_read = bool(data.get('all'))
@@ -55,7 +59,14 @@ def notifications_read():
 
 @apis_bp.route('/notifications/preferences', methods=['GET', 'POST'])
 @login_required
+@require_api_scope('read:social')
 def notifications_preferences():
+    if request.method == 'POST' and not user_has_scope('write:social'):
+        return api_error(
+            'Missing scope: write:social',
+            code='forbidden',
+            detail={'required_scope': 'write:social'},
+        )
     prefs = current_user.preferences
     if prefs is None:
         prefs = UserPreference(user_id=current_user.id)

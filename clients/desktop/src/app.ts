@@ -407,11 +407,16 @@ async function runPlayAction(uuid: string): Promise<void> {
   try {
     setGameActivity(uuid, 'Launching…')
     renderLibrary()
-    const { pid } = await kickoffLaunch(api, uuid)
+    const { pid, sessionId } = await kickoffLaunch(api, uuid)
     lastPlayedGameUuid = uuid
     setGameActivity(uuid, `Playing (pid ${pid})`)
     renderLibrary()
-    setStatus(`Launched ${uuid}.`, 'success')
+    setStatus(
+      sessionId === null
+        ? `Launched ${uuid}. Playtime tracking is unavailable.`
+        : `Launched ${uuid}.`,
+      'success',
+    )
   } finally {
     busyGames.delete(uuid)
     renderLibrary()
@@ -607,6 +612,10 @@ async function runGameAction(
       const versionChoice = options.kind
         ? { kind: options.kind, versionUuid: options.versionUuid }
         : await pickDownloadVersion(api, uuid)
+      if (versionChoice === null) {
+        setStatus('Download canceled.', 'info')
+        return 'ok'
+      }
       await kickoffDownload(api, auth, registry, uuid, {
         kind: versionChoice.kind,
         versionUuid: versionChoice.versionUuid,

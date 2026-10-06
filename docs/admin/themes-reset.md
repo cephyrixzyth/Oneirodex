@@ -4,6 +4,10 @@
 
 Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 41** in `oneirodex/utils/preset_themes.py` (41 = metadata-providers handler learns the hash-identify switch; 40 = six system-family presets; 39 = `.od-seg` wraps on narrow screens; 38 = per-console loading-motif colour; 37 = drawn room art per era; 36 = Library tools THN). **Reset Default Themes** after this bump — volume copies stay on the previous generator until you do.
 
+## Uploading a theme
+
+Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded content, and 1,024 archive entries. Unsafe archive paths and special files are rejected before extraction. Each upload uses its own temporary directory; concurrent uploads cannot mix files. If two uploads use the same theme name, one is accepted and the other is refused without replacing the installed theme.
+
 ## Default look
 
 - Accent **`#2fd67b`** (green glass Style B+C).

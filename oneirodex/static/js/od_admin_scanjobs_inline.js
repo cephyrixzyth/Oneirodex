@@ -427,10 +427,14 @@
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        messageDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
+        const messageText = document.createElement('span');
+        messageText.textContent = String(message ?? '');
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'btn-close';
+        closeButton.setAttribute('data-bs-dismiss', 'alert');
+        closeButton.setAttribute('aria-label', 'Close');
+        messageDiv.append(messageText, closeButton);
 
         messagesDiv.appendChild(messageDiv);
 

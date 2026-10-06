@@ -20,7 +20,6 @@ from oneirodex.utils.browse_filters import apply_item_kind_filter, apply_name_fi
 from oneirodex.utils.client_lifecycle import load_lifecycle_map
 from oneirodex.utils.local_metadata import has_local_images, has_local_metadata
 from oneirodex.utils.lifecycle import web_lifecycle_fields
-from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.game_details_payload import browse_trailer_fields
 from oneirodex.utils.play_url import browse_play_fields, library_platform_key
 from oneirodex.utils.secondary_scrapers import game_card_flags
@@ -30,6 +29,7 @@ from oneirodex.schemas.user import CheckUsernameBody
 from oneirodex.utils.icon_themes import icon_pack_css_url, list_icon_packs
 from oneirodex.utils.presence import accepted_friend_ids, presence_for_user
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.api_tokens import require_api_scope
 from sqlalchemy import func, select, and_, delete
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
@@ -38,6 +38,7 @@ from . import apis_bp
 
 @apis_bp.route('/users/<int:user_id>/profile', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def member_profile(user_id: int):
     """Public member profile — ACL-filtered recent games (Wave 14b)."""
     target = db.session.get(User, user_id)
@@ -60,10 +61,10 @@ def member_profile(user_id: int):
     recent = []
     total_seconds = 0
     for row in progress_rows:
-        total_seconds += int(row.total_seconds or 0)
         game = db.session.execute(select(Game).filter_by(uuid=row.game_uuid)).scalars().first()
         if not game or not user_can_access_game(current_user, game):
             continue
+        total_seconds += int(row.total_seconds or 0)
         recent.append({
             'game_uuid': row.game_uuid,
             'game_name': game.name,
@@ -90,6 +91,7 @@ def member_profile(user_id: int):
 
 @apis_bp.route('/users/<int:user_id>/compare/<int:other_id>', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def member_profile_compare(user_id: int, other_id: int):
     """Compare playtime with a friend (Wave 14b)."""
     if current_user.id not in {user_id, other_id}:

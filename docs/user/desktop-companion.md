@@ -42,6 +42,16 @@ The Friends webview is least-privilege (browse only); install/launch ACLs stay o
 
 ## Lifecycle
 
+Cancel, Escape or clicking outside the version picker stops the download without
+changing the game's local state. Choosing the base version explicitly still
+downloads it.
+
+An installed game can launch while the server is unavailable. If playtime
+registration fails, the companion reports a successful launch with a tracking
+unavailable notice and continues watching the local process. That session's
+playtime is not uploaded or backfilled. A local registry write failure after
+launch likewise does not report that the game failed to start.
+
 Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected
 by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html).
 The advisory concerns string-variant iteration and is patched in glib 0.20+;

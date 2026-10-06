@@ -10,6 +10,7 @@ from uuid import uuid4
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.accounts import display_email, is_placeholder_email, placeholder_email
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_invariant import lock_admin_mutation
 from oneirodex.utils.rbac import VALID_ROLES as RBAC_VALID_ROLES
 from oneirodex.utils.library_acl import (
     get_user_content_filters,
@@ -23,6 +24,17 @@ from sqlalchemy.exc import IntegrityError
 # Validation constants and functions
 VALID_ROLES = list(RBAC_VALID_ROLES)
 RESERVED_USERNAMES = ['system']
+def _lock_admin_user_mutation():
+    """Serialize admin role/state/deletion decisions through their commit."""
+    lock_admin_mutation(db.session)
+    # An actor whose role or state changed while waiting for the lock must not
+    # continue a request authorized against the earlier session object.
+    actor = db.session.execute(
+        select(User).where(User.id == current_user.id).execution_options(populate_existing=True)
+    ).scalars().first()
+    if actor is None:
+        return False
+    return actor.role == 'admin' and actor.state is not False
 
 def validate_username(username):
     """Validate username according to business rules"""
@@ -103,7 +115,7 @@ def check_admin_protection(user_id, new_role=None, new_state=None):
     current_admin_count = db.session.execute(
         select(func.count(User.id)).where(
             User.role == 'admin',
-            User.state == True
+            User.state.is_not(False),
         )
     ).scalar()
     
@@ -112,7 +124,7 @@ def check_admin_protection(user_id, new_role=None, new_state=None):
         return False, "User not found"
     
     # If this is the only active admin and we're trying to demote or deactivate
-    if (user.role == 'admin' and user.state and current_admin_count <= 1):
+    if (user.role == 'admin' and user.state is not False and current_admin_count <= 1):
         if (new_role and new_role != 'admin') or (new_state is not None and not new_state):
             return False, "Cannot modify the last active admin account"
     
@@ -267,7 +279,12 @@ def manage_user_api(user_id):
             log_system_event(f"Admin {current_user.name} failed to create user {username}: {str(e)}", event_type='audit', event_level='error')
             return api_error('Failed to create user', code='internal')
 
-    user = db.session.get(User, user_id)
+    if request.method in ('PUT', 'DELETE') and not _lock_admin_user_mutation():
+        return api_error('Admin account is no longer active', code='forbidden')
+
+    user = db.session.execute(
+        select(User).where(User.id == user_id).execution_options(populate_existing=True)
+    ).scalars().first() if request.method in ('PUT', 'DELETE') else db.session.get(User, user_id)
     if not user:
         return api_error('User not found', code='not_found')
     

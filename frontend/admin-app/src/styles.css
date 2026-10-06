@@ -617,6 +617,117 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   margin-bottom: 0;
 }
 
+/* Scan/match policy groups related controls and keeps their labels readable
+   in the live admin route instead of inheriting legacy inline form spacing. */
+.od-scan-match {
+  display: grid;
+  gap: var(--od-space-4);
+}
+
+.od-scan-match .od-admin-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: var(--od-space-4);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-lg);
+  background: var(--od-surface-1);
+}
+
+.od-scan-match .od-admin-fieldset legend {
+  padding: 0 var(--od-space-2);
+  color: var(--od-text);
+  font-size: var(--od-font-lg);
+  font-weight: 700;
+}
+
+.od-scan-match .od-admin-field:not(.od-admin-field--check) {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.55fr) minmax(10rem, 0.8fr) minmax(16rem, 1.6fr);
+  align-items: center;
+  gap: var(--od-space-3);
+  margin: 0;
+  padding: var(--od-space-2) 0;
+  color: var(--od-text);
+}
+
+.od-scan-match .od-admin-field:not(.od-admin-field--check) input,
+.od-scan-match .od-admin-field:not(.od-admin-field--check) select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.od-scan-match .od-admin-field--check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--od-space-2);
+  margin: var(--od-space-2) 0 0;
+  color: var(--od-text);
+}
+
+.od-scan-match .od-admin-field--check > span {
+  display: grid;
+  gap: var(--od-space-1);
+}
+
+.od-scan-match .od-admin-hint {
+  display: block;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.od-emu-list {
+  display: grid;
+  gap: var(--od-space-4);
+}
+
+.od-emu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+  gap: var(--od-space-2);
+}
+
+.od-emu-row {
+  display: grid;
+  min-width: 0;
+  gap: var(--od-space-1);
+  padding: var(--od-space-2);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-1);
+}
+
+.od-emu-row label {
+  overflow: hidden;
+  color: var(--od-text);
+  font-size: var(--od-font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.od-emu-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface-2);
+  color: var(--od-text);
+  font: inherit;
+}
+
+@media (max-width: 850px) {
+  .od-scan-match .od-admin-field:not(.od-admin-field--check) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--od-space-1);
+  }
+}
+
 /* Admin layout utilities — inline-style sweep.
  *
  * These name values that were repeated as one-off `style={{}}` objects across
@@ -1908,6 +2019,107 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
 .od-images-filters__check input {
   width: auto;
   margin: 0;
+}
+
+.od-image-queue-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.od-image-queue-head .od-admin-lede { margin-bottom: 0; }
+
+.od-image-queue-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.od-image-queue-stats > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+}
+
+.od-image-queue-stats strong {
+  color: var(--od-text);
+  font-size: var(--od-font-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.od-image-queue-stats span { color: var(--od-text-muted); }
+.od-image-queue-stats .is-warning strong { color: var(--od-warning); }
+.od-image-queue-stats .is-success strong { color: var(--od-success); }
+
+.od-image-queue-filters {
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+}
+
+.od-image-queue-filters summary {
+  padding: 0.7rem 0.85rem;
+  color: var(--od-text);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.od-image-queue-filters summary span {
+  margin-left: 0.6rem;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+  font-weight: 400;
+}
+
+.od-image-queue-filters[open] .od-images-filters {
+  margin: 0;
+  padding: 0.8rem;
+  border-top: 1px solid var(--od-border);
+}
+
+.od-image-queue-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.od-image-queue-actions > div {
+  display: flex;
+  align-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+}
+
+.od-image-queue-actions h3 {
+  width: 100%;
+  margin: 0;
+  color: var(--od-text);
+  font-size: var(--od-font-md);
+}
+
+.od-image-queue-actions p {
+  width: 100%;
+  margin: 0 0 0.2rem;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}
+
+@media (max-width: 720px) {
+  .od-image-queue-head { align-items: stretch; flex-direction: column; }
+  .od-image-queue-actions { grid-template-columns: 1fr; }
+  .od-image-queue-stats { gap: 0.4rem; }
+  .od-image-queue-stats > div { align-items: flex-start; flex-direction: column; gap: 0; padding: 0.55rem; }
 }
 
 .od-images-groups {

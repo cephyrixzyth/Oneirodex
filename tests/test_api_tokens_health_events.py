@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from oneirodex import db
-from oneirodex.models import ApiToken, Game, Library, User
+from oneirodex.models import ApiToken, ClientDevice, Game, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.api_tokens import (
     VALID_SCOPES,
@@ -169,6 +169,36 @@ def test_create_token_secret_payload_is_pure(client, db_session, user):
     assert found_token is not None
 
 
+def test_library_token_cannot_write_client_presence(client, db_session, user):
+    _, raw = generate_api_token(user, 'library-only', ['read:library'])
+
+    denied = client.post(
+        '/api/client/heartbeat',
+        headers={'Authorization': f'Bearer {raw}'},
+        json={'device_id': 'narrow-token-device'},
+    )
+
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+    assert db_session.execute(
+        select(ClientDevice).filter_by(user_id=user.id, device_id='narrow-token-device')
+    ).scalar_one_or_none() is None
+
+
+def test_presence_scope_can_write_client_presence(client, db_session, user):
+    _, presence_raw = generate_api_token(user, 'presence', ['write:presence'])
+    allowed = client.post(
+        '/api/client/heartbeat',
+        headers={'Authorization': f'Bearer {presence_raw}'},
+        json={'device_id': 'presence-token-device'},
+    )
+
+    assert allowed.status_code == 200
+    assert db_session.execute(
+        select(ClientDevice).filter_by(user_id=user.id, device_id='presence-token-device')
+    ).scalar_one_or_none() is not None
+
+
 def test_revoke_api_token(db_session, user):
     row, raw = generate_api_token(user, 'temp', ['read:library'])
     assert revoke_api_token(row.id, user_id=user.id) is True
@@ -262,5 +292,6 @@ def test_event_bus_publish_subscribe():
 def test_valid_scopes_frozen():
     assert 'read:library' in VALID_SCOPES
     assert 'read:social' in VALID_SCOPES
+    assert 'write:social' in VALID_SCOPES
     assert 'write:presence' in VALID_SCOPES
     assert 'admin' in VALID_SCOPES

@@ -13,7 +13,6 @@ only the endpoint names change (``main.*`` -> ``admin2.*``).
 
 import logging
 import os
-from datetime import datetime, timezone
 
 from flask import (
     abort, current_app, flash, redirect, render_template, request, session, url_for,
@@ -28,9 +27,7 @@ from oneirodex.forms import (
     ScanFolderForm,
 )
 from oneirodex.models import AllowedFileType, Library, ReleaseGroup, ScanJob
-from oneirodex.utilities import scan_and_add_games
 from oneirodex.utils.auth import admin_required
-from oneirodex.utils.background import run_in_background
 from oneirodex.utils.functions import load_scanning_filter_patterns
 from oneirodex.utils.gamenames import get_game_names_from_folder
 from oneirodex.utils.library_roots import resolve_scan_path
@@ -147,65 +144,17 @@ def cancel_scan_job(job_id):
 def restart_scan_job(job_id):
     logger.info(f"Request to restart scan job: {job_id}")
     job = db.session.get(ScanJob, job_id) or abort(404)
-    if job.status == 'Running':
-        flash('Cannot restart a running scan.', 'error')
-        return redirect(url_for('admin2.scan_management'))
+    from oneirodex.utils.scan_queue import parse_queue_policy, restart_or_queue_scan
 
-    # Reset the existing job's counters instead of creating a new job
-    job.status = 'Running'
-    job.total_folders = 0
-    job.folders_success = 0
-    job.folders_failed = 0
-    job.removed_count = 0
-    job.last_run = datetime.now(timezone.utc)
-    job.error_message = None
-    job.is_enabled = True
-    db.session.commit()
-    try:
-        from oneirodex.utils.event_bus import publish_scan_event
-        publish_scan_event(job.id, 'Running')
-    except Exception:
-        pass
-
-    # Start scan using the existing job.
-    #
-    # Nothing but the job id crosses into the thread. `job` belongs to this
-    # request's session, and the worker gets its own — see utils/background.py.
-    # Every field is read from the row the worker re-fetches, so it also cannot
-    # act on values that changed between the click and the thread starting.
-    scan_job_id = job.id
-
-    def _run_restarted_scan():
-        existing = db.session.get(ScanJob, scan_job_id)
-        if not existing:
-            return
-
-        base_dir = current_app.config.get('BASE_FOLDER_WINDOWS') if os.name == 'nt' else current_app.config.get('BASE_FOLDER_POSIX')
-        full_path = os.path.join(base_dir, existing.scan_folder)
-
-        if not os.path.exists(full_path) or not os.access(full_path, os.R_OK):
-            existing.status = 'Failed'
-            existing.error_message = f"Cannot access folder: {full_path}"
-            db.session.commit()
-            return
-
-        scan_mode = 'files' if existing.setting_filefolder else 'folders'
-        download_missing_images = getattr(existing, 'setting_download_missing_images', False)
-        scan_and_add_games(
-            full_path,
-            scan_mode=scan_mode,
-            library_uuid=existing.library_uuid,
-            remove_missing=existing.setting_remove,
-            existing_job=existing,
-            download_missing_images=download_missing_images,
-            force_updates_extras_scan=getattr(existing, 'setting_force_updates_extras', False)
-        )
-
-    run_in_background(
-        current_app._get_current_object(),
-        _run_restarted_scan,
-        name=f'oneirodex-restart-scan-{str(scan_job_id)[:8]}',
+    result = restart_or_queue_scan(
+        job.id,
+        queue_policy=parse_queue_policy(
+            request.form.get('queue_policy'), request.form.get('force_parallel'),
+        ),
+        allow_force=True,
+        app=current_app._get_current_object(),
     )
+    flash(result['message'], 'error' if result['status'] == 'rejected' else 'success')
     return redirect(url_for('admin2.scan_management'))
 
 

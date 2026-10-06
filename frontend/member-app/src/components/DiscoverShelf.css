@@ -17,7 +17,7 @@
      library and left Discover exactly as it was. Deriving them here is what
      connects the control to these rows.
 
-     Height is the 3:4 cover box PLUS the caption strip, measured rather than
+     Height is the standard 3:4 cover box PLUS the caption strip, measured rather than
      guessed. The old flat 1.4 ratio was a single number standing in for both,
      so it was right at neither setting: with titles on the card came out 12px
      taller than the item box that holds it, and the caption hung below the
@@ -53,12 +53,13 @@
    ended a strip above the box's floor and the scroll bar, parked relative to
    that floor, sat a strip too low under every News tile (human, 2026-09-06:
    "news row scroll bar is too low and should match all other rows spacing").
-   Zero the strip for article rows so their box is the bare 3:4 card and the
+   Zero the strip for article rows so their box is the bare 2:3 card and the
    bar lands at the same gap as under a game cover. The +4px titles-on gap
    stays: it is about the bar reading as an underline, which a badge-over-art
    card avoids anyway, and one lane height across rows is the point. */
 .od-shelf[data-item-kind='articles'] {
   --od-tile-title-h: 0px;
+  --od-tile-h: calc(var(--od-tile-w) * 3 / 2);
   --od-shelf-scrollbar-gap: 0.45rem;
 }
 

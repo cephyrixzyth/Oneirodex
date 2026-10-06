@@ -6,6 +6,8 @@ Oneirodex is a self-hosted multi-user game library. Members browse and download 
 
 **Defaults (operators):** Most product modules ship **on** (`ENABLE_*` in `.env.example`). **OIDC / SSO stays off** until you set `OIDC_ENABLED=true` and enable it under Admin → Integrations. Optional ClamAV: `docker compose --profile clamav up -d` when you want daemon scans in addition to filename heuristics — [settings-modules.md](../admin/settings-modules.md).
 
+On a new install, the wizard creates the first admin, then optionally configures email, features, metadata/API keys, and a first library. The library step accepts a server-visible path under a declared library root and queues its first scan. Every optional step can be skipped; integrations that require container environment values are listed in Admin → Integrations after setup.
+
 ## Sign in
 
 1. Open the server URL (default port **5006**).

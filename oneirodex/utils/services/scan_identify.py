@@ -541,8 +541,6 @@ def retrieve_and_save_game(
 ):
     # print(f"retrieve_and_save_game Retrieving and saving game: {game_name} on {full_disk_path} to library with UUID {library_uuid}.")
     from oneirodex.utils.local_metadata import read_local_metadata
-    from oneirodex.utils.event_logging import log_system_event
-    from flask import flash
 
     # Scan workers pass scan_job_id — defer Steam/images/HLTB so identify commits fast.
     if defer_enrichment is None:

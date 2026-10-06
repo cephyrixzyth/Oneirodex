@@ -13,13 +13,21 @@
         </div>
     </div>
     <div class="od-adminpage-panel">
-        <style>
-            #content {
-                min-height: 300px;
-            }
-        </style>
+        {% if not can_send %}
+        <div class="alert alert-info" role="status">
+            <strong>Newsletter sending is not ready.</strong>
+            {% if not newsletter_enabled %}
+                Enable the newsletter feature in <a href="/admin/features">Admin → Features</a>.
+            {% endif %}
+            {% if not smtp_ready %}
+                Configure an enabled mail server and sender in <a href="/admin/smtp_settings">Admin → SMTP</a>.
+            {% endif %}
+            You can still review sent newsletters below.
+        </div>
+        {% endif %}
         <form action="" method="post" novalidate>
             {{ form.hidden_tag() }}
+            <fieldset {% if not can_send %}disabled{% endif %}>
             <div class="mb-3">
                 <label for="subject" class="form-label">{{ form.subject.label }}</label>
                 {{ form.subject(size=32, class="form-control input-glass", id="subject") }}
@@ -46,6 +54,7 @@
             
             {{ form.recipients(style="display:none") }}  <!-- hidden input field -->
             <button type="submit" class="btn btn-primary">{{ form.send.label }}</button>
+            </fieldset>
         </form>
         
        <!-- Newsletter History Table -->
@@ -65,7 +74,7 @@
                    {% for newsletter in newsletters %}
                    <tr>
                        <td>{{ newsletter.subject }}</td>
-                       <td>{{ newsletter.sent_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                       <td>{{ newsletter.sent_date.strftime('%Y-%m-%d %H:%M:%S') if newsletter.sent_date else '—' }}</td>
                        <td>
                            {% if newsletter.status == 'sent' %}
                                <span class="badge bg-success">Sent</span>

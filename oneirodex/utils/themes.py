@@ -2,12 +2,17 @@ import os
 import json
 import zipfile
 import shutil
+import tempfile
 from flask import flash
 from werkzeug.utils import secure_filename
 from oneirodex.models import UserPreference
 from oneirodex import db
 from sqlalchemy import update
 from oneirodex.utils.library_paths import library_dir
+
+
+MAX_THEME_ZIP_MEMBERS = 1024
+MAX_THEME_EXPANDED_BYTES = 100 * 1024 * 1024
 
 class ThemeManager:
     def __init__(self, app):
@@ -54,23 +59,32 @@ class ThemeManager:
 
         if not os.path.exists(self.theme_folder):
             try:
-                os.makedirs(self.theme_folder)
+                os.makedirs(self.theme_folder, exist_ok=True)
                 flash('Themes folder created successfully.', 'info')
             except Exception as e:
                 flash(f'Error creating themes folder: {str(e)}', 'error')
                 return None
 
-        temp_dir = os.path.join(self.app.config['UPLOAD_FOLDER'], 'temp_theme')
-        os.makedirs(temp_dir, exist_ok=True)
-
+        temp_dir = None
+        reserved_theme_path = None
         try:
+            temp_dir = tempfile.mkdtemp(prefix='temp_theme_', dir=self.app.config['UPLOAD_FOLDER'])
             with zipfile.ZipFile(theme_zip, 'r') as zip_ref:
+                members = zip_ref.infolist()
+                if len(members) > MAX_THEME_ZIP_MEMBERS:
+                    raise ValueError(f'Theme ZIP has too many entries (maximum {MAX_THEME_ZIP_MEMBERS})')
+                if sum(member.file_size for member in members) > MAX_THEME_EXPANDED_BYTES:
+                    raise ValueError('Theme ZIP expands beyond the 100MB limit')
                 temp_dir_real = os.path.realpath(temp_dir)
-                for member in zip_ref.infolist():
+                for member in members:
                     # Reject absolute paths, drive letters, and any traversal
                     member_name = member.filename
-                    if member_name.startswith(('/', '\\')) or (len(member_name) > 1 and member_name[1] == ':'):
+                    if (not member_name or '\x00' in member_name
+                            or member_name.startswith(('/', '\\'))
+                            or (len(member_name) > 1 and member_name[1] == ':')):
                         raise ValueError(f"Unsafe absolute path in zip: {member_name}")
+                    if '..' in member_name.replace('\\', '/').split('/'):
+                        raise ValueError(f"Unsafe path in zip (traversal): {member_name}")
                     target_path = os.path.realpath(os.path.join(temp_dir, member_name))
                     if target_path != temp_dir_real and not target_path.startswith(temp_dir_real + os.sep):
                         raise ValueError(f"Unsafe path in zip (traversal): {member_name}")
@@ -98,10 +112,18 @@ class ThemeManager:
 
             theme_name = secure_filename(theme_data['name'])
             theme_path = os.path.join(self.theme_folder, theme_name)
-            if os.path.exists(theme_path):
+            try:
+                # mkdir reserves the name atomically, so another upload cannot
+                # nest its temporary folder inside a theme that just appeared.
+                os.mkdir(theme_path)
+            except FileExistsError:
                 raise ValueError(f"Theme '{theme_name}' already exists")
+            reserved_theme_path = theme_path
 
-            shutil.move(temp_dir, theme_path)
+            # Copying into the reserved directory also works when the upload
+            # folder and theme library are on different filesystems.
+            shutil.copytree(temp_dir, theme_path, dirs_exist_ok=True)
+            reserved_theme_path = None
             flash(f'Theme "{theme_data["name"]}" uploaded successfully.', 'success')
             return theme_data
         except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
@@ -125,7 +147,9 @@ class ThemeManager:
             print(f"Unexpected error during theme upload: {str(e)}")
             return None
         finally:
-            if os.path.exists(temp_dir):
+            if reserved_theme_path and os.path.isdir(reserved_theme_path):
+                shutil.rmtree(reserved_theme_path)
+            if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
     def validate_theme_structure(self, theme_path):

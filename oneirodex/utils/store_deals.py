@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
 
@@ -84,6 +85,15 @@ def fetch_cheapshark_deals(
             continue
         if savings < min_savings:
             continue
+        try:
+            sale_price = Decimal(str(row.get('salePrice')))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        # Free promotions have their own Discover shelf. CheapShark can return
+        # them alongside deep discounts, which otherwise duplicates the same
+        # offer in both rows.
+        if not sale_price.is_finite() or sale_price <= 0:
+            continue
         deal_id = str(row.get('dealID') or '').strip()
         title = str(row.get('title') or '').strip()
         if not deal_id or not title:
@@ -92,15 +102,25 @@ def fetch_cheapshark_deals(
         store = _STORE_BY_ID.get(store_id, 'other')
         steam_app = str(row.get('steamAppID') or '').strip() or None
         thumb = str(row.get('thumb') or '').strip() or None
+        # CheapShark's ``thumb`` is the short Steam capsule (roughly 460x215),
+        # which reads as a banner inside Discover's 2:3 poster tile. Steam's
+        # public library capsule is the matching portrait asset. Keep the
+        # CheapShark image as a fallback for apps without that artwork.
+        portrait = (
+            f'https://cdn.cloudflare.steamstatic.com/steam/apps/{steam_app}/library_600x900_2x.jpg'
+            if steam_app and steam_app.isdigit()
+            else None
+        )
         out.append({
             'deal_id': deal_id,
             'title': title,
             'store': store,
             'savings': round(savings),
-            'sale_price': str(row.get('salePrice') or ''),
+            'sale_price': str(sale_price),
             'normal_price': str(row.get('normalPrice') or ''),
             'steam_app_id': steam_app,
-            'image_url': thumb,
+            'image_url': portrait or thumb,
+            'image_fallback_url': thumb if portrait else None,
             'href': f'https://www.cheapshark.com/redirect?dealID={deal_id}',
         })
     return out

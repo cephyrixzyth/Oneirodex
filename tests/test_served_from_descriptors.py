@@ -552,6 +552,56 @@ def test_rom_endpoint_serves_a_folder_rom_with_its_size_and_name(served):
     assert wire.finished
 
 
+def test_rom_endpoint_keeps_child_browser_playback_for_allowed_game(served):
+    from oneirodex.models import User, UserLibraryAccess
+
+    folder = served.root / 'Allowed Child Game'
+    folder.mkdir()
+    (folder / 'game.nes').write_bytes(GAME)
+    game = _make_game(served.db, folder)
+    child = User(
+        name=f'child_{uuid4().hex[:8]}',
+        email=f'child_{uuid4().hex[:8]}@example.com',
+        user_id=str(uuid4()), role='child', state=True,
+    )
+    child.set_password('password123')
+    served.db.add(child)
+    served.db.flush()
+    served.db.add(UserLibraryAccess(user_id=child.id, library_uuid=game.library_uuid))
+    served.db.commit()
+    served.lazy._get_user_id = AsyncMock(return_value=child.id)
+
+    wire = _get_rom(served, game)
+
+    assert _status(wire) == 200
+    assert wire.body == GAME
+
+
+def test_asgi_rejects_legacy_download_scope_after_account_becomes_child(served):
+    from oneirodex.models import User
+    from oneirodex.utils.api_tokens import generate_api_token
+
+    member = User(
+        name=f'member_{uuid4().hex[:8]}',
+        email=f'member_{uuid4().hex[:8]}@example.com',
+        user_id=str(uuid4()), role='user', state=True,
+    )
+    member.set_password('password123')
+    served.db.add(member)
+    served.db.commit()
+    _, raw = generate_api_token(member, 'legacy download', ['write:download'])
+    member.role = 'child'
+    served.db.commit()
+    scope = {'headers': [(b'authorization', f'Bearer {raw}'.encode('ascii'))]}
+    served.lazy._get_user_id = asgi_mod.LazyASGIApp._get_user_id.__get__(
+        served.lazy, asgi_mod.LazyASGIApp,
+    )
+
+    resolved = asyncio.run(served.lazy._get_user_id(scope))
+
+    assert resolved is None
+
+
 @pytest.mark.skipif(os.name == 'nt', reason='Windows denies unlinking a file held by an open descriptor')
 def test_rom_endpoint_serves_what_was_vetted_when_the_file_is_swapped_while_logging(served, secret, monkeypatch):
     folder = served.root / 'Rom Game'
@@ -652,11 +702,11 @@ def _get_zip(served, request_id, wire=None) -> _Wire:
     return wire
 
 
-def _download_request(served, game, file_path: Path):
+def _download_request(served, game, file_path: Path, *, user_id: int | None = None):
     from oneirodex.models import DownloadRequest
 
     row = DownloadRequest(
-        user_id=served.user.id,
+        user_id=user_id or served.user.id,
         game_uuid=game.uuid,
         status='available',
         zip_file_path=str(file_path),
@@ -665,6 +715,61 @@ def _download_request(served, game, file_path: Path):
     served.db.add(row)
     served.db.commit()
     return row
+
+
+def test_zip_download_rechecks_current_child_library_access(served, monkeypatch):
+    from oneirodex.models import User, UserLibraryAccess
+
+    package = served.root / 'child-game.7z'
+    package.write_bytes(GAME)
+    game = _make_game(served.db, package)
+    child = User(
+        name=f'child_{uuid4().hex[:8]}',
+        email=f'child_{uuid4().hex[:8]}@example.com',
+        user_id=str(uuid4()), role='child', state=True,
+    )
+    child.set_password('password123')
+    served.db.add(child)
+    served.db.flush()
+    access = UserLibraryAccess(user_id=child.id, library_uuid=game.library_uuid)
+    served.db.add(access)
+    served.db.commit()
+    request = _download_request(served, game, package, user_id=child.id)
+    # Isolate current library access from the separate child download-role rule.
+    monkeypatch.setattr(asgi_mod, 'forbidden_scopes_for_role', lambda _role: frozenset())
+    served.lazy._get_user_id = AsyncMock(return_value=child.id)
+    served.db.delete(access)
+    served.db.commit()
+
+    wire = _get_zip(served, request.id)
+
+    assert _status(wire) == 403
+    assert GAME not in wire.body
+
+
+def test_child_cannot_download_a_queued_zip(served):
+    from oneirodex.models import User, UserLibraryAccess
+
+    package = served.root / 'child-game.7z'
+    package.write_bytes(GAME)
+    game = _make_game(served.db, package)
+    child = User(
+        name=f'child_{uuid4().hex[:8]}',
+        email=f'child_{uuid4().hex[:8]}@example.com',
+        user_id=str(uuid4()), role='child', state=True,
+    )
+    child.set_password('password123')
+    served.db.add(child)
+    served.db.flush()
+    served.db.add(UserLibraryAccess(user_id=child.id, library_uuid=game.library_uuid))
+    served.db.commit()
+    request = _download_request(served, game, package, user_id=child.id)
+    served.lazy._get_user_id = AsyncMock(return_value=child.id)
+
+    wire = _get_zip(served, request.id)
+
+    assert _status(wire) == 403
+    assert GAME not in wire.body
 
 
 def test_single_file_download_serves_the_file_with_its_size(served):

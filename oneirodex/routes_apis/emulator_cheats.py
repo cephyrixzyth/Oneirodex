@@ -14,6 +14,7 @@ from oneirodex.models import Game
 from oneirodex.platform import cheat_surface_for_platform
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.api_tokens import require_api_scope
 from oneirodex.utils.bios_install import (
     apply_firmware_import,
     firmware_import_allowed_bases,
@@ -80,6 +81,7 @@ def _refuse_non_retroarch(game):
 
 @apis_bp.route('/games/<game_uuid>/cheats', methods=['GET'])
 @login_required
+@require_api_scope('read:library')
 def list_game_cheats(game_uuid):
     game, refusal = _accessible_game(game_uuid)
     if refusal is not None:
@@ -95,6 +97,7 @@ def list_game_cheats(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/cheats', methods=['POST'])
 @login_required
+@require_api_scope('write:library')
 def upload_game_cheat(game_uuid):
     """Upload a prebuilt .cht or easy-create from JSON body.
 
@@ -140,6 +143,7 @@ def upload_game_cheat(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/cheats/<path:filename>', methods=['GET'])
 @login_required
+@require_api_scope('read:library')
 def download_game_cheat(game_uuid, filename):
     game, refusal = _accessible_game(game_uuid)
     if refusal is not None:
@@ -161,6 +165,7 @@ def download_game_cheat(game_uuid, filename):
 
 @apis_bp.route('/games/<game_uuid>/cheats/<path:filename>', methods=['DELETE'])
 @login_required
+@require_api_scope('write:library')
 def remove_game_cheat(game_uuid, filename):
     game, refusal = _accessible_game(game_uuid)
     if refusal is not None:
@@ -318,6 +323,7 @@ def _pc_surface_or_error(game):
 
 @apis_bp.route('/games/<game_uuid>/pc_cheats', methods=['GET'])
 @login_required
+@require_api_scope('read:library')
 def pc_cheats_list(game_uuid: str):
     """Cheat notes for a PC game."""
     from oneirodex.models import PcCheat

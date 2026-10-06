@@ -41,6 +41,9 @@ function installFetch(overrides: { jobs?: any; scan?: any } = {}) {
     vi.fn(async (url, opts) => {
       const href = String(url)
       calls.push({ url: href, body: opts?.body ? JSON.parse(opts.body) : null })
+      if (href.includes('/api/admin/library_platforms')) {
+        return jsonResponse({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] })
+      }
       if (href.includes('/api/get_libraries')) return jsonResponse(LIBRARIES)
       if (href.includes('/api/scan_jobs_status')) {
         return jsonResponse(overrides.jobs ?? [])
@@ -86,6 +89,42 @@ test('each library row can start its own scan', async () => {
   // backend has to guess the policy.
   expect(posted.body.queue_policy).toBe('queue')
   expect(posted.body.force_parallel).toBe(false)
+})
+
+test('manual create form creates a library and queues its first scan', async () => {
+  const user = userEvent.setup()
+  const seen: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
+    const href = String(url)
+    seen.push(href)
+    if (href.includes('/api/admin/library_platforms')) {
+      return jsonResponse({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] })
+    }
+    if (href.includes('/api/get_libraries')) {
+      return jsonResponse([{ uuid: 'new-lib', name: 'NES Games' }])
+    }
+    if (href.includes('/admin/library/add')) {
+      expect((opts?.body as FormData).get('name')).toBe('NES Games')
+      expect((opts?.body as FormData).get('platform')).toBe('NES')
+      return { ...jsonResponse({}), redirected: true, url: 'http://localhost/libraries' }
+    }
+    if (href.includes('/api/admin/libraries/scan')) {
+      const body = JSON.parse(opts?.body as string)
+      expect(body).toMatchObject({ library_uuid: 'new-lib', folder: '/storage/games/nes', scan_mode: 'folders' })
+      return jsonResponse({ status: 'queued' })
+    }
+    return jsonResponse({}, { ok: false, status: 404 })
+  }))
+
+  render(<MemoryRouter><LibrariesPage /></MemoryRouter>)
+  await user.type(await screen.findByLabelText('Library name'), 'NES Games')
+  await user.selectOptions(screen.getByLabelText('Platform'), 'NES')
+  await user.type(screen.getByLabelText('Folder path inside the server'), '/storage/games/nes')
+  await user.click(screen.getByRole('button', { name: 'Create library and start scan' }))
+
+  expect(await screen.findByText('Created and queued first scan.')).toBeInTheDocument()
+  expect(seen.some((url) => url.includes('/admin/library/add'))).toBe(true)
+  expect(seen.some((url) => url.includes('/api/admin/libraries/scan'))).toBe(true)
 })
 
 test('a library with no last scan folder says so instead of posting', async () => {

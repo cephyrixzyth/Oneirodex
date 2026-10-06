@@ -148,7 +148,7 @@ export function ScanMatchSettingsPage() {
       ) : null}
 
       {!loading && exposed.length > 0 ? (
-        <form className="od-admin-panel" onSubmit={save}>
+        <form className="od-admin-panel od-scan-match" onSubmit={save}>
           {showPropose ? (
             <fieldset className="od-admin-fieldset">
               <legend>Propose-only (libraries)</legend>

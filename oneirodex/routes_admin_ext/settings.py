@@ -16,6 +16,7 @@ from oneirodex.utils.global_settings import (
     global_settings_row_or_create,
 )
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.oidc import is_secure_oidc_issuer
 from oneirodex.utils.igdb_api import make_igdb_api_request
 from oneirodex.utils.providers import get_steamgriddb_api_key, mask_api_key
 from . import admin2_bp
@@ -530,10 +531,13 @@ def integrations_oidc_save():
     try:
         data = request.get_json(silent=True) or {}
         settings = get_or_create_settings_record()
+        issuer_url = (data.get('oidc_issuer_url') or '').strip()[:512] or None
+        if issuer_url and not is_secure_oidc_issuer(issuer_url):
+            return api_error('OIDC issuer URL must use HTTPS.', code='bad_request')
 
         settings.oidc_enabled = bool(data.get('oidc_enabled', False))
         settings.oidc_display_name = (data.get('oidc_display_name') or 'Sign in with SSO').strip()[:120]
-        settings.oidc_issuer_url = (data.get('oidc_issuer_url') or '').strip()[:512] or None
+        settings.oidc_issuer_url = issuer_url
         settings.oidc_client_id = (data.get('oidc_client_id') or '').strip()[:255] or None
         # The page never shows the saved secret; blank keeps it.
         new_secret = (data.get('oidc_client_secret') or '').strip()[:512]

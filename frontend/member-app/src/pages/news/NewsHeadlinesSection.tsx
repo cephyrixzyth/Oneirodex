@@ -1,6 +1,7 @@
 import { truncate } from './newsHelpers'
 import type { NewsItem } from './newsTypes'
 import { formatLocaleDate } from '../../utils/formatLocaleDate'
+import { safeHttpUrl } from '../../utils/safeUrl'
 
 /** Headlines with the per-source mute chips. */
 export function NewsHeadlinesSection({
@@ -73,7 +74,7 @@ export function NewsHeadlinesSection({
                     <article>
                       <a
                         className="od-news__mag-link"
-                        href={item.url}
+                        href={safeHttpUrl(item.url) || '/news'}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -103,7 +104,7 @@ export function NewsHeadlinesSection({
                   <li key={item.url} className="od-news__card">
                     <a
                       className="od-news__card-link"
-                      href={item.url}
+                      href={safeHttpUrl(item.url) || '/news'}
                       target="_blank"
                       rel="noreferrer"
                     >

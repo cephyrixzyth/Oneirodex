@@ -4,6 +4,7 @@ import { getJson } from '../api/adminApi'
 import { DataTable } from '../components/DataTable'
 import { ImportLeafLibraries } from '../components/ImportLeafLibraries'
 import { Page } from '../components/Page'
+import { CreateLibraryForm } from '../components/CreateLibraryForm'
 import { ProposeLeafLibraries } from '../components/ProposeLeafLibraries'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
@@ -12,6 +13,7 @@ import { useLibraryScan } from '../hooks/useLibraryScan'
 export function LibrariesPage() {
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null)
   const [error, setError] = useState<unknown>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const { conflictOpen, refreshing, startRefreshAll, onConflictChoose, onConflictClose } =
     useLibraryRefreshAll()
   const {
@@ -26,7 +28,7 @@ export function LibrariesPage() {
     getJson('/api/get_libraries')
       .then((data) => setRows(Array.isArray(data) ? data : []))
       .catch(setError)
-  }, [])
+  }, [reloadKey])
 
   return (
     <Page
@@ -36,17 +38,16 @@ export function LibrariesPage() {
       <PageStatus error={error} errorMessage="Unable to load libraries." />
       <p className="od-admin-lede">
         Prefer the unified classic page:{' '}
-        <a href="/scan_management?active_tab=libraries">Libraries &amp; scans</a>
+        <a href="/scan_management?active_tab=auto">Scan jobs</a>
         {' · '}
         Library hero image:{' '}
         <a href="/admin/art_studio#stock">Choose image from Backup &amp; stock</a>
-        {' · '}
-        <a href="/libraries">Full library forms</a>
         {' · '}
         <a href="#propose-leaf">Propose leaf libraries</a>
         {' · '}
         <a href="#import-leaf">Import CSV/JSON</a>
       </p>
+      <CreateLibraryForm onCreated={() => setReloadKey((key) => key + 1)} />
       <div className="od-admin-panel">
         <div className="od-admin-panel__toolbar">
           <Button

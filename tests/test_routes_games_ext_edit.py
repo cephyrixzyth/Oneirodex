@@ -480,8 +480,8 @@ class TestGameEditLogging:
         
         # Verify security error was logged
         mock_logger.error.assert_called()
-        error_calls = [call for call in mock_logger.error.call_args_list 
-                      if 'Security error' in str(call)]
+        error_calls = [logged_call for logged_call in mock_logger.error.call_args_list
+                      if 'Security error' in str(logged_call)]
         assert len(error_calls) > 0
     
     def test_audit_logging_for_successful_update(self, client, admin_user, test_game, form_data):
@@ -650,8 +650,8 @@ class TestGameEditFormValidation:
         
         # Verify form validation failure was logged
         mock_logger.warning.assert_called()
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if 'Form validation failed' in str(call)]
+        warning_calls = [logged_call for logged_call in mock_logger.warning.call_args_list
+                        if 'Form validation failed' in str(logged_call)]
         assert len(warning_calls) > 0
 
 

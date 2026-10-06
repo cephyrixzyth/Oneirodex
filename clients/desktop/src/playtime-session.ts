@@ -17,7 +17,7 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000
 export function watchPlaySession(
   api: OneirodexClient,
   pid: number,
-  sessionId: number,
+  sessionId: number | null,
   options: WatchPlaySessionOptions = {},
 ): PlaySessionWatcher {
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
@@ -38,7 +38,7 @@ export function watchPlaySession(
       timer = undefined
     }
     try {
-      await api.playtime.stopSession(sessionId)
+      if (sessionId !== null) await api.playtime.stopSession(sessionId)
     } catch {
       // Best-effort stop when the game exits or polling fails hard.
     }
@@ -55,7 +55,7 @@ export function watchPlaySession(
         await stop()
         return
       }
-      await api.playtime.heartbeatSession(sessionId)
+      if (sessionId !== null) await api.playtime.heartbeatSession(sessionId)
     } catch {
       await stop()
     }

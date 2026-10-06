@@ -15,6 +15,7 @@ from oneirodex.utils.activity_feed import list_now_playing
 from oneirodex.utils.notifications import notify_friend_accepted, notify_friend_request
 from oneirodex.utils.presence import list_friend_presence, presence_for_user
 from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.api_tokens import require_api_scope
 
 from . import apis_bp
 
@@ -45,6 +46,7 @@ def _user_public(user: User, *, viewer: User | None = None) -> dict:
 
 @apis_bp.route('/social/status', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def social_status():
     community = _community_settings()
     friends = (
@@ -81,6 +83,7 @@ def social_status():
 
 @apis_bp.route('/social/friends', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def social_friends_list():
     rows = (
         db.session.execute(
@@ -111,6 +114,7 @@ def social_friends_list():
 
 @apis_bp.route('/social/friends/<int:friendship_id>/reject', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def social_friends_reject(friendship_id: int):
     """Decline an incoming pending request (same effect as delete for recipient)."""
     row = db.session.get(UserFriendship, friendship_id)
@@ -123,6 +127,7 @@ def social_friends_reject(friendship_id: int):
 
 @apis_bp.route('/social/friends/<int:friendship_id>/block', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def social_friends_block(friendship_id: int):
     row = db.session.get(UserFriendship, friendship_id)
     if not row or (row.user_id != current_user.id and row.friend_user_id != current_user.id):
@@ -142,6 +147,7 @@ def social_friends_block(friendship_id: int):
 
 @apis_bp.route('/social/friends', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def social_friends_request():
     data = request.get_json(silent=True) or {}
     username = (data.get('username') or data.get('name') or '').strip()
@@ -195,6 +201,7 @@ def social_friends_request():
 
 @apis_bp.route('/social/friends/<int:friendship_id>/accept', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def social_friends_accept(friendship_id: int):
     row = db.session.get(UserFriendship, friendship_id)
     if not row or row.friend_user_id != current_user.id:
@@ -215,6 +222,7 @@ def social_friends_accept(friendship_id: int):
 
 @apis_bp.route('/social/friends/<int:friendship_id>', methods=['DELETE'])
 @login_required
+@require_api_scope('write:social')
 def social_friends_delete(friendship_id: int):
     row = db.session.get(UserFriendship, friendship_id)
     if not row or (row.user_id != current_user.id and row.friend_user_id != current_user.id):

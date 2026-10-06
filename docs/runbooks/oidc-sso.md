@@ -110,7 +110,7 @@ Both `OIDC_ENABLED=true` **and** the admin toggle must be on before the SSO butt
 }
 ```
 
-Unmapped users JIT-provision with role `user`. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten.
+Unmapped users JIT-provision with role `user`. Identity is bound to the pair **(issuer URL, `sub`)** so two identity providers that both issue `sub=123` cannot share an account. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows that issuer and subject. Usernames never link accounts, and the local email is never overwritten. Existing subject-only rows are migrated with a null issuer and can be claimed through the same verified-email check; do not manually copy an issuer value between providers.
 
 ### 6. Reverse proxy and HTTPS
 
@@ -177,7 +177,7 @@ Default JSON role map (also configurable in admin):
 }
 ```
 
-JIT provisioning creates users with role `user` unless a mapped claim is present. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows the provider's `sub`. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
+JIT provisioning creates users with role `user` unless a mapped claim is present. Identity is bound to **(issuer URL, `sub`)**; a matching subject from a different issuer is a separate identity. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); the provider's issuer and subject are then stored together. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
 
 ## Flow
 

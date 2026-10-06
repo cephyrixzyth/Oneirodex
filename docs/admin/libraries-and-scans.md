@@ -8,7 +8,7 @@ Admin surfaces today are **Jinja** under `base_admin` (top bar), hosted inside t
 
 **Libraries & scans** destinations are separate pages (not one Bootstrap tab document). The **left rail** lists Libraries, Scan, Library tools, Unmatched, Filters, Release filters, Extensions, Image queue, and Art & images. **Scan** is one LHN row; while you are on Scan, the **thin top bar** shows **Auto | Manual**. Other destinations have no sibling strip in the THN.
 
-The Libraries page is an admin SPA **DataTable** (sort + per-column filters, themed `od-cbtn` Scan/Edit/Delete bar, sticky multi-select batch actions). Add library is reached from the Libraries page / command palette — not a THN unfurl.
+The Libraries page is an admin SPA **DataTable** (sort + per-column filters, themed `od-cbtn` Scan/Edit/Delete bar, sticky multi-select batch actions). Its **Create library** form is inline on `/libraries`: choose a name, supported platform, mounted folder path, scan depth, then create and queue the first scan. The former “full library forms” self-link has been removed. `/admin/library/add` remains as a classic compatibility route.
 
 ## Where can a library point?
 
@@ -69,18 +69,19 @@ for mounting recipes per OS and for the Docker host-path-vs-container-path trap.
 
 ## Add a library
 
-1. Admin → **Libraries & scans** (`/libraries` or `/scan_management?active_tab=libraries`).
-2. Point the folder at the games mount (Docker: under `/storage/...`), or pick
-   another **Scan location** when the operator has declared extras.
-3. Set **scan depth** on create/edit (GET seeds the form; save persists it).
+1. Admin → **Libraries & scans** (`/libraries`).
+2. In **Create library**, choose a name and platform, set the visible host-mounted folder path (Docker: under `/storage/...`), and choose the scan depth. The form loads its platform options from the server and reports create/scan errors in place.
+3. Choose **Create library and start scan** to save the library and queue its first scan; then use Scan management to monitor or tune recurring scans.
 4. **Update library when folders change** — per-library incremental watch (`watch_enabled`: follow global / prefer on / opt out). Global `ONEIRODEX_LIBRARY_WATCH` may still gate Unraid (Ops → Library watch).
-5. Prefer a small test scan before a full library scan.
+5. Prefer a small test scan before a full library scan. A new install can skip IGDB credentials and arrives at this same create-library flow; optional integrations can be configured later from Admin → Integrations.
 
 **W22-1 chrome (updated):** Library Management and Scan management share the **Libraries & scans** LHN section. Destinations are separate URLs (`/libraries`, `/scan_management?active_tab=…`). Multi-select libraries (checkbox / select all) → sticky **Scan** / **Edit** / **Delete**. Sticky **Scan** posts `POST /api/admin/libraries/batch/scan` (`library_uuids` + `queue_policy=queue`); per-row and sticky **Edit** open the shared-fields modal on this page → `POST /api/admin/libraries/batch/edit` (`scan_depth` · `watch_enabled` · `platform`; full editor for name/image stays a link inside the modal). Bulk delete offers a **Force delete** checkbox (no typing each name). Prefer the batch APIs below; soft-degrade to sequential single-library calls when a batch route 404s mid-rollout. After theme CSS/JS deploy: **Admin → Themes → Reset Themes** so `library/themes` picks up `admin_manage_libs` — [themes-reset.md](themes-reset.md).
 
 **Library tools** (tidy names, proposals, rename, freshness, propose/import leaves): `/scan_management?active_tab=tools` (LHN). Tool views live in the **thin top bar** — **Add many** (Scan a folder | Import a list inside the pane), Tidy folder names, Review suggested fixes, Rename one game, Check for updates. `/admin/library_tools` redirects there.
 
 ## Batch library APIs (W22-1 / UID-003)
+
+Restarting a completed, failed, or cancelled scan follows the same Queue/Force policy as a new scan. Running, stopping, and already queued jobs cannot be restarted. Each scheduled or restarted run renews its worker ownership and progress clock and resets its counters. A successful recurring scan with no eligible entries keeps its schedule, so newly added games can be found later. Forced extras and HLTB refreshes behave consistently with one or several scan workers.
 
 Admin-only (`@admin_required` + session CSRF as other `/api/admin/*` POSTs). Partial success on scan/edit; delete returns `ok` only when ≥1 job started.
 
@@ -297,7 +298,7 @@ Never library-root: `_Emulators`, named emu installs, Pegasus/CRU/tools, archive
 
 ## Image queue
 
-Admin → Scan management → **Image Queue** tab manages artwork downloads (kinds below).
+Admin → **Image queue** (`/admin/images`) manages artwork downloads with queue health counts, compact filters, retry/download controls, and artwork search/actions (kinds below). The scan management **Image Queue** tab remains available for the legacy table and its row-level tools; use the dedicated page for the redesigned queue workflow.
 Prefer **Admin → Settings → Art studio → Pick & queue** (`/admin/art_studio#images`) for the React artwork picker + mass queue chrome.
 For library hero / site-wide fallback variety, use **Art studio → Backup & stock** (`/admin/art_studio#stock`) — platform packs + stock motifs. Library create/edit forms include a **Choose image** link to that tab.
 

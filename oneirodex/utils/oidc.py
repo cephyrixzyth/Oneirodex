@@ -8,12 +8,13 @@ import os
 import secrets
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from sqlalchemy import func, select
 
 from oneirodex.utils.rbac import VALID_ROLES, normalize_role
 from oneirodex.utils.global_settings import global_settings_row
+from oneirodex.utils.admin_invariant import lock_admin_mutation
 
 try:
     from authlib.integrations.flask_client import OAuth
@@ -59,6 +60,22 @@ class OidcConfig:
 
 def get_env_oidc_enabled() -> bool:
     return os.getenv('OIDC_ENABLED', 'false').lower() in ('1', 'true', 'yes')
+
+
+def is_secure_oidc_issuer(value: str | None) -> bool:
+    """OIDC discovery and client-secret exchange must start from HTTPS."""
+    try:
+        parsed = urlsplit((value or '').strip())
+        return bool(
+            parsed.scheme.lower() == 'https'
+            and parsed.hostname
+            and not parsed.username
+            and not parsed.password
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
+        return False
 
 
 def parse_role_map(raw: str | dict[str, str] | None) -> dict[str, str]:
@@ -153,6 +170,8 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
         missing.append('Admin Integrations → Enable OIDC')
     if not issuer:
         missing.append('issuer_url')
+    elif not is_secure_oidc_issuer(issuer):
+        missing.append('HTTPS issuer URL')
     if not client_id:
         missing.append('client_id')
     if not redirect_uri:
@@ -221,7 +240,7 @@ def build_oidc_config(settings_record=None) -> OidcConfig | None:
         or os.getenv('OIDC_DISPLAY_NAME', 'Sign in with SSO')
     ).strip() or 'Sign in with SSO'
 
-    if not issuer or not client_id or not redirect_uri:
+    if not issuer or not is_secure_oidc_issuer(issuer) or not client_id or not redirect_uri:
         return None
 
     return OidcConfig(
@@ -347,6 +366,8 @@ def init_oauth(app) -> Any | None:
 
 def register_oidc_provider(app, config: OidcConfig) -> None:
     global _oidc_registered_key
+    if not is_secure_oidc_issuer(config.issuer_url):
+        raise ValueError('OIDC issuer URL must use HTTPS.')
     oauth = init_oauth(app)
     if oauth is None:
         return
@@ -395,34 +416,34 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
 
     username, email = extract_user_identity(claims)
     role = map_claims_to_role(claims, config.role_claim, config.role_map)
-    subject = str(claims.get('sub') or '').strip()[:255] or None
+    issuer = str(config.issuer_url or '').strip().rstrip('/')
+    # The signed subject is an opaque identifier. Trimming or coercing it can
+    # turn two distinct IdP accounts into the same local account.
+    subject = claims.get('sub')
+    if not issuer or len(issuer) > 512 or not isinstance(subject, str) or not subject or len(subject) > 255:
+        raise ValueError('SSO issuer or subject is missing or too long. Ask an administrator to check the provider.')
 
     # Linking order. It used to match by email without asking whether the
     # provider verified it, then by username, so an IdP account called "admin"
     # (or claiming the admin's address) signed in as the local admin.
-    #   1. the provider subject stored on an earlier sign-in;
+    #   1. the provider's issuer and subject stored on an earlier sign-in;
     #   2. a local account whose email the provider says is verified, and
-    #      only one not yet linked to another subject;
-    #   3. an account this code created earlier for a provider that sends no
-    #      email (placeholder address), by name;
-    #   4. otherwise a new account.
-    user = None
-    if subject:
-        user = db_session.execute(select(User).filter(User.oidc_subject == subject)).scalars().first()
+    #      which is not bound to another known issuer;
+    #   3. otherwise a new account, unless a legacy subject-only link would
+    #      make the identity ambiguous. Names never prove an OIDC identity.
+    user = db_session.execute(select(User).filter(
+        User.oidc_issuer_url == issuer,
+        User.oidc_subject == subject,
+    )).scalars().first()
 
     if user is None and email and _email_verified(claims):
         candidate_user = db_session.execute(
             select(User).filter(func.lower(User.email) == email)
         ).scalars().first()
-        if candidate_user is not None and candidate_user.oidc_subject in (None, subject):
-            user = candidate_user
-
-    if user is None and not email:
-        candidate_user = db_session.execute(
-            select(User).filter(func.lower(User.name) == func.lower(username))
-        ).scalars().first()
-        if (candidate_user is not None and candidate_user.oidc_subject in (None, subject)
-                and (candidate_user.email or '').endswith('@oidc.local')):
+        if candidate_user is not None and candidate_user.oidc_issuer_url is None:
+            # A verified address can repair a legacy subject-only binding on
+            # this same account. A different address with the same bare sub
+            # cannot: the legacy row below is never matched by subject alone.
             user = candidate_user
 
     if user is None and email and db_session.execute(
@@ -433,14 +454,24 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
         # account cannot share it either.
         raise ValueError(
             'An account with this email already exists. Sign in with its password, '
-            'or ask your identity provider to verify the address.'
+            'or ask an administrator to review its SSO binding and verified email.'
+        )
+
+    if user is None and db_session.execute(select(User.id).filter(
+        User.oidc_issuer_url.is_(None), User.oidc_subject == subject,
+    )).first() is not None:
+        raise ValueError(
+            'This SSO identity overlaps an older account link with no recorded issuer. '
+            'Ask an administrator to review and repair that link before signing in.'
         )
 
     if user is None:
         base_name = username[:64]
         candidate = base_name
         suffix = 1
-        while db_session.execute(select(User).filter_by(name=candidate)).scalars().first():
+        while User.is_username_reserved(candidate) or db_session.execute(
+            select(User.id).where(func.lower(User.name) == candidate.lower())
+        ).first():
             candidate = f'{base_name[:58]}-{suffix}'
             suffix += 1
 
@@ -470,14 +501,32 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
         except Exception:
             roles_locked = True
         if not roles_locked:
-            user.role = normalize_role(role)
+            new_role = normalize_role(role)
+            if user.role != new_role:
+                # Optional group sync can demote an admin just like the admin
+                # editor. Re-read after the shared transaction lock so both
+                # paths enforce the last-active-admin rule on current state.
+                lock_admin_mutation(db_session)
+                user = db_session.execute(
+                    select(User).where(User.id == user.id).execution_options(populate_existing=True)
+                ).scalars().first()
+                if user is None:
+                    raise ValueError('This account no longer exists. Ask an administrator to review its SSO binding.')
+                if user.role == 'admin' and user.state is not False and new_role != 'admin':
+                    active_admins = db_session.scalar(select(func.count(User.id)).where(
+                        User.role == 'admin', User.state.is_not(False),
+                    ))
+                    if active_admins <= 1:
+                        raise ValueError('Cannot change the role of the last active administrator.')
+                user.role = new_role
         if not user.is_email_verified:
             user.is_email_verified = True
 
     user.lastlogin = datetime.now(timezone.utc)
     if user.state is False:
         raise ValueError('Account is disabled.')
-    if subject and not user.oidc_subject:
+    if user.oidc_issuer_url is None:
+        user.oidc_issuer_url = issuer
         user.oidc_subject = subject
 
     db_session.commit()

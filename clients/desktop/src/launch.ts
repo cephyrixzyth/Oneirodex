@@ -26,7 +26,7 @@ export function canLaunchGame(state: GameLifecycleState): boolean {
 export async function kickoffLaunch(
   api: OneirodexClient,
   gameUuid: string,
-): Promise<{ pid: number; sessionId: number }> {
+): Promise<{ pid: number; sessionId: number | null }> {
   if (!isTauriRuntime()) {
     throw new Error('Launch is only available in the desktop app')
   }
@@ -43,17 +43,24 @@ export async function kickoffLaunch(
   })
 
   if (launchResult.resolved_exe_path) {
-    await persistResolvedExePath(gameUuid, record, launchResult.resolved_exe_path)
+    try {
+      await persistResolvedExePath(gameUuid, record, launchResult.resolved_exe_path)
+    } catch {
+      // The process already exists; a registry write must not report launch failure.
+    }
   }
 
-  const session = await api.playtime.startSession({
-    game_uuid: gameUuid,
-    client: 'desktop',
-  })
-
-  const sessionId = session.id
-  if (typeof sessionId !== 'number') {
-    throw new Error('Playtime session did not return an id')
+  let sessionId: number | null = null
+  try {
+    const session = await api.playtime.startSession({
+      game_uuid: gameUuid,
+      client: 'desktop',
+    })
+    if (typeof session.id === 'number' && Number.isInteger(session.id) && session.id > 0) {
+      sessionId = session.id
+    }
+  } catch {
+    // Offline play remains a successful local launch, without invented playtime.
   }
 
   const existing = activeWatchers.get(gameUuid)

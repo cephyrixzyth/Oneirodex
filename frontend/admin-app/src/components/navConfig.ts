@@ -394,7 +394,7 @@ export const HUB_LINKS = {
     { href: '/scan_management?active_tab=scan_filters', label: 'Filters' },
     { href: '/admin/edit_filters', label: 'Release filters' },
     { href: '/admin/extensions', label: 'Extensions' },
-    { href: '/scan_management?active_tab=image_queue', label: 'Image queue' },
+    { href: '/admin/images', label: 'Image queue' },
     { href: '/admin/art_studio', label: 'Art & images' },
     // Page actions — filtered out of the rail by PAGE_ACTION_HREFS.
     { href: '/admin/library/add', label: 'Add one library' },

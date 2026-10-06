@@ -297,7 +297,11 @@ def api_my_downloads():
         .order_by(DownloadRequest.request_time.desc())
     ).scalars().unique().all()
 
-    return jsonify([_serialize_download_request(item) for item in download_requests]), 200
+    visible_requests = [
+        item for item in download_requests
+        if item.game is not None and user_can_access_game(current_user, item.game)
+    ]
+    return jsonify([_serialize_download_request(item) for item in visible_requests]), 200
 
 
 @apis_bp.route('/delete_download/<int:request_id>', methods=['DELETE'])

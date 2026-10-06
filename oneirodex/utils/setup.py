@@ -67,11 +67,9 @@ def mark_setup_complete():
     settings = get_or_create_global_settings()
     settings.setup_in_progress = False
     settings.setup_completed = True
-    # 4, not 3. The wizard gained a Features step and IGDB moved from 3 to 4,
-    # but this was left behind — so a completed setup recorded itself as
-    # sitting on Features, and get_setup_redirect_url would send anyone who
-    # re-entered the wizard back there rather than to the end.
-    settings.setup_current_step = 4  # Final step
+    # Keep the recorded step at the end of the six-stage first-run path so an
+    # interrupted/replayed wizard never bounces back to credentials or setup.
+    settings.setup_current_step = 6  # Final step
     settings.last_updated = datetime.now(timezone.utc)
     db.session.commit()
 
@@ -108,6 +106,10 @@ def get_setup_redirect_url():
         return '/setup/features'
     elif current_step == 4:
         return '/setup/igdb'
+    elif current_step == 5:
+        return '/setup/integrations'
+    elif current_step == 6:
+        return '/setup/library'
     else:
         return '/setup'  # Default fallback
 

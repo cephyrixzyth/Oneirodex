@@ -39,11 +39,6 @@ def test_map_claims_to_role_oneirodex_admin_group():
     assert oidc.map_claims_to_role(claims) == 'admin'
 
 
-def test_map_claims_to_role_oneirodex_admin_group():
-    claims = {'groups': ['oneirodex-admin']}
-    assert oidc.map_claims_to_role(claims) == 'admin'
-
-
 def test_map_claims_to_role_single_value():
     claims = {'groups': 'admin'}
     assert oidc.map_claims_to_role(claims, role_claim='groups') == 'admin'
@@ -95,6 +90,23 @@ def test_build_oidc_config_requires_issuer_client_redirect(monkeypatch):
     assert config is not None
     assert config.issuer_url.endswith('/realms/oneirodex')
     assert config.client_id == 'oneirodex'
+
+
+def test_build_oidc_config_rejects_http_issuer(monkeypatch):
+    monkeypatch.setenv('OIDC_ENABLED', 'true')
+    settings = SimpleNamespace(
+        oidc_enabled=True,
+        oidc_issuer_url='http://idp.example.com',
+        oidc_client_id='oneirodex',
+        oidc_client_secret='secret',
+        oidc_redirect_uri='https://oneirodex.example.com/login/oidc/callback',
+        oidc_scopes='openid email profile',
+        oidc_role_claim='groups',
+        oidc_role_map=None,
+        oidc_display_name='Sign in with SSO',
+    )
+
+    assert oidc.build_oidc_config(settings) is None
 
 
 def test_generate_pkce_pair_returns_verifier_and_challenge():

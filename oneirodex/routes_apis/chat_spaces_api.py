@@ -37,6 +37,8 @@ from oneirodex.utils.rbac import normalize_role
 from oneirodex.schemas.chat_spaces import AddSpaceMemberBody
 from oneirodex.utils.validation import validate_body
 
+from oneirodex.utils.api_tokens import require_api_scope
+
 from . import apis_bp
 
 
@@ -68,6 +70,7 @@ def _refuse_missing_space(space, *, require_active: bool = False):
 
 @apis_bp.route('/chat/spaces', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_spaces_list():
     """Spaces the caller may see, each with its text and voice channels."""
     payload = []
@@ -83,6 +86,7 @@ def chat_spaces_list():
 
 @apis_bp.route('/chat/spaces', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_spaces_create():
     data = request.get_json(silent=True) or {}
@@ -105,6 +109,7 @@ def chat_spaces_create():
 
 @apis_bp.route('/chat/spaces/<int:space_id>/channels', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_space_channel_create(space_id: int):
     space = db.session.get(ChatSpace, space_id)
@@ -127,6 +132,7 @@ def chat_space_channel_create(space_id: int):
 
 @apis_bp.route('/chat/spaces/<int:space_id>/members', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_space_members(space_id: int):
     space = _visible_space_or_none(space_id)
     refusal = _refuse_missing_space(space)
@@ -137,6 +143,7 @@ def chat_space_members(space_id: int):
 
 @apis_bp.route('/chat/spaces/<int:space_id>/members', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 @validate_body(AddSpaceMemberBody)
 def chat_space_member_add(space_id: int, body: AddSpaceMemberBody):
@@ -150,6 +157,7 @@ def chat_space_member_add(space_id: int, body: AddSpaceMemberBody):
 
 @apis_bp.route('/chat/spaces/<int:space_id>/members/<int:user_id>', methods=['DELETE'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_space_member_remove(space_id: int, user_id: int):
     space = db.session.get(ChatSpace, space_id)
@@ -162,6 +170,7 @@ def chat_space_member_remove(space_id: int, user_id: int):
 
 @apis_bp.route('/chat/spaces/<int:space_id>/invites', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 @admin_required
 def chat_space_invites_list(space_id: int):
     space = db.session.get(ChatSpace, space_id)
@@ -176,6 +185,7 @@ def chat_space_invites_list(space_id: int):
 
 @apis_bp.route('/chat/spaces/<int:space_id>/invites', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_space_invite_create(space_id: int):
     space = db.session.get(ChatSpace, space_id)
@@ -210,6 +220,7 @@ def chat_space_invite_create(space_id: int):
 
 @apis_bp.route('/chat/spaces/invites/<int:invite_id>/revoke', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 @admin_required
 def chat_space_invite_revoke(invite_id: int):
     invite = db.session.get(ChatSpaceInvite, invite_id)
@@ -221,6 +232,7 @@ def chat_space_invite_revoke(invite_id: int):
 
 @apis_bp.route('/chat/spaces/join', methods=['POST'])
 @login_required
+@require_api_scope('write:social')
 def chat_space_join():
     """Redeem an invite token. Child accounts still cannot enter unsafe spaces."""
     data = request.get_json(silent=True) or {}
@@ -232,6 +244,7 @@ def chat_space_join():
 
 @apis_bp.route('/chat/spaces/<int:space_id>/voice/<int:channel_id>/room', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def chat_space_voice_room(space_id: int, channel_id: int):
     """Resolve the canonical room id for a voice channel.
 

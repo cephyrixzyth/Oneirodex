@@ -133,7 +133,9 @@ def test_a_blocked_member_cannot_lift_the_block(app, db_session):
 # -- OIDC links by subject or verified email, never by name --------------------
 
 def _oidc_config():
-    return SimpleNamespace(role_claim='groups', role_map={})
+    return SimpleNamespace(
+        issuer_url='https://idp.example', role_claim='groups', role_map={},
+    )
 
 
 def test_oidc_never_links_by_username_or_unverified_email(app, db_session):

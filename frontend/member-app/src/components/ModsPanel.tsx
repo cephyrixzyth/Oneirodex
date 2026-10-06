@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@oneirodex/ui'
+import { safeHttpUrl } from '../utils/safeUrl'
 import {
   createMod,
   deleteMod,
@@ -234,10 +235,10 @@ export function ModsPanel({ gameUuid, canEdit = false }: { gameUuid: string; can
                 </div>
                 {mod.notes ? <p className="od-mods__notes">{mod.notes}</p> : null}
                 <div className="od-mods__actions">
-                  {mod.source_url ? (
+                  {safeHttpUrl(mod.source_url) ? (
                     <a
                       className="od-mods__link"
-                      href={mod.source_url}
+                      href={safeHttpUrl(mod.source_url) || undefined}
                       target="_blank"
                       rel="noreferrer noopener"
                     >

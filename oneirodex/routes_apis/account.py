@@ -38,6 +38,8 @@ from oneirodex.utils.public_origin import (
 from oneirodex.utils.smtp import is_smtp_config_valid
 from oneirodex.utils.validation import validate_body
 
+from oneirodex.utils.api_tokens import require_browser_session
+
 from . import apis_bp
 
 # Matches the copy on the classic invites page. Kept here so the modal can say
@@ -118,6 +120,7 @@ def _invite_row(invite) -> dict:
 
 @apis_bp.route('/account/summary', methods=['GET'])
 @login_required
+@require_browser_session
 def account_summary():
     """Everything the account modals show in their headers, in one call."""
     unused = _unused_invite_count(current_user)
@@ -244,6 +247,7 @@ def account_password(body: ChangePasswordBody):
 
 @apis_bp.route('/account/invites', methods=['GET'])
 @login_required
+@require_browser_session
 def account_invites():
     invites = db.session.execute(
         select(InviteToken).filter_by(creator_user_id=current_user.user_id, used=False)
@@ -262,6 +266,7 @@ def account_invites():
 
 @apis_bp.route('/account/invites', methods=['POST'])
 @login_required
+@require_browser_session
 def create_account_invite():
     """Create an invite. The email address is optional.
 
@@ -315,6 +320,7 @@ def create_account_invite():
 
 @apis_bp.route('/account/invites/<token>', methods=['DELETE'])
 @login_required
+@require_browser_session
 def delete_account_invite(token):
     invite = db.session.execute(
         select(InviteToken).filter_by(token=token, creator_user_id=current_user.user_id)

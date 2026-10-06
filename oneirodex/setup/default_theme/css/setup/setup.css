@@ -16,6 +16,79 @@
     color: var(--od-text);
 }
 
+.od-setup--wide {
+    --od-setup-max: 48rem;
+}
+
+.od-setup-progress {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+    overflow-x: auto;
+    color: var(--od-text-muted);
+    font-size: var(--od-font-xs);
+    text-align: center;
+}
+
+.od-setup-progress span {
+    padding: 0.45rem 0.25rem;
+    border-bottom: 2px solid var(--od-border);
+}
+
+.od-setup-progress [aria-current="step"] {
+    border-color: var(--od-accent);
+    color: var(--od-text);
+    font-weight: 650;
+}
+
+.od-setup-help {
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-lg);
+    background: var(--od-surface-2);
+    color: var(--od-text-muted);
+    line-height: 1.55;
+}
+
+.od-setup-help summary {
+    color: var(--od-text);
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.od-setup-help a { color: var(--od-accent); }
+.od-setup-help p { margin: 0; }
+.od-setup-help ol { margin: 0.7rem 0; padding-left: 1.35rem; }
+
+.od-setup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.od-setup-grid__wide { grid-column: 1 / -1; }
+
+.od-setup-provider {
+    min-width: 0;
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-lg);
+    background: var(--od-surface-2);
+    color: var(--od-text);
+}
+
+.od-setup-provider legend { padding-inline: 0.25rem; font-weight: 650; }
+.od-setup-provider label { display: block; margin-block: 0.5rem; color: var(--od-text); }
+.od-setup-provider input[type="checkbox"] { accent-color: var(--od-accent); }
+
+.od-setup .od-setup__actions .btn-primary,
+.od-setup .od-setup__actions .btn-secondary {
+    width: auto;
+    margin-top: 0;
+}
+
 .od-setup__brand {
     display: flex;
     flex-direction: column;
@@ -271,4 +344,10 @@
     .od-setup .btn-primary {
         transition: none;
     }
+}
+
+@media (max-width: 560px) {
+    .od-setup-grid { grid-template-columns: 1fr; gap: 0.6rem; }
+    .od-setup-progress { font-size: var(--od-font-2xs); }
+    .od-setup-progress span { padding-inline: 0; }
 }

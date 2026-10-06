@@ -273,7 +273,7 @@ def create_app(config_object=None):
         # Skip setup checks for certain endpoints
         exempt_endpoints = {
             'setup.setup', 'setup.setup_submit', 'setup.setup_smtp', 'setup.setup_igdb',
-            # Steps 2-4 need the admin from step 1 signed in; an admin who lost
+            # Steps 2-6 need the admin from step 1 signed in; an admin who lost
             # that session must be able to sign in again mid-wizard.
             'login.login',
             'static', 'favicon', 'site.favicon',

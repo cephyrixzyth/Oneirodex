@@ -228,7 +228,7 @@ test('rail libraries is a hub of sibling pages', () => {
   )
   expect(container.querySelector('a[href="/scan_management?active_tab=manual"]')).toBeNull()
   expect(container.querySelector('a[href="/scan_management?active_tab=tools"]')).toBeTruthy()
-  expect(container.querySelector('a[href="/scan_management?active_tab=image_queue"]')).toBeTruthy()
+  expect(container.querySelector('a[href="/admin/images"]')).toBeTruthy()
 })
 
 test('rail highlights only the Scan row for auto or manual tabs', () => {

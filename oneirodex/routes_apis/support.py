@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import current_app, jsonify
 
 from oneirodex.utils.api_response import api_error, api_ok
 from flask_login import current_user, login_required
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from oneirodex import db
 from oneirodex.models import SupportTicket
@@ -18,6 +18,7 @@ from oneirodex.utils.validation import validate_body
 from oneirodex.utils.github_issues import build_issue_body, create_github_issue
 from oneirodex.utils.notifications import notify_admins
 from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.api_tokens import require_browser_session
 
 from . import apis_bp
 from oneirodex.utils.rbac import is_admin
@@ -30,6 +31,8 @@ VALID_SEV = frozenset({'P0', 'P1', 'P2', 'P3'})
 
 # Bug report vs feature request — the two things the one Report form collects.
 VALID_KINDS = frozenset({'issue', 'enhancement'})
+_SUPPORT_TICKET_WINDOW = timedelta(hours=1)
+_SUPPORT_TICKET_LIMIT = 5
 
 # Compact caps — logs/symptoms optional; avoid huge blobs in UI payloads.
 _BODY_MAX = 2000
@@ -40,6 +43,19 @@ _LOGS_MAX = 4000
 @login_required
 @validate_body(CreateSupportTicketBody)
 def support_ticket_create(body: CreateSupportTicketBody):
+    now = datetime.now(timezone.utc)
+    recent_count = db.session.scalar(
+        select(func.count(SupportTicket.id)).where(
+            SupportTicket.user_id == current_user.id,
+            SupportTicket.created_at >= now - _SUPPORT_TICKET_WINDOW,
+        )
+    ) or 0
+    if recent_count >= _SUPPORT_TICKET_LIMIT:
+        return api_error(
+            'Support report limit reached. Try again later.',
+            code='rate_limited',
+        )
+
     title = body.title[:200]
     # Symptom/body optional for redesigned Report UI (title alone is enough).
     ticket_body = (body.body or body.symptom or '').strip()[:_BODY_MAX]
@@ -70,6 +86,7 @@ def support_ticket_create(body: CreateSupportTicketBody):
         logs=logs_raw or None,
         status='open',
         github_sync='pending',
+        created_at=now,
     )
     db.session.add(ticket)
     db.session.commit()
@@ -110,6 +127,7 @@ def support_ticket_create(body: CreateSupportTicketBody):
 
 @apis_bp.route('/support/tickets', methods=['GET'])
 @login_required
+@require_browser_session
 def support_tickets_list():
     q = select(SupportTicket).order_by(SupportTicket.created_at.desc()).limit(100)
     if not is_admin(current_user):
@@ -125,6 +143,7 @@ def support_tickets_list():
 
 @apis_bp.route('/support/tickets/<int:ticket_id>', methods=['GET'])
 @login_required
+@require_browser_session
 def support_ticket_detail(ticket_id: int):
     ticket = db.session.get(SupportTicket, ticket_id)
     if not ticket:

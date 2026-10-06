@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, flash, redirect, url_for, request
+import os
+from urllib.parse import urlparse
+from flask import Blueprint, render_template, flash, redirect, url_for, request, current_app
 from oneirodex import db
 from sqlalchemy import select
 from oneirodex.forms import SetupForm, IGDBSetupForm
@@ -6,7 +8,7 @@ from oneirodex.utils.global_settings import (
     global_settings_row,
     global_settings_row_or_create,
 )
-from oneirodex.models import User, GlobalSettings
+from oneirodex.models import User, GlobalSettings, Library, LibraryPlatform
 from oneirodex.utils.setup import (
     is_setup_required,
     set_setup_step,
@@ -17,12 +19,13 @@ from oneirodex.utils.setup import (
 from uuid import uuid4
 from datetime import datetime, timezone
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.oidc import is_secure_oidc_issuer
 
 setup_bp = Blueprint('setup', __name__)
 
 
 def _require_setup_admin():
-    """Steps 2-4 belong to the admin created in step 1, who is signed in by it.
+    """Steps 2-6 belong to the admin created in step 1, who is signed in by it.
 
     They used to be open to anyone while the wizard was in progress, so any
     visitor could point the install's mail at their own SMTP server (and so
@@ -217,6 +220,17 @@ def setup_igdb():
     if refusal is not None:
         return refusal
 
+    # IGDB is useful for matching, but installs without Twitch credentials must
+    # still be able to continue. API choices and the first library are next.
+    if request.method == 'POST' and 'skip_igdb' in request.form:
+        try:
+            set_setup_step(5)
+            flash('IGDB skipped. Choose any additional API connections, or continue without them.', 'info')
+            return redirect(url_for('setup.setup_integrations'))
+        except Exception as e:
+            _setup_failed('Setup', e)
+            return redirect(url_for('setup.setup_igdb'))
+
     form = IGDBSetupForm()
     if form.validate_on_submit():
         settings = global_settings_row_or_create()
@@ -225,19 +239,211 @@ def setup_igdb():
         settings.igdb_client_secret = form.igdb_client_secret.data
         
         try:
-            db.session.commit()
-            mark_setup_complete()  # Mark setup as fully completed
-            log_system_event("IGDB settings configured - Setup completed", event_type='setup', event_level='information')
-            flash('Setup completed successfully! Please create your first game library.', 'success')
-            from oneirodex.init_data import initialize_library_folders, insert_default_scanning_filters, initialize_default_settings, initialize_allowed_file_types, initialize_discovery_sections
-
-            initialize_library_folders()
-            initialize_discovery_sections()
-            insert_default_scanning_filters()
-            initialize_default_settings()
-            initialize_allowed_file_types()
-            return redirect(url_for('library.libraries'))
+            set_setup_step(5)
+            log_system_event("IGDB settings saved during setup", event_type='setup', event_level='information')
+            flash('IGDB settings saved. Choose any additional API connections, or continue without them.', 'success')
+            return redirect(url_for('setup.setup_integrations'))
         except Exception as e:
             _setup_failed('IGDB settings', e)
 
     return render_template('setup/setup_igdb.html', form=form, is_setup_mode=True)
+
+
+@setup_bp.route('/setup/integrations', methods=['GET', 'POST'])
+def setup_integrations():
+    """Collect optional API credentials that are stored in app settings."""
+    if get_current_setup_step() != 5:
+        return redirect(url_for('setup.setup'))
+    refusal = _require_setup_admin()
+    if refusal is not None:
+        return refusal
+
+    settings = global_settings_row_or_create()
+    if request.method == 'POST':
+        if request.form.get('skip_integrations') == '1':
+            set_setup_step(6)
+            flash('Optional API setup skipped. You can continue without API credentials.', 'info')
+            return redirect(url_for('setup.setup_library'))
+
+        # These keys are the app-managed provider credentials. Blank values are
+        # deliberately ignored so resuming setup never clears a saved secret.
+        credential_fields = {
+            'steam_web_api_key': 'steam_web_api_key',
+            'steamgriddb_api_key': 'steamgriddb_api_key',
+            'giantbomb_api_key': 'giantbomb_api_key',
+            'mobygames_api_key': 'mobygames_api_key',
+            'thegamesdb_api_key': 'thegamesdb_api_key',
+        }
+        try:
+            for field, setting_name in credential_fields.items():
+                if request.form.get(f'configure_{field}') == 'on':
+                    value = (request.form.get(field) or '').strip()
+                    if value:
+                        setattr(settings, setting_name, value[:512])
+
+            if request.form.get('configure_oidc') == 'on':
+                for field, max_length in (
+                    ('oidc_issuer_url', 512),
+                    ('oidc_client_id', 255),
+                    ('oidc_redirect_uri', 512),
+                    ('oidc_scopes', 255),
+                    ('oidc_role_claim', 64),
+                ):
+                    value = (request.form.get(field) or '').strip()
+                    if value:
+                        if field.endswith('_url') or field == 'oidc_redirect_uri':
+                            parsed = urlparse(value)
+                            if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+                                raise ValueError(f'{field} must be an HTTP or HTTPS URL')
+                        if field == 'oidc_issuer_url' and not is_secure_oidc_issuer(value):
+                            raise ValueError('OIDC issuer URL must use HTTPS')
+                        setattr(settings, field, value[:max_length])
+                oidc_secret = (request.form.get('oidc_client_secret') or '').strip()
+                if oidc_secret:
+                    settings.oidc_client_secret = oidc_secret[:512]
+
+            settings.enable_hltb_integration = request.form.get('enable_hltb_integration') == 'on'
+            settings.oidc_enabled = False  # Auth provider activation remains an explicit post-setup action.
+            db.session.commit()
+            set_setup_step(6)
+            log_system_event("Optional API preferences saved during setup", event_type='setup', event_level='information')
+            flash('API choices saved. Add your first library next, or skip it for now.', 'success')
+            return redirect(url_for('setup.setup_library'))
+        except ValueError:
+            db.session.rollback()
+            flash('OIDC issuer must use HTTPS; redirect URI must use a valid HTTP or HTTPS URL.', 'error')
+            return render_template(
+                'setup/setup_integrations.html',
+                is_setup_mode=True,
+                settings=global_settings_row_or_create(),
+            )
+        except Exception as exc:
+            _setup_failed('API settings', exc)
+
+    return render_template(
+        'setup/setup_integrations.html',
+        is_setup_mode=True,
+        settings=settings,
+    )
+
+
+def _finish_setup(*, library_created=False, scan_status=None):
+    """Initialize first-run defaults and close the wizard after optional library setup."""
+    from oneirodex.init_data import (
+        initialize_library_folders,
+        insert_default_scanning_filters,
+        initialize_default_settings,
+        initialize_allowed_file_types,
+        initialize_discovery_sections,
+    )
+
+    try:
+        initialize_library_folders()
+        initialize_discovery_sections()
+        insert_default_scanning_filters()
+        initialize_default_settings()
+        initialize_allowed_file_types()
+        mark_setup_complete()
+    except Exception as exc:
+        _setup_failed('Setup', exc)
+        return redirect(url_for('setup.setup_library'))
+    log_system_event("Setup completed", event_type='setup', event_level='information')
+    if library_created:
+        if scan_status in ('started', 'queued'):
+            flash('Your first library is ready and its initial scan has started or queued.', 'success')
+        else:
+            flash('Your first library is ready. Start its first scan from Libraries & scans.', 'warning')
+    else:
+        flash('Setup is ready. You can add a library at any time from Libraries & scans.', 'success')
+    return redirect(url_for('library.libraries'))
+
+
+@setup_bp.route('/setup/library', methods=['GET', 'POST'])
+def setup_library():
+    """Optional first library step with the same guarded scan queue as admin setup."""
+    if get_current_setup_step() != 6:
+        return redirect(url_for('setup.setup'))
+    refusal = _require_setup_admin()
+    if refusal is not None:
+        return refusal
+
+    if request.method == 'POST' and request.form.get('skip_library') == 'on':
+        return _finish_setup()
+
+    platforms = [(platform.name, platform.value) for platform in LibraryPlatform]
+    errors = []
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        platform_key = (request.form.get('platform') or '').strip()
+        folder = os.path.normpath((request.form.get('folder_path') or '').strip())
+        scan_mode = (request.form.get('scan_mode') or 'folders').strip()
+        try:
+            scan_depth = int(request.form.get('scan_depth') or '1')
+        except (TypeError, ValueError):
+            scan_depth = 0
+
+        if not name or len(name) > 255:
+            errors.append('Enter a library name up to 255 characters.')
+        if platform_key not in dict(platforms):
+            errors.append('Choose a valid platform.')
+        if scan_mode not in ('folders', 'files'):
+            errors.append('Choose folders or files for the folder layout.')
+        if scan_depth not in (1, 2):
+            errors.append('Choose a scan depth of one or two folders.')
+        if not folder or len(folder) > 2048:
+            errors.append('Enter a server-visible folder path.')
+        else:
+            from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+
+            safe, _reason = is_safe_path(folder, get_allowed_base_directories(current_app))
+            if not safe:
+                errors.append('That folder is outside the configured library locations.')
+            elif not os.path.isdir(folder):
+                errors.append('That folder is not available as a directory on the server.')
+
+        if not errors:
+            platform = LibraryPlatform[platform_key]
+            library = db.session.execute(
+                select(Library).filter_by(name=name, platform=platform, last_scan_folder=folder)
+            ).scalars().first()
+            if library is None:
+                library = Library(
+                    name=name,
+                    platform=platform,
+                    scan_depth=scan_depth,
+                    last_scan_folder=folder,
+                )
+                db.session.add(library)
+                try:
+                    db.session.commit()
+                except Exception as exc:
+                    _setup_failed('The first library', exc)
+                    return render_template(
+                        'setup/setup_library.html', is_setup_mode=True,
+                        platforms=platforms, errors=[],
+                    )
+
+            scan_status = None
+            try:
+                from oneirodex.utils.scan_queue import start_or_queue_scan
+
+                queued = start_or_queue_scan(
+                    folder_path=folder,
+                    library_uuid=library.uuid,
+                    scan_mode=scan_mode,
+                    queue_policy='queue',
+                    force_parallel=False,
+                    allow_force=False,
+                    app=current_app._get_current_object(),
+                )
+                scan_status = queued.get('status')
+            except Exception as exc:
+                current_app.logger.warning('First library scan could not be queued (%s)', type(exc).__name__)
+            return _finish_setup(library_created=True, scan_status=scan_status)
+
+    return render_template(
+        'setup/setup_library.html',
+        is_setup_mode=True,
+        platforms=platforms,
+        errors=errors,
+    )
