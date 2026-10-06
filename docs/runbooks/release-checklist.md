@@ -67,6 +67,6 @@ and `Alembic upgrade head complete`. `/readyz` green as before.
 ## Publish
 
 - [ ] Commit + push release branch / PR to `main`
-- [ ] Git tag `vX.Y.Z` and GitHub Release notes from CHANGELOG. Pushing the tag builds the six desktop installers and attaches them to the release (`desktop-build.yml`, `release` job); to add them to an existing release instead, run **Desktop build** manually with `release_tag` set. Check the release lists eight files (`.exe`, `.dmg`, `.deb` and `.AppImage` for the full and the thin client) before announcing
+- [ ] Git tag `vX.Y.Z` and GitHub Release notes from CHANGELOG. Pushing the tag runs six OS/flavor builds and attaches eight assets (`.exe`, `.dmg`, `.deb` and `.AppImage` for both the full and thin clients; `desktop-build.yml`, `release` job). To add them to an existing release instead, run **Desktop build** manually with `release_tag` set. Confirm all eight files before announcing
 - [ ] Push Docker image tags `:X.Y.Z` and `:latest` (when publishing images)
 - [ ] Unraid / docs note if env vars changed
