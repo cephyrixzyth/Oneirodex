@@ -631,19 +631,21 @@ class TestAdvancedScanScenarios:
                     with patch('os.access', return_value=True):
                         with patch('oneirodex.utils.services.scan_orchestration.get_game_names_from_folder', return_value=[]):
                             with patch('oneirodex.utils.services.scan_orchestration.load_scanning_filter_patterns', return_value=([], [])):
+                                real_commit = db_session.commit
                                 with patch('oneirodex.utils.services.scan_orchestration.db.session.commit') as mock_commit:
                                     from sqlalchemy.exc import SQLAlchemyError
                                     
                                     # Track commits and fail on final one
                                     commit_count = 0
-                                    def commit_side_effect():
+
+                                    def commit_and_fail_on_final():
                                         nonlocal commit_count
                                         commit_count += 1
                                         if commit_count >= 3:  # Fail on final commit
                                             raise SQLAlchemyError("Connection timeout during final commit")
-                                        return None
-                                    
-                                    mock_commit.side_effect = commit_side_effect
+                                        return real_commit()
+
+                                    mock_commit.side_effect = commit_and_fail_on_final
                                     
                                     # The scan function should handle the SQLAlchemy error gracefully
                                     # and continue execution (not raise an exception to the test)
