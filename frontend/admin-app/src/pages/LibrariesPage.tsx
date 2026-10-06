@@ -37,8 +37,7 @@ export function LibrariesPage() {
     >
       <PageStatus error={error} errorMessage="Unable to load libraries." />
       <p className="od-admin-lede">
-        Prefer the unified classic page:{' '}
-        <a href="/scan_management?active_tab=auto">Scan jobs</a>
+        Prefer the unified classic page: <a href="/scan_management?active_tab=auto">Scan jobs</a>
         {' · '}
         Library hero image:{' '}
         <a href="/admin/art_studio#stock">Choose image from Backup &amp; stock</a>

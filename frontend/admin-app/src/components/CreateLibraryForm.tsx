@@ -77,30 +77,60 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   return (
     <section className="od-admin-panel od-create-library" aria-labelledby="od-create-library-title">
       <div>
-        <h2 id="od-create-library-title" className="od-admin-panel-title">Add one library</h2>
+        <h2 id="od-create-library-title" className="od-admin-panel-title">
+          Add one library
+        </h2>
         <p className="od-admin-lede">
-          Name a game folder, choose its platform, then Oneirodex creates the library and queues its first scan.
+          Name a game folder, choose its platform, then Oneirodex creates the library and queues its
+          first scan.
         </p>
       </div>
-      <PageStatus error={platformError} errorMessage="Unable to load platform choices." />
+      <PageStatus
+        error={platformError || error || null}
+        errorMessage={platformError ? 'Unable to load platform choices.' : error || null}
+        className="od-create-library__message od-create-library__message--error"
+      />
       <form className="od-create-library__form" onSubmit={(event) => void submit(event)}>
         <label>
           Library name
-          <input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" />
+          <input
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            autoComplete="off"
+          />
         </label>
         <label>
           Platform
-          <select required value={platform} onChange={(event) => setPlatform(event.target.value)} disabled={!platforms.length}>
-            {platforms.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+          <select
+            required
+            value={platform}
+            onChange={(event) => setPlatform(event.target.value)}
+            disabled={!platforms.length}
+          >
+            {platforms.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="od-create-library__path">
           Folder path inside the server
-          <input required value={path} onChange={(event) => setPath(event.target.value)} placeholder="/storage/games/nes" autoComplete="off" />
+          <input
+            required
+            value={path}
+            onChange={(event) => setPath(event.target.value)}
+            placeholder="/storage/games/nes"
+            autoComplete="off"
+          />
         </label>
         <label>
           Folder layout
-          <select value={scanMode} onChange={(event) => setScanMode(event.target.value as 'folders' | 'files')}>
+          <select
+            value={scanMode}
+            onChange={(event) => setScanMode(event.target.value as 'folders' | 'files')}
+          >
             <option value="folders">Game folders</option>
             <option value="files">Game files directly in this folder</option>
           </select>
@@ -113,14 +143,21 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
           </select>
         </label>
         <div className="od-create-library__actions">
-          <Button type="submit" className="od-btn--accent" disabled={busy || !platforms.length || !name.trim() || !path.trim()}>
+          <Button
+            type="submit"
+            className="od-btn--accent"
+            disabled={busy || !platforms.length || !name.trim() || !path.trim()}
+          >
             {busy ? 'Creating and queueing…' : 'Create library and start scan'}
           </Button>
-          <span className="od-admin-lede od-admin-lede--tight">The scan uses the server-visible path; game files stay read-only.</span>
+          <span className="od-admin-lede od-admin-lede--tight">
+            The scan uses the server-visible path; game files stay read-only.
+          </span>
         </div>
       </form>
-      {error ? <p className="od-create-library__message od-create-library__message--error" role="alert">{error}</p> : null}
-      {result?.note ? <p className="od-create-library__message" role="status">{result.note}</p> : null}
+      {result?.note ? (
+        <PageStatus emptyMessage={result.note} className="od-create-library__message" />
+      ) : null}
     </section>
   )
 }

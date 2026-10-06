@@ -29,7 +29,11 @@ export function AnticheatFact({ report }: { report: AnticheatReport }) {
       {names.length ? <span>{names.join(', ')}</span> : null}
       <span className="od-details-page__anticheat-note">
         {safeHttpUrl(report.source_url) ? (
-          <a href={safeHttpUrl(report.source_url) || undefined} target="_blank" rel="noreferrer noopener">
+          <a
+            href={safeHttpUrl(report.source_url) || undefined}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
             {note}
           </a>
         ) : (

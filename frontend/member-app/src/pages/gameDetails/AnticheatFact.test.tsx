@@ -31,7 +31,12 @@ describe('AnticheatFact (INSP-35)', () => {
   it('does not turn a non-http source into a clickable link', () => {
     render(
       <AnticheatFact
-        report={{ status: 'unknown', anticheats: [], reports: 1, source_url: 'javascript:alert(1)' }}
+        report={{
+          status: 'unknown',
+          anticheats: [],
+          reports: 1,
+          source_url: 'javascript:alert(1)',
+        }}
       />,
     )
     expect(screen.queryByRole('link')).toBeNull()

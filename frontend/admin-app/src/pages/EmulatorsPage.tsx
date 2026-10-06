@@ -116,21 +116,21 @@ export function EmulatorProfilesForm() {
                   <label htmlFor={`emu-${platform}`}>
                     <strong>{platform.replaceAll('_', ' ')}</strong>
                   </label>
-                <select
-                  id={`emu-${platform}`}
-                  className="od-emu-select"
-                  value={profiles[platform] || ''}
-                  onChange={(e) =>
-                    setProfiles((prev) => ({ ...prev, [platform]: e.target.value || null }))
-                  }
-                >
-                  <option value="">Default (first core)</option>
-                  {(catalog[platform] || []).map((core) => (
-                    <option key={core} value={core}>
-                      {core}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                    id={`emu-${platform}`}
+                    className="od-emu-select"
+                    value={profiles[platform] || ''}
+                    onChange={(e) =>
+                      setProfiles((prev) => ({ ...prev, [platform]: e.target.value || null }))
+                    }
+                  >
+                    <option value="">Default (first core)</option>
+                    {(catalog[platform] || []).map((core) => (
+                      <option key={core} value={core}>
+                        {core}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ))}
             </div>
