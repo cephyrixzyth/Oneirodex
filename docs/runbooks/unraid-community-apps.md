@@ -125,7 +125,7 @@ the listing itself is refreshed independently by the metadata action.
 
 Docker's `X.Y.Z` tag pins one exact release; `X.Y` is a moving alias for the latest patch in that
 minor line; `latest` follows the newest stable release. For example, at v1.1.1, `1.1` and `1.1.1`
-resolve to the same image. When v1.1.2 publishes, `1.1` advances to that patch while `1.1.1`
+resolve to the same image. When v1.1.3 publishes, `1.1` advances to that patch while `1.1.1`
 continues to pin the older image. The CA template uses `latest` so Unraid can discover each stable
 image update without changing the template's repository tag.
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-10-07
+
+### Added
+- **Onei expedition terminal.** Native installers and application startup now share Onei’s full-body field-scout art, quest-log progress, and retro-future console styling.
+
 ## [1.1.2] — 2026-10-06
 
 ### Fixed
