@@ -90,12 +90,12 @@ Open `http://SERVER-IP:5006/`. The first visit starts the setup flow. Keep `/con
 
 Install **Oneirodex** from Community Applications, set the Appdata path on your cache/SSD, and point **Games** at the host share to scan. The template mounts games read-only and keeps the database and generated artwork under appdata. Optional Forge artwork, ClamAV, and TRAWL integrations are off until configured.
 
-For a running container, check for image updates from Unraid's **Docker** page and run the available update action. Updating the Community Applications catalog refreshes the install template; it does not itself pull a new image. See the [Unraid install, storage, backup, and update guide](https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/runbooks/unraid-community-apps.md).
+For an installed container, use Unraid's **Docker** page and run the available update action. If Unraid does not offer an update, enable **Advanced View** and choose **Force Update** to pull the current image. Refreshing the Community Applications catalog updates the install template; it does not pull a new container image. After updating, check the app's `/awake` endpoint for `__VERSION__`. Keep a current Appdata backup before upgrading. See the [Unraid install, storage, backup, and update guide](https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/runbooks/unraid-community-apps.md).
 
 ## Image tags and updates
 
-- `__VERSION__` pins this release.
-- `1.1` follows compatible patch updates in the 1.1 minor line.
+- `__VERSION__` pins this exact release. Older exact patch tags remain available.
+- `1.1` is a moving alias for compatible patch updates in the 1.1 minor line.
 - `latest` advances with each stable release.
 
 GitHub Actions runs the release checks before publishing multi-architecture images. Compare the running app's version on its `/awake` endpoint after updating. Read the [release notes](https://github.com/cephyrixzyth/Oneirodex/releases/tag/v__VERSION__) before upgrading and keep a current `/config` backup.
