@@ -97,7 +97,6 @@ def download_image(url, save_path, *, image_type=None, title=None):
                 return False, error
         else:
             error = 'Downloaded image response was empty.'
-            print(error)
             return False, error
     except requests.exceptions.RequestException as e:
         error = f"Network error: {e}"
