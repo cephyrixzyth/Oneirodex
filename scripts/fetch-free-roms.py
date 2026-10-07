@@ -245,8 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         available_ids = {str(entry.get("id") or entry.get("filename") or "") for entry in roms}
         unknown_ids = selected_ids - available_ids
         if unknown_ids:
-            print(f"ERROR: unknown ROM id(s): {', '.join(sorted(unknown_ids))}", file=sys.stderr)
-            return 2
+            parser.error(f"unknown ROM id(s): {', '.join(sorted(unknown_ids))}")
         roms = [entry for entry in roms if str(entry.get("id") or entry.get("filename") or "") in selected_ids]
 
     for entry in roms:

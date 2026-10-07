@@ -10,15 +10,23 @@
   <Support>https://github.com/cephyrixzyth/oneirodex/issues</Support>
   <Project>https://github.com/cephyrixzyth/oneirodex</Project>
   <ReadMe>https://github.com/cephyrixzyth/oneirodex/blob/main/docs/runbooks/unraid-community-apps.md</ReadMe>
-  <Overview>Oneirodex stable release __VERSION__. The self-hosted game library for a household. Scan folders of DRM-free games and ROMs, identify them against IGDB / Steam / GOG, invite the family, download, play in the browser where a system supports it, and chat.&#xD;
+  <Overview>Oneirodex is a self-hosted game library for your household. Browse a shared catalog, enrich it with metadata and artwork, organize collections, chat, and play supported systems from the browser or TV-friendly Big Picture view.&#xD;
 &#xD;
-Everything runs in this one container, PostgreSQL included: no second database container to set up. Point "Games" at your games share (read-only), keep "Appdata" on the cache, and open the WebUI. The first visit runs the setup wizard.&#xD;
+One container includes the web app and PostgreSQL. Point Games at your existing game share (mounted read-only), keep Appdata on cache/SSD, and open the WebUI to start setup. Your database, settings, generated secrets, and artwork stay in Appdata.&#xD;
 &#xD;
-Use Oneirodex only with software you are authorised to share. It ships no BIOS or firmware and no pirate tooling.</Overview>
+Release __VERSION__ · Multi-architecture image for amd64 and arm64. Optional metadata, workstation artwork, ClamAV, and TRAWL connections are configured by you and off until enabled.&#xD;
+&#xD;
+Oneirodex does not include game files, BIOS, firmware, or encryption keys. Use only software you are authorized to access. Install, backup, and update guide: https://github.com/cephyrixzyth/Oneirodex/blob/main/docs/runbooks/unraid-community-apps.md</Overview>
   <Category>Tools: Productivity: MediaApp:Other:</Category>
   <WebUI>http://[IP]:[PORT:5006]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/cephyrixzyth/unraid-templates/main/oneirodex/oneirodex.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/cephyrixzyth/unraid-templates/main/icon.png</Icon>
+  <Screenshot>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-library.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-discover.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-big-picture.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/screenshot-admin-libraries.png</Screenshot>
+  <Video>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/media/video/howto/howto-tour.mp4</Video>
+  <Video>https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/media/video/howto/howto-admin-libraries.mp4</Video>
   <ExtraParams>--health-start-period=60s</ExtraParams>
   <PostArgs/>
   <CPUset/>
