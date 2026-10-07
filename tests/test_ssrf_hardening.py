@@ -71,6 +71,89 @@ def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length()
         read_response_limited(oversized, 4)
 
 
+def test_provider_image_fetch_streams_and_enforces_shared_limit(monkeypatch):
+    from oneirodex.utils.providers import base
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    class Response:
+        status_code = 200
+        headers = {'Content-Type': 'image/png'}
+
+        def iter_content(self, chunk_size):
+            yield b'12345'
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    seen = {}
+
+    def fake_safe_get(_url, **kwargs):
+        seen.update(kwargs)
+        return response
+
+    monkeypatch.setattr(base, 'MAX_OUTBOUND_IMAGE_BYTES', 4)
+    monkeypatch.setattr(base.requests, 'Session', Session)
+    monkeypatch.setattr(base, 'safe_get', fake_safe_get)
+    monkeypatch.setattr(base, 'validate_user_outbound_http_url', lambda url: (True, url))
+
+    with pytest.raises(ResponseTooLarge):
+        base.fetch_outbound_image('https://cdn.example/image.png', timeout=2)
+
+    assert seen['stream'] is True
+    assert seen['session'] is not None
+    assert response.closed is True
+
+
+def test_stored_image_download_rejects_oversized_stream_without_writing(tmp_path, monkeypatch):
+    from oneirodex.utils.clients import images
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def iter_content(self, chunk_size):
+            yield b'12345'
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    seen = {}
+
+    def fake_safe_get(_url, **kwargs):
+        seen.update(kwargs)
+        return response
+
+    monkeypatch.setattr(images, 'MAX_OUTBOUND_IMAGE_BYTES', 4)
+    monkeypatch.setattr(images.requests, 'Session', Session)
+    monkeypatch.setattr(images, 'safe_get', fake_safe_get)
+    monkeypatch.setattr(images, 'validate_user_outbound_http_url', lambda url: (True, url))
+    target = tmp_path / 'large.jpg'
+
+    ok, error = images.download_image('https://cdn.example/large.jpg', str(target))
+
+    assert ok is False
+    assert 'exceeds 4 bytes' in error
+    assert target.exists() is False
+    assert seen['stream'] is True
+    assert seen['session'] is not None
+    assert response.closed is True
+
+
 PUBLIC = '93.184.216.34'
 
 

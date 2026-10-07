@@ -140,6 +140,12 @@ def test_fetch_image_mocked(monkeypatch):
         content = b'PNGDATA'
         headers = {'Content-Type': 'image/png'}
 
+        def iter_content(self, chunk_size):
+            yield self.content
+
+        def close(self):
+            pass
+
     fetched = []
 
     def fake_safe_get(url, **kwargs):

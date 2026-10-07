@@ -5,7 +5,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 
-from oneirodex.utils.http_safe import safe_get
+import requests
+
+from oneirodex.utils.http_safe import (
+    MAX_OUTBOUND_IMAGE_BYTES,
+    read_response_limited,
+    safe_get,
+)
 from oneirodex.utils.security import validate_user_outbound_http_url
 
 
@@ -79,15 +85,27 @@ def fetch_outbound_image(
     ok, result = validate_user_outbound_http_url(url)
     if not ok:
         raise ValueError(f'Blocked outbound URL: {result}')
-    response = safe_get(
-        result,
-        validator=validate_user_outbound_http_url,
-        timeout=timeout,
-        headers=headers,
-    )
-    if response.status_code != 200:
-        raise RuntimeError(f'Failed to download image ({response.status_code})')
-    return response.content, response.headers.get('Content-Type')
+    # A caller-owned session is required for stream=True: safe_request's
+    # temporary pinned-TLS session eagerly reads response.content before close.
+    with requests.Session() as session:
+        response = safe_get(
+            result,
+            validator=validate_user_outbound_http_url,
+            timeout=timeout,
+            headers=headers,
+            session=session,
+            stream=True,
+        )
+        try:
+            if response.status_code != 200:
+                raise RuntimeError(f'Failed to download image ({response.status_code})')
+            content_type = response.headers.get('Content-Type')
+            data = read_response_limited(response, MAX_OUTBOUND_IMAGE_BYTES)
+            return data, content_type
+        finally:
+            close = getattr(response, 'close', None)
+            if callable(close):
+                close()
 
 
 def mask_api_key(key: str | None) -> str | None:

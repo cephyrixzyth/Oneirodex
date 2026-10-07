@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-10-06
+
+### Fixed
+- Stream remote artwork responses with a 25 MiB cap so oversized provider downloads are rejected before they consume unbounded memory or are written to the library.
+- Validate stable release tags against `VERSION` before publishing any image, and allow a Docker Hub overview permission failure to leave the independent Unraid CA template sync runnable.
+
 ## [1.1.1] — 2026-10-06
 
 ### Fixed
@@ -1030,7 +1036,8 @@ First milestone release on the `feature/roadmap-q1-foundation` track (Oneirodex 
 - Hardlink and AI apply remain feature-flagged and path-sandboxed
 - `SECRET_KEY` required; container refuses the placeholder
 
-[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/cephyrixzyth/oneirodex/compare/v1.0.0...v1.0.1

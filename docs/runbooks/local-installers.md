@@ -25,7 +25,7 @@ build produced no bundles rather than reporting success over an empty directory.
 | macOS | `.dmg`, `.app` | **Mac required** — see below. |
 
 `.msi` and `.rpm` remain excluded while their native build and signing behavior is
-validated. The current plain `1.1.1` version is compatible with those formats, but does
+validated. The current plain `1.1.2` version is compatible with those formats, but does
 not itself enable them. The release runs six OS/flavor builds and attaches eight assets: Windows NSIS, universal
 macOS DMG, Linux DEB and AppImage for both full and thin clients.
 

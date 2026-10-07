@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Oneirodex API",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "description": "Self-hosted multi-user game library API. Authenticate with session cookies or Authorization: Bearer gt_<prefix>_<secret>."
   },
   "servers": [

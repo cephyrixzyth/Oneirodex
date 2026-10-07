@@ -8,7 +8,11 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game
 from oneirodex.utils.cover_quality import qualify_downloaded_image
-from oneirodex.utils.http_safe import safe_get
+from oneirodex.utils.http_safe import (
+    MAX_OUTBOUND_IMAGE_BYTES,
+    read_response_limited,
+    safe_get,
+)
 from oneirodex.utils.security import validate_user_outbound_http_url
 
 __all__ = ["cover_title_for_uuid", "download_image", "download_stored_image"]
@@ -51,8 +55,24 @@ def download_image(url, save_path, *, image_type=None, title=None):
         # safe_get, not requests.get: the validation above covers the URL we
         # asked for, and a 302 from a valid host to 169.254.169.254 used to be
         # followed without any further check. Every hop is revalidated now.
-        response = safe_get(url, validator=validate_user_outbound_http_url, timeout=30)
-        if response.status_code == 200:
+        with requests.Session() as session:
+            response = safe_get(
+                url,
+                validator=validate_user_outbound_http_url,
+                timeout=30,
+                session=session,
+                stream=True,
+            )
+            try:
+                if response.status_code != 200:
+                    error = f"HTTP {response.status_code} downloading image."
+                    print(f"Failed to download the image. Status Code: {response.status_code}")
+                    return False, error
+                image_bytes = read_response_limited(response, MAX_OUTBOUND_IMAGE_BYTES)
+            finally:
+                response.close()
+
+        if image_bytes:
             directory = os.path.dirname(save_path)
 
             if not os.path.exists(directory):
@@ -67,7 +87,7 @@ def download_image(url, save_path, *, image_type=None, title=None):
 
             if os.access(directory, os.W_OK):
                 with open(save_path, 'wb') as f:
-                    f.write(response.content)
+                    f.write(image_bytes)
                 return qualify_downloaded_image(
                     save_path, image_type=image_type, title=title,
                 )
@@ -76,8 +96,7 @@ def download_image(url, save_path, *, image_type=None, title=None):
                 print(f"Error: {error}")
                 return False, error
         else:
-            error = f"HTTP {response.status_code} downloading image."
-            print(f"Failed to download the image. Status Code: {response.status_code}")
+            error = 'Downloaded image response was empty.'
             return False, error
     except requests.exceptions.RequestException as e:
         error = f"Network error: {e}"

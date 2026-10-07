@@ -37,6 +37,10 @@ from oneirodex.utils import security
 
 logger = logging.getLogger(__name__)
 
+# Artwork responses are kept comfortably above normal poster sizes while
+# preventing remote image hosts from forcing unbounded RAM or disk use.
+MAX_OUTBOUND_IMAGE_BYTES = 25 * 1024 * 1024
+
 DEFAULT_MAX_REDIRECTS = 5
 
 Validator = Callable[[str], tuple[bool, str]]
