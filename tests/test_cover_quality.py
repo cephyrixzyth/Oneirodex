@@ -94,6 +94,8 @@ def test_download_image_replaces_wash_cover(tmp_path, monkeypatch):
     response = MagicMock()
     response.status_code = 200
     response.content = _jpeg_bytes(PILImage.new('RGB', (200, 300), (8, 8, 8)))
+    response.headers = {}
+    response.iter_content.return_value = [response.content]
     monkeypatch.setattr(
         'oneirodex.utils.clients.images.validate_user_outbound_http_url',
         lambda url: (True, url),
@@ -117,6 +119,8 @@ def test_download_image_leaves_screenshot_wash(tmp_path, monkeypatch):
     response = MagicMock()
     response.status_code = 200
     response.content = _jpeg_bytes(PILImage.new('RGB', (200, 300), (0, 0, 0)))
+    response.headers = {}
+    response.iter_content.return_value = [response.content]
     monkeypatch.setattr(
         'oneirodex.utils.clients.images.validate_user_outbound_http_url',
         lambda url: (True, url),

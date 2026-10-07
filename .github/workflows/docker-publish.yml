@@ -33,6 +33,19 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate release tag before publishing
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          version="$(cat VERSION)"
+          tag_version="${RELEASE_REF#v}"
+          if [[ ! "$tag_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$tag_version" != "$version" ]; then
+            echo "::error::Release tag must be vMAJOR.MINOR.PATCH and match VERSION."
+            exit 1
+          fi
+
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -92,22 +105,15 @@ jobs:
 
       - name: Stamp Docker Hub overview version
         if: steps.hub.outputs.enabled == 'true'
-        env:
-          RELEASE_REF: ${{ github.ref_name }}
-          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           version="$(cat VERSION)"
-          if [ "$IS_TAG" = true ]; then
-            tag_version="${RELEASE_REF#v}"
-            if [[ ! "$tag_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$tag_version" != "$version" ]; then
-              echo "::error::Release tag must be vMAJOR.MINOR.PATCH and match VERSION."
-              exit 1
-            fi
-          fi
           sed "s/__VERSION__/${version}/g" docs/dockerhub-overview.md > "$RUNNER_TEMP/dockerhub-overview.md"
 
       - name: Sync Docker Hub repository overview
         if: steps.hub.outputs.enabled == 'true'
+        # Image publication and the CA feed must not fail because Hub's
+        # separate repository-metadata API rejects an overview update.
+        continue-on-error: true
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}

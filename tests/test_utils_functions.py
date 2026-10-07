@@ -425,6 +425,8 @@ class TestDownloadImage:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.content = b'fake_image_data'
+        mock_response.headers = {}
+        mock_response.iter_content.return_value = [mock_response.content]
         mock_get = MagicMock(return_value=mock_response)
         self._allow_url(monkeypatch)
         monkeypatch.setattr('oneirodex.utils.clients.images.safe_get', mock_get)
@@ -446,6 +448,8 @@ class TestDownloadImage:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.content = b'fake_image_data'
+        mock_response.headers = {}
+        mock_response.iter_content.return_value = [mock_response.content]
         mock_get = MagicMock(return_value=mock_response)
         self._allow_url(monkeypatch)
         monkeypatch.setattr('oneirodex.utils.clients.images.safe_get', mock_get)
@@ -477,6 +481,8 @@ class TestDownloadImage:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.content = b'fake_image_data'
+        mock_response.headers = {}
+        mock_response.iter_content.return_value = [mock_response.content]
         self._allow_url(monkeypatch)
         monkeypatch.setattr(
             'oneirodex.utils.clients.images.safe_get',

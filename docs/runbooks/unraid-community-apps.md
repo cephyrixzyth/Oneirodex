@@ -114,12 +114,20 @@ environment must be able both to push the image and edit the repository's descri
 If the build/push step succeeds but `dockerhub-description` returns `403 Forbidden`, the image is
 published but the listing is stale. Update the token's repository metadata permission or edit the
 description and overview from Docker Hub's repository page, then rerun the metadata sync and read
-the public page back to verify it. Never put a Docker Hub token in the repository or chat.
+the public page back to verify it. The overview update is independent of the image and CA template
+sync, so a Hub metadata 403 should not prevent the CA template job from running. Never put a Docker
+Hub token in the repository or chat.
 
 After the GitHub Actions variable and secret are configured, a stable `v*` tag publishes the
 version and `latest` images for `linux/amd64` and `linux/arm64`. Confirm both architectures are
 public before updating the CA listing. The current versioned image is available from Docker Hub;
 the listing itself is refreshed independently by the metadata action.
+
+Docker's `X.Y.Z` tag pins one exact release; `X.Y` is a moving alias for the latest patch in that
+minor line; `latest` follows the newest stable release. For example, at v1.1.1, `1.1` and `1.1.1`
+resolve to the same image. When v1.1.2 publishes, `1.1` advances to that patch while `1.1.1`
+continues to pin the older image. The CA template uses `latest` so Unraid can discover each stable
+image update without changing the template's repository tag.
 
 ## Unraid Community Apps listing
 
