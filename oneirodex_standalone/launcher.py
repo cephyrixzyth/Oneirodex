@@ -42,6 +42,32 @@ STATE_FILE = 'standalone.json'
 #: Give up restarting a database that keeps dying: more than this many
 #: restarts inside the window means something is wrong that a restart won't fix.
 MAX_RESTARTS, RESTART_WINDOW = 5, 600
+FIELD_ART = (
+    '╭──────────────────────────────────────────────────────────────╮',
+    '│  Oneirodex  //  EXPEDITION DECK                 FIELD BOOT  │',
+    '╰──────────────────────────────────────────────────────────────╯',
+    '                         .-""""-.',
+    '                        /  .--.  \\',
+    '                       |  (o  o)  |     ONEI',
+    '                       |    ∇     |     map scout · field guide',
+    '                        \\  ____  /      d20 packed · radio tuned',
+    '                       .-|      |-.',
+    '                      /  |  []  |  \\',
+    '                     /___|______|___\\',
+    '                          /    \\',
+    '                         /______\\',
+    '  QUEST LOG // waking the deck and checking the trail markers...',
+)
+
+
+def print_field_boot() -> None:
+    """Show Onei's field-terminal splash when the launcher has a console."""
+    if not sys.stdout.isatty():
+        return
+    tint = '\033[0;32m' if not os.environ.get('NO_COLOR') else ''
+    reset = '\033[0m' if tint else ''
+    for line in FIELD_ART:
+        print(f'{tint}{line}{reset}')
 
 
 def default_data_dir() -> Path:
@@ -173,6 +199,7 @@ def main(argv=None) -> int:
     parser.add_argument('--init-only', action='store_true', help='create the data folder and database, then stop')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format='[standalone] %(message)s', stream=sys.stdout)
+    print_field_boot()
 
     # Before anything is started: on Windows the database and web server then
     # end with the launcher even when it is killed outright (winjob.py).
@@ -189,15 +216,15 @@ def main(argv=None) -> int:
     except BundleError as exc:
         logger.error('%s', exc)
         return 2
-    logger.info('data folder: %s%s', root, ' (created)' if first_run else '')
+    logger.info('QUEST LOG // data camp: %s%s', root, ' (created)' if first_run else '')
     if args.init_only:
         pg.stop()
         return 0
 
     env = server_env(pg, state, root)
-    logger.info('preparing the database (first start takes longer)')
+    logger.info('QUEST LOG // checking the camp ledger; first start takes longer')
     if subprocess.run(init_command(), cwd=REPO_ROOT, env=env).returncode != 0:
-        logger.error('startup initialization failed; not starting the server')
+        logger.error('FIELD ALERT // startup did not complete; server will not start')
         pg.stop()
         return 3
     # As startweb.sh does after the same step: the server's readiness probe
@@ -205,7 +232,7 @@ def main(argv=None) -> int:
     env['ONEIRODEX_INITIALIZATION_COMPLETE'] = 'true'
     server = subprocess.Popen(server_command(args.port), cwd=REPO_ROOT, env=env)
     supervisor = Supervisor(pg, server)
-    logger.info('Oneirodex on http://127.0.0.1:%s', args.port)
+    logger.info('QUEST COMPLETE // Oneirodex is at http://127.0.0.1:%s', args.port)
 
     def _stop(signum, _frame):
         raise KeyboardInterrupt

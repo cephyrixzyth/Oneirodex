@@ -9,6 +9,29 @@ fi
 
 cd "$(dirname "$0")"
 
+if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+    printf '\033[0;32m'
+fi
+printf '%s\n' \
+    '╭──────────────────────────────────────────────────────────────╮' \
+    '│  Oneirodex  //  EXPEDITION DECK                 FIELD BOOT  │' \
+    '╰──────────────────────────────────────────────────────────────╯' \
+    '                         .-""""-.' \
+    '                        /  .--.  \' \
+    '                       |  (o  o)  |     ONEI' \
+    '                       |    ∇     |     map scout · field guide' \
+    '                        \  ____  /      d20 packed · radio tuned' \
+    '                       .-|      |-.' \
+    '                      /  |  []  |  \' \
+    '                     /___|______|___\' \
+    '                          /    \' \
+    '                         /______\' \
+    '  QUEST LOG // waking the deck and checking the trail markers...' \
+    ''
+if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+    printf '\033[0m'
+fi
+
 source venv/bin/activate
 
 # Load .env file and export variables to shell environment
@@ -53,19 +76,36 @@ print('Database reset complete. Run ./startweb.sh to start the server.')
     exit 0
 fi
 
-echo "Starting Oneirodex with uvicorn..."
+if [ -t 1 ]; then
+    printf '\033[0;36m'
+fi
+echo "ONEI > The launch gate is coming online."
+echo "        Oneirodex will be at http://localhost:${PORT:-5006} when ready."
+if [ -t 1 ]; then
+    printf '\033[0m'
+fi
 
 # Run complete startup initialization once before starting workers
 python3 -c "
 from oneirodex.init_manager import run_complete_startup_initialization
 import sys
 
-print('🚀 Starting Oneirodex initialization...')
+print('QUEST LOG // checking the camp ledger and preparing the worlds...')
 if not run_complete_startup_initialization():
-    print('❌ Startup initialization failed!')
     sys.exit(1)
-print('✅ Initialization completed - starting workers...')
+print('QUEST COMPLETE // initialization ready; opening the launch gate...')
 "
+INIT_STATUS=$?
+if [ "$INIT_STATUS" -ne 0 ]; then
+    if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+        printf '\033[0;31m'
+    fi
+    printf '%s\n' 'FIELD ALERT // startup did not complete; see the log above.'
+    if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+        printf '\033[0m'
+    fi
+    exit "$INIT_STATUS"
+fi
 
 # Ensure environment variables are set for worker processes
 export ONEIRODEX_MIGRATIONS_COMPLETE=true

@@ -54,22 +54,44 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ScriptDir 'install.log'
 $DbName = 'oneirodex'
 $TestDbName = 'oneirodextest'
+$script:InstallStage = 0
 
 function Write-Log([string]$Message) {
     "{0}: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message | Add-Content -Path $LogFile -Encoding utf8
 }
 
-function Write-Step([string]$Message)    { Write-Host "[->] $Message" -ForegroundColor Blue;   Write-Log "STEP: $Message" }
-function Write-Ok([string]$Message)      { Write-Host "[OK] $Message" -ForegroundColor Green;  Write-Log "SUCCESS: $Message" }
-function Write-Fail([string]$Message)    { Write-Host "[XX] $Message" -ForegroundColor Red;    Write-Log "ERROR: $Message" }
-function Write-Warn([string]$Message)    { Write-Host "[!!] $Message" -ForegroundColor Yellow; Write-Log "WARNING: $Message" }
-function Write-Note([string]$Message)    { Write-Host "[ii] $Message" -ForegroundColor Cyan;   Write-Log "INFO: $Message" }
+function Write-Step([string]$Message) {
+    $script:InstallStage++
+    Write-Host ("`n  QUEST {0:D2}  //  FIELD LOG" -f $script:InstallStage) -ForegroundColor DarkYellow
+    Write-Host "  ONEI > $Message" -ForegroundColor Cyan
+    Write-Log "STEP: $Message"
+}
+function Write-Ok([string]$Message)      { Write-Host "  [+] $Message" -ForegroundColor Green;  Write-Log "SUCCESS: $Message" }
+function Write-Fail([string]$Message)    { Write-Host "  [!] $Message" -ForegroundColor Red;    Write-Log "ERROR: $Message" }
+function Write-Warn([string]$Message)    { Write-Host "  [!] $Message" -ForegroundColor Yellow; Write-Log "WARNING: $Message" }
+function Write-Note([string]$Message)    { Write-Host "  [.] $Message" -ForegroundColor Cyan;   Write-Log "INFO: $Message" }
 
 function Write-Header {
     Clear-Host
-    Write-Host '===============================================' -ForegroundColor Cyan
-    Write-Host '    Oneirodex Windows Installer v1.0' -ForegroundColor White
-    Write-Host '===============================================' -ForegroundColor Cyan
+    Write-Host '+--------------------------------------------------------------------+' -ForegroundColor DarkGreen
+    Write-Host '|  Oneirodex  //  EXPEDITION DECK                         WINDOWS   |' -ForegroundColor Green
+    Write-Host '|  QUEST LOG / INSTALLATION                                      [*] |' -ForegroundColor DarkYellow
+    Write-Host '+--------------------------------------------------------------------+' -ForegroundColor DarkGreen
+    $oneiArt = @'
+                         .-""""-.
+                        /  .--.  \
+                       |  (o  o)  |
+                       |    v     |     ONEI
+                        \  ____  /      map scout - keeper of the lantern
+                       .-|      |-.
+                      /  |  []  |  \    field kit: d20 - radio - spare key
+                     /___|______|___\
+                          /    \
+                         /______\
+'@
+    Write-Host $oneiArt -ForegroundColor Green
+    Write-Host ''
+    Write-Host '  A little old-world magic. A well-stocked field terminal.' -ForegroundColor Gray
     Write-Host ''
 }
 
@@ -272,24 +294,25 @@ function Write-EnvFile([string]$DatabaseUrl) {
 
 function Show-Summary {
     Write-Host ''
-    Write-Host '===============================================' -ForegroundColor Green
-    Write-Host '    Installation Completed Successfully!' -ForegroundColor White
-    Write-Host '===============================================' -ForegroundColor Green
+    Write-Host '+--------------------------------------------------------------------+' -ForegroundColor Green
+    Write-Host '|  QUEST COMPLETE  //  THE DECK IS READY                            |' -ForegroundColor Green
+    Write-Host '+--------------------------------------------------------------------+' -ForegroundColor Green
+    Write-Host '  ONEI > Your worlds are waiting at the gate.' -ForegroundColor Cyan
     Write-Host ''
-    Write-Note "Access URL:      http://localhost:$Port"
-    Write-Note "Games Directory: $GamesDir"
+    Write-Note "Launch gate:     http://localhost:$Port"
+    Write-Note "Game cache:      $GamesDir"
     if (-not [string]::IsNullOrWhiteSpace($LibraryRoots)) {
-        Write-Note "Scan Locations:  $LibraryRoots"
+        Write-Note "Trail markers:   $LibraryRoots"
     }
-    Write-Note 'Start Command:   .\startweb_windows.cmd'
-    Write-Note 'Reset Database:  .\startweb_windows.cmd --force-setup'
+    Write-Note 'Start command:   .\startweb_windows.cmd'
+    Write-Note 'Reset database:  .\startweb_windows.cmd --force-setup'
     Write-Note 'Run as service:  docs/runbooks/install-native.md (Windows)'
     Write-Note "Log File:        $LogFile"
     Write-Host ''
 
     $answer = Read-Host 'Start Oneirodex now? [Y/n]'
     if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^[Yy]') {
-        Write-Note "Starting Oneirodex - open http://localhost:$Port"
+        Write-Note "Opening the launch gate - http://localhost:$Port"
         & (Join-Path $ScriptDir 'startweb_windows.cmd')
     }
     else {
