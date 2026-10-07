@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 
 from oneirodex.utils.api_response import api_error, api_ok
 from flask_login import current_user, login_required
@@ -230,6 +230,12 @@ def chat_attachment_upload(channel_id: int):
         'limits': {
             'max_bytes': MAX_ATTACHMENT_BYTES,
             'max_per_message': MAX_ATTACHMENTS_PER_MESSAGE,
+            'max_total_bytes': current_app.config.get(
+                'CHAT_ATTACHMENT_STORAGE_MAX_BYTES'
+            ),
+            'max_total_files': current_app.config.get(
+                'CHAT_ATTACHMENT_STORAGE_MAX_FILES'
+            ),
         },
     }, status=201)
 

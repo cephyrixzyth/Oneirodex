@@ -127,7 +127,7 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Session/remember-me cookie hardening. Defaults are safe for HTTPS deployments;
-    # set SESSION_COOKIE_SECURE=false in .env for local HTTP development only.
+    # Set both cookie Secure flags false only when deliberately using direct HTTP.
     SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', True)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
@@ -153,6 +153,17 @@ class Config(object):
     # Total .cht storage across every game (0 = the built-in 256 MB). Each game
     # is separately capped at 200 files of 1 MB; this is the bound on the sum.
     CHEAT_STORAGE_MAX_BYTES = _env_int('CHEAT_STORAGE_MAX_BYTES')
+
+    # Total retained chat-attachment storage. Zero/unset keeps the bounded
+    # 1 GiB default; operators can raise the cap to match their library volume.
+    CHAT_ATTACHMENT_STORAGE_MAX_BYTES = (
+        _env_int('CHAT_ATTACHMENT_STORAGE_MAX_BYTES') or (1024 * 1024 * 1024)
+    )
+    # Maximum regular files retained across all chat channels and users.
+    # Zero/unset keeps the bounded 10,000-file default.
+    CHAT_ATTACHMENT_STORAGE_MAX_FILES = (
+        max(1, _env_int('CHAT_ATTACHMENT_STORAGE_MAX_FILES') or 10_000)
+    )
 
     # Global request-body ceiling. Every upload route already has its own,
     # tighter limit (firmware at 64MB is the largest); without this one, none of

@@ -31,7 +31,7 @@ Copy from `.env.example`:
 | `OIDC_ROLE_MAP` | JSON object mapping IdP claim values → Oneirodex roles |
 | `OIDC_DISPLAY_NAME` | Login button label (default: `Sign in with SSO`) |
 | `TRUSTED_PROXIES` | Number of trusted reverse-proxy hops (`0` = off, `1` = typical single nginx/Caddy/Traefik) |
-| `SESSION_COOKIE_SECURE` | `true` behind HTTPS (default); `false` for local HTTP dev only |
+| `SESSION_COOKIE_SECURE` | `true` by default; `false` only for deliberate direct HTTP access (authentication cookies then cross the network) |
 | `REMEMBER_COOKIE_SECURE` | Same as above for remember-me cookies |
 
 Admin settings stored in `global_settings` override env defaults when set.

@@ -62,6 +62,23 @@ docker compose up -d --build
 
 App: http://localhost:5006
 
+Both Compose layouts set session and remember-me cookies to `Secure` by
+default when those variables are unset. Existing `.env` files from older
+templates may still explicitly set them to `false`; for HTTPS deployments,
+change those existing values to `true` because explicit `.env` values override
+the Compose defaults. Use HTTPS at a reverse proxy for normal browser access.
+Direct HTTP access by LAN address will not retain authenticated cookies; setting both
+`SESSION_COOKIE_SECURE=false` and `REMEMBER_COOKIE_SECURE=false` opts into
+sending authentication cookies over HTTP. The loopback-only review Compose
+file keeps that explicit local-development override.
+
+Chat attachments share a **1 GiB** total storage cap across users and channels
+by default, with a **10,000-file** cap to bound directory checks during uploads.
+Set `CHAT_ATTACHMENT_STORAGE_MAX_BYTES` or `CHAT_ATTACHMENT_STORAGE_MAX_FILES`
+in `.env` to raise either limit. Zero or unset uses the 1 GiB and 10,000-file
+defaults. The file cap counts regular files, including orphaned files, under
+`UPLOAD_FOLDER/chat-attachments` across all channels.
+
 ## Free isolated public demo (Blitz)
 
 The public preview runs at

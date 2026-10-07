@@ -93,6 +93,11 @@ To put the app on HTTPS:
 2. Proxy to `http://127.0.0.1:5006` with `X-Forwarded-Proto: https` — [oidc-sso.md § reverse proxy](oidc-sso.md#6-reverse-proxy-and-https).
 3. Set `TRUSTED_PROXIES=1`, `SESSION_COOKIE_SECURE=true`, and Admin **Site URL** to the `https://…` base.
 
+The Compose default keeps both authentication cookies `Secure`. For direct
+HTTP on a trusted LAN, setting both cookie flags to `false` restores browser
+login persistence but sends authentication cookies without transport
+encryption; prefer the HTTPS proxy path above.
+
 4. Once TLS is up, members can **install the app** (Preferences → Install this library) on laptops, Chromebooks, tablets and headsets — the install path needs a secure origin, so on plain HTTP the row never appears. Installed seats heartbeat as `browser`, not `thin`; they hold no install ACLs. See [thin-client.md § No binary](../user/thin-client.md#no-binary-install-the-web-app-instead-tc-2b).
 
 **SMTP** is stored in Admin → Integrations → SMTP (`GlobalSettings.smtp_*`), not `.env`. Tuta: `smtp.tuta.com` port **587** STARTTLS. Do not paste the password into git or chat. **Passkeys** for Unraid’s GUI are a host setting; the Oneirodex login page has no WebAuthn yet.
