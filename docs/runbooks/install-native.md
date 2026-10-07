@@ -23,6 +23,13 @@ databases, and write a `.env` with a generated `SECRET_KEY`. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
 
+The Linux, macOS, and Windows installers use the same expedition field-terminal
+presentation: Onei appears as a full-body map scout, install steps read like a
+quest log, and native, standalone, and container startup carry that look through
+initialization. The retro-future console styling and tabletop map / d20 details
+are decorative; status lines and errors still report the real operation and its
+result.
+
 ## Standalone (preview): no PostgreSQL to install
 
 [ADR 0011](../adr/0011-standalone-bundled-postgres.md) adds a third way in:

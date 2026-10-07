@@ -4,6 +4,10 @@
 
 The repo includes two supported layouts: `docker-compose.yml` runs `oneirodex-app` plus `oneirodex-db`; `docker-compose.single.yml` runs one app container with embedded PostgreSQL. The single-container file reads app settings from `APP_ENV_FILE` (default `.env`) and keeps database files and generated secrets under the `/config` bind. Hub image: `cephyrixzyth/oneirodex` via `APP_IMAGE`.
 
+Container startup opens with Onei's expedition field-terminal splash and prints
+the initialization outcome as a quest-log entry. In non-interactive container
+logs, the art stays plain text so the output remains readable.
+
 ## Prerequisites
 
 - Docker Compose v2

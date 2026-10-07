@@ -43,13 +43,14 @@ DEV_MODE=false
 SKIP_DB=false
 CUSTOM_PORT="5006"
 VERBOSE_MODE=false
+INSTALL_STAGE=0
 
 # Cleanup function
 cleanup() {
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
-        echo -e "\n${RED}✗ Installation failed!${NC}"
-        echo -e "${YELLOW}Check the log file: $LOG_FILE${NC}"
+        echo -e "\n${RED}FIELD ALERT // installation did not complete.${NC}"
+        echo -e "${YELLOW}Field log: $LOG_FILE${NC}"
     fi
 }
 trap cleanup EXIT
@@ -62,41 +63,59 @@ log() {
 # Print functions
 print_header() {
     clear
-    echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
-    echo -e "${WHITE}    Oneirodex Linux Auto-Installer v1.0${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}╭──────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│  Oneirodex  //  EXPEDITION DECK                          LINUX      │${NC}"
+    echo -e "${YELLOW}│  QUEST LOG · INSTALLATION                                        ◉  │${NC}"
+    echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${GREEN}"
+    cat <<'ONEI'
+                         .-""""-.
+                        /  .--.  \
+                       |  (o  o)  |
+                       |    ∇     |     ONEI
+                        \  ____  /      map scout · keeper of the lantern
+                       .-|      |-.
+                      /  |  []  |  \    field kit: d20 · radio · spare key
+                     /___|______|___\
+                          /    \
+                         /______\
+ONEI
+    echo -e "${NC}"
+    echo -e "  A little old-world magic. A well-stocked field terminal."
     echo
 }
 
 print_step() {
-    echo -e "${BLUE}[→]${NC} $1"
+    INSTALL_STAGE=$((INSTALL_STAGE + 1))
+    printf "\n${YELLOW}  QUEST %02d  //  FIELD LOG${NC}\n" "$INSTALL_STAGE"
+    echo -e "${CYAN}  ONEI > $1${NC}"
     log "STEP: $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
+    echo -e "${GREEN}  [✓]${NC} $1"
     log "SUCCESS: $1"
 }
 
 print_error() {
-    echo -e "${RED}[✗]${NC} $1"
+    echo -e "${RED}  [!]${NC} $1"
     log "ERROR: $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1"
+    echo -e "${YELLOW}  [!]${NC} $1"
     log "WARNING: $1"
 }
 
 print_info() {
-    echo -e "${CYAN}[ℹ]${NC} $1"
+    echo -e "${CYAN}  [·]${NC} $1"
     log "INFO: $1"
 }
 
 # Verbose-only info messages (suppressed in quiet mode)
 print_verbose() {
     if [ "$VERBOSE_MODE" = true ]; then
-        echo -e "${CYAN}[ℹ]${NC} $1"
+        echo -e "${CYAN}  [·]${NC} $1"
     fi
     log "VERBOSE: $1"
 }
@@ -902,22 +921,23 @@ validate_installation() {
 # Show installation summary
 show_summary() {
     echo
-    echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-    echo -e "${WHITE}    Installation Completed Successfully!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}╭──────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│  QUEST COMPLETE  //  THE DECK IS READY                              │${NC}"
+    echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${CYAN}  ONEI > Your worlds are waiting at the gate.${NC}"
     echo
-    echo -e "${CYAN}📌 Access URL:${NC} http://localhost:$CUSTOM_PORT"
-    echo -e "${CYAN}📌 Games Directory:${NC} $GAMES_DIR"
+    echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
+    echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
     if [ -n "$LIBRARY_ROOTS" ]; then
-        echo -e "${CYAN}📌 Extra Scan Locations:${NC} $LIBRARY_ROOTS"
+        echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
     fi
     if [ "$SKIP_DB" != true ]; then
-        echo -e "${CYAN}📌 Database:${NC} oneirodex (credentials stored in .env)"
+        echo -e "${CYAN}  Camp ledger:${NC} oneirodex (credentials stored in .env)"
     fi
-    echo -e "${CYAN}📌 Start Command:${NC} ./startweb.sh"
-    echo -e "${CYAN}📌 Stop:${NC} Press Ctrl+C"
-    echo -e "${CYAN}📌 Reset Database:${NC} ./startweb.sh --force-setup"
-    echo -e "${CYAN}📌 Log File:${NC} $LOG_FILE"
+    echo -e "${CYAN}  Start command:${NC} ./startweb.sh"
+    echo -e "${CYAN}  Stop:${NC} Press Ctrl+C"
+    echo -e "${CYAN}  Reset database:${NC} ./startweb.sh --force-setup"
+    echo -e "${CYAN}  Field log:${NC} $LOG_FILE"
     echo
 
     # Ask if user wants to start the application
@@ -932,7 +952,7 @@ show_summary() {
     esac
     if [ "$start_it" = true ]; then
         echo
-        print_info "Starting Oneirodex..."
+        print_info "Opening the launch gate..."
         print_info "Open your browser to http://localhost:$CUSTOM_PORT when ready"
         print_info "Press Ctrl+C to stop the application"
         echo

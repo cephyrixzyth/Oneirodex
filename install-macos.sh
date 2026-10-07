@@ -34,23 +34,29 @@ FORCE_INSTALL=false
 DEV_MODE=false
 SKIP_DB=false
 VERBOSE_MODE=false
+INSTALL_STAGE=0
 
 cleanup() {
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
-        echo -e "\n${RED}✗ Installation failed!${NC}"
-        echo -e "${YELLOW}Check the log file: $LOG_FILE${NC}"
+        echo -e "\n${RED}FIELD ALERT // installation did not complete.${NC}"
+        echo -e "${YELLOW}Field log: $LOG_FILE${NC}"
     fi
 }
 trap cleanup EXIT
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> "$LOG_FILE"; }
-print_step()    { echo -e "${BLUE}[→]${NC} $1"; log "STEP: $1"; }
-print_success() { echo -e "${GREEN}[✓]${NC} $1"; log "SUCCESS: $1"; }
-print_error()   { echo -e "${RED}[✗]${NC} $1"; log "ERROR: $1"; }
-print_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; log "WARNING: $1"; }
-print_info()    { echo -e "${CYAN}[ℹ]${NC} $1"; log "INFO: $1"; }
-print_verbose() { if [ "$VERBOSE_MODE" = true ]; then echo -e "${CYAN}[ℹ]${NC} $1"; fi; log "VERBOSE: $1"; }
+print_step() {
+    INSTALL_STAGE=$((INSTALL_STAGE + 1))
+    printf "\n${YELLOW}  QUEST %02d  //  FIELD LOG${NC}\n" "$INSTALL_STAGE"
+    echo -e "${CYAN}  ONEI > $1${NC}"
+    log "STEP: $1"
+}
+print_success() { echo -e "${GREEN}  [✓]${NC} $1"; log "SUCCESS: $1"; }
+print_error()   { echo -e "${RED}  [!]${NC} $1"; log "ERROR: $1"; }
+print_warning() { echo -e "${YELLOW}  [!]${NC} $1"; log "WARNING: $1"; }
+print_info()    { echo -e "${CYAN}  [·]${NC} $1"; log "INFO: $1"; }
+print_verbose() { if [ "$VERBOSE_MODE" = true ]; then echo -e "${CYAN}  [·]${NC} $1"; fi; log "VERBOSE: $1"; }
 
 run_quiet() {
     if [ "$VERBOSE_MODE" = true ]; then
@@ -62,9 +68,25 @@ run_quiet() {
 
 print_header() {
     clear
-    echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
-    echo -e "${WHITE}    Oneirodex macOS Installer v1.0${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}╭──────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│  Oneirodex  //  EXPEDITION DECK                          macOS      │${NC}"
+    echo -e "${YELLOW}│  QUEST LOG · INSTALLATION                                        ◉  │${NC}"
+    echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${GREEN}"
+    cat <<'ONEI'
+                         .-""""-.
+                        /  .--.  \
+                       |  (o  o)  |
+                       |    ∇     |     ONEI
+                        \  ____  /      map scout · keeper of the lantern
+                       .-|      |-.
+                      /  |  []  |  \    field kit: d20 · radio · spare key
+                     /___|______|___\
+                          /    \
+                         /______\
+ONEI
+    echo -e "${NC}"
+    echo -e "  A little old-world magic. A well-stocked field terminal."
     echo
 }
 
@@ -376,30 +398,31 @@ validate_installation() {
 
 show_summary() {
     echo
-    echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-    echo -e "${WHITE}    Installation Completed Successfully!${NC}"
-    echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}╭──────────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│  QUEST COMPLETE  //  THE DECK IS READY                              │${NC}"
+    echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
+    echo -e "${CYAN}  ONEI > Your worlds are waiting at the gate.${NC}"
     echo
-    echo -e "${CYAN}📌 Access URL:${NC} http://localhost:$CUSTOM_PORT"
-    echo -e "${CYAN}📌 Games Directory:${NC} $GAMES_DIR"
+    echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
+    echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
     if [ -n "$LIBRARY_ROOTS" ]; then
-        echo -e "${CYAN}📌 Extra Scan Locations:${NC} $LIBRARY_ROOTS"
+        echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
     fi
     if [ "$SKIP_DB" != true ]; then
-        echo -e "${CYAN}📌 Database:${NC} $DB_NAME (local socket, user $DB_USER)"
+        echo -e "${CYAN}  Camp ledger:${NC} $DB_NAME (local socket, user $DB_USER)"
     fi
-    echo -e "${CYAN}📌 Start Command:${NC} ./startweb.sh"
-    echo -e "${CYAN}📌 Stop:${NC} Press Ctrl+C"
-    echo -e "${CYAN}📌 Reset Database:${NC} ./startweb.sh --force-setup"
-    echo -e "${CYAN}📌 Run at login:${NC} docs/runbooks/install-native.md (macOS launchd)"
-    echo -e "${CYAN}📌 Log File:${NC} $LOG_FILE"
+    echo -e "${CYAN}  Start command:${NC} ./startweb.sh"
+    echo -e "${CYAN}  Stop:${NC} Press Ctrl+C"
+    echo -e "${CYAN}  Reset database:${NC} ./startweb.sh --force-setup"
+    echo -e "${CYAN}  Run at login:${NC} docs/runbooks/install-native.md (macOS launchd)"
+    echo -e "${CYAN}  Field log:${NC} $LOG_FILE"
     echo
 
     read -r -p "Start Oneirodex now? [Y/n]: " start_now
     case "${start_now:-Y}" in
         [Yy]|[Yy][Ee][Ss])
             echo
-            print_info "Starting Oneirodex — open http://localhost:$CUSTOM_PORT"
+            print_info "Opening the launch gate — http://localhost:$CUSTOM_PORT"
             print_info "Press Ctrl+C to stop"
             echo
             export PORT="$CUSTOM_PORT"
