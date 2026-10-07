@@ -225,6 +225,45 @@ class TestSetupSubmitRoute:
         
         assert response.status_code == 302
         assert '/login' in response.location
+
+    @patch('oneirodex.routes_setup.SetupForm')
+    def test_setup_submit_rechecks_after_serializing_concurrent_winner(
+        self, mock_form_class, client, db_session
+    ):
+        safe_cleanup_users_and_related(db_session)
+        mock_form = MagicMock()
+        mock_form.validate_on_submit.return_value = True
+        mock_form.username.data = 'late_admin'
+        mock_form.email.data = 'late@example.com'
+        mock_form.password.data = 'password123'
+        mock_form_class.return_value = mock_form
+
+        def another_request_wins(session):
+            winner = User(
+                name='first_admin',
+                email='first@example.com',
+                password_hash='hashed_password',
+                role='admin',
+                user_id=str(uuid4()),
+            )
+            session.add(winner)
+
+            from oneirodex.routes_setup import _stage_setup_step
+
+            _stage_setup_step(2)
+            session.commit()
+
+        with patch(
+            'oneirodex.routes_setup.lock_admin_mutation',
+            side_effect=another_request_wins,
+        ):
+            response = client.post('/setup/submit', data={})
+
+        assert response.status_code == 302
+        assert '/login' in response.location
+        users = db_session.execute(select(User)).scalars().all()
+        assert len(users) == 1
+        assert users[0].email == 'first@example.com'
     
     @patch('oneirodex.routes_setup.SetupForm')
     @patch('oneirodex.routes_setup.log_system_event')

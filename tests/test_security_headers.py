@@ -11,6 +11,8 @@ See docs/strategy/security-legal-playbook.md (S1, S3).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from flask import Flask
 
@@ -21,6 +23,33 @@ from oneirodex.utils.security_headers import (
     baseline_static_headers,
     build_csp,
 )
+
+
+@pytest.mark.parametrize('compose_file', ['docker-compose.yml', 'docker-compose.single.yml'])
+def test_deployment_compose_defaults_authentication_cookies_to_secure(compose_file):
+    root = Path(__file__).resolve().parents[1]
+    compose = (root / compose_file).read_text(encoding='utf-8')
+
+    assert (
+        '- SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-true}' in compose
+        or 'SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}' in compose
+    )
+    assert (
+        '- REMEMBER_COOKIE_SECURE=${REMEMBER_COOKIE_SECURE:-true}' in compose
+        or 'REMEMBER_COOKIE_SECURE: ${REMEMBER_COOKIE_SECURE:-true}' in compose
+    )
+
+
+def test_deployment_env_examples_default_authentication_cookies_to_secure():
+    root = Path(__file__).resolve().parents[1]
+    for name in (
+        '.env.example', '.env.docker.example', '.env.nas.example',
+        '.env.unraid.example',
+    ):
+        values = (root / name).read_text(encoding='utf-8')
+        assert 'SESSION_COOKIE_SECURE=true' in values
+        assert 'REMEMBER_COOKIE_SECURE=true' in values
+        assert 'CHAT_ATTACHMENT_STORAGE_MAX_FILES=0' in values
 
 
 def _app(**config) -> Flask:

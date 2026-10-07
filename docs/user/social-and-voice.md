@@ -122,7 +122,7 @@ outside it cannot list its channels, read its messages, or join its voice.
 
 - Members (`user` / librarian / admin) can attach images and small files in household rooms and DMs. **Child accounts cannot upload** (same policy as camera/screenshare).
 - Flow: upload first (`POST /api/chat/channels/<id>/attachments` multipart field `file`), then send with `attachment_ids` on `POST …/messages`. Body may be empty when attachments are present.
-- Limits: **5 MB** per file · **5** attachments per message · types: `png` / `jpg` / `webp` / `gif` / `txt` / `csv` / `pdf`.
+- Limits: **5 MB** per file · **5** attachments per message · **1 GiB and 10,000 files total** across this Oneirodex installation by default · types: `png` / `jpg` / `webp` / `gif` / `txt` / `csv` / `pdf`. The server operator can raise the storage and file-count limits with `CHAT_ATTACHMENT_STORAGE_MAX_BYTES` and `CHAT_ATTACHMENT_STORAGE_MAX_FILES`.
 - Message payloads include `attachments: [{id, url, mime, name, size}]` (URL under `/static/library/chat-attachments/…`).
 
 ## Voice (LiveKit)

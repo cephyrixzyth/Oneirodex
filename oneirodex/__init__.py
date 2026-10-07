@@ -41,9 +41,9 @@ def _read_version() -> str:
         path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VERSION')
         with open(path, encoding='utf-8') as handle:
             text = handle.read().strip()
-        return text or '1.1.2'
+        return text or '1.1.3'
     except OSError:
-        return '1.1.2'
+        return '1.1.3'
 
 
 app_version = _read_version()

@@ -13,6 +13,7 @@ from oneirodex.models import User
 from oneirodex.utils.chat import create_household_channel, list_messages, post_message
 from oneirodex.utils.chat_attachments import (
     MAX_ATTACHMENT_BYTES,
+    _stored_attachment_bytes,
     upload_attachment,
 )
 
@@ -132,6 +133,85 @@ def test_size_reject(app, db_session, member, tmp_path, monkeypatch):
         )
         with pytest.raises(ValueError, match='too large'):
             upload_attachment(channel=ch, user=member, file=huge)
+
+
+def test_total_chat_attachment_storage_quota_includes_sent_files_and_all_channels(
+    app, db_session, member, tmp_path, monkeypatch
+):
+    with app.app_context():
+        monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+        monkeypatch.setitem(app.config, 'CHAT_ATTACHMENT_STORAGE_MAX_BYTES', 8)
+        first_channel = create_household_channel(
+            member,
+            name='Quota room one',
+            slug=f'quota1-{uuid4().hex[:8]}',
+        )
+        second_channel = create_household_channel(
+            member,
+            name='Quota room two',
+            slug=f'quota2-{uuid4().hex[:8]}',
+        )
+
+        first = upload_attachment(
+            channel=first_channel, user=member, file=_txt_file(content=b'1234')
+        )
+        post_message(first_channel, member, 'sent', attachment_ids=[first.id])
+        second = upload_attachment(
+            channel=second_channel, user=member, file=_txt_file(content=b'5678')
+        )
+        assert second.size_bytes == 4
+
+        with pytest.raises(ValueError, match='storage limit'):
+            upload_attachment(
+                channel=second_channel, user=member, file=_txt_file(content=b'x')
+            )
+
+        assert len(list((tmp_path / 'chat-attachments').iterdir())) == 2
+
+
+def test_total_chat_attachment_file_quota_includes_orphans_and_bounds_uploads(
+    app, db_session, member, tmp_path, monkeypatch
+):
+    with app.app_context():
+        monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+        monkeypatch.setitem(app.config, 'CHAT_ATTACHMENT_STORAGE_MAX_BYTES', 1024)
+        monkeypatch.setitem(app.config, 'CHAT_ATTACHMENT_STORAGE_MAX_FILES', 2)
+        ch = create_household_channel(
+            member,
+            name='File quota room',
+            slug=f'filequota-{uuid4().hex[:8]}',
+        )
+        attachment_dir = tmp_path / 'chat-attachments'
+        attachment_dir.mkdir()
+        # Orphaned files still consume the global file quota.
+        (attachment_dir / 'orphan.txt').write_bytes(b'orphan')
+
+        uploaded = upload_attachment(channel=ch, user=member, file=_txt_file())
+        assert uploaded.id
+        with pytest.raises(ValueError, match='file limit'):
+            upload_attachment(channel=ch, user=member, file=_txt_file())
+
+
+def test_attachment_file_quota_stops_scanning_at_limit(tmp_path, monkeypatch):
+    attachment_dir = tmp_path / 'chat-attachments'
+    attachment_dir.mkdir()
+    for index in range(20):
+        (attachment_dir / f'{index}.txt').write_bytes(b'x')
+
+    import oneirodex.utils.chat_attachments as attachments
+
+    original_stat = attachments.os.stat
+    scanned = []
+
+    def track_stat(path, *args, **kwargs):
+        if str(path).startswith(str(attachment_dir)):
+            scanned.append(str(path))
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(attachments.os, 'stat', track_stat)
+    with pytest.raises(ValueError, match='file limit'):
+        _stored_attachment_bytes(str(attachment_dir), 3)
+    assert len(scanned) == 3
 
 
 def test_unsupported_mime_reject(app, db_session, member, tmp_path, monkeypatch):

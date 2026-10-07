@@ -16,6 +16,7 @@ from oneirodex.utils.setup import (
     mark_setup_complete,
     get_current_setup_step,
 )
+from oneirodex.utils.admin_invariant import lock_admin_mutation
 from uuid import uuid4
 from datetime import datetime, timezone
 from oneirodex.utils.event_logging import log_system_event
@@ -77,19 +78,28 @@ def setup_submit():
     if form.validate_on_submit():
         # Never log the CSRF token — anything with log access could replay it.
         print("Setup form validation succeeded")
-        
-        user = User(
-            name=form.username.data,
-            email=form.email.data.lower(),
-            role='admin',
-            is_email_verified=True,
-            user_id=str(uuid4()),
-            invite_quota=10,
-            created=datetime.now(timezone.utc)
-        )
-        user.set_password(form.password.data)
-        
+
         try:
+            # The initial anonymous check above is only a fast path. Serialize
+            # and recheck inside the write transaction so competing first-run
+            # submissions cannot both observe an empty users table.
+            lock_admin_mutation(db.session)
+            if not is_setup_required():
+                db.session.rollback()
+                flash('Setup has already been completed.', 'warning')
+                return redirect(url_for('login.login'))
+
+            user = User(
+                name=form.username.data,
+                email=form.email.data.lower(),
+                role='admin',
+                is_email_verified=True,
+                user_id=str(uuid4()),
+                invite_quota=10,
+                created=datetime.now(timezone.utc)
+            )
+            user.set_password(form.password.data)
+
             # The admin row and the step advance must land in ONE transaction.
             #
             # These used to be two commits: user first, then set_setup_step(2).

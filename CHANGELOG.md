@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-10-07
+
+### Added
+- **Onei expedition terminal.** Native installers and application startup now share Onei’s full-body field-scout art, quest-log progress, and retro-future console styling.
+
+### Security
+- **Deployment and chat storage safeguards.** Secure authentication cookies are the default across deployment templates, retained chat attachments have bounded storage, and first-admin setup rechecks state after acquiring its mutation lock.
+
 ## [1.1.2] — 2026-10-06
 
 ### Fixed
