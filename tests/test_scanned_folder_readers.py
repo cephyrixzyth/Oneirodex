@@ -260,7 +260,7 @@ def test_import_bios_cli_still_copies_plain_files(tmp_path, monkeypatch, capsys)
     assert 'Copied 1 file(s)' in capsys.readouterr().out
 
 
-def test_import_bios_cli_require_all_refuses_partial_install(tmp_path, monkeypatch, capsys):
+def test_import_bios_cli_require_all_refuses_partial_install(tmp_path, monkeypatch, caplog):
     module = _load_script()
     pack = tmp_path / 'pack'
     pack.mkdir()
@@ -273,9 +273,8 @@ def test_import_bios_cli_require_all_refuses_partial_install(tmp_path, monkeypat
 
     rc = module.main()
 
-    out = capsys.readouterr().out
     assert rc == 2
-    assert 'nothing was copied' in out.lower()
+    assert 'nothing was copied' in caplog.text.lower()
     assert not dest.exists()
 
 

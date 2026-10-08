@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import logging
 import os
 import shutil
 
@@ -53,6 +54,7 @@ _bios = _load_util('emulator_bios.py', '_gt_emulator_bios')
 _security = _load_util('security.py', '_gt_security')
 BIOS_REQUIREMENTS = _bios.BIOS_REQUIREMENTS
 BIOS_HARD_REQUIRED_CORES = _bios.BIOS_HARD_REQUIRED_CORES
+logger = logging.getLogger(__name__)
 
 # The server's own rule (utils/library_paths): a library moved to a data folder
 # with ONEIRODEX_LIBRARY_DIR keeps its firmware there too.
@@ -221,7 +223,10 @@ def main() -> int:
 
     if args.require_all and (missing or refused):
         unavailable = len(missing) + len(refused)
-        print(f'\nIncomplete firmware set — {unavailable} supported file(s) are unavailable; nothing was copied.')
+        logger.error(
+            'Incomplete firmware set: %d supported file(s) are unavailable; nothing was copied.',
+            unavailable,
+        )
         return 2
 
     status = 1 if refused else 0
