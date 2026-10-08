@@ -35,6 +35,7 @@ from sqlalchemy import func, select
 
 from oneirodex import db
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry
+from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.platform import LibraryPlatform
 
 log = logging.getLogger(__name__)
@@ -87,11 +88,63 @@ PROGRESS_CACHE_TTL = timedelta(minutes=10)
 
 
 def credentials() -> tuple[str, str]:
-    """(username, api key) from the environment; either may be empty."""
+    """(username, API key), with environment values taking precedence over admin settings."""
+    settings = None
+    try:
+        settings = global_settings_row()
+    except RuntimeError:
+        # Hash helpers can be used without an application context in tooling.
+        pass
     return (
-        (os.getenv('RETROACHIEVEMENTS_USERNAME') or '').strip(),
-        (os.getenv('RETROACHIEVEMENTS_API_KEY') or '').strip(),
+        (
+            os.getenv('RETROACHIEVEMENTS_USERNAME')
+            or getattr(settings, 'retroachievements_username', None)
+            or ''
+        ).strip(),
+        (
+            os.getenv('RETROACHIEVEMENTS_API_KEY')
+            or getattr(settings, 'retroachievements_api_key', None)
+            or ''
+        ).strip(),
     )
+
+
+def settings_summary() -> dict[str, Any]:
+    """Admin-safe credential state. Never return the API key itself."""
+    settings = global_settings_row()
+    env_username = (os.getenv('RETROACHIEVEMENTS_USERNAME') or '').strip()
+    env_key = (os.getenv('RETROACHIEVEMENTS_API_KEY') or '').strip()
+    db_username = (getattr(settings, 'retroachievements_username', None) or '').strip()
+    db_key = (getattr(settings, 'retroachievements_api_key', None) or '').strip()
+    username, key = credentials()
+    return {
+        'username': username or None,
+        'has_key': bool(key),
+        'username_source': 'environment' if env_username else ('admin' if db_username else None),
+        'key_source': 'environment' if env_key else ('admin' if db_key else None),
+        'environment_username': bool(env_username),
+        'environment_key': bool(env_key),
+    }
+
+
+def save_settings(
+    *,
+    username: str | None,
+    api_key: str | None,
+    clear_api_key: bool = False,
+) -> dict[str, Any]:
+    """Persist admin-provided credentials without returning the API key."""
+    from oneirodex.utils.global_settings import global_settings_row_or_create
+
+    settings = global_settings_row_or_create()
+    if username is not None:
+        settings.retroachievements_username = username.strip() or None
+    if clear_api_key:
+        settings.retroachievements_api_key = None
+    elif api_key:
+        settings.retroachievements_api_key = api_key.strip()
+    db.session.commit()
+    return settings_summary()
 
 
 def configured() -> bool:

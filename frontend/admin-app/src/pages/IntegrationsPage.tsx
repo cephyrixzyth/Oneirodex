@@ -4,6 +4,7 @@ import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { INTEGRATION_SECTIONS } from '../components/navConfig'
 import { RailIcon } from '../components/railIcons'
+import { RetroAchievementsSettingsPanel } from '../components/RetroAchievementsSettingsPanel'
 
 const INVENTORY_CATEGORY_ORDER = [
   'metadata',
@@ -109,7 +110,14 @@ export function IntegrationsPage() {
             </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
-                <li key={item.to} id={item.to.split('#')[1]}>
+                <li
+                  key={item.to}
+                  id={
+                    item.to.endsWith('#retro-achievements-settings')
+                      ? undefined
+                      : item.to.split('#')[1]
+                  }
+                >
                   <a className="od-settings-row" href={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}
@@ -122,6 +130,8 @@ export function IntegrationsPage() {
           </section>
         ))}
       </div>
+
+      <RetroAchievementsSettingsPanel />
 
       {!inventory && !inventoryError ? (
         <div className="od-admin-panel od-admin-inventory od-admin-panel--stacked">

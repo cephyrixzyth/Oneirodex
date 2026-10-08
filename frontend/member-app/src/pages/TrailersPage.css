@@ -97,67 +97,48 @@
 /* The card holds the frame *and* its caption (W27-F1), so the 16:9 ratio moved
    from the card to the iframe. Left on the card, the caption either overflowed
    a fixed-height box or ate into the picture. */
-/* An analog set, drawn from theme tokens.
- *
- * Every colour here is a `--od-*` mix, so the cabinet follows the chosen preset
- * rather than pinning the page to one palette — that is the difference between
- * a themed set and a picture of a television. No image is loaded: it is a
- * rounded box, two gradients and three small shapes.
- */
+/* Generated transparent CRT art frames the video without obscuring its screen. */
 .od-trailers__set {
-  /* The set's own tokens. Declaring them here is the one place a literal is
-     allowed, and it keeps the cabinet's geometry and its two non-theme darks in
-     a single readable block instead of scattered through the rules below. */
+  /* The tube and scanline literals stay local to this display. */
   --od-crt-tube: #05070a;
-  --od-crt-shadow: rgba(0, 0, 0, 0.45);
-  --od-crt-inner-shadow: rgba(0, 0, 0, 0.9);
   --od-crt-scanline: rgba(0, 0, 0, 0.16);
-  --od-crt-cabinet-radius: 18px;
-  --od-crt-foot-radius: 10px;
-  --od-crt-tube-radius-x: 14px;
-  --od-crt-tube-radius-y: 22px;
 
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 0.9rem 0.9rem 0;
-  border-radius: var(--od-crt-cabinet-radius) var(--od-crt-cabinet-radius) var(--od-crt-foot-radius)
-    var(--od-crt-foot-radius);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--od-surface) 88%, var(--od-bg)) 0%,
-    color-mix(in srgb, var(--od-bg) 82%, var(--od-surface)) 100%
-  );
-  border: 1px solid color-mix(in srgb, var(--od-accent) 26%, var(--od-border));
-  box-shadow:
-    0 18px 40px var(--od-crt-shadow),
-    inset 0 1px 0 color-mix(in srgb, var(--od-text) 10%, transparent);
+  padding: 0;
+  background: transparent;
 }
 
-/* The tube. Slightly inset and darker than the cabinet, with the corner radius
-   a CRT actually had — square corners are what make a "TV frame" read as a
-   border rather than as a screen. */
+/* The iframe is positioned in the transparent screen opening of the CRT art. */
 .od-trailers__video {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 100%;
-  background: var(--od-crt-tube);
-  border: 1px solid color-mix(in srgb, var(--od-bg) 70%, var(--od-crt-tube));
-  border-radius: var(--od-crt-tube-radius-x) / var(--od-crt-tube-radius-y);
-  overflow: hidden;
-  box-shadow:
-    inset 0 0 30px var(--od-crt-inner-shadow),
-    inset 0 0 0 2px color-mix(in srgb, var(--od-bg) 60%, var(--od-crt-tube));
+  aspect-ratio: 16 / 9;
+  isolation: isolate;
+  overflow: visible;
 }
 
 .od-trailers__video iframe {
+  position: absolute;
+  inset: 15% 24% 15% 6%;
   display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  height: auto;
+  width: 70%;
+  height: 70%;
   border: 0;
+  border-radius: var(--od-radius-xl);
+  background: var(--od-crt-tube);
+  z-index: 1;
+}
+
+.od-trailers__video::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: url('./assets/crt-tv-bezel.png') center / 100% 100% no-repeat;
 }
 
 /* Scanlines and glare sit *over* the picture, so they must not eat the click
@@ -165,7 +146,7 @@
 .od-trailers__scanlines,
 .od-trailers__glare {
   position: absolute;
-  inset: 0;
+  inset: 15% 24% 15% 6%;
   z-index: 2;
   pointer-events: none;
 }
@@ -191,45 +172,6 @@
   );
 }
 
-/* The cabinet below the tube. The wordmark that used to sit on the left is
-   gone (`.od-trailers__brand` with it), so the controls take the end slot on
-   their own rather than being pushed there by a label. */
-.od-trailers__bezel {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 0.55rem 0.35rem 0.7rem;
-}
-
-.od-trailers__knobs {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.od-trailers__knob {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: var(--od-radius-circle);
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--od-text) 22%, transparent),
-    color-mix(in srgb, var(--od-bg) 70%, transparent)
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--od-border) 80%, transparent);
-}
-
-/* The power light is the one accent-coloured part, which is what ties the set
-   to the theme at a glance. */
-.od-trailers__led {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: var(--od-radius-circle);
-  background: var(--od-accent);
-  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--od-accent) 60%, transparent);
-}
-
 @media (prefers-reduced-motion: reduce) {
   /* Nothing animates here, but the overlays are pure decoration — drop them
      for anyone who has asked for less visual noise. */
@@ -240,14 +182,29 @@
 }
 
 @media (max-width: 640px) {
-  /* At phone width the cabinet is mostly bezel; keep the picture. */
-  .od-trailers__set {
-    padding: 0.4rem 0.4rem 0;
-    border-radius: var(--od-crt-foot-radius);
+  /* Keep the video comfortably large on a phone; the full bezel returns at
+     desktop widths where its controls have room to read as hardware. */
+  .od-trailers__video {
+    overflow: hidden;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-md);
+    background: var(--od-crt-tube);
   }
 
-  .od-trailers__bezel {
+  .od-trailers__video iframe {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .od-trailers__video::after {
     display: none;
+  }
+
+  .od-trailers__scanlines,
+  .od-trailers__glare {
+    inset: 0;
   }
 }
 

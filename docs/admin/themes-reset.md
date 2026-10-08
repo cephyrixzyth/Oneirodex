@@ -12,7 +12,7 @@ Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded conte
 
 - Accent **`#2fd67b`** (green glass Style B+C).
 - Glass tokens: `--od-glass-bg`, `--od-glass-border`, `--od-glass-blur`.
-- Admin → Themes is a dense `od-adminpage` surface (upload · reset · **installed themes as a list** · loading icons) — no separate “Back to Dashboard” stack; use the React top bar. Choosing a theme happens in Preferences, not here — see [Apply a theme](#apply-a-theme).
+- Admin → Themes uses the shared `od-adminpage` width and panel spacing (upload · reset · **installed themes as a list** · loading icons) — no separate “Back to Dashboard” stack; use the React top bar. Choosing a theme happens in Preferences, not here — see [Apply a theme](#apply-a-theme).
 - Member SPA also needs built **`member-app.css`** in dist — theme reset does not replace a missing SPA bundle.
 
 ## Rooms have drawn art (generator 37)

@@ -6,7 +6,7 @@
 
 Admin surfaces today are **Jinja** under `base_admin` (top bar), hosted inside the admin SPA shell (LHN + thin THN).
 
-**Libraries & scans** destinations are separate pages (not one Bootstrap tab document). The **left rail** lists Libraries, Scan, Library tools, Unmatched, Filters, Release filters, Extensions, Image queue, and Art & images. **Scan** is one LHN row; while you are on Scan, the **thin top bar** shows **Auto | Manual**. Other destinations have no sibling strip in the THN.
+**Libraries & scans** destinations are separate pages (not one Bootstrap tab document). The **left rail** lists Libraries, Scan, Library tools, Unmatched, Filters, Release filters, Extensions, Image queue, and Art & images. **Scan** is one LHN row; while you are on Scan, the **thin top bar** shows **Auto | Manual**. Scan Jobs actions, the Unmatched actions, and **Add filter** on either filter page are centered in that top bar. Menus close when you click outside or press Escape.
 
 The Libraries page is an admin SPA **DataTable** (sort + per-column filters, themed `od-cbtn` Scan/Edit/Delete bar, sticky multi-select batch actions). Its **Create library** form is inline on `/libraries`: choose a name, supported platform, mounted folder path, scan depth, then create and queue the first scan. The former “full library forms” self-link has been removed. `/admin/library/add` remains as a classic compatibility route.
 

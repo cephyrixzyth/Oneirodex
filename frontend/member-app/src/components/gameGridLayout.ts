@@ -1,6 +1,6 @@
 /**
  * Layout helpers for library grid virtualization.
- * Matches CSS `repeat(auto-fill, minmax(var(--od-tile-min), 1fr))` + gap.
+ * Matches fixed-width CSS auto-fill tracks based on `--od-tile-min` + gap.
  */
 
 export function readCssPx(el: any, varName: any, fallback: any) {
@@ -12,7 +12,7 @@ export function readCssPx(el: any, varName: any, fallback: any) {
   return Number.isFinite(n) ? n : fallback
 }
 
-/** Column count for CSS auto-fill with minmax(tileMin, 1fr) and gap. */
+/** Column count for CSS auto-fill with fixed tile width and gap. */
 export function computeGridColumns(width: any, tileMin = 180, gap = 10) {
   if (!(width > 0)) {
     return 1
@@ -46,7 +46,7 @@ export function computeGridColumns(width: any, tileMin = 180, gap = 10) {
  * *between* rows and not after the last one, which is what a CSS grid `gap`
  * does and what makes the grid end flush with its final row.
  *
- * Cover is 3:4, so a row is the cover height plus `titleH` — the title strip
+ * Cover is 2:3, so a row is the cover height plus `titleH` — the title strip
  * is a member preference, and a row that ignored it would leave the estimate
  * short of the measured height and reopen the drifting-total-size bug above.
  */
@@ -54,7 +54,7 @@ export function estimateGridRowHeight(width: any, columnCount: any, gap = 10, ti
   const cols = Math.max(1, columnCount)
   const g = Math.max(0, gap)
   const tileWidth = Math.max(1, (Math.max(width, 1) - g * (cols - 1)) / cols)
-  return Math.ceil(tileWidth * (4 / 3) + Math.max(0, titleH))
+  return Math.ceil(tileWidth * (3 / 2) + Math.max(0, titleH))
 }
 
 /**

@@ -37,24 +37,26 @@ html.is-tile-resizing .game-library-row {
 /* auto-fill, deliberately — do NOT change this to auto-fit.
  *
  * It was briefly auto-fit for W27-B1, on the theory that empty tracks were
- * stopping tiles filling the width. That was wrong twice over. The tracks are
- * already `1fr`, so auto-fill spreads them across the full container anyway;
- * and collapsing the empty tracks means any row holding fewer items than fit —
- * the last row of a page, a short filtered result, a partially filled
- * virtualiser row — stretches its tiles across the whole width. That produced
- * single covers rendered several thousand pixels wide, reported with
- * screenshots.
+ * stopping tiles filling the width. Fixed-size tracks keep tile width tied to
+ * the slider, while collapsing empty tracks means any row holding fewer items
+ * than fit — the last row of a page, a short filtered result, a partially
+ * filled virtualiser row — stretches its tiles across the whole width. That
+ * produced single covers rendered several thousand pixels wide, reported
+ * with screenshots.
  *
- * auto-fill keeps the empty tracks so a lone tile stays tile-sized. If the grid
- * genuinely fails to fill the viewport, look at the container's width (rail
- * offset, gutters, max-width) rather than at the track-repeat mode. */
+ * auto-fill keeps the empty tracks so a lone tile stays tile-sized; justify-
+ * content centers the filled tracks as a group under the view controls. */
 .game-library-container[data-library-grid]:not([data-library-virtual]):not(.catalog-grid-sections) {
   display: grid;
   grid-template-columns: repeat(
     auto-fill,
-    minmax(var(--od-catalog-col-min, var(--od-tile-min)), 1fr)
+    minmax(
+      var(--od-catalog-col-min, var(--od-tile-min)),
+      var(--od-catalog-col-min, var(--od-tile-min))
+    )
   );
   gap: var(--od-tile-gap);
+  justify-content: center;
   align-items: start;
   transition: gap 0.22s ease;
 }
@@ -81,9 +83,13 @@ html.is-tile-resizing .game-library-row {
   display: grid;
   grid-template-columns: repeat(
     auto-fill,
-    minmax(var(--od-catalog-col-min, var(--od-tile-min)), 1fr)
+    minmax(
+      var(--od-catalog-col-min, var(--od-tile-min)),
+      var(--od-catalog-col-min, var(--od-tile-min))
+    )
   );
   gap: var(--od-tile-gap);
+  justify-content: center;
   align-items: start;
   box-sizing: border-box;
   transition: gap 0.22s ease;
@@ -137,7 +143,7 @@ html.is-tile-resizing .game-library-row {
    the top-bar slider changes this view the same way it changes Tile / Grid. */
 .game-library-container[data-layout='rows'] {
   --od-row-h: clamp(56px, calc(var(--od-tile-min, 180px) * 0.42), 144px);
-  --od-row-cover-w: calc(var(--od-row-h) * 3 / 4);
+  --od-row-cover-w: calc(var(--od-row-h) * 2 / 3);
 }
 
 .game-library-container[data-layout='rows'] .game-library-row {
@@ -196,7 +202,7 @@ html.is-tile-resizing .game-library-row {
 .game-library-container[data-layout='rows'] .od-cover-fallback {
   width: var(--od-row-cover-w);
   height: var(--od-row-h);
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .game-library-container[data-layout='rows'] .game-card__row-meta {

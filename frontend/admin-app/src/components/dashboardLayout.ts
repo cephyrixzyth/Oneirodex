@@ -63,7 +63,7 @@ export const DASHBOARD_WIDGET_LABELS: Record<string, string> = {
 
 const METRIC_MIN = { w: 2, h: 2 }
 const PANEL_MIN = { w: 3, h: 3 }
-const STATUS_MIN = { w: 6, h: 2 }
+const STATUS_MIN = { w: 6, h: 3 }
 
 export function widgetMins(id: string): WidgetMins {
   if (id === 'status') return STATUS_MIN
@@ -79,8 +79,8 @@ export function widgetMins(id: string): WidgetMins {
 export function defaultDashboardLayout({
   hasErrors = false,
 }: { hasErrors?: boolean } = {}): WidgetItem[] {
-  const items: WidgetItem[] = [{ id: 'status', x: 0, y: 0, w: 12, h: 2 }]
-  let y = 2
+  const items: WidgetItem[] = [{ id: 'status', x: 0, y: 0, w: 12, h: 3 }]
+  let y = 3
   const perRow = 4
   const ids = DASHBOARD_METRIC_IDS
   for (let i = 0; i < ids.length; i += perRow) {

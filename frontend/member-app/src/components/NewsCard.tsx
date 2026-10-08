@@ -11,7 +11,7 @@ const STORE_LABELS: Record<string, string> = {
   humble: 'Humble',
 }
 
-/** Wider than this → letterbox on a blurred fill (true 3:4 cover is 0.75). */
+/** Wider than this → letterbox on a blurred fill inside the shared 2:3 tile. */
 const LETTERBOX_RATIO = 0.9
 
 function whenLabel(value: any) {
@@ -44,7 +44,7 @@ function badgeFor(item: any) {
 /**
  * A tile on the Discover news / deals rows.
  *
- * Art is a 3:4 cover in the same tile box as a game card. Badge + date +
+ * Art is a 2:3 cover in the same tile box as a game card. Badge + date +
  * title overlay the image so the scrollbar lane matches every other row.
  * Wide store banners letterbox on a blurred copy of themselves so nothing
  * stretches and empty bands are not bare.

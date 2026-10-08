@@ -57,12 +57,7 @@ function useCollapsedGroups() {
  * legacy Jinja pages render the same rail from the same source (the UIR-4
  * pattern). This component contributes no CSS of its own.
  */
-export function SideRail({
-  railState = 'expanded',
-  onNavigate,
-  onCloseDrawer,
-  footer = null,
-}: LooseProps) {
+export function SideRail({ railState = 'expanded', onNavigate, onCloseDrawer }: LooseProps) {
   const { isAdmin } = useViewer()
   const {
     showTrailers = false,
@@ -248,12 +243,6 @@ export function SideRail({
           </ul>
         ) : null}
       </nav>
-
-      {/* Rail footer (W27-A1). The page up/down pair lives here rather than
-          floating over the content pane: the rail already has the space, and
-          floating it meant a control permanently sitting on top of the thing it
-          scrolls. */}
-      {footer ? <div className="od-rail__footer od-rail__footer--controls">{footer}</div> : null}
     </div>
   )
 }

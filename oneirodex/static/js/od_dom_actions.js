@@ -27,6 +27,10 @@
 (function () {
   'use strict';
 
+  function queryAll(selector) {
+    return typeof document.querySelectorAll === 'function' ? document.querySelectorAll(selector) : [];
+  }
+
   function allowlist(names) {
     var set = Object.create(null);
     names.forEach(function (name) {
@@ -105,6 +109,41 @@
     if (!msg) return true;
     return window.confirm(msg);
   }
+
+  function closeOpenMenus(target) {
+    var openTriggers = queryAll('[aria-haspopup="menu"][aria-expanded="true"]');
+    openTriggers.forEach(function (trigger) {
+      var controlledId = trigger.getAttribute('aria-controls');
+      var panel = controlledId ? document.getElementById(controlledId) : null;
+      var root = trigger.closest('.od-pop, .od-topnav__dropdown, .od-dash__add, [data-od-menu-root]');
+      if ((root && root.contains(target)) || (panel && panel.contains(target))) return;
+      trigger.click();
+    });
+
+    queryAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
+      if (!menu.contains(target)) menu.open = false;
+    });
+  }
+
+  // Shared dismissal for classic and React menu triggers. Popovers with a
+  // dialog role own their focus/dismissal; these are menu-style dropdowns.
+  document.addEventListener('click', function (event) {
+    if (event.target && event.target.closest) closeOpenMenus(event.target);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    var triggers = queryAll('[aria-haspopup="menu"][aria-expanded="true"]');
+    triggers.forEach(function (trigger) {
+      trigger.click();
+      trigger.focus();
+    });
+    queryAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
+      menu.open = false;
+      var summary = menu.querySelector('summary');
+      if (summary) summary.focus();
+    });
+  });
 
   document.addEventListener(
     'click',

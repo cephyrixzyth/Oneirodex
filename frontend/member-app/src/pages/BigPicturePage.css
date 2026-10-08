@@ -89,8 +89,8 @@
 .od-bp__hero-art {
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  aspect-ratio: 2 / 3;
+  object-fit: contain;
   border-radius: var(--od-radius-xl);
   border: 1px solid var(--od-border);
 }
@@ -203,8 +203,8 @@
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  aspect-ratio: 2 / 3;
+  object-fit: contain;
   border-radius: var(--od-radius-xl);
   border: 1px solid var(--od-border);
   background: var(--od-surface);

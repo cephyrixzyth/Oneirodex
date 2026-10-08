@@ -49,10 +49,10 @@ test('computeGridColumns matches auto-fill math', () => {
   expect(computeGridColumns(0, 180, 10)).toBe(1)
 })
 
-test('estimateGridRowHeight uses 3:4 cover aspect and excludes the row gap', () => {
-  // 4 cols in 900px with 10px gaps → tile ~217.5 → cover ceil(290). The gap
+test('estimateGridRowHeight uses 2:3 cover aspect and excludes the row gap', () => {
+  // 4 cols in 900px with 10px gaps → tile ~217.5 → cover ceil(326.25). The gap
   // narrows the tile (and so the row), but is not added on top of it.
-  expect(estimateGridRowHeight(900, 4, 10)).toBe(Math.ceil(217.5 * (4 / 3)))
+  expect(estimateGridRowHeight(900, 4, 10)).toBe(Math.ceil(217.5 * (3 / 2)))
 })
 
 test('the row height is the tiles only — the gap has exactly one owner', () => {
@@ -66,8 +66,8 @@ test('the row height is the tiles only — the gap has exactly one owner', () =>
   // into view, which is the dead space reported under the last row. The
   // virtualizer's own `gap` option is the single owner now, and it adds nothing
   // after the final row.
-  expect(estimateGridRowHeight(300, 1, 12)).toBe(Math.ceil(300 * (4 / 3)))
-  expect(estimateGridRowHeight(300, 1, 0)).toBe(Math.ceil(300 * (4 / 3)))
+  expect(estimateGridRowHeight(300, 1, 12)).toBe(Math.ceil(300 * (3 / 2)))
+  expect(estimateGridRowHeight(300, 1, 0)).toBe(Math.ceil(300 * (3 / 2)))
 })
 
 test('the row CSS does not re-add the gap it no longer owns', () => {

@@ -35,12 +35,14 @@ export function useLegacyContextbarPortal(enabled: boolean) {
 
     const views = bar.querySelector(':scope > .od-contextbar__views')
     const actions = bar.querySelector(':scope > .od-contextbar__actions')
+    const actionSlot = actions?.getAttribute('data-od-admin-action-slot')
     const placeholder = document.createComment('od-contextbar-home')
     bar.parentNode?.insertBefore(placeholder, bar)
 
     if (views) pageSlot.appendChild(views)
     if (actions) {
-      ;(trailSlot || pageSlot).appendChild(actions)
+      const target = actionSlot === 'page' ? pageSlot : trailSlot || pageSlot
+      target.appendChild(actions)
     }
     bar.remove()
 

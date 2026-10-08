@@ -35,7 +35,7 @@ export const OPS_DETAIL_IDS = [
 
 const METRIC_MIN = { w: 2, h: 2 }
 const PANEL_MIN = { w: 3, h: 3 }
-const STATUS_MIN = { w: 6, h: 2 }
+const STATUS_MIN = { w: 6, h: 3 }
 const WIDE_MIN = { w: 4, h: 3 }
 
 export function opsWidgetMins(id: string): WidgetMins {
@@ -73,9 +73,9 @@ export function defaultOpsLayout({ visibleIds }: { visibleIds?: string[] } = {})
   const items: WidgetItem[] = []
 
   if (show('status')) {
-    items.push({ id: 'status', x: 0, y: 0, w: 12, h: 2 })
+    items.push({ id: 'status', x: 0, y: 0, w: 12, h: 3 })
   }
-  let y = show('status') ? 2 : 0
+  let y = show('status') ? 3 : 0
 
   const metricIds = OPS_METRIC_IDS.filter((id) => show(`m-${id}`))
   const packed = packMetricRows(metricIds, y)

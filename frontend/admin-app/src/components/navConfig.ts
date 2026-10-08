@@ -178,6 +178,12 @@ export const INTEGRATION_SECTIONS: SubSection[] = [
         title: 'Artwork & secondary',
         blurb: 'SteamGridDB covers, Giant Bomb, HowLongToBeat.',
       },
+      {
+        to: '/admin/integrations#retro-achievements-settings',
+        icon: 'emulators',
+        title: 'RetroAchievements',
+        blurb: 'Connect the household account used for achievement sets and member progress.',
+      },
     ],
   },
   {

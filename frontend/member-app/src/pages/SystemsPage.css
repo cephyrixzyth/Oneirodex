@@ -345,16 +345,21 @@
    to a stack below the tablet breakpoint, where there is no spare width to
    put it in. */
 .od-systems-page__intro {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 0.72fr);
+  align-items: stretch;
   gap: var(--od-space-4, 1rem) var(--od-space-6, 1.5rem);
 }
 
 .od-systems-page__intro > .od-more-page__lede {
-  flex: 1 1 24rem;
   min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: var(--od-space-3, 0.75rem) var(--od-space-4, 1rem);
+  border: 1px solid color-mix(in srgb, var(--od-glass-border) 80%, transparent);
+  border-radius: var(--od-radius-lg, 10px);
+  background: color-mix(in srgb, var(--od-surface-2) 55%, transparent);
+  color: var(--od-text);
 }
 
 /* Inside the intro band the section is a boxed note, so it drops the
@@ -367,13 +372,18 @@
 }
 
 .od-systems-page__intro > .od-systems-exports {
-  flex: 0 1 22rem;
   margin-top: 0;
   padding: var(--od-space-3, 0.75rem) var(--od-space-4, 1rem);
   border-top: 0;
   border: 1px solid color-mix(in srgb, var(--od-glass-border) 80%, transparent);
   border-radius: var(--od-radius-lg, 10px);
   background: color-mix(in srgb, var(--od-surface-2) 55%, transparent);
+}
+
+@media (max-width: 760px) {
+  .od-systems-page__intro {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .od-systems-page__intro > .od-systems-exports .od-systems-group__title {

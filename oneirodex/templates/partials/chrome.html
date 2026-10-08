@@ -29,7 +29,7 @@
    still render as the same segmented control.
 #}
 
-{% macro contextbar(views=None, active=None, summary=None, label='Views', data_toggle=None, views_id=None) %}
+{% macro contextbar(views=None, active=None, summary=None, label='Views', data_toggle=None, views_id=None, actions_slot='trail') %}
 {#- `data_toggle` is for pages whose views are panes of the *same* document
     (Bootstrap tabs). Pass 'tab' and give each view a `#panel` href: the segment
     still renders as a link — middle-click and copy-link keep working — but the
@@ -80,7 +80,7 @@
   </div>
   {% endif %}
 
-  <div class="od-contextbar__actions">
+  <div class="od-contextbar__actions{% if actions_slot == 'page' %} od-contextbar__actions--center{% endif %}" data-od-admin-action-slot="{{ actions_slot }}">
     {% if summary %}<span class="od-contextbar__count">{{ summary }}</span>{% endif %}
     {{ caller() if caller else '' }}
   </div>

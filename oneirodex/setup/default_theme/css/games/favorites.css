@@ -56,9 +56,10 @@
     display: block;
     position: relative;
     width: 100%;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
+    object-fit: contain;
     height: auto;
-    object-fit: cover;
+    object-fit: contain;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     box-shadow: var(--shadow-box-game);
     background-color: var(--bg-dark-secondary, var(--od-surface-2));

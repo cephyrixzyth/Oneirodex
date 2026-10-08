@@ -248,7 +248,7 @@ export function TopBar({
               )}
             </button>
             {accountOpen ? (
-              <div className="od-topnav__dropdown-panel" id={accountId} role="menu">
+              <div className="od-topnav__dropdown-panel od-menu-surface" id={accountId} role="menu">
                 {username ? <div className="od-topnav__username">{username}</div> : null}
                 {/* Only remaining home for the palette hint now the bar's
                     search button is gone. CommandPalette binds ⌘K itself, so

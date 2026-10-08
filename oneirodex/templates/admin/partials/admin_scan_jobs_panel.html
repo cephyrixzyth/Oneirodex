@@ -11,6 +11,7 @@
         </h4>
         <p class="jobs-subtitle">Monitor running, queued, and recent scan operations</p>
       </div>
+      {% if not actions_in_topbar %}
       <div class="jobs-controls od-cbtn-group" role="group" aria-label="Job list actions">
         <form action="{{ url_for('admin2.clear_scan_jobs') }}" method="post" class="inline-form">
           {{ csrf_form.csrf_token }}
@@ -26,14 +27,15 @@
           {{ csrf_form.csrf_token }}
           <button type="submit" class="od-cbtn od-cbtn--danger" data-od-confirm="Delete ALL jobs (skips Running/Stopping)?">Clear all</button>
         </form>
-        <button type="button" class="od-cbtn" id="scanJobsExportBtn" title="Export the current filtered list as CSV">Export CSV</button>
+        <button type="button" class="od-cbtn" data-scan-jobs-export title="Export the current filtered list as CSV">Export CSV</button>
       </div>
+      {% endif %}
     </div>
   </div>
-  {% else %}
+  {% elif compact %}
   <div class="scan-jobs-card__modal-toolbar">
     <a class="od-cbtn" href="{{ url_for('admin2.scan_management', active_tab='jobs') }}">Open full Scan Jobs</a>
-    <button type="button" class="od-cbtn" id="scanJobsExportBtn" title="Export the current filtered list as CSV">Export CSV</button>
+    <button type="button" class="od-cbtn" data-scan-jobs-export title="Export the current filtered list as CSV">Export CSV</button>
   </div>
   {% endif %}
 

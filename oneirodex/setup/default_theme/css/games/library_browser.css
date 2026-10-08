@@ -13,7 +13,7 @@
 
 .game-card-skeleton__cover {
     width: 100%;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
     border-radius: var(--border-radius-xs, 4px);
     background: linear-gradient(
         90deg,

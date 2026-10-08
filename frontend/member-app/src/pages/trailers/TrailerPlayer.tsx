@@ -88,13 +88,8 @@ export function TrailerPlayer({
   }, [videoId, settingsRef])
 
   return (
-    /* The set, not just a rectangle.
-       Trailers are the one page that is purely about watching something, and a
-       bare iframe on a flat panel is the least evocative way to present that in
-       an app about games. The cabinet is drawn entirely from theme tokens — no
-       image — so it recolours with whatever preset is chosen instead of pinning
-       the page to one palette. Decorative parts are aria-hidden; the iframe is
-       still just an iframe to a screen reader. */
+    /* The CRT bezel is a generated transparent overlay in TrailersPage.css.
+       The frame is decorative; the iframe remains the accessible video. */
     <div className="od-trailers__set">
       {/* The title leads the set.
           It sat under the cabinet, below the bezel and the knobs, so on a tall
@@ -111,8 +106,6 @@ export function TrailerPlayer({
         </p>
       ) : null}
       <div className="od-trailers__video">
-        <span className="od-trailers__scanlines" aria-hidden="true" />
-        <span className="od-trailers__glare" aria-hidden="true" />
         <iframe
           ref={frameRef}
           title={title ? `Trailer — ${title}` : 'Game trailer'}
@@ -120,20 +113,8 @@ export function TrailerPlayer({
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
         />
-      </div>
-      {/* Bezel without the wordmark.
-          "Oneirodex" printed under the player was the product naming itself on
-          a page the member reached from a nav that already says Oneirodex, on a
-          screen inside an app called Oneirodex — and it sat exactly where a
-          video's title belongs, which is where the title is now. The knobs stay:
-          they are what makes the frame read as a cabinet rather than as a grey
-          bar, and they claim nothing. */}
-      <div className="od-trailers__bezel" aria-hidden="true">
-        <span className="od-trailers__knobs">
-          <span className="od-trailers__knob" />
-          <span className="od-trailers__knob" />
-          <span className="od-trailers__led" />
-        </span>
+        <span className="od-trailers__scanlines" aria-hidden="true" />
+        <span className="od-trailers__glare" aria-hidden="true" />
       </div>
     </div>
   )

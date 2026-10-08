@@ -38,9 +38,15 @@
 
 .od-vr__card img {
   width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  aspect-ratio: 2 / 3;
+  object-fit: contain;
+  background: var(--od-surface-2);
   border-radius: var(--od-radius-sm);
+}
+
+.od-vr__card .od-cover-fallback {
+  width: 100%;
+  aspect-ratio: 2 / 3;
 }
 
 .od-vr__card span {
@@ -89,6 +95,11 @@
 .od-vr__detail-cover {
   max-width: 260px;
   border-radius: var(--od-radius-sm);
+}
+
+.od-vr__detail .od-cover-fallback {
+  max-width: 260px;
+  margin-bottom: var(--od-space-4);
 }
 
 .od-vr__meta {

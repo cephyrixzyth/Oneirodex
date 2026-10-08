@@ -101,10 +101,9 @@ export function RetroAchievementsPanel() {
       />
       {loading || error || !status ? null : !status.configured ? (
         <p className="od-muted" data-testid="ra-unconfigured">
-          Not configured. Set <code>RETROACHIEVEMENTS_USERNAME</code> and{' '}
-          <code>RETROACHIEVEMENTS_API_KEY</code> in the server environment (the account name that
-          owns the web API key, from retroachievements.org → Settings → Keys), restart, then match a
-          system here.
+          Not configured. Save the household username and web API key under Admin → Integrations →
+          RetroAchievements (get the web API key from retroachievements.org → Settings → Keys), then
+          match a system here.
           {status.has_key && !status.username
             ? ' The key is present; the username is missing.'
             : ''}
