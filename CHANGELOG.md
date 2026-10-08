@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.5] — 2026-10-08
+
+### Added
+- Configure RetroAchievements for the household in Admin → Integrations, including Docker and Unraid installs where operators cannot edit environment variables.
+
+### Improved
+- Give member and admin menus a consistent appearance and dismiss them when clicking outside. Reposition page actions and dropdowns, keep dashboard widgets within the page, and align admin panels around a shared layout.
+- Refine library artwork sizing, browse rows, Systems and Ways to Play spacing, Help typography, and sidebar branding. VR uses available game artwork, and trailer playback sits inside a CRT bezel.
+
+### Fixed
+- Remove the unused sidebar footer box and obsolete theme selector. Prevent dashboard widgets from obscuring status text and prevent game art from stretching into the wrong aspect ratio.
+
 ## [1.1.4] — 2026-10-07
 
 ### Fixed
