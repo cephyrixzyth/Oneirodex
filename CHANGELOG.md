@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Onei expedition terminal.** Native installers and application startup now share Onei’s full-body field-scout art, quest-log progress, and retro-future console styling.
+- **Bulk local firmware install.** Admin → Emulation can upload the matching firmware files from a folder on the operator’s device, with progress and duplicate-name protection.
 
 ### Security
 - **Deployment and chat storage safeguards.** Secure authentication cookies are the default across deployment templates, retained chat attachments have bounded storage, and first-admin setup rechecks state after acquiring its mutation lock.

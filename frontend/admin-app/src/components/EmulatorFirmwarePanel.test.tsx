@@ -323,3 +323,44 @@ test('install sends the dump the operator picked', async () => {
     })
   })
 })
+
+test('folder upload sends only firmware names required by configured cores', async () => {
+  mockApi({ get: { ...SUMMARY, files: [] } })
+  render(<EmulatorFirmwarePanel />)
+  await screen.findByText('PlayStation')
+
+  expect(screen.getByLabelText('Firmware folder')).toHaveAttribute('webkitdirectory', 'true')
+  const firmware = new File(['saturn'], 'saturn_bios.bin', {
+    type: 'application/octet-stream',
+  })
+  Object.defineProperty(firmware, 'webkitRelativePath', { value: 'collection/saturn_bios.bin' })
+  const unrelated = new File(['data'], 'unrelated.iso', { type: 'application/octet-stream' })
+  await userEvent.upload(screen.getByLabelText('Firmware folder'), [firmware, unrelated])
+
+  expect(await screen.findAllByText(/Uploaded 1 matching file/)).not.toHaveLength(0)
+  const uploadCall = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.find(
+      ([url, init]: any) => String(url) === '/api/emulator-bios' && init?.method === 'POST',
+    )
+  expect(uploadCall).toBeTruthy()
+  const body = (uploadCall as any[])[1].body as FormData
+  expect((body.get('file') as File).name).toBe('saturn_bios.bin')
+})
+
+test('folder upload refuses ambiguous duplicate firmware filenames', async () => {
+  mockApi({ get: { ...SUMMARY, files: [] } })
+  render(<EmulatorFirmwarePanel />)
+  await screen.findByText('PlayStation')
+
+  const first = new File(['region-a'], 'saturn_bios.bin', { type: 'application/octet-stream' })
+  const second = new File(['region-b'], 'saturn_bios.bin', { type: 'application/octet-stream' })
+  await userEvent.upload(screen.getByLabelText('Firmware folder'), [first, second])
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Use the collection scanner')
+  expect(
+    vi.mocked(globalThis.fetch).mock.calls.some(
+      ([url, init]: any) => String(url) === '/api/emulator-bios' && init?.method === 'POST',
+    ),
+  ).toBe(false)
+})

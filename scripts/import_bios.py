@@ -12,6 +12,7 @@ is written until you pass --apply.
 
     python scripts/import_bios.py --source E:\\_bios
     python scripts/import_bios.py --source E:\\_bios --apply
+    python scripts/import_bios.py --source E:\\_bios --require-all
 
 The destination is `oneirodex/static/library/bios` (gitignored), or `bios` in
 the data folder when ONEIRODEX_LIBRARY_DIR moves the library, unless
@@ -166,6 +167,11 @@ def main() -> int:
     parser.add_argument('--dest', default=os.environ.get('EMULATOR_BIOS_PATH') or DEFAULT_DEST)
     parser.add_argument('--apply', action='store_true', help='Actually copy (default is preview)')
     parser.add_argument('--overwrite', action='store_true', help='Replace files already present')
+    parser.add_argument(
+        '--require-all',
+        action='store_true',
+        help='Fail without writing unless every supported firmware file is selectable from source or already installed',
+    )
     args = parser.parse_args()
 
     if not os.path.isdir(args.source):
@@ -212,6 +218,11 @@ def main() -> int:
             hard = any(c in BIOS_HARD_REQUIRED_CORES for c in cores)
             flag = 'blocks play' if hard else 'optional'
             print(f'  - {name:<24} {", ".join(cores)} ({flag})')
+
+    if args.require_all and (missing or refused):
+        unavailable = len(missing) + len(refused)
+        print(f'\nIncomplete firmware set — {unavailable} supported file(s) are unavailable; nothing was copied.')
+        return 2
 
     status = 1 if refused else 0
     if not to_copy:

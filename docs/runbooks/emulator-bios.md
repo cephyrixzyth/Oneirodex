@@ -36,9 +36,10 @@ Operator-supplied only. There is no download button.
 | How | When |
 |---|---|
 | **Upload one file** | Admin → Emulation → Firmware file input (`POST /api/emulator-bios`) |
+| **Upload a local folder** | Admin → Emulation → **Upload matching firmware from a folder on this device**. The browser sends only filenames required by the configured cores, one file at a time. Unrelated files are ignored; duplicate required names stop the upload so you can use the collection scanner's version picker. |
 | **Scan a collection** | Same page: set a folder (and its subfolders). **Scan collection** previews matches; **Install matching firmware** copies the names this service asks for, flattened onto the volume. If several dumps share a filename, pick which one that system should use before installing. A popup lists what is still missing as **copyable markdown**. |
 | **Boot import** | Set `BIOS_IMPORT_SOURCE` to that folder. Missing names are copied on startup; existing files are never replaced. |
-| **CLI** | `python scripts/import_bios.py --source /path/to/dumps` (preview) then `--apply` |
+| **CLI** | `python scripts/import_bios.py --source /path/to/dumps` (preview) then `--apply`. Add `--require-all` to fail before writing if any supported firmware file is missing, unreadable, or otherwise cannot be selected from the source or existing destination. |
 | **Volume mount** | Bind a private host folder at `EMULATOR_BIOS_PATH` |
 
 The folder must sit under a library root (`ONEIRODEX_LIBRARY_ROOTS` / `BASE_FOLDER_*`) or be the path named by `BIOS_IMPORT_SOURCE`.

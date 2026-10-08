@@ -33,6 +33,8 @@ export function EmulatorFirmwarePanel() {
   const [overwrite, setOverwrite] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const folderInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 })
 
   const reportMarkdown = plan?.missing_markdown || volumeMarkdown
 
@@ -159,6 +161,96 @@ export function EmulatorFirmwarePanel() {
     [load],
   )
 
+  const uploadFolder = useCallback(
+    async (selected: FileList | null) => {
+      if (!selected?.length) return
+      setBusy('folder-upload')
+      setError(null)
+      setNotice(null)
+      setUploadProgress({ done: 0, total: 0 })
+      try {
+        const requiredNames = new Map<string, string>()
+        for (const core of cores) {
+          for (const name of core.required || []) requiredNames.set(name.toLowerCase(), name)
+        }
+
+        const grouped = new Map<string, File[]>()
+        let ignored = 0
+        for (const file of Array.from(selected)) {
+          const canonical = requiredNames.get(file.name.toLowerCase())
+          if (!canonical) {
+            ignored += 1
+            continue
+          }
+          grouped.set(canonical, [...(grouped.get(canonical) || []), file])
+        }
+
+        const conflicts = [...grouped.entries()].filter(([, copies]) => copies.length > 1)
+        if (conflicts.length) {
+          throw new Error(
+            `${conflicts.length} required filename${conflicts.length === 1 ? ' appears' : 's appear'} more than once. Use the collection scanner to review regional copies before installing.`,
+          )
+        }
+
+        const existing = new Set(files.map((file) => file.name.toLowerCase()))
+        const candidates = [...grouped.entries()].filter(
+          ([name]) => overwrite || !existing.has(name.toLowerCase()),
+        )
+        const alreadyPresent = grouped.size - candidates.length
+        setUploadProgress({ done: 0, total: candidates.length })
+        if (!candidates.length) {
+          const summary = `No new matching files to upload. ${alreadyPresent} already on the volume; ${ignored} not required by configured cores.`
+          setNotice(summary)
+          showToast(summary, 'success')
+          return
+        }
+
+        let uploaded = 0
+        let failed = 0
+        for (const [canonical, copies] of candidates) {
+          const form = new FormData()
+          form.append('file', copies[0], canonical)
+          form.append('csrf_token', csrfToken())
+          try {
+            const response = await fetch(ENDPOINT, {
+              method: 'POST',
+              body: form,
+              credentials: 'same-origin',
+              headers: csrfHeaders(),
+            })
+            if (!response.ok) {
+              throw new Error(await readError(response, 'Upload failed.'))
+            }
+            uploaded += 1
+          } catch {
+            failed += 1
+          }
+          setUploadProgress((progress) => ({ ...progress, done: progress.done + 1 }))
+        }
+
+        const summary = `Uploaded ${uploaded} matching file${uploaded === 1 ? '' : 's'}; ${alreadyPresent} already on the volume; ${ignored} not required by configured cores.`
+        setNotice(summary)
+        let failureNotice: string | null = null
+        if (failed) {
+          failureNotice = `${summary} ${failed} file${failed === 1 ? '' : 's'} could not be uploaded; check the file limits and try again.`
+          showToast(failureNotice, 'error')
+        } else {
+          showToast(summary, 'success')
+        }
+        await load()
+        if (failureNotice) setError(failureNotice)
+      } catch (err) {
+        const text = errorText(err) || 'Could not upload that firmware folder.'
+        setError(text)
+        showToast(text, 'error')
+      } finally {
+        if (folderInputRef.current) folderInputRef.current.value = ''
+        setBusy(null)
+      }
+    },
+    [cores, files, load, overwrite],
+  )
+
   const ready = cores.filter((c) => c.ready).length
   const missing = cores.length - ready
   const working = Boolean(busy)
@@ -169,7 +261,9 @@ export function EmulatorFirmwarePanel() {
         ? 'Installing…'
         : busy === 'upload'
           ? 'Uploading…'
-          : null
+          : busy === 'folder-upload'
+            ? `Uploading ${uploadProgress.done} of ${uploadProgress.total}…`
+            : null
 
   return (
     <section className="od-admin-panel" aria-labelledby="od-firmware-heading">
@@ -278,6 +372,27 @@ export function EmulatorFirmwarePanel() {
             {busyLabel}
           </span>
         ) : null}
+      </div>
+
+      <div className="od-btn-bar">
+        <label className="od-admin-lede" htmlFor="od-firmware-folder">
+          Upload matching firmware from a folder on this device
+        </label>
+        <input
+          ref={folderInputRef}
+          id="od-firmware-folder"
+          className="od-input"
+          type="file"
+          aria-label="Firmware folder"
+          multiple
+          disabled={working}
+          {...({ webkitdirectory: 'true' } as Record<string, string>)}
+          onChange={(event) => void uploadFolder(event.currentTarget.files)}
+        />
+        <p className="od-error__detail">
+          Only filenames required by configured cores are uploaded. If the folder contains multiple
+          versions of a required filename, use the collection scanner to choose one.
+        </p>
       </div>
 
       {/* `Uploading…` / `Scanning…` / `Installing…` and `notice` stay
