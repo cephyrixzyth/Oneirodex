@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-10-07
+
+### Fixed
+- Build static SPA assets on the native Docker build platform so arm64 image builds do not run npm installation under QEMU.
+
 ## [1.1.3] — 2026-10-07
 
 ### Added
