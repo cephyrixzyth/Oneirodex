@@ -112,21 +112,15 @@
 }
 
 /* Library (and any page with the cover grid): centred hover scale needs paint
-   room on every edge. Vertical: top-bar height + bleed so the first row can
-   grow into the overlay. Horizontal: extra inline pad absorbs the scale so
-   edge tiles are not clipped by the scrollport; the grid pulls back with a
-   negative margin so resting columns still sit on the content gutter.
-   Bleed is sized from --od-tile-min × 1.5 because auto-fill tracks are 1fr and
-   real covers often render wider than the min — under-sizing left edge tiles
-   clipped covers/badges. overflow-clip-margin lets the last few pixels paint
-   past the padding edge (gutter alone is smaller than half the scale). */
+   room on every edge. Tracks are fixed to --od-tile-min and covers are 2:3,
+   so reserve half the actual scaled size plus a small safety margin. */
 .od-shell__main:has([data-library-grid]),
 .od-shell > #content:has([data-library-grid]) {
   --od-tile-hover-bleed-y: calc(
-    var(--od-tile-min, 180px) * 4 / 3 * (var(--od-tile-hover-scale, 1.25) - 1) / 2 * 1.5 + 12px
+    var(--od-tile-min, 180px) * 3 / 2 * (var(--od-tile-hover-scale, 1.25) - 1) / 2 + 12px
   );
   --od-tile-hover-bleed-x: calc(
-    var(--od-tile-min, 180px) * (var(--od-tile-hover-scale, 1.25) - 1) / 2 * 1.5 + 12px
+    var(--od-tile-min, 180px) * (var(--od-tile-hover-scale, 1.25) - 1) / 2 + 12px
   );
   --od-tile-hover-pad-x: calc(var(--od-tile-hover-bleed-x) + 2.75rem);
   padding-block-start: calc(
@@ -156,6 +150,15 @@
    and put the hover bleed on the grid so first-row enlarge still clears. */
 #main-content.od-shell__main:has(.od-library-selection),
 .od-shell > #content:has(.od-library-selection) {
+  padding-block-start: calc(var(--od-topbar-h) + 0.15rem) !important;
+  padding-top: calc(var(--od-topbar-h) + 0.15rem) !important;
+}
+
+/* Keep the first-run store prompt close to the top navigation. The normal
+   library reserve includes cover hover bleed, which leaves a conspicuous gap
+   above this small prompt before the tile grid begins. */
+#main-content.od-shell__main:has(.od-store-setup-prompt),
+.od-shell > #content:has(.od-store-setup-prompt) {
   padding-block-start: calc(var(--od-topbar-h) + 0.15rem) !important;
   padding-top: calc(var(--od-topbar-h) + 0.15rem) !important;
 }
@@ -398,8 +401,8 @@ body.od-shell-host > #admin-legacy-content[hidden] {
   /* Own token, not a multiple of the icon column. Tying the two together made
      every icon shrink also shrink the logo, which is the opposite of what
      the expanded rail needs. */
-  width: var(--od-rail-mark-expanded, 5.5rem);
-  height: var(--od-rail-mark-expanded, 5.5rem);
+  width: 4.25rem;
+  height: 4.25rem;
   transition: width var(--od-motion-base) var(--od-motion-ease),
     height var(--od-motion-base) var(--od-motion-ease);
 }

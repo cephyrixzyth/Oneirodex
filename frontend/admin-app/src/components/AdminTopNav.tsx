@@ -169,7 +169,7 @@ export function AdminTopNav({
               )}
             </button>
             {accountOpen ? (
-              <div className="od-topnav__dropdown-panel" id={accountId} role="menu">
+              <div className="od-topnav__dropdown-panel od-menu-surface" id={accountId} role="menu">
                 {identity.username ? (
                   <div className="od-topnav__username">{identity.username}</div>
                 ) : null}

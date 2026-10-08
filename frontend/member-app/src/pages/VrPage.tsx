@@ -6,7 +6,22 @@ import { useShellConfig } from '@oneirodex/ui'
 import { fetchVrCatalog, fetchVrGame } from '../api/vr'
 import { VrWayToPlayLine, vrCompatCopy } from '../components/VrWayToPlay'
 import { PageStatus } from '../components/PageStatus'
+import { CoverFallback } from '../components/CoverFallback'
 import './VrPage.css'
+
+function VrCover({ game, className = '' }: LooseProps) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [game.cover_url])
+  const url = String(game.cover_url || '')
+  const isRetiredPlaceholder = url.replace(/\\/g, '/').toLowerCase().endsWith('default_cover.jpg')
+  const hasArt = Boolean(url) && !isRetiredPlaceholder && !failed
+
+  return hasArt ? (
+    <img className={className} src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
+  ) : (
+    <CoverFallback name={game.name} />
+  )
+}
 
 const PER_PAGE = 48
 const VR_VIEWS = [
@@ -158,7 +173,7 @@ export function VrPage() {
               data-uuid={game.uuid}
               onClick={() => setSelectedUuid(game.uuid)}
             >
-              {game.cover_url ? <img src={game.cover_url} alt="" loading="lazy" /> : null}
+              <VrCover game={game} />
               <span>{game.name}</span>
               {game.vr_compat === 'injector_profile' ? (
                 <small className="od-vr__card-way" title={vrCompatCopy('injector_profile')?.title}>
@@ -209,9 +224,7 @@ export function VrPage() {
 
           {!detailError && detail ? (
             <>
-              {detail.cover_url ? (
-                <img className="od-vr__detail-cover" src={detail.cover_url} alt="" />
-              ) : null}
+              <VrCover game={detail} className="od-vr__detail-cover" />
               <h2>{detail.name}</h2>
               {detail.size ? <p className="od-vr__meta">{detail.size}</p> : null}
               <VrWayToPlayLine vrCompat={detail.vr_compat} />

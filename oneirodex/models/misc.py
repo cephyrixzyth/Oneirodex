@@ -129,6 +129,9 @@ class GlobalSettings(db.Model):
     mobygames_api_key = db.Column(db.String(255), nullable=True)
     # TheGamesDB identify search key (optional — empty search when unset)
     thegamesdb_api_key = db.Column(db.String(255), nullable=True)
+    # RetroAchievements household account used for set matching / member progress
+    retroachievements_username = db.Column(db.String(64), nullable=True)
+    retroachievements_api_key = db.Column(db.String(512), nullable=True)
     # Preferred release groups / size bands for *arr scoring
     quality_profiles = db.Column(JSONEncodedDict, nullable=True)
     # Game details section order/visibility

@@ -4,20 +4,22 @@
 
 {% block content %}
 {% import 'partials/icons.html' as icons %}
+{% import 'partials/chrome.html' as chrome %}
 <link rel="stylesheet" href="{{ 'css/admin/admin-pages.css'|theme_asset }}">
 <link rel="stylesheet" href="{{ 'css/admin/admin_manage_scanjobs.css'|theme_asset }}">
 
+{% call chrome.contextbar(views=[], active='filters', label='Scanning filters', actions_slot='page') %}
+    <button type="button" class="od-cbtn od-cbtn--primary" data-bs-toggle="modal" data-bs-target="#addFilterModal" id="odScanFilterAddBtn">
+        {{ icons.icon('plus') }} Add filter
+    </button>
+{% endcall %}
+
 <div class="container od-adminpage od-adminpage--lg mt-4">
-<div class="admin_manage_filters-panel od-adminpage-panel od-scan-filters">
+<div class="admin_manage_filters-panel od-scan-filters">
     <div class="admin_manage_filters-header od-adminpage-header od-scan-filters__header">
         <div>
             <h2 class="od-adminpage-title">{{ icons.icon('filter', size=22) }} Game Scanning Filters</h2>
             <p class="od-adminpage-lede">Two jobs, one list: strip junk from folder <strong>names</strong>, or skip whole <strong>folders</strong> during scans. Prefer <a href="{{ url_for('admin2.scan_management', active_tab='scan_filters') }}">Scan management → Scan Filters</a> for the same UI.</p>
-        </div>
-        <div class="od-adminpage-header-actions">
-            <button type="button" class="od-btn od-btn--primary" data-bs-toggle="modal" data-bs-target="#addFilterModal" id="odScanFilterAddBtn">
-                {{ icons.icon('plus') }} Add filter
-            </button>
         </div>
     </div>
 

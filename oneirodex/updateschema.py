@@ -627,6 +627,12 @@ class DatabaseManager:
         ADD COLUMN IF NOT EXISTS thegamesdb_api_key VARCHAR(255);
 
         ALTER TABLE global_settings
+        ADD COLUMN IF NOT EXISTS retroachievements_username VARCHAR(64);
+
+        ALTER TABLE global_settings
+        ADD COLUMN IF NOT EXISTS retroachievements_api_key VARCHAR(512);
+
+        ALTER TABLE global_settings
         ADD COLUMN IF NOT EXISTS quality_profiles TEXT;
 
         ALTER TABLE global_settings

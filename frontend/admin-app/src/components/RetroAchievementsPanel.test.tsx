@@ -69,7 +69,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('unconfigured says exactly what to set, and offers no Match', async () => {
+test('unconfigured points to Integrations setup, and offers no Match', async () => {
   mockApi({
     status: {
       ok: true,
@@ -81,9 +81,7 @@ test('unconfigured says exactly what to set, and offers no Match', async () => {
     },
   })
   render(<RetroAchievementsPanel />)
-  expect(await screen.findByTestId('ra-unconfigured')).toHaveTextContent(
-    /RETROACHIEVEMENTS_USERNAME/,
-  )
+  expect(await screen.findByTestId('ra-unconfigured')).toHaveTextContent(/Admin → Integrations/)
   expect(screen.queryByRole('button', { name: /^Match/ })).not.toBeInTheDocument()
 })
 

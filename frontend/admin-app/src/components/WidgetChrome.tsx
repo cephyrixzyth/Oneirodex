@@ -92,13 +92,13 @@ export function AddWidgetMenu({
         Add widget{hidden.length ? ` (${hidden.length})` : ''}
       </button>
       {open && hidden.length ? (
-        <ul className="od-dash__add-menu" role="menu">
+        <ul className="od-dash__add-menu od-menu-surface" role="menu">
           {hidden.map((id) => (
             <li key={id} role="none">
               <button
                 type="button"
                 role="menuitem"
-                className="od-dash__add-item"
+                className="od-dash__add-item od-menu-item"
                 onClick={() => onAdd(id)}
               >
                 {labelFor(id)}

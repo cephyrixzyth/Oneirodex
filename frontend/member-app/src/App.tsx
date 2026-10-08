@@ -1,7 +1,6 @@
 ﻿import { lazy, Suspense, useEffect, useState } from 'react'
 import { Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { CommandPalette } from './chrome/CommandPalette'
-import { ScrollJump } from './chrome/ScrollJump'
 import { LoadingOverlay } from './components/LoadingOverlay'
 import { SideRail } from './chrome/SideRail'
 import { applyTileSizeCssVars } from './chrome/TileSizeControl'
@@ -197,7 +196,6 @@ function Layout({ tileSize, onTileSizeChange }: LooseProps) {
           if (link.action === 'open-chat') requestOpenChatPanel()
           if (link.action === 'open-friends') requestOpenSocialCompanion()
         }}
-        footer={<ScrollJump />}
       />
       {drawerOpen ? (
         <button

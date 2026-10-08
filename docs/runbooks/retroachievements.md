@@ -11,16 +11,22 @@ shell — and the member copy says so.
 
 1. Sign in at retroachievements.org and open **Settings → Keys** for the *web API
    key* (not the Connect key).
-2. Put both values in the server environment (`.env`, then restart):
+2. In Oneirodex, open **Admin → Integrations → RetroAchievements** and save the
+   account username and web API key. The key is stored in the Oneirodex database
+   and is never shown after saving. This works for Docker and Unraid installs
+   without editing container environment variables. Environment values, when
+   present, take precedence over the saved admin settings.
+
+   Alternatively, configure both values in the server environment and restart:
 
    ```
    RETROACHIEVEMENTS_USERNAME=the-account-that-owns-the-key
    RETROACHIEVEMENTS_API_KEY=...
    ```
 
-   Both are required. With one missing, Admin → Emulators → RetroAchievements says
-   which half it has, the plugin reports `available`, and no title claims a set.
-3. **Admin → Emulators → RetroAchievements → Match** per system. Each run refreshes
+   Both are required. With one missing, the Admin → Integrations panel shows what
+   is missing, the plugin reports `available`, and no title claims a set.
+3. Open **Admin → Emulators → Achievements** and use **Match** per system. Each run refreshes
    that console's hash index (cached 24h) and hashes every game on the platform that
    has a disk path, storing the match on the game.
 
@@ -46,7 +52,7 @@ does not ride on the DAT matcher's `md5` column.
   A matched set with zero is stored (`ra_game_id`) but promises nothing: no badge, no
   section, no CTA.
 - Unconfigured is *no data*, never a silent empty list: the panel says exactly which
-  environment variable is missing, and the plugin registry reports `available`.
+  credential is missing, and the plugin registry reports `available`.
 - The member's RetroAchievements username is a public handle stored on
   `user_preferences.ra_username`. Oneirodex never asks for their RA password or key.
 
@@ -54,6 +60,7 @@ does not ride on the DAT matcher's `md5` column.
 
 | Route | Who | What |
 |---|---|---|
+| `GET`/`PUT /api/admin/integrations/retroachievements` | admin | Read credential state and save username/API key; never returns the key. |
 | `GET /api/retroachievements/status` | admin | Configured? Per-console index size/age and matched counts. |
 | `POST /api/retroachievements/match` | admin | `{platform, rehash?}` — refresh index if stale, hash and match. |
 | `GET /api/games/<uuid>/achievements` | member | The matched set + this member's progress (cached 10 min) + `unlocks_here: false`. |

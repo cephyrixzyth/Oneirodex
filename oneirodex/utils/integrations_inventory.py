@@ -164,9 +164,9 @@ def build_integrations_inventory() -> list[dict[str, Any]]:
         id='retroachievements',
         name='RetroAchievements',
         category='emulation',
-        admin_href='/admin/emulators#retroachievements',
+        admin_href='/admin/integrations#retro-achievements-settings',
         configured=ra_ok,
-        notes='Achievement sets matched by ROM hash; member progress read-only (RETROACHIEVEMENTS_USERNAME / _API_KEY)',
+        notes='Configure the household account in Integrations; match systems under Emulators. Member progress is read-only.',
     )
     try:
         from oneirodex.utils.hash_identify import base_url as _hash_base, is_enabled as _hash_on

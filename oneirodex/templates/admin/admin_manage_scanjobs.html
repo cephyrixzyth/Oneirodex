@@ -66,7 +66,8 @@
              views=[],
              active='unmatched',
              label='Unmatched',
-             summary='Resolve unmatched') %}
+             summary='Resolve unmatched',
+             actions_slot='page') %}
           <form action="" method="post" class="od-contextbar__form">
             {{ csrf_form.csrf_token }}
             <input type="hidden" name="submit" value="DeleteOnlyUnmatched">
@@ -83,7 +84,7 @@
             <button type="button" class="od-cbtn" id="unmatchedExportToggle" aria-expanded="false" aria-haspopup="menu" aria-controls="unmatchedExportMenu" title="Download the current filter">
               {{ icons.icon('download') }} Export
             </button>
-            <div class="od-pop__panel od-pop__panel--bare" id="unmatchedExportMenu" role="menu" hidden>
+            <div class="od-pop__panel od-pop__panel--bare od-menu-surface" id="unmatchedExportMenu" role="menu" hidden>
               <a id="exportUnmatchedCsvBtn" class="od-cbtn" role="menuitem" href="{{ url_for('apis.export_unmatched_folders', status='all', format='csv') }}" title="Download the current filter as CSV">Export CSV</a>
               <a id="exportUnmatchedJsonBtn" class="od-cbtn" role="menuitem" href="{{ url_for('apis.export_unmatched_folders', status='all', format='json') }}" title="Download the current filter as JSON">Export JSON</a>
             </div>
@@ -93,7 +94,29 @@
         {% call chrome.contextbar(
              views=[],
              active='jobs',
-             label='Scan Jobs') %}
+             label='Scan Jobs',
+             actions_slot='page') %}
+          <form action="{{ url_for('admin2.clear_scan_jobs') }}" method="post" class="od-contextbar__form">
+            {{ csrf_form.csrf_token }}
+            <input type="hidden" name="status" value="Completed">
+            <button type="submit" class="od-cbtn" data-od-confirm="Clear all Completed jobs?">Clear completed</button>
+          </form>
+          <form action="{{ url_for('admin2.clear_scan_jobs') }}" method="post" class="od-contextbar__form">
+            {{ csrf_form.csrf_token }}
+            <input type="hidden" name="status" value="Failed">
+            <button type="submit" class="od-cbtn" data-od-confirm="Clear all Failed jobs?">Clear failed</button>
+          </form>
+          <form action="{{ url_for('admin2.clear_all_scan_jobs') }}" method="post" class="od-contextbar__form">
+            {{ csrf_form.csrf_token }}
+            <button type="submit" class="od-cbtn od-cbtn--danger" data-od-confirm="Delete ALL jobs (skips Running/Stopping)?">Clear all</button>
+          </form>
+          <button type="button" class="od-cbtn" data-scan-jobs-export title="Export the current filtered list as CSV">Export CSV</button>
+        {% endcall %}
+{% elif enable_new_chrome and active_tab == 'scan_filters' %}
+        {% call chrome.contextbar(views=[], active='scan_filters', label='Scan filters', actions_slot='page') %}
+          <button type="button" class="od-cbtn od-cbtn--primary" data-bs-toggle="modal" data-bs-target="#addFilterModal" id="odScanFilterAddBtn">
+            {{ icons.icon('plus') }} Add filter
+          </button>
         {% endcall %}
 {% elif enable_new_chrome and active_tab == 'image_queue' %}
         {% call chrome.contextbar(views=[], active='image_queue', label='Image queue actions') %}
@@ -331,7 +354,9 @@
             {% if active_tab == 'jobs' %}
             <div id="scanJobs" class="admin_manage_scanjobs-tab-panel tab-pane {% if active_tab == 'jobs' %}active{% else %}fade{% endif %}">
                 {% with compact=false %}
-                  {% include 'admin/partials/admin_scan_jobs_panel.html' %}
+                  {% with actions_in_topbar=true %}
+                    {% include 'admin/partials/admin_scan_jobs_panel.html' %}
+                  {% endwith %}
                 {% endwith %}
             </div>
 
@@ -621,13 +646,10 @@
             {% endif %}
             {% if active_tab == 'scan_filters' %}
             <div id="scanFilters" class="admin_manage_scanjobs-filters-container container tab-pane {% if active_tab == 'scan_filters' %}active{% else %}fade{% endif %}">
-                <div class="admin_manage_scanjobs-filters-panel od-adminpage-panel od-scan-filters">
+                <div class="admin_manage_scanjobs-filters-panel od-scan-filters">
                     <div class="admin_manage_scanjobs-tab-header od-scan-filters__header">
                         <h3>{{ icons.icon('filter', size=22) }} Scanning Filters</h3>
                         <p class="od-adminpage-lede">Two jobs, one list: strip junk from folder <strong>names</strong>, or skip whole <strong>folders</strong> during scans.</p>
-                        <button type="button" class="od-btn od-btn--primary" data-bs-toggle="modal" data-bs-target="#addFilterModal" id="odScanFilterAddBtn">
-                            {{ icons.icon('plus') }} Add filter
-                        </button>
                     </div>
 
                     <section class="od-scan-filters__howto" aria-labelledby="od-scan-filters-howto-title">

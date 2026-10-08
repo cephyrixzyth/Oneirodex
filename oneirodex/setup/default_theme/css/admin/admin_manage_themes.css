@@ -1,16 +1,16 @@
 /* Admin → Themes — dense od-adminpage blocks (no legacy padding stacks). */
 
 .od-themes-page {
-    --od-themes-gap: 0.85rem;
-    --od-themes-pad: 0.9rem 1rem;
-    --od-themes-radius: 10px;
-    max-width: 1080px;
+    --od-themes-gap: var(--od-adminpage-gap, 1.25rem);
+    --od-themes-pad: var(--od-adminpage-pad, clamp(1rem, 2.2vw, 1.75rem));
+    --od-themes-radius: var(--od-adminpage-radius, 14px);
+    max-width: none;
     margin: 0 auto;
     padding: 0.25rem 0 1.25rem;
 }
 
 .od-themes-flash {
-    max-width: 1080px;
+    max-width: none;
     margin: 0 auto 0.75rem;
     display: grid;
     gap: 0.4rem;

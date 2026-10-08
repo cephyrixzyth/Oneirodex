@@ -143,8 +143,8 @@
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  aspect-ratio: 2 / 3;
+  object-fit: contain;
   border-radius: var(--od-radius-lg);
 }
 

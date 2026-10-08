@@ -429,9 +429,7 @@ export function ArtStudioPage() {
             {skin.label}
             {systemText ? ` · ${systemText}` : ''}
           </span>
-        ) : (
-          <span className="od-art-studio-skin">Generic aurora</span>
-        )}
+        ) : null}
       </header>
 
       <ArtStudioTabs selectTab={selectTab} tab={tab} />

@@ -1638,7 +1638,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Export CSV — button may appear on jobs page and/or modal toolbar.
-    document.querySelectorAll('#scanJobsExportBtn').forEach((btn) => {
+    document.querySelectorAll('[data-scan-jobs-export]').forEach((btn) => {
         btn.addEventListener('click', () => {
             downloadScanJobsCsv(window.__odLastScanJobsPayload || []);
         });
@@ -1936,7 +1936,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const actionsBar = `
                         <details class="unmatched-row-menu">
                           <summary class="od-cbtn unmatched-row-menu__summary">Actions</summary>
-                          <div class="unmatched-row-actions" role="toolbar" aria-label="Actions for ${escapedDisk}">
+                          <div class="unmatched-row-actions od-menu-surface" role="toolbar" aria-label="Actions for ${escapedDisk}">
                         <button type="button" class="btn btn-outline-light btn-sm reveal-path-btn" data-path="${escapedPath}" title="Open path (companion / copy) — disk tidy this wave; no disk rename">Open path</button>
                         <form action="/add_game_manual" method="GET" class="unmatched-identify-form" style="display: inline;">
                             <input type="hidden" name="full_disk_path" value="${escapedPath}">

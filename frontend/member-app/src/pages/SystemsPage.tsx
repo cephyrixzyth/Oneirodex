@@ -190,7 +190,7 @@ export function SystemsPage() {
           empty on every visit. It is a sidebar note, not a chapter: it goes
           where the unused width already was. */}
       <div className="od-systems-page__intro">
-        <p className="od-more-page__lede">
+        <p className="od-more-page__lede od-systems-page__lede">
           Browse your library by console or PC. Open a system to filter the grid and apply that
           era&apos;s chrome. <Link to="/ways-to-play">Ways to Play</Link> lists Browser / Companion
           / Catalog across the catalog. Console tiles also open a licensed catalog of IGDB regional

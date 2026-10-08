@@ -408,7 +408,15 @@ export function DashboardBoard({
 
   function addWidget(id: string) {
     prefs.show(id)
-    setLayout((prev) => appendWidget(prev, id, defaultSize(id), minsFn, pinned))
+    setLayout((prev) =>
+      appendWidget(
+        prev.filter((item) => !hidden.includes(item.id)),
+        id,
+        defaultSize(id),
+        minsFn,
+        pinned,
+      ),
+    )
     setAddOpen(false)
   }
 

@@ -17,7 +17,7 @@
      library and left Discover exactly as it was. Deriving them here is what
      connects the control to these rows.
 
-     Height is the standard 3:4 cover box PLUS the caption strip, measured rather than
+     Height is the standard 2:3 cover box PLUS the caption strip, measured rather than
      guessed. The old flat 1.4 ratio was a single number standing in for both,
      so it was right at neither setting: with titles on the card came out 12px
      taller than the item box that holds it, and the caption hung below the
@@ -25,7 +25,7 @@
      over" on Discover. `--od-tile-title-h` is 0px when titles are off, which
      collapses this back to the bare cover. */
   --od-tile-w: var(--od-tile-min, 200px);
-  --od-tile-h: calc(var(--od-tile-w) * 4 / 3 + var(--od-tile-title-h, 0px));
+  --od-tile-h: calc(var(--od-tile-w) * 3 / 2 + var(--od-tile-title-h, 0px));
 
   /* How far a hovered tile grows past its box, per side. The track reserves
      this inside its padding box (so overflow does not clip the scale) and
@@ -449,8 +449,8 @@
  */
 .od-shelf__arrow {
   position: absolute;
-  /* Below the track (z-index 1) so a grown tile always paints over the fade.
-     Still above the hbar; pointer-events only when visible on shelf hover. */
+  /* Below the track at rest; the active edge control rises above a grown tile
+     so it remains clickable while the pointer is over the row. */
   z-index: 0;
   top: 0;
   bottom: 0;
@@ -497,20 +497,23 @@
 .od-shelf__arrow:focus-visible {
   opacity: 1;
   pointer-events: auto;
-  /* Lift only while clickable so the fade can receive hits without covering
-     a grown tile (items stack at z-index 25+ inside the track). */
-  z-index: 3;
+  /* Lift only while clickable. The narrow edge fade may cover a little cover
+     art, but the backward / forward control cannot sit under the tile. */
+  z-index: 30;
 }
 
-/* While a fully-visible tile is enlarged, hide arrows and the bottom slider.
-   Key off the *item* (not the inner card): card:hover misses caption/badge
-   gaps and lost to the shelf-hover arrow rule in practice. */
-.od-shelf__viewport:has(.od-shelf__item[data-fully-visible]:hover) .od-shelf__arrow,
-.od-shelf__viewport:has(.od-shelf__item[data-fully-visible]:focus-within) .od-shelf__arrow,
-.od-shelf__viewport:has(.game-card[data-overlay-open='true']) .od-shelf__arrow,
+/* While a fully-visible tile is enlarged, hide the bottom slider so the tile
+   keeps its click surface. Keep both edge arrows available: hiding them here
+   made the backward arrow disappear whenever the pointer rested on a card. */
 .od-shelf__scroller:has(.od-shelf__item[data-fully-visible]:hover) .od-shelf__hbar,
 .od-shelf__scroller:has(.od-shelf__item[data-fully-visible]:focus-within) .od-shelf__hbar,
 .od-shelf__scroller:has(.game-card[data-overlay-open='true']) .od-shelf__hbar {
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.od-shelf__viewport:has(.game-card[data-overlay-open='true']) .od-shelf__arrow {
   z-index: 0;
   opacity: 0;
   pointer-events: none;

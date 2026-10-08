@@ -21,12 +21,51 @@ from oneirodex.utils.retroachievements import (
     configured,
     fetch_member_progress,
     match_platform,
+    save_settings,
+    settings_summary,
     status_summary,
     supported_platforms,
 )
 from oneirodex.utils.auth import admin_required
 
 from . import apis_bp
+
+
+class RetroAchievementsSettingsBody(BaseModel, extra='forbid'):
+    username: str | None = Field(default=None, max_length=64)
+    api_key: str | None = Field(default=None, max_length=512)
+    clear_api_key: bool = False
+
+
+@apis_bp.route('/admin/integrations/retroachievements', methods=['GET'])
+@login_required
+@admin_required
+def retroachievements_settings_get():
+    """Read household credential state without returning the API key."""
+    return api_ok(settings_summary())
+
+
+@apis_bp.route('/admin/integrations/retroachievements', methods=['PUT'])
+@login_required
+@admin_required
+@validate_body(RetroAchievementsSettingsBody)
+def retroachievements_settings_put(body: RetroAchievementsSettingsBody):
+    """Save household credentials without returning the API key."""
+    username = body.username
+    if username is not None:
+        username = username.strip()
+        if username and not all(ch.isalnum() or ch in '_-.' for ch in username):
+            return api_error('Username may only contain letters, digits, _ - .', code='bad_request')
+    api_key = body.api_key
+    if api_key is not None:
+        api_key = api_key.strip()
+    return api_ok(
+        save_settings(
+            username=username,
+            api_key=api_key,
+            clear_api_key=body.clear_api_key,
+        ),
+    )
 
 
 @apis_bp.route('/retroachievements/status', methods=['GET'])
@@ -49,8 +88,8 @@ def retroachievements_match(body: MatchBody):
     """Refresh the console index (if stale) and match every game on a platform."""
     if not configured():
         return api_error(
-            'RetroAchievements is not configured — set RETROACHIEVEMENTS_USERNAME and '
-            'RETROACHIEVEMENTS_API_KEY in the server environment.',
+            'RetroAchievements is not configured — save the household username and web API key '
+            'under Admin → Integrations.',
             code='forbidden',
         )
     key = body.platform.strip().upper()

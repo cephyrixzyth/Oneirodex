@@ -13,7 +13,7 @@
 
 .od-ways-to-play__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--od-tile-gap, 0.85rem);
 }
 

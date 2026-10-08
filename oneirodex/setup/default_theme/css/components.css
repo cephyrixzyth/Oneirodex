@@ -52,7 +52,7 @@
  * full-size menu, not an oversized one.
  *
  * The guarantee survives because it never depended on this rule: .game-cover
- * is pinned to 3:4 with `object-fit: cover` at `width: 100%`, so the image
+ * is pinned to 2:3 with `object-fit: contain` at `width: 100%`, so the image
  * cannot exceed its box. Clipping the link that holds it keeps the rounded
  * corner and the containment, and lets the menu paint over the grid again. */
 .game-card__cover-link {
@@ -196,26 +196,25 @@
  * the rest of the row out of line — reported as art "expanding out of the
  * bounds".
  *
- * `aspect-ratio` plus `object-fit: cover` pins every tile to 3:4 and crops the
- * overflow instead of growing; `max-width/height: 100%` and `overflow: hidden`
- * on the card stop anything escaping even if a stylesheet elsewhere unsets the
- * ratio. Cropping a wide image is a visible compromise, but a predictable grid
- * is worth more than showing the edges of one bad file. */
+ * `aspect-ratio` plus `object-fit: contain` pins every tile to 2:3 without
+ * stretching or cropping art whose source has another ratio. The neutral
+ * ground fills any letterbox; `max-width/height: 100%` keeps files inside the
+ * tile even if another stylesheet unsets the ratio. */
 .game-cover {
     display: block;
     position: relative;
     width: 100%;
     max-width: 100%;
     max-height: 100%;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
     height: auto;
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
     /* Covers are lazy, so a tile paints its badges before its art arrives. With
        nothing behind the image that gap read as an empty box, and a screen of
        them reads as a broken grid rather than a loading one. Favourites already
-       carried this tone; the catalog grid did not. `object-fit: cover` hides it
-       the moment the image paints. */
+       carried this tone; the catalog grid did not. The themed ground also fills
+       any letterboxing on art whose source ratio differs from the 2:3 tile. */
     background-color: var(--bg-dark-secondary, var(--od-surface-2));
     background-image: linear-gradient(
         160deg,
@@ -264,7 +263,7 @@
     gap: 0.5rem;
     box-sizing: border-box;
     width: 100%;
-    aspect-ratio: 3 / 4;
+    aspect-ratio: 2 / 3;
     padding: 12% 10%;
     border: 1px solid var(--od-border);
     border-radius: var(--od-radius-xs);

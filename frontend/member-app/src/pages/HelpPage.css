@@ -315,22 +315,31 @@
 
 .od-help__section ul {
   margin: 0 0 0.75rem;
-  padding: 0 0 0 1.05rem;
-  list-style: disc;
+  padding: 0;
+  list-style: none;
   /* Body copy, so it takes the reading colour rather than the muted one —
      muted is for supporting text, and this is the answer you came for. */
   color: var(--od-text);
-  font-size: var(--od-font-base);
-  line-height: 1.65;
-  max-width: 72ch;
+  font-size: var(--od-font-lg);
+  line-height: 1.7;
+  max-width: 84ch;
 }
 
 .od-help__section li {
-  margin-bottom: 0.35rem;
+  position: relative;
+  margin-bottom: 0.55rem;
+  padding-inline-start: 1.25rem;
 }
 
-.od-help__section li::marker {
-  color: color-mix(in srgb, var(--od-help-tone) 70%, transparent);
+.od-help__section li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0.2rem;
+  top: 0.7em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: var(--od-radius-circle);
+  background: color-mix(in srgb, var(--od-help-tone) 78%, var(--od-text));
 }
 
 .od-help__footer {
