@@ -1,4 +1,6 @@
-FROM node:22-alpine AS frontend-build
+# SPA bundles contain only static assets. Build them on the native build
+# platform so an arm64 image does not run npm install/build through QEMU.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-build
 
 WORKDIR /build
 
