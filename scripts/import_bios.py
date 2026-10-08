@@ -12,6 +12,7 @@ is written until you pass --apply.
 
     python scripts/import_bios.py --source E:\\_bios
     python scripts/import_bios.py --source E:\\_bios --apply
+    python scripts/import_bios.py --source E:\\_bios --require-all
 
 The destination is `oneirodex/static/library/bios` (gitignored), or `bios` in
 the data folder when ONEIRODEX_LIBRARY_DIR moves the library, unless
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import logging
 import os
 import shutil
 
@@ -52,6 +54,7 @@ _bios = _load_util('emulator_bios.py', '_gt_emulator_bios')
 _security = _load_util('security.py', '_gt_security')
 BIOS_REQUIREMENTS = _bios.BIOS_REQUIREMENTS
 BIOS_HARD_REQUIRED_CORES = _bios.BIOS_HARD_REQUIRED_CORES
+logger = logging.getLogger(__name__)
 
 # The server's own rule (utils/library_paths): a library moved to a data folder
 # with ONEIRODEX_LIBRARY_DIR keeps its firmware there too.
@@ -166,6 +169,11 @@ def main() -> int:
     parser.add_argument('--dest', default=os.environ.get('EMULATOR_BIOS_PATH') or DEFAULT_DEST)
     parser.add_argument('--apply', action='store_true', help='Actually copy (default is preview)')
     parser.add_argument('--overwrite', action='store_true', help='Replace files already present')
+    parser.add_argument(
+        '--require-all',
+        action='store_true',
+        help='Fail without writing unless every supported firmware file is selectable from source or already installed',
+    )
     args = parser.parse_args()
 
     if not os.path.isdir(args.source):
@@ -212,6 +220,14 @@ def main() -> int:
             hard = any(c in BIOS_HARD_REQUIRED_CORES for c in cores)
             flag = 'blocks play' if hard else 'optional'
             print(f'  - {name:<24} {", ".join(cores)} ({flag})')
+
+    if args.require_all and (missing or refused):
+        unavailable = len(missing) + len(refused)
+        logger.error(
+            'Incomplete firmware set: %d supported file(s) are unavailable; nothing was copied.',
+            unavailable,
+        )
+        return 2
 
     status = 1 if refused else 0
     if not to_copy:

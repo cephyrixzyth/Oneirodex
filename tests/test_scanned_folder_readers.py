@@ -260,6 +260,24 @@ def test_import_bios_cli_still_copies_plain_files(tmp_path, monkeypatch, capsys)
     assert 'Copied 1 file(s)' in capsys.readouterr().out
 
 
+def test_import_bios_cli_require_all_refuses_partial_install(tmp_path, monkeypatch, caplog):
+    module = _load_script()
+    pack = tmp_path / 'pack'
+    pack.mkdir()
+    (pack / 'scph5501.bin').write_bytes(GAME)
+    dest = tmp_path / 'volume'
+    monkeypatch.setattr(
+        'sys.argv',
+        ['import_bios.py', '--source', str(pack), '--dest', str(dest), '--apply', '--require-all'],
+    )
+
+    rc = module.main()
+
+    assert rc == 2
+    assert 'nothing was copied' in caplog.text.lower()
+    assert not dest.exists()
+
+
 @pytest.mark.parametrize('layout', ['dest_inside_source', 'hardlink'])
 def test_import_bios_cli_never_overwrites_a_firmware_file_with_itself(tmp_path, monkeypatch, capsys, layout):
     """--overwrite with the installed file found as its own source used to open
