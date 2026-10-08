@@ -27,6 +27,10 @@
 (function () {
   'use strict';
 
+  function queryAll(selector) {
+    return typeof document.querySelectorAll === 'function' ? document.querySelectorAll(selector) : [];
+  }
+
   function allowlist(names) {
     var set = Object.create(null);
     names.forEach(function (name) {
@@ -107,7 +111,7 @@
   }
 
   function closeOpenMenus(target) {
-    var openTriggers = document.querySelectorAll('[aria-haspopup="menu"][aria-expanded="true"]');
+    var openTriggers = queryAll('[aria-haspopup="menu"][aria-expanded="true"]');
     openTriggers.forEach(function (trigger) {
       var controlledId = trigger.getAttribute('aria-controls');
       var panel = controlledId ? document.getElementById(controlledId) : null;
@@ -116,7 +120,7 @@
       trigger.click();
     });
 
-    document.querySelectorAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
+    queryAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
       if (!menu.contains(target)) menu.open = false;
     });
   }
@@ -129,12 +133,12 @@
 
   document.addEventListener('keydown', function (event) {
     if (event.key !== 'Escape') return;
-    var triggers = document.querySelectorAll('[aria-haspopup="menu"][aria-expanded="true"]');
+    var triggers = queryAll('[aria-haspopup="menu"][aria-expanded="true"]');
     triggers.forEach(function (trigger) {
       trigger.click();
       trigger.focus();
     });
-    document.querySelectorAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
+    queryAll('details[open][data-od-dismiss-outside], details.unmatched-row-menu[open]').forEach(function (menu) {
       menu.open = false;
       var summary = menu.querySelector('summary');
       if (summary) summary.focus();
