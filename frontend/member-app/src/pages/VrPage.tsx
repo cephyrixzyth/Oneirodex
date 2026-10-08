@@ -4,12 +4,28 @@ import { ContextBar } from '../chrome/ContextBar'
 import { usesNewChrome } from '../chrome/usesNewChrome'
 import { useShellConfig } from '@oneirodex/ui'
 import { fetchVrCatalog, fetchVrGame } from '../api/vr'
-import { VrWayToPlayLine, vrCompatCopy } from '../components/VrWayToPlay'
+import { VrWayToPlayLine, vrCompatCopy, type VrCompat } from '../components/VrWayToPlay'
 import { PageStatus } from '../components/PageStatus'
 import { CoverFallback } from '../components/CoverFallback'
 import './VrPage.css'
 
-function VrCover({ game, className = '' }: LooseProps) {
+interface VrGame {
+  uuid: string
+  name: string
+  cover_url?: string | null
+  vr_compat?: VrCompat
+  size?: string | null
+  summary?: string | null
+}
+
+interface VrCatalog {
+  games: VrGame[]
+  total: number
+  pages: number
+  page: number
+}
+
+function VrCover({ game, className = '' }: { game: VrGame; className?: string }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [game.cover_url])
   const url = String(game.cover_url || '')
@@ -33,13 +49,13 @@ const VR_VIEWS = [
 export function VrPage() {
   const shellConfig = useShellConfig()
   const useNewChrome = usesNewChrome(shellConfig)
-  const [catalog, setCatalog] = useState<any>(null)
-  const [error, setError] = useState<any>(null)
+  const [catalog, setCatalog] = useState<VrCatalog | null>(null)
+  const [error, setError] = useState<unknown>(null)
   const [page, setPage] = useState(1)
   const [retryCount, setRetryCount] = useState(0)
-  const [selectedUuid, setSelectedUuid] = useState<any>(null)
-  const [detail, setDetail] = useState<any>(null)
-  const [detailError, setDetailError] = useState<any>(null)
+  const [selectedUuid, setSelectedUuid] = useState<string | null>(null)
+  const [detail, setDetail] = useState<VrGame | null>(null)
+  const [detailError, setDetailError] = useState<unknown>(null)
   // Rider R3: `?vr_compat=native_vr|injector_profile` narrows the hub to one way to play.
   const [searchParams, setSearchParams] = useSearchParams()
   const vrCompatFilter = searchParams.get('vr_compat') || ''
@@ -70,11 +86,11 @@ export function VrPage() {
     fetchVrCatalog({ signal: controller.signal, page, perPage: PER_PAGE, vrCompat: vrCompatFilter })
       .then((data) => {
         if (active) {
-          setCatalog(data)
+          setCatalog(data as VrCatalog)
         }
       })
-      .catch((err: any) => {
-        if (active && err.name !== 'AbortError') {
+      .catch((err: unknown) => {
+        if (active && !(err instanceof Error && err.name === 'AbortError')) {
           setError(err)
         }
       })
@@ -98,11 +114,11 @@ export function VrPage() {
     fetchVrGame(selectedUuid, { signal: controller.signal })
       .then((data) => {
         if (active) {
-          setDetail(data)
+          setDetail(data as VrGame)
         }
       })
-      .catch((err: any) => {
-        if (active && err.name !== 'AbortError') {
+      .catch((err: unknown) => {
+        if (active && !(err instanceof Error && err.name === 'AbortError')) {
           setDetailError(err)
         }
       })
@@ -113,7 +129,7 @@ export function VrPage() {
     }
   }, [selectedUuid])
 
-  const games = catalog?.games || []
+  const games = catalog?.games ?? []
 
   return (
     <div className="od-more-page od-vr">
@@ -165,7 +181,7 @@ export function VrPage() {
 
       {!error && games.length > 0 ? (
         <div className="od-vr__grid">
-          {games.map((game: any) => (
+          {games.map((game) => (
             <button
               key={game.uuid}
               type="button"
