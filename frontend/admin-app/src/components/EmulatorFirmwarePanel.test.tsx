@@ -359,8 +359,10 @@ test('folder upload refuses ambiguous duplicate firmware filenames', async () =>
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Use the collection scanner')
   expect(
-    vi.mocked(globalThis.fetch).mock.calls.some(
-      ([url, init]: any) => String(url) === '/api/emulator-bios' && init?.method === 'POST',
-    ),
+    vi
+      .mocked(globalThis.fetch)
+      .mock.calls.some(
+        ([url, init]: any) => String(url) === '/api/emulator-bios' && init?.method === 'POST',
+      ),
   ).toBe(false)
 })
