@@ -4,7 +4,7 @@
 
 Oneirodex play modes for systems **below PS5 / Xbox Series**. Those two stay **catalog + download only**.
 
-**Browser engines (direction):** Play today uses **WebRetro** (RetroArch WASM). Browse payloads include `browser_player` / `browser_players_available` (always `webretro` until a second engine is wired). Admin stub: `GET`/`PUT /api/browser-player-settings`. Optional **NES Nostalgist pilot** (`nostalgist_nes_pilot`, default off) swaps only NES Play links to a vendored Nostalgist host that still loads household cores/ROMs from this box — see [browser-play-engines.md](../dev/browser-play-engines.md). That host has **no save/load/rewind bar yet**; leave the flag off for cabinet chrome. Planned next: EmulatorJS as engine B, optional **webЯcade** sidecar. SaaS hosts that require uploading household ROMs (e.g. Afterplay) are out of scope.
+**Browser engines:** WebRetro (RetroArch WASM) and the pinned EmulatorJS release ship with the container. Admin settings choose the default engine and can disable EmulatorJS; supported systems use the selected engine, while unsupported systems stay on WebRetro. Optional **NES Nostalgist pilot** (`nostalgist_nes_pilot`, default off) swaps only NES Play links to a vendored Nostalgist host that still loads household cores/ROMs from this box — see [browser-play-engines.md](../dev/browser-play-engines.md). That host has **no save/load/rewind bar yet**. Optional **webЯcade** sidecar remains separate. SaaS hosts that require uploading household ROMs to a third party are out of scope.
 
 | Platform | Browser (WebRetro) | Companion | Notes |
 |---|---|---|---|
@@ -67,7 +67,7 @@ Browser play opens `webretro.html` with a per-system **artistic room** — multi
 
 ## Two engines
 
-WebRetro is the player that ships with Oneirodex. Your admin can add **EmulatorJS** as a second engine (a different shell with its own menu, save-state screen and touch controls) and make it the default; when they do, Play on the systems it supports opens in that shell and everything else stays on WebRetro. Either way your ROMs never leave the server. If a game opens in a plain page saying EmulatorJS is not installed, tell your admin — that shell needs a one-time install on the server.
+WebRetro is the default player. **EmulatorJS** is bundled as a second engine with its own menu, save-state screen and touch controls; an admin can enable or disable it in Admin → Emulators and make it the default. Play on supported systems opens in that shell, while other systems stay on WebRetro. ROMs remain on the server.
 
 ## Audio/video tuning + WASM limits (SNES and friends)
 

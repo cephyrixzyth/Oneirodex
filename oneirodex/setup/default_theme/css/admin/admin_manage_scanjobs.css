@@ -1757,8 +1757,13 @@ a.unmatched-stage-e__name {
 }
 
 .unmatched-dupe-compare__banner-text {
-    font-size: var(--od-font-xs);
-    color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+  color: var(--od-text-muted);
+}
+
+/* Keep the table readable; the complete comparison belongs in its popout. */
+#unmatchedFoldersTableBody .unmatched-dupe-compare__grid {
+  display: none;
 }
 
 .unmatched-dupe-compare__pop {
@@ -1818,6 +1823,7 @@ a.unmatched-stage-e__name {
 }
 
 .od-dupe-compare-modal .unmatched-dupe-compare__grid {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 

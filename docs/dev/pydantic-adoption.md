@@ -70,7 +70,7 @@ model: a model with required fields → 422 naming them; an all-optional model
 
 ## Adopted so far
 
-52 routes (PRs #80–#96 plus named-field leftovers) on `@validate_body`, plus
+53 routes (PRs #80–#96 plus named-field leftovers) on `@validate_body`, plus
 `games_batch_favorite` on `@validate_batch_body`. Prefixes below match the
 Flask blueprints (`/api` for `routes_apis/`).
 
@@ -130,6 +130,7 @@ Flask blueprints (`/api` for `routes_apis/`).
 | `routes_arr.py` | `POST /api/arr/download` (`arr_download`) | `ArrDownloadBody` |
 | `routes_arr.py` | `POST /api/arr/hardlink/preview` (`arr_hardlink_preview`) | `ArrHardlinkPreviewBody` |
 | `routes_apis/game.py` | `POST /api/games/batch/favorite` (`games_batch_favorite`) | `BatchFavoriteBody` (`@validate_batch_body`) |
+| `routes_apis/scan_unmatched_edit.py` | `POST /api/unmatched_folders/<id>/place_update` (`place_unmatched_update`) | `PlaceUnmatchedUpdateBody` |
 
 ### Contract notes for the adopted routes
 

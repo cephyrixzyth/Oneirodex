@@ -6,12 +6,11 @@ fetched per system on first use) and a strong touch / gamepad story, which is
 why the engine evaluation kept it as the second stack rather than a third
 launcher over the same WASM.
 
-Nothing here is vendored into the image. The operator drops an EmulatorJS
-release into ``EMULATORJS_HOST_PATH`` (Compose binds it onto
-``static/vendor/emulatorjs/data``) with ``scripts/fetch-emulatorjs.sh``; this
-module reports whether that happened, and the engine is offered only when it
-has. Same honesty shape as the WebRetro cores directory: an empty mount means
-"not installed", never a broken Play button.
+The pinned release is bundled in the image under
+``static/vendor/emulatorjs/data``. This module reports whether the bundle is
+present, and the engine is offered only when it is. Same honesty shape as the
+WebRetro cores directory: a missing loader means "not installed", never a
+broken Play button.
 
 ROMs never leave the box. The play shell hands EmulatorJS the same
 ``/api/downloadrom/<guid>`` URL the WebRetro room uses; cores and the loader
@@ -26,7 +25,7 @@ from oneirodex.platform import LibraryPlatform
 
 ENGINE_ID = 'emulatorjs'
 
-#: Relative to ``oneirodex/static``; the Compose bind lands here.
+#: Relative to ``oneirodex/static``; the Docker image bundle lands here.
 DATA_DIR_RELATIVE = Path('vendor') / 'emulatorjs' / 'data'
 
 #: The one file every EmulatorJS release has at its data root. Its presence is

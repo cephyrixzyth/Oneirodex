@@ -2,12 +2,12 @@
 
 > **Doc status:** Active
 
-**Applies to:** 1.0.0-beta and later · **Status:** shipped 2026-09-17 (BP-2), off until installed
+**Applies to:** 1.0.0-beta and later · **Status:** bundled by default; selectable at Admin → Emulators
 
-Oneirodex ships one browser player in the image: WebRetro (libretro cores in
-WASM). EmulatorJS is a second, self-contained shell — its own UI, its own core
-packaging, a stronger touch and gamepad story — that an operator can add
-without rebuilding the image. It is GPL-3 ([EmulatorJS/EmulatorJS](https://github.com/EmulatorJS/EmulatorJS));
+Oneirodex bundles WebRetro (libretro cores in WASM) and a pinned EmulatorJS
+release in the image. EmulatorJS is a second, self-contained shell — its own
+UI and core packaging — and can be disabled in Admin → Emulators. It is GPL-3
+([EmulatorJS/EmulatorJS](https://github.com/EmulatorJS/EmulatorJS));
 you are responsible for the licences of the libretro cores it bundles, same
 as for WebRetro's.
 
@@ -15,31 +15,18 @@ Nothing about the household leaves the box: the play shell hands EmulatorJS
 the same `/api/downloadrom/<guid>` URL WebRetro uses, and the loader, UI and
 cores are served from this origin. There is no CDN fallback in the shell.
 
-## Install
+## Availability
 
-1. Pick the host directory Compose binds as `EMULATORJS_HOST_PATH`
-   (default `/mnt/cache/appdata/oneirodex/emulatorjs`; set it in the live
-   `.env` if you want it elsewhere).
-2. Fetch a release into it:
-
-   ```bash
-   EMULATORJS_DATA_DIR=/mnt/cache/appdata/oneirodex/emulatorjs ./scripts/fetch-emulatorjs.sh
-   # or pin: ./scripts/fetch-emulatorjs.sh --version 4.2.3
-   ```
-
-   The script downloads the GitHub release zip, finds its `data/` root
-   (`loader.js` at the top), and copies it in. Cores under `data/cores/` are
-   fetched lazily by EmulatorJS's own loader from that same directory, so the
-   whole release is needed there.
-3. `docker compose up -d` (a recreate is enough — the bind is declared in
-   `docker-compose.yml`; no image rebuild).
-4. **Admin → Emulators → Browser play engine**: EmulatorJS is now selectable.
-   Until step 2 happens it shows disabled with *not installed on this server*.
+EmulatorJS is included in the container image from the pinned release. Keep it
+enabled to offer both browser engines, or turn **Enable EmulatorJS** off in
+Admin → Emulators. WebRetro remains the default unless an admin changes it.
+The manual fetch script remains available for local development; production
+images obtain the pinned archive during the Docker build.
 
 ## What it changes
 
-- The app detects the install by `<data dir>/loader.js`. Empty or missing
-  directory = engine not offered; the admin default cannot be set to it.
+- The app detects the install by `<data dir>/loader.js`. An admin can disable
+  the bundled engine without removing files from the image.
 - With EmulatorJS as the default, Play on a **supported** system opens
   `/static/vendor/emulatorjs/play.html`. Supported systems are the ones with a
   row in `EJS_CORE_BY_PLATFORM` (`oneirodex/utils/emulatorjs.py`): NES, SNES,
@@ -74,6 +61,6 @@ WebRetro. `browse_play_fields()` reports the *resolved* engine per member in
 
 ## Remove
 
-Empty the bind directory (or point `EMULATORJS_HOST_PATH` at an empty one) and
-recreate the container. If the admin default was EmulatorJS, the app falls back
-to WebRetro on read and says so in the settings panel.
+Turn **Enable EmulatorJS** off in Admin → Emulators. If EmulatorJS was the
+default engine, Oneirodex switches the server default to WebRetro and member
+play uses WebRetro.

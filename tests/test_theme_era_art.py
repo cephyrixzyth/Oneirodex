@@ -112,8 +112,8 @@ def test_art_carries_exactly_one_themed_colour():
 
 
 def test_build_preset_recolours_only_the_sentinel(tmp_path):
-    preset = next(p for p in PRESET_THEMES if p['slug'] == 'aurora')
-    target = tmp_path / 'aurora'
+    preset = next(p for p in PRESET_THEMES if p['slug'] == 'afterglow')
+    target = tmp_path / 'afterglow'
     build_preset(str(THEME_SOURCE), str(target), preset, 'fp')
 
     accent = preset_tokens(preset)['od-accent']
@@ -135,7 +135,7 @@ def test_art_is_protected_from_the_sync_pass(tmp_path):
     themes = tmp_path / 'themes'
     themes.mkdir()
     install_preset_themes(str(themes), str(THEME_SOURCE))
-    art = themes / 'aurora' / 'art' / 'era' / 'wood_den_80s.svg'
+    art = themes / 'afterglow' / 'art' / 'era' / 'wood_den_80s.svg'
     recoloured = art.read_text(encoding='utf-8')
     sync_preset_themes(str(themes), str(THEME_SOURCE))
     assert art.read_text(encoding='utf-8') == recoloured
@@ -150,8 +150,8 @@ def test_missing_art_in_the_source_is_not_permanent_staleness(tmp_path):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text('{}' if rel.endswith('.json') else '/* x */', encoding='utf-8')
 
-    preset = next(p for p in PRESET_THEMES if p['slug'] == 'ember')
-    target = tmp_path / 'ember'
+    preset = next(p for p in PRESET_THEMES if p['slug'] == 'afterglow')
+    target = tmp_path / 'afterglow'
     fingerprint = source_fingerprint(str(source))
     build_preset(str(source), str(target), preset, fingerprint)
 
@@ -160,8 +160,8 @@ def test_missing_art_in_the_source_is_not_permanent_staleness(tmp_path):
 
 
 def test_a_preset_missing_its_art_rebuilds(tmp_path):
-    preset = next(p for p in PRESET_THEMES if p['slug'] == 'forest')
-    target = tmp_path / 'forest'
+    preset = next(p for p in PRESET_THEMES if p['slug'] == 'greenhouse')
+    target = tmp_path / 'greenhouse'
     fingerprint = source_fingerprint(str(THEME_SOURCE))
     build_preset(str(THEME_SOURCE), str(target), preset, fingerprint)
     assert preset_needs_rebuild(str(target), preset, fingerprint, str(THEME_SOURCE)) is False

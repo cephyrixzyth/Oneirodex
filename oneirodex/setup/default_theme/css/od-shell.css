@@ -645,8 +645,7 @@ body.od-shell-host > #admin-legacy-content[hidden] {
   100% { transform: scale(1.12) rotate(0deg); }
 }
 
-.od-rail__link:hover .od-icon,
-.od-rail__link:focus-visible .od-icon {
+.od-rail__link.is-active .od-icon {
   animation: od-rail-icon-pop var(--od-motion-normal, 240ms) var(--od-motion-ease, ease) forwards;
 }
 
@@ -726,59 +725,60 @@ body.od-shell-host > #admin-legacy-content[hidden] {
 }
 
 /* Favorites — a heartbeat, twice, the way a heart actually reads. */
-.od-rail__link[data-rail-item='favorites']:hover .od-icon,
-.od-rail__link[data-rail-item='favorites']:focus-visible .od-icon {
-  animation: od-rail-beat 900ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='favorites'].is-active .od-icon {
+  animation: od-rail-beat 900ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Downloads — the arrow drops, then the next one drops. */
-.od-rail__link[data-rail-item='downloads']:hover .od-icon,
-.od-rail__link[data-rail-item='downloads']:focus-visible .od-icon {
-  animation: od-rail-fall 850ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='downloads'].is-active .od-icon {
+  animation: od-rail-fall 850ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Big Picture and VR — a controller being picked up. */
-.od-rail__link[data-rail-item='big-picture']:hover .od-icon,
-.od-rail__link[data-rail-item='big-picture']:focus-visible .od-icon,
-.od-rail__link[data-rail-item='vr']:hover .od-icon,
-.od-rail__link[data-rail-item='vr']:focus-visible .od-icon {
-  animation: od-rail-shake 520ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='big-picture'].is-active .od-icon,
+.od-rail__link[data-rail-item='vr'].is-active .od-icon,
+.od-rail__link[data-rail-item='vr'].is-active .od-icon {
+  animation: od-rail-shake 520ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Release calendar — a page turning over. */
-.od-rail__link[data-rail-item='calendar']:hover .od-icon,
-.od-rail__link[data-rail-item='calendar']:focus-visible .od-icon {
-  animation: od-rail-flip 900ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='calendar'].is-active .od-icon {
+  animation: od-rail-flip 900ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Discover — a beam sweeping across. */
-.od-rail__link[data-rail-item='discover']:hover .od-icon,
-.od-rail__link[data-rail-item='discover']:focus-visible .od-icon {
-  animation: od-rail-sweep 1100ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='discover'].is-active .od-icon {
+  animation: od-rail-sweep 1100ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Wishlist and Acquire — the thing you are reaching for lifts toward you. */
-.od-rail__link[data-rail-item='wishlist']:hover .od-icon,
-.od-rail__link[data-rail-item='wishlist']:focus-visible .od-icon,
-.od-rail__link[data-rail-item='acquire']:hover .od-icon,
-.od-rail__link[data-rail-item='acquire']:focus-visible .od-icon {
-  animation: od-rail-rise 800ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='wishlist'].is-active .od-icon,
+.od-rail__link[data-rail-item='acquire'].is-active .od-icon,
+.od-rail__link[data-rail-item='acquire'].is-active .od-icon {
+  animation: od-rail-rise 800ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Notifications — a bell rung once per cycle. Playtime's clock ticks the same
    way, which is the same gesture read differently. */
-.od-rail__link[data-rail-item='notifications']:hover .od-icon,
-.od-rail__link[data-rail-item='notifications']:focus-visible .od-icon,
-.od-rail__link[data-rail-item='playtime']:hover .od-icon,
-.od-rail__link[data-rail-item='playtime']:focus-visible .od-icon {
-  animation: od-rail-tick 700ms var(--od-motion-ease, ease) infinite;
+.od-rail__link[data-rail-item='notifications'].is-active .od-icon,
+.od-rail__link[data-rail-item='playtime'].is-active .od-icon,
+.od-rail__link[data-rail-item='playtime'].is-active .od-icon {
+  animation: od-rail-tick 700ms var(--od-motion-ease, ease) 1 forwards;
 }
 
 /* Updates — the refresh mark turns, once per pass. */
-.od-rail__link[data-rail-item='updates']:hover .od-icon,
-.od-rail__link[data-rail-item='updates']:focus-visible .od-icon {
-  animation: od-rail-spin 1200ms linear infinite;
+.od-rail__link[data-rail-item='updates'].is-active .od-icon {
+  animation: od-rail-spin 1200ms linear 1 forwards;
 }
+
+
+/* Theme rooms give the selection motion a distinct hand while the glyph art and accent already follow the active preset. */
+html[data-era='wood_den_80s'] .od-rail__link.is-active[data-rail-item] .od-icon,
+html[data-era='arcade_cabinet'] .od-rail__link.is-active[data-rail-item] .od-icon { animation-timing-function: steps(4, end); }
+html[data-era='teen_bedroom_90s'] .od-rail__link.is-active[data-rail-item] .od-icon,
+html[data-era='carpet_den_late_90s'] .od-rail__link.is-active[data-rail-item] .od-icon { animation-timing-function: cubic-bezier(.2, 1.6, .4, 1); }
+html[data-era='media_center_00s'] .od-rail__link.is-active[data-rail-item] .od-icon,
+html[data-era='desk'] .od-rail__link.is-active[data-rail-item] .od-icon { animation-timing-function: cubic-bezier(.16, 1, .3, 1); }
 
 @media (prefers-reduced-motion: reduce) {
   /* The size change is the affordance and stays; the travel between the two
@@ -786,10 +786,8 @@ body.od-shell-host > #admin-legacy-content[hidden] {
      `:where()` keeps this at zero specificity on the attribute selectors above,
      so one rule retires every per-destination animation rather than needing a
      matching override for each. */
-  .od-rail__link:hover .od-icon,
-  .od-rail__link:focus-visible .od-icon,
-  .od-rail__link[data-rail-item]:hover .od-icon,
-  .od-rail__link[data-rail-item]:focus-visible .od-icon {
+  .od-rail__link.is-active .od-icon,
+  .od-rail__link.is-active[data-rail-item] .od-icon {
     animation: none;
     transform: scale(1.12);
   }

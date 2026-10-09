@@ -1,9 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="No avatar chosen">
-  <title>No avatar chosen</title>
-  <g fill="none" stroke="#8a94a3" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M44 46h40c13 0 21 9 24 22l6 25c2 9-3 15-11 15-6 0-10-3-14-9l-8-12H47l-8 12c-4 6-8 9-14 9-8 0-13-6-11-15l6-25c3-13 11-22 24-22z"/>
-    <path d="M44 70h16M52 62v16"/>
-  </g>
-  <circle cx="84" cy="66" r="5.5" fill="#8a94a3"/>
-  <circle cx="95" cy="77" r="5.5" fill="#8a94a3"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Oneirodex avatar"><title>Oneirodex avatar</title><circle cx="64" cy="64" r="58" fill="#12161c" stroke="#2fd67b" stroke-width="4"/><path d="M64 19 99 39v40L64 99 29 79V39z" fill="#12161c" stroke="#8a94a3" stroke-width="4" stroke-linejoin="round"/><path d="m64 31 23 13v27L64 84 41 71V44z" fill="#2fd67b"/><path d="m64 42 13 8v15l-13 8-13-8V50z" fill="#12161c"/><circle cx="64" cy="57" r="5" fill="#8a94a3"/></svg>

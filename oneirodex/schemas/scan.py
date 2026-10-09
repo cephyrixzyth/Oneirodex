@@ -1,7 +1,7 @@
 """Request models for ``oneirodex/routes_apis/scan.py`` and its H-D.4 siblings
 ``scan_unmatched.py`` / ``scan_unmatched_edit.py``.
 
-Nothing is adopted here yet. The JSON routes in those modules are almost all
+The JSON routes in those modules are almost all
 librarian/admin batch endpoints that:
 
 * return partial-success bodies via ``_parse_batch_ids`` whose rejection
@@ -21,3 +21,13 @@ See docs/dev/pydantic-adoption.md for the follow-up plan.
 """
 
 from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class PlaceUnmatchedUpdateBody(BaseModel):
+    """Optional admin override for the root title when placing an update."""
+
+    game_root_name: str | None = Field(default=None, max_length=255)
+
+    model_config = ConfigDict(extra='forbid')

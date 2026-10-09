@@ -232,6 +232,7 @@ export function AdminSideRail({
                               : 'od-rail__link od-rail__link--sub'
                           }
                           href={sub.href}
+                          data-rail-item={hubIcon(sub.label)}
                           onClick={onCloseDrawer}
                           aria-current={subActive ? 'page' : undefined}
                         >

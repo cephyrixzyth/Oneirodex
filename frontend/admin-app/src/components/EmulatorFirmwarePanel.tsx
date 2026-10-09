@@ -488,30 +488,35 @@ export function EmulatorFirmwarePanel() {
           {cores.length === 0 ? (
             <p className="od-empty">No cores declare firmware requirements.</p>
           ) : (
-            <ul className="od-list">
-              {cores.map((core) => (
-                <li key={core.core} className="od-list__row">
-                  <strong>{coreLabel(core.core)}</strong>{' '}
-                  <span>
-                    {core.ready
-                      ? 'ready'
-                      : core.misplaced?.length
-                        ? 'files found, but in a subfolder'
-                        : 'missing system files'}
-                  </span>
-                  <p className="od-error__detail">
-                    Accepts: {(core.required || []).join(', ')}
-                    {core.present?.length ? ` · present: ${core.present.join(', ')}` : ''}
-                  </p>
-                  {core.misplaced?.length ? (
+            <details className="od-fold">
+              <summary className="od-fold__summary">
+                Core requirements · {ready} ready · {missing} need files
+              </summary>
+              <ul className="od-list">
+                {cores.map((core) => (
+                  <li key={core.core} className="od-list__row">
+                    <strong>{coreLabel(core.core)}</strong>{' '}
+                    <span>
+                      {core.ready
+                        ? 'ready'
+                        : core.misplaced?.length
+                          ? 'files found, but in a subfolder'
+                          : 'missing system files'}
+                    </span>
                     <p className="od-error__detail">
-                      Move to the firmware root to load:{' '}
-                      {core.misplaced.map((f) => `${f.subdir}/${f.name}`).join(', ')}
+                      Accepts: {(core.required || []).join(', ')}
+                      {core.present?.length ? ` · present: ${core.present.join(', ')}` : ''}
                     </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+                    {core.misplaced?.length ? (
+                      <p className="od-error__detail">
+                        Move to the firmware root to load:{' '}
+                        {core.misplaced.map((f) => `${f.subdir}/${f.name}`).join(', ')}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           <h3 className="od-section-head__title">Files on volume</h3>
@@ -522,17 +527,22 @@ export function EmulatorFirmwarePanel() {
               nothing, check the path the volume is actually mounted at.
             </p>
           ) : (
-            <ul className="od-list">
-              {files.map((file) => (
-                <li key={`${file.subdir}/${file.name}`} className="od-list__row">
-                  <code>{file.subdir ? `${file.subdir}/${file.name}` : file.name}</code>{' '}
-                  <span>{formatBytes(file.size)}</span>
-                  {file.loadable === false ? (
-                    <span className="od-badge od-badge--warn">subfolder</span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <details className="od-fold">
+              <summary className="od-fold__summary">
+                Firmware files · {files.length} uploaded
+              </summary>
+              <ul className="od-list">
+                {files.map((file) => (
+                  <li key={`${file.subdir}/${file.name}`} className="od-list__row">
+                    <code>{file.subdir ? `${file.subdir}/${file.name}` : file.name}</code>{' '}
+                    <span>{formatBytes(file.size)}</span>
+                    {file.loadable === false ? (
+                      <span className="od-badge od-badge--warn">subfolder</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </>
       ) : null}

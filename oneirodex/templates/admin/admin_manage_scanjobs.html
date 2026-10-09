@@ -37,13 +37,14 @@
 <meta name="selected-library-uuid" content="{{ selected_library_uuid }}">
 <script src="{{ url_for('static', filename='vendor/sortablejs/1.15.2/Sortable.min.js') }}"></script>
 
-{% if enable_new_chrome and (active_tab == 'auto' or active_tab == 'manual' or not active_tab) %}
+{% if enable_new_chrome and (active_tab == 'auto' or active_tab == 'manual' or active_tab == 'jobs' or not active_tab) %}
         {# LHN owns Libraries / tools / unmatched / filters / … — THN only
            switches Auto vs Manual while on Scan. #}
         {% call chrome.contextbar(
              views=[
                ('auto', 'Auto', url_for('admin2.scan_management', active_tab='auto')),
                ('manual', 'Manual', url_for('admin2.scan_management', active_tab='manual')),
+               ('jobs', 'Jobs', url_for('admin2.scan_management', active_tab='jobs')),
              ],
              active=active_tab or 'auto') %}
         {% endcall %}
@@ -66,7 +67,6 @@
              views=[],
              active='unmatched',
              label='Unmatched',
-             summary='Resolve unmatched',
              actions_slot='page') %}
           <form action="" method="post" class="od-contextbar__form">
             {{ csrf_form.csrf_token }}
@@ -293,9 +293,6 @@
                                         <button type="submit" name="submit" value="AutoScan" class="od-cbtn od-cbtn--primary" id="autoScanStartBtn">
                                             {{ icons.icon('play') }} Start Scan
                                         </button>
-                                        <button type="button" class="od-cbtn" id="openScanJobsModalBtn" data-bs-toggle="modal" data-bs-target="#scanJobsModal">
-                                            {{ icons.icon('tasks') }} Scan jobs
-                                        </button>
                                         <div id="loadingSpinner" class="loading-spinner" style="display: none;" role="status" aria-live="polite">
                                             <span class="od-spinner od-spinner--sm" aria-hidden="true"></span>
                                             <span class="visually-hidden">Loading folders…</span>
@@ -422,9 +419,6 @@
                             </button>
                             <button type="submit" name="submit" value="ManualScan" class="od-cbtn od-cbtn--primary" id="manualListGamesBtn">
                                 {{ icons.icon('play') }} List Games
-                            </button>
-                            <button type="button" class="od-cbtn" id="openScanJobsModalBtnManual" data-bs-toggle="modal" data-bs-target="#scanJobsModal">
-                                {{ icons.icon('tasks') }} Scan jobs
                             </button>
                             <div id="loadingSpinnerManual" class="loading-spinner" style="display: none;" role="status" aria-live="polite">
                                 <span class="od-spinner od-spinner--sm" aria-hidden="true"></span>
@@ -905,25 +899,6 @@
         </div>
     </div>
 </div>
-
-{% if active_tab == 'auto' or active_tab == 'manual' or not active_tab %}
-<!-- Compact Scan Jobs modal (Auto/Manual only — jobs tab uses the full panel) -->
-<div class="modal fade" id="scanJobsModal" tabindex="-1" aria-labelledby="scanJobsModalTitle">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="scanJobsModalTitle">{{ icons.icon('tasks', size=18) }} Scan Jobs</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                {% with compact=true %}
-                  {% include 'admin/partials/admin_scan_jobs_panel.html' %}
-                {% endwith %}
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <!-- Write Permissions Error Modal -->
 <div class="modal fade" id="permissionsErrorModal" tabindex="-1">

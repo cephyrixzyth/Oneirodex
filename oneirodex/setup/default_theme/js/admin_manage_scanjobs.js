@@ -233,6 +233,9 @@ function resolveUnmatchedSearchName(folder) {
         (folder.display_name != null && String(folder.display_name).trim()) ||
         '';
     if (soft) return soft;
+    if (folder.suggested_search_name != null && String(folder.suggested_search_name).trim()) {
+        return String(folder.suggested_search_name).trim();
+    }
     if (folder.folder_name != null && String(folder.folder_name).trim()) {
         return String(folder.folder_name).trim();
     }
@@ -447,8 +450,8 @@ function buildDupeOfHtml(folder) {
       <div class="unmatched-dupe-compare" data-dupe-uuid="${escapeHtml((hit && hit.uuid) || '')}" role="group" aria-label="Duplicate side-by-side comparison">
         <div class="unmatched-dupe-compare__banner">
           <span class="unmatched-dupe-of__label">Compare</span>
-          <span class="unmatched-dupe-compare__banner-text">Folder vs library game — path, size, and date when the API provides them</span>
-          <button type="button" class="btn btn-sm btn-outline-light unmatched-dupe-compare__pop">Pop out</button>
+          <span class="unmatched-dupe-compare__banner-text">Review folder and library details side by side</span>
+          <button type="button" class="od-cbtn unmatched-dupe-compare__pop">Compare details</button>
         </div>
         <div class="unmatched-dupe-compare__grid">
           <div class="unmatched-dupe-compare__side unmatched-dupe-compare__side--folder">
@@ -1038,16 +1041,10 @@ function isScanPaneActive(paneId) {
     return Boolean(pane && pane.classList.contains('active'));
 }
 
-function isScanJobsModalOpen() {
-    const modal = document.getElementById('scanJobsModal');
-    return Boolean(modal && modal.classList.contains('show'));
-}
-
-/** Auto pane, Scan Jobs page, or the compact modal — any surface that shows the jobs table. */
+/** Auto pane or the Scan → Jobs view — the only surfaces that show the jobs table. */
 function isScanJobsSurfaceVisible() {
     return isScanPaneActive('autoScan')
-        || isScanPaneActive('scanJobs')
-        || isScanJobsModalOpen();
+        || isScanPaneActive('scanJobs');
 }
 
 /** API may send last_run as "Not Available" when unset — only real parseable stamps count. */
@@ -1644,15 +1641,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    const scanJobsModalEl = document.getElementById('scanJobsModal');
-    if (scanJobsModalEl) {
-        scanJobsModalEl.addEventListener('shown.bs.modal', () => {
-            updateScanJobs();
-        });
-    }
-
-
-
     function interceptScanFormSubmit(form) {
         if (!form || form.dataset.scanConflictBound) return;
         form.dataset.scanConflictBound = '1';
@@ -1896,8 +1884,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 : 'Utility';
                         const isSuggested = suggestedKind === itemKind;
                         const btnClass = isSuggested
-                            ? 'btn btn-outline-success btn-sm mark-kind-btn is-suggested'
-                            : 'btn btn-outline-light btn-sm mark-kind-btn';
+                            ? 'od-cbtn mark-kind-btn is-suggested'
+                            : 'od-cbtn mark-kind-btn';
                         const title = isSuggested
                             ? `Suggested: catalog as ${fullLabel} without an IGDB game match`
                             : `Catalog as ${fullLabel} without an IGDB game match`;
@@ -1929,39 +1917,45 @@ document.addEventListener('DOMContentLoaded', function() {
                         : '';
                     const dupeFixButtons = isDuplicate
                         ? `
-                        <button type="button" class="btn btn-outline-light btn-sm unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="merge" title="Keep library game; clear this duplicate row">Merge</button>
-                        <button type="button" class="btn btn-outline-light btn-sm unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="keep" title="Reclassify as Unmatched for further review">Keep</button>
-                        <button type="button" class="btn btn-outline-light btn-sm unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="ignore" title="Ignore this duplicate folder">Ignore</button>`
+                        <button type="button" class="od-cbtn unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="merge" title="Keep library game; clear this duplicate row">Merge</button>
+                        <button type="button" class="od-cbtn unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="keep" title="Reclassify as Unmatched for further review">Keep</button>
+                        <button type="button" class="od-cbtn unmatched-fix-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-fix-action="ignore" title="Ignore this duplicate folder">Ignore</button>`
+                        : '';
+                    const scanCorrectionButton = folder.status === 'Unmatched'
+                        ? (folder.is_bare_update_package
+                            ? `<button type="button" class="od-cbtn unmatched-place-update-btn" data-folder-id="${escapeHtml(String(folder.id))}" data-game-root-name="${escapeHtml(folder.suggested_search_name || '')}" title="Move this update under its game folder">Place update</button>`
+                            : `<button type="button" class="od-cbtn unmatched-retry-match-btn" data-folder-id="${escapeHtml(String(folder.id))}" title="Retry matching with current metadata providers">Retry match</button>`)
                         : '';
                     const actionsBar = `
                         <details class="unmatched-row-menu">
                           <summary class="od-cbtn unmatched-row-menu__summary">Actions</summary>
                           <div class="unmatched-row-actions od-menu-surface" role="toolbar" aria-label="Actions for ${escapedDisk}">
-                        <button type="button" class="btn btn-outline-light btn-sm reveal-path-btn" data-path="${escapedPath}" title="Open path (companion / copy) — disk tidy this wave; no disk rename">Open path</button>
+                        <button type="button" class="od-cbtn reveal-path-btn" data-path="${escapedPath}" title="Open path (companion / copy) — disk tidy this wave; no disk rename">Open path</button>
                         <form action="/add_game_manual" method="GET" class="unmatched-identify-form" style="display: inline;">
                             <input type="hidden" name="full_disk_path" value="${escapedPath}">
                             <input type="hidden" name="library_uuid" value="${escapeHtml(folder.library_uuid || '')}">
                             <input type="hidden" name="platform_name" value="${escapeHtml(folder.platform_name || '')}">
                             <input type="hidden" name="platform_id" value="${escapeHtml(folder.platform_id || '')}">
                             <input type="hidden" name="from_unmatched" value="true">
-                            <button type="submit" class="btn btn-outline-light btn-sm" title="Identify as game — Fix search uses Search name when set">Fix search</button>
+                            <button type="submit" class="od-cbtn" title="Identify as game — Fix search uses Search name when set">Fix search</button>
                         </form>
                         ${markKindButtons}
+                        ${scanCorrectionButton}
                         ${dupeFixButtons}
                         ${badMatchControl(folder)}
-                        <button
+                        ${!isDuplicate ? `<button
                             type="button"
                             data-od-click="toggleIgnoreStatus"
                             data-od-arg="${folder.id}"
-                            class="btn btn-outline-light btn-sm"
+                            class="od-cbtn"
                             title="Ignored folders are not scanned">
                             ${ignoreLabel}
-                        </button>
-                        <button type="button" data-od-click="clearEntry" data-od-arg="${folder.id}" class="btn btn-outline-light btn-sm" title="Remove from unmatched list">Clear</button>
+                        </button>` : ''}
+                        <button type="button" data-od-click="clearEntry" data-od-arg="${folder.id}" class="od-cbtn" title="Remove from unmatched list">Clear</button>
                         <form class="delete-folder-form" style="display: inline;">
                             <input type="hidden" name="csrf_token" value="${csrfToken}">
                             <input type="hidden" name="folder_path" value="${escapedPath}">
-                            <button type="submit" class="btn btn-outline-light btn-sm" title="Delete the folder from disk">Delete</button>
+                            <button type="submit" class="od-cbtn od-cbtn--danger" title="Delete the folder from disk">Delete</button>
                         </form>
                           </div>
                         </details>
@@ -2227,6 +2221,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            const retryMatchBtn = event.target.closest('.unmatched-retry-match-btn');
+            if (retryMatchBtn) {
+                retryUnmatchedMatch(retryMatchBtn.dataset.folderId || '', retryMatchBtn);
+                return;
+            }
+
+            const placeUpdateBtn = event.target.closest('.unmatched-place-update-btn');
+            if (placeUpdateBtn) {
+                placeUnmatchedUpdate(
+                    placeUpdateBtn.dataset.folderId || '',
+                    placeUpdateBtn.dataset.gameRootName || '',
+                    placeUpdateBtn,
+                );
+                return;
+            }
+
             const markBtn = event.target.closest('.mark-kind-btn');
             if (markBtn) {
                 markUnmatchedKind(
@@ -2279,6 +2289,71 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         unmatchedTableBody.dataset.actionsWired = 'true';
+    }
+
+    function unmatchedActionRequest(folderId, action, body, button) {
+        if (!folderId) return Promise.reject(new Error('Missing unmatched folder id'));
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        }
+        return fetch(`/api/unmatched_folders/${encodeURIComponent(folderId)}/${action}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: CSRFUtils.getHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(body || {}),
+        })
+            .then((response) => response.json().catch(() => ({})).then((data) => {
+                if (!response.ok) {
+                    throw new Error(action === 'retry_match'
+                        ? 'Could not retry metadata matching'
+                        : 'Could not place the update folder');
+                }
+                return data;
+            }))
+            .finally(() => {
+                if (button) {
+                    button.disabled = false;
+                    button.removeAttribute('aria-busy');
+                }
+            });
+    }
+
+    function retryUnmatchedMatch(folderId, button) {
+        unmatchedActionRequest(folderId, 'retry_match', {}, button)
+            .then((data) => {
+                showToast(
+                    data.matched
+                        ? `Matched “${data.name || data.search_name || 'game'}” using current metadata providers`
+                        : `No unique metadata match found for “${data.search_name || 'folder'}”`,
+                    data.matched ? 'success' : 'info',
+                );
+                return updateUnmatchedFolders();
+            })
+            .catch((err) => showToast(err?.message || 'Could not retry matching', 'info'));
+    }
+
+    function placeUnmatchedUpdate(folderId, suggestedName, button) {
+        const gameRootName = window.prompt(
+            'Move this update into the game folder named:',
+            suggestedName || '',
+        );
+        if (gameRootName == null) return;
+        if (!gameRootName.trim()) {
+            showToast('Enter the game folder name', 'info');
+            return;
+        }
+        unmatchedActionRequest(folderId, 'place_update', { game_root_name: gameRootName.trim() }, button)
+            .then((data) => {
+                showToast(
+                    data.created_game_root
+                        ? `Created “${data.game_root_name}” and moved the update into it`
+                        : `Moved the update into “${data.game_root_name}”`,
+                    'success',
+                );
+                return updateUnmatchedFolders();
+            })
+            .catch((err) => showToast(err?.message || 'Could not place update folder', 'info'));
     }
 
     function fixDuplicateFolder(folderId, action, button) {

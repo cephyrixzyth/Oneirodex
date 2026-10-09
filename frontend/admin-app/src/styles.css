@@ -205,15 +205,16 @@ body.admin-shell.modal-open > .modal-backdrop {
 }
 
 .od-admin-legacy {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 0.65rem 1.25rem 1.5rem;
+  max-width: none;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: calc(var(--od-topbar-h, 3.25rem) + 0.75rem) var(--od-gutter, 1rem) 1.5rem;
+  background: var(--od-bg);
   color: var(--od-text);
 }
 
 .od-admin-legacy .card,
-.od-admin-legacy .container-settings,
-.od-admin-legacy .od-adminpage,
 .od-admin-legacy .glass-panel {
   background: var(--od-surface);
   color: var(--od-text);
@@ -307,8 +308,52 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
    min-width: 800px, which overflowed the admin column beside the rail. */
 .od-admin-legacy .container-settings {
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   width: 100%;
+}
+
+.od-fold {
+  margin-block: 0.75rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: color-mix(in srgb, var(--od-surface) 78%, transparent);
+}
+
+.od-fold__summary {
+  padding: 0.8rem 1rem;
+  color: var(--od-text);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.od-fold > .od-list {
+  margin: 0;
+  padding: 0 1rem 0.8rem;
+}
+
+.od-admin-legacy .container-settings,
+.od-admin-legacy .od-adminpage {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.od-admin-legacy .settingsform-admin__sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.od-admin-legacy .settingsform-admin__sections > .settings-section {
+  min-width: 0;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border: 1px solid color-mix(in srgb, var(--od-border) 70%, transparent);
+  border-radius: var(--od-radius-lg);
+  background: color-mix(in srgb, var(--od-surface) 70%, transparent);
 }
 
 /* Integrations (and other fill panes): use the whole main column. Nested SMTP

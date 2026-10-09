@@ -55,10 +55,11 @@ browse / details Play
 
 | Setting | Scope | Values |
 |---|---|---|
-| `browser_player_default` | Admin (GlobalSettings) | `webretro` · `emulatorjs` — the second is accepted only when an EmulatorJS release is in the data bind ([runbook](../runbooks/emulatorjs.md), **landed 2026-09-17**) |
-| `browser_player_allow_member_choice` | Admin | bool (stored; no member UI yet — two engines exist now, the preference surface is the next slice) |
+| `browser_player_default` | Admin (GlobalSettings) | `webretro` · `emulatorjs` — the pinned EmulatorJS release is bundled in the image ([runbook](../runbooks/emulatorjs.md)) |
+| `browser_player_allow_member_choice` | Admin | bool — enables the member preference while both engines are enabled |
+| `browser_player_emulatorjs_enabled` | Admin | bool — defaults on; disabling it returns the default to WebRetro |
 | `nostalgist_nes_pilot` | Admin | bool — **landed**, default **off**. NES `play_url` → `/static/vendor/nostalgist/play.html` |
-| `browser_player_preference` | Member prefs | planned: `webretro` · `emulatorjs` · `default` |
+| `browser_player_preference` | Member prefs | `webretro` · `emulatorjs` · default |
 | `webrcade_sidecar_url` | Admin | empty = off; else base URL of private webЯcade |
 | `webrcade_feed_export` | Admin | bool — expose generated feed for that instance |
 
@@ -73,10 +74,10 @@ Honesty badges stay per-platform × **capability**, not per-engine marketing. If
 
 ### EmulatorJS (engine B)
 
-1. Vendor or release-pin EmulatorJS + cores (license pass: GPL-3 + core licences — same class of problem as WebRetro).
-2. Map `LibraryPlatform` → EmulatorJS system/core ids (parallel to `webretro_cores`).
-3. Wire save/load and BIOS paths through the same admin BIOS tree where filenames match.
-4. Per-platform matrix row: Browser (WebRetro) / Browser (EmulatorJS) / either.
+EmulatorJS 4.2.3 is bundled during Docker image build. Its own UI and core data
+are served from this origin. The app maps supported `LibraryPlatform` values
+to EmulatorJS core ids; unsupported systems and firmware-dependent systems use
+WebRetro. Continue expanding platform support only after real ROM verification.
 
 ### webЯcade sidecar (C)
 
@@ -99,9 +100,9 @@ Honesty badges stay per-platform × **capability**, not per-engine marketing. If
 
 | Wave | Deliverable |
 |---|---|
-| **BP-0** | **Landed 2026-08-28.** This note + `GET`/`PUT /api/browser-player-settings` + `browser_player` / `browser_players_available` on every play payload. Default and available list are `webretro` only — EmulatorJS is a recognized name but rejected as default until that shell ships. |
+| **BP-0** | **Landed 2026-08-28.** This note + `GET`/`PUT /api/browser-player-settings` + `browser_player` / `browser_players_available` on every play payload. |
 | **BP-1** | **Landed 2026-08-28 (scaffold).** Vendored `nostalgist@0.21.1` + `play.html`. Flag `nostalgist_nes_pilot` (default **off**) under `settings.browser_player` swaps NES `play_url` to `/static/vendor/nostalgist/play.html` using WebRetro `nestopia` WASM + `/api/downloadrom`. Save-bridge / rooms / EmulatorJS still WebRetro-only. |
-| **BP-2** | EmulatorJS shell for the same pilot; admin default + member choice |
+| **BP-2** | **Landed 2026-10-08.** Docker image bundles EmulatorJS 4.2.3; Admin → Emulators can disable it, choose the engine default, and allow member choice. |
 | **BP-3** | Expand matrix; koin.js optional React chrome |
 | **BP-4** | webЯcade feed export + sidecar runbook |
 

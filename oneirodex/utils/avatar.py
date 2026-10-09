@@ -114,6 +114,9 @@ def avatar_url(path: str | None, *, theme: str | None = None) -> str:
         theme = _current_theme()
 
     root = os.path.join(library_dir(), 'themes')
+    from oneirodex.utils.preset_themes import canonical_theme_slug
+
+    theme = canonical_theme_slug(theme)
     for candidate in (theme, 'default'):
         if not candidate:
             continue
@@ -134,7 +137,9 @@ def _current_theme() -> str:
         if current_user.is_authenticated:
             prefs = getattr(current_user, 'preferences', None)
             if prefs is not None:
-                return getattr(prefs, 'theme', None) or 'default'
+                from oneirodex.utils.preset_themes import canonical_theme_slug
+
+                return canonical_theme_slug(getattr(prefs, 'theme', None))
     except Exception:  # noqa: BLE001 — outside a request, or no login manager
         pass
     return 'default'

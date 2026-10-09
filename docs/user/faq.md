@@ -128,7 +128,7 @@ NES, SNES, N64, Game Boy family, DS, Virtual Boy, PS1, the Genesis family includ
 ## Themes & icons
 
 **Theme vs icon pack?**  
-- Color theme = **decade room or colour cabinet** (wallpaper, window, posters, floor — same setting language as browser play — plus palette/chrome). Icon pack = glyph style (outline, filled, …) — still overridable. Independent after save — [preferences-themes.md](preferences-themes.md). Preferences is sectioned (Library · Look & density · Game language) and uses a **grouped room-card picker** (Decade rooms · Colour cabinets · Installed uploads), not a tiny swatch grid. **Preferences is the only place a theme is chosen** — admins included; the separate admin picker was retired in favour of one surface that cannot disagree with itself.
+- Color theme = one of six built-in designs, each with a room atmosphere, palette, and shape language. Icon pack = glyph style (outline, filled, …) — still overridable. Uploaded theme packs remain installed separately — [preferences-themes.md](preferences-themes.md). Preferences is the only place a theme is chosen; admins included.
 
 **Loading spinners look wrong / stuck on ring?**  
 Household mode is Admin → Themes → **Loading icons** (rotate catalogue or lock one). Motif CSS needs **Reset Default Themes** after Wave 2d deploy — [themes-reset.md](../admin/themes-reset.md).

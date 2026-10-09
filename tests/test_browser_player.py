@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from flask import Flask
 from flask_login import login_user
 
 from oneirodex.models import GlobalSettings, User
 from oneirodex.utils.browser_player import (
     DEFAULTS,
     SHIPPED_ENGINES,
+    available_engines,
     browser_play_href,
     get_browser_player_settings,
     normalize_browser_player_settings,
@@ -65,6 +67,7 @@ def test_normalize_defaults():
     assert cleaned['webrcade_feed_export'] is False
     assert cleaned['browser_player_allow_member_choice'] is False
     assert cleaned['nostalgist_nes_pilot'] is False
+    assert cleaned['browser_player_emulatorjs_enabled'] is True
 
 
 def test_normalize_rejects_unwired_engine():
@@ -91,6 +94,14 @@ def test_play_engine_fields_without_app():
     assert fields['browser_player'] == 'webretro'
     assert fields['browser_players_available'] == ['webretro']
     assert fields['nostalgist_nes_pilot'] is False
+
+
+def test_available_engines_in_plain_app_context_skips_unavailable_database(monkeypatch):
+    app = Flask(__name__)
+    monkeypatch.setattr('oneirodex.utils.emulatorjs.emulatorjs_installed', lambda: True)
+
+    with app.app_context():
+        assert available_engines() == ('webretro', 'emulatorjs')
 
 
 def test_browse_play_fields_include_engine(monkeypatch):
@@ -221,6 +232,19 @@ def test_emulatorjs_absent_is_not_offered(tmp_path, monkeypatch):
     assert available_engines() == ('webretro',)
     with pytest.raises(ValueError, match='not installed'):
         normalize_browser_player_settings({'browser_player_default': 'emulatorjs'})
+
+
+def test_disabling_emulatorjs_falls_back_from_emulatorjs_default(tmp_path, monkeypatch):
+    from oneirodex.utils.browser_player import normalize_browser_player_settings
+
+    _install_emulatorjs(tmp_path, monkeypatch)
+    cleaned = normalize_browser_player_settings({
+        'browser_player_default': 'emulatorjs',
+        'browser_player_emulatorjs_enabled': False,
+    })
+    assert cleaned['browser_player_default'] == 'webretro'
+    assert cleaned['browser_player_emulatorjs_enabled'] is False
+    assert cleaned['browser_players_available'] == ['webretro']
 
 
 def test_emulatorjs_present_is_offered_and_accepted(tmp_path, monkeypatch):

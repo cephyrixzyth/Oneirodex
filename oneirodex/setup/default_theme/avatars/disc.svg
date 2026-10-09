@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Disc">
-  <title>Disc</title>
-  <circle cx="64" cy="64" r="34" fill="none" stroke="#2fd67b" stroke-width="6"/>
-  <circle cx="64" cy="64" r="11" fill="none" stroke="#2fd67b" stroke-width="6"/>
-  <path d="M64 30a34 34 0 0 1 30 18" fill="none" stroke="#2fd67b" stroke-width="6" stroke-linecap="round" stroke-opacity="0.55"/>
-  <circle cx="64" cy="64" r="3.5" fill="#2fd67b"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Disc avatar"><title>Disc avatar</title><circle cx="64" cy="64" r="58" fill="#12161c" stroke="#8a94a3" stroke-width="3"/><circle cx="64" cy="64" r="39" fill="#12161c" stroke="#2fd67b" stroke-width="6"/><path d="M64 25a39 39 0 0 1 39 39H64z" fill="#2fd67b"/><circle cx="64" cy="64" r="12" fill="#12161c" stroke="#8a94a3" stroke-width="4"/><circle cx="64" cy="64" r="3" fill="#2fd67b"/><path d="M36 91 49 78m43-42L79 49" stroke="#8a94a3" stroke-width="3" stroke-linecap="round"/></svg>

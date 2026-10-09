@@ -33,12 +33,12 @@ def test_platform_ids_cover_library_platform_enum():
 def test_theme_slugs_include_default_and_presets():
     slugs = theme_slugs()
     assert slugs[0] == 'default'
-    assert 'aurora' in slugs
-    assert 'era-80s' in slugs
+    assert 'afterglow' in slugs
+    assert 'signal' in slugs
 
 
 def test_prompt_is_catalogue_only():
-    prompt = build_system_mark_prompt(platform='nes', theme='aurora')
+    prompt = build_system_mark_prompt(platform='nes', theme='afterglow')
     assert 'Nintendo Entertainment System' in prompt
     assert 'front-loading' in prompt or 'NES' in prompt
     assert 'recognizable' in prompt
@@ -51,11 +51,11 @@ def test_mark_path_rejects_traversal(tmp_path: Path):
     with pytest.raises(ValueError):
         mark_path('../evil', 'nes', package_root=tmp_path)
     with pytest.raises(ValueError):
-        mark_path('aurora', '../nes', package_root=tmp_path)
+        mark_path('afterglow', '../nes', package_root=tmp_path)
 
 
 def test_static_url_shape():
-    assert static_mark_url('aurora', 'nes') == '/static/library/system-marks/aurora/nes.webp'
+    assert static_mark_url('afterglow', 'nes') == '/static/library/system-marks/afterglow/nes.webp'
 
 
 def test_catalog_lists_themes(tmp_path: Path):
@@ -197,14 +197,14 @@ def test_art_studio_lab_prompt_requires_one_pair(client, db_session, admin_user)
 
 
 def test_lab_spec_is_catalogue_only(tmp_path: Path):
-    spec = system_mark_lab_spec(theme='aurora', platform='nes', package_root=tmp_path)
-    assert spec['theme'] == 'aurora'
+    spec = system_mark_lab_spec(theme='afterglow', platform='nes', package_root=tmp_path)
+    assert spec['theme'] == 'afterglow'
     assert spec['platform'] == 'nes'
     assert spec['exists'] is False
     assert 'Nintendo' in spec['prompt']
     for banned in ('/mnt/', 'C:\\', 'username', 'password'):
         assert banned not in spec['prompt']
-    assert spec['url'] == '/static/library/system-marks/aurora/nes.webp'
+    assert spec['url'] == '/static/library/system-marks/afterglow/nes.webp'
     assert 'path' not in spec
 
 

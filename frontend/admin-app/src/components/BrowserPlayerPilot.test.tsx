@@ -13,7 +13,17 @@ function mockSettings({
   putOk = true,
   available = ['webretro'],
   memberChoice = false,
+  emulatorjsEnabled = true,
+  emulatorjsInstalled,
+}: {
+  getPilot?: boolean
+  putOk?: boolean
+  available?: string[]
+  memberChoice?: boolean
+  emulatorjsEnabled?: boolean
+  emulatorjsInstalled?: boolean
 } = {}) {
+  const ejsInstalled = emulatorjsInstalled ?? available.includes('emulatorjs')
   globalThis.fetch = vi.fn(async (url, init = {}) => {
     const method = init.method || 'GET'
     if (!String(url).includes('/api/browser-player-settings')) {
@@ -43,6 +53,8 @@ function mockSettings({
           browser_player_default: 'webretro',
           browser_player_allow_member_choice: memberChoice,
           browser_players_available: available,
+          browser_player_emulatorjs_enabled: emulatorjsEnabled,
+          emulatorjs_installed: ejsInstalled,
         }),
       }
     }
@@ -74,6 +86,9 @@ function mockSettings({
           browser_player_default: body.browser_player_default || 'webretro',
           browser_player_allow_member_choice: Boolean(body.browser_player_allow_member_choice),
           browser_players_available: available,
+          browser_player_emulatorjs_enabled:
+            body.browser_player_emulatorjs_enabled ?? emulatorjsEnabled,
+          emulatorjs_installed: emulatorjsInstalled,
         }),
       }
     }
@@ -100,7 +115,7 @@ test('checkbox is off when the flag is off', async () => {
   render(<BrowserPlayerPilot />)
   const box = await screen.findByLabelText('NES Nostalgist pilot')
   expect(box).not.toBeChecked()
-  expect(screen.getByText(/WebRetro ships with the image/i)).toBeInTheDocument()
+  expect(screen.getByText(/WebRetro and EmulatorJS are available/i)).toBeInTheDocument()
 })
 
 test('toggling on PUTs nostalgist_nes_pilot true', async () => {
@@ -121,23 +136,22 @@ test('toggling on PUTs nostalgist_nes_pilot true', async () => {
   expect(showToast).toHaveBeenCalled()
 })
 
-test('EmulatorJS is disabled with the reason until the release is on disk', async () => {
-  mockSettings({ available: ['webretro'] })
+test('EmulatorJS is disabled with the reason when it is missing from the build', async () => {
+  mockSettings({ available: ['webretro'], emulatorjsInstalled: false })
   render(<BrowserPlayerPilot />)
-  const ejs = await screen.findByLabelText(/EmulatorJS/)
+  const ejs = await screen.findByLabelText(/Enable EmulatorJS/)
   expect(ejs).toBeDisabled()
-  expect(screen.getByText(/not installed on this server/i)).toBeInTheDocument()
-  expect(screen.getAllByText(/fetch-emulatorjs\.sh/).length).toBeGreaterThan(0)
+  expect(screen.getAllByText(/not installed in this build/i)).toHaveLength(2)
   expect(screen.getByLabelText(/^WebRetro$/)).toBeChecked()
 })
 
 test('choosing EmulatorJS PUTs browser_player_default when it is installed', async () => {
   const fetchSpy = mockSettings({ available: ['webretro', 'emulatorjs'] })
   render(<BrowserPlayerPilot />)
-  const ejs = await screen.findByLabelText(/EmulatorJS/)
+  const ejs = await screen.findByLabelText(/Enable EmulatorJS/)
   expect(ejs).not.toBeDisabled()
-  expect(screen.queryByText(/not installed on this server/i)).not.toBeInTheDocument()
-  await userEvent.click(ejs)
+  expect(screen.queryByText(/not installed in this build/i)).not.toBeInTheDocument()
+  await userEvent.click(screen.getByLabelText(/^EmulatorJS$/))
   await waitFor(() => {
     expect(fetchSpy).toHaveBeenCalledWith(
       '/api/browser-player-settings',
@@ -147,6 +161,7 @@ test('choosing EmulatorJS PUTs browser_player_default when it is installed', asy
       }),
     )
   })
+  expect(screen.getByLabelText(/^EmulatorJS$/)).toBeChecked()
   expect(ejs).toBeChecked()
 })
 

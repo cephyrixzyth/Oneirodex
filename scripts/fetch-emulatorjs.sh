@@ -7,10 +7,10 @@
 #   ./scripts/fetch-emulatorjs.sh --version 4.2.3 # a pinned release
 #   EMULATORJS_DATA_DIR=/mnt/cache/appdata/oneirodex/emulatorjs ./scripts/fetch-emulatorjs.sh
 #
-# On Unraid, point EMULATORJS_DATA_DIR at the host path Compose binds as
-# EMULATORJS_HOST_PATH (docker-compose.yml). The app offers EmulatorJS only when
-# <data dir>/loader.js exists; cores under data/cores/ are fetched lazily by the
-# loader itself from this same directory, so the whole release is needed here.
+# For local development, EMULATORJS_DATA_DIR may point to a temporary data
+# directory. Production images fetch a pinned release during the Docker build.
+# The app offers EmulatorJS only when <data dir>/loader.js exists; cores under
+# data/cores/ are fetched lazily by the loader itself from this directory.
 #
 # EmulatorJS is GPL-3 (https://github.com/EmulatorJS/EmulatorJS). You are
 # responsible for the licences of the libretro cores it bundles.

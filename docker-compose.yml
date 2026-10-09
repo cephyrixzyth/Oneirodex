@@ -168,10 +168,6 @@ services:
       # the shipped 24 cores OR run scripts/fetch-webretro-cores.sh --defaults first —
       # an empty mount hides image cores. See docs/runbooks/webretro-cores.md
       - "${WEBRETRO_CORES_HOST_PATH:-/mnt/cache/appdata/oneirodex/webretro-cores}:/app/oneirodex/static/vendor/webretro/cores"
-      # Optional EmulatorJS release (browser play engine B, BP-2). Empty = engine
-      # not offered; fill with scripts/fetch-emulatorjs.sh. Nothing is vendored
-      # in the image. See docs/runbooks/emulatorjs.md
-      - "${EMULATORJS_HOST_PATH:-/mnt/cache/appdata/oneirodex/emulatorjs}:/app/oneirodex/static/vendor/emulatorjs/data"
       # Optional private BIOS / firmware (RW appdata — NOT /storage:ro games).
       # Host example: /mnt/user/appdata/oneirodex/bios
       # Nested bind overrides LIBRARY_HOST_PATH/bios so dumps stay out of the

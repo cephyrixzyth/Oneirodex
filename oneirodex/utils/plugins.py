@@ -36,7 +36,7 @@ _BUILTIN: list[PluginInfo] = [
     PluginInfo('debrid.premiumize', 'Premiumize', 'debrid', 'Optional third debrid'),
     PluginInfo('debrid.torbox', 'TorBox', 'debrid', 'Optional modern debrid API'),
     PluginInfo('emu.webretro', 'WebRetro', 'emulator', 'Browser WASM cores + cloud save bridge'),
-    PluginInfo('emu.emulatorjs', 'EmulatorJS', 'emulator', 'Browser engine B — own shell + cores, operator-fetched (BP-2)'),
+    PluginInfo('emu.emulatorjs', 'EmulatorJS', 'emulator', 'Bundled browser engine B — own shell + cores (BP-2)'),
     PluginInfo('emu.retroarch', 'RetroArch', 'emulator', 'Native companion profiles'),
     PluginInfo('compat.anticheat', 'Anti-cheat reports', 'metadata', 'Community anti-cheat compatibility list, read-only; one keyless fetch a day (INSP-35)'),
     PluginInfo('compat.save_paths', 'Save locations', 'metadata', 'Community save-location manifest, read-only; one keyless fetch a day (INSP-1)'),

@@ -914,6 +914,7 @@ def retrieve_and_save_game(
         try:
             store_candidate = resolve_stage_d_store_candidate(
                 cleaned_name=variant_base,
+                search_variants=search_variants,
                 steam_app_id=parsed_label.get('steam_app_id'),
                 steam_title=steam_title,
                 sources=stage_d_source_ids(),
@@ -1253,6 +1254,7 @@ def retrieve_and_save_game(
                 stage_d_game = try_stage_d_store_identify(
                     raw_label=raw_folder_label or game_name,
                     cleaned_name=variant_base,
+                    search_variants=search_variants,
                     full_disk_path=full_disk_path,
                     library_uuid=library.uuid,
                     steam_app_id=parsed_label.get('steam_app_id'),

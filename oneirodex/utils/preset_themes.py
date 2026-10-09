@@ -1,4 +1,4 @@
-"""Install ~10 selectable UI theme presets derived from the default theme.
+"""Install the current selectable UI theme presets derived from the default theme.
 
 Presets live under ``static/library/themes/<slug>`` which is runtime state (a
 Docker volume in production), while the tracked source of truth is
@@ -115,7 +115,7 @@ from oneirodex.utils.preset_themes_geometry import _system_geometry
 # presets are byte-identical, the bump is what makes Reset Themes install them.
 # 41 = admin_metadata_providers.js learns the hash_identify switch (INSP-31);
 # the theme JS lives on the volume, so the handler change needs a Reset.
-GENERATOR_VERSION = 41
+GENERATOR_VERSION = 42
 
 # Play-room id used when a theme does not name one (default + uploaded packs).
 DEFAULT_ERA = 'wood_den_80s'
@@ -127,15 +127,13 @@ PRESET_MARKER_KEY = 'oneirodex_preset'
 # Stock avatars
 # ---------------------------------------------------------------------------
 #
-# The seven shipped avatars are flat SVGs drawn in the *default* theme's palette
-# — a green glyph on a near-black panel. They are served as <img>, so they can
-# neither inherit `currentColor` nor read a CSS custom property: on Arcade Neon
-# or Hot Cabinet the member's chosen avatar stayed default-green while every
-# other pixel around it changed.
+# The seven shipped avatars are hand-drawn emblem SVGs using the default
+# theme's accent, panel, and muted colours. They are served as <img>, so they
+# cannot inherit `currentColor` or read CSS custom properties; regenerate their
+# accent with each preset so they belong to the selected design.
 #
 # So they are generated per preset, exactly like `od-tokens.css` is. The source
-# files carry these three colours and nothing else (verified: 24 accent, 7
-# panel, 4 muted occurrences across all seven files), which is what makes a
+# files carry these three colours and nothing else, which is what makes a
 # straight substitution safe rather than a guess.
 #
 # Anyone editing the source SVGs must stay inside this palette. `AVATAR_SOURCE_*`
@@ -205,10 +203,54 @@ PRESET_PROTECTED_FILES = PRESET_MANAGED_FILES + PRESET_AVATAR_FILES + PRESET_ART
 PRESET_SLUGS = tuple(preset['slug'] for preset in PRESET_THEMES)
 PRESET_BY_SLUG = {preset['slug']: preset for preset in PRESET_THEMES}
 
+# Retired built-ins are replaced by the six new visual designs. Preferences
+# using a retired slug keep a nearby palette until the member chooses again.
+RETIRED_PRESET_ALIASES = {
+    'aurora': 'afterglow', 'ember': 'afterglow', 'era-arcade': 'afterglow',
+    'violet': 'tape-deck', 'rose': 'tape-deck', 'era-90s': 'tape-deck',
+    'era-late90s': 'tape-deck',
+    'forest': 'greenhouse', 'mono': 'monochrome', 'era-desk': 'greenhouse',
+    'console-terminal': 'greenhouse', 'console-signal': 'greenhouse',
+    'sunset': 'signal', 'era-80s': 'signal', 'console-woodgrain': 'signal',
+    'console-cartridge': 'signal',
+    'ice': 'deep-space', 'ocean': 'deep-space', 'era-00s': 'deep-space',
+    'console-disc': 'deep-space', 'console-deepblue': 'deep-space',
+}
+
+
+def canonical_theme_slug(slug: str | None) -> str:
+    """Resolve a retired built-in id to its replacement design."""
+    # Test doubles and incomplete user-preference records can expose arbitrary
+    # values here. Theme ids are strings; anything else safely selects default.
+    if not isinstance(slug, str):
+        return 'default'
+    key = slug.strip() or 'default'
+    replacement = RETIRED_PRESET_ALIASES.get(key)
+    if not replacement:
+        return key
+    # A household upload may occupy a former preset slug. Startup pruning only
+    # removes generator-owned folders, so an extant unmarked folder keeps its identity.
+    try:
+        from oneirodex.utils.library_paths import library_dir
+
+        old_folder = os.path.join(library_dir(), 'themes', key)
+        metadata = _read_theme_json(os.path.join(old_folder, 'theme.json'))
+        marker = metadata.get(PRESET_MARKER_KEY) if metadata else None
+        owned_old_preset = (
+            isinstance(marker, dict)
+            and marker.get('slug') == key
+            and metadata.get('author') in {PRODUCT_NAME, LEGACY_NAME}
+        )
+        if os.path.isdir(old_folder) and not owned_old_preset:
+            return key
+    except Exception:  # noqa: BLE001 — resolve safely outside an app context
+        pass
+    return replacement
+
 
 def era_for_theme(slug: str | None) -> str:
     """Play-room / UI atmosphere id for a theme folder slug."""
-    key = (slug or '').strip() or 'default'
+    key = canonical_theme_slug(slug)
     if key == 'default':
         return DEFAULT_ERA
     preset = PRESET_BY_SLUG.get(key)
@@ -743,6 +785,21 @@ def install_preset_themes(themes_path: str, default_source: str, *, force: bool 
         return 0
 
     os.makedirs(themes_path, exist_ok=True)
+    # Remove only generated Oneirodex presets from the retired catalogue.
+    # Uploaded themes are preserved even when they use a formerly built-in slug.
+    for retired_slug in RETIRED_PRESET_ALIASES:
+        retired_path = os.path.join(themes_path, retired_slug)
+        metadata = _read_theme_json(os.path.join(retired_path, 'theme.json'))
+        marker = metadata.get(PRESET_MARKER_KEY) if metadata else None
+        if (
+            os.path.isdir(retired_path)
+            and metadata
+            and metadata.get('author') in {PRODUCT_NAME, LEGACY_NAME}
+            and isinstance(marker, dict)
+            and marker.get('slug') == retired_slug
+        ):
+            shutil.rmtree(retired_path)
+
     fingerprint = source_fingerprint(default_source)
     rebuilt = 0
 

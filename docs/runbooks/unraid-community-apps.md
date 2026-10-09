@@ -49,7 +49,8 @@ database container stopped until the embedded app has passed `/awake` and a sign
 2. Choose durable paths in `.env`: `COMPOSE_FILE=docker-compose.single.yml`,
    `APPDATA_PATH=/path/to/appdata/oneirodex/config`, `APP_ENV_FILE=/path/to/appdata/oneirodex/config/runtime.env`,
    and keep the existing `DATA_FOLDER_GAMES`, `LIBRARY_HOST_PATH`,
-   `WEBRETRO_CORES_HOST_PATH`, and `EMULATORJS_HOST_PATH`. `APP_ENV_FILE` should contain
+   `WEBRETRO_CORES_HOST_PATH`. EmulatorJS is included in the image and does not need a
+   host data-path bind. `APP_ENV_FILE` should contain
    the app's current settings with external database keys (`DATABASE_URL`, `DATABASE_HOST`,
    `DATABASE_PORT`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`) removed. Protect it as a
    secrets file. The single-container Compose file forces embedded mode and supplies the

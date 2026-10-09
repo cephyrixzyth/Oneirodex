@@ -29,9 +29,8 @@
     // Browser play engine B (BP-2). Same contract as the WebRetro room and the
     // Nostalgist pilot: the ROM is streamed from this origin over
     // /api/downloadrom/<guid>, and everything EmulatorJS needs -- loader,
-    // cores, UI -- comes from /static/vendor/emulatorjs/data/, which the
-    // operator fills with scripts/fetch-emulatorjs.sh (Compose binds it from
-    // EMULATORJS_HOST_PATH). Nothing about the household leaves the box.
+    // cores, UI -- comes from /static/vendor/emulatorjs/data/, bundled in the
+    // Docker image. Nothing about the household leaves the box.
     (function () {
       var params = new URLSearchParams(window.location.search);
       var guid = params.get('guid') || '';
