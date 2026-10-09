@@ -36,7 +36,7 @@
                ('igdb', 'IGDB', '#igdb', 'igdb-tab'),
                ('metadata', 'Metadata', '#metadata', 'metadata-tab'),
                ('community', 'Community chat', '#community', 'community-tab'),
-               ('artwork', 'Artwork', '#artwork', 'artwork-tab'),
+               ('artwork', 'Artwork & secondary', '#artwork', 'artwork-tab'),
                ('oidc', 'OIDC / SSO', '#oidc', 'oidc-tab'),
              ],
              active=none,
@@ -96,7 +96,7 @@
             </li>
             <li class="integrations-nav-item nav-item" role="presentation">
                 <button class="integrations-nav-link nav-link" id="artwork-tab" data-bs-toggle="tab" data-bs-target="#artwork" type="button" role="tab" aria-controls="artwork" aria-selected="false">
-                    {{ icons.icon('image') }} Artwork
+                    {{ icons.icon('image') }} Artwork &amp; secondary
                 </button>
             </li>
             <li class="integrations-nav-item nav-item" role="presentation">
@@ -164,6 +164,15 @@
                     <h4 id="steamgriddb">{{ icons.icon('image', size=20) }} SteamGridDB Artwork</h4>
                     {% include 'partials/integrations/steamgriddb_status.html' %}
 
+                    <p class="text-muted mb-2">
+                      Secondary metadata keys and HowLongToBeat are managed in Server Settings.
+                    </p>
+                    <p>
+                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin2.new_server_settings') }}">
+                        Server settings
+                      </a>
+                    </p>
+
                     <hr class="my-4">
                     <h4 id="giantbomb">{{ icons.icon('gamepad', size=20) }} Giant Bomb</h4>
                     <p class="text-muted mb-2">
@@ -171,47 +180,52 @@
                       (<code>GIANTBOMB_API_KEY</code> / GlobalSettings) — deep-linked from
                       Integrations inventory.
                     </p>
-                    <p>
-                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin2.new_server_settings') }}">
-                        Server settings
-                      </a>
-                    </p>
-
                     <hr class="my-4">
                     <h4 id="mobygames">{{ icons.icon('gamepad', size=20) }} MobyGames</h4>
                     <p class="text-muted mb-2">
                       Optional API key (<code>MOBYGAMES_API_KEY</code> / GlobalSettings).
                       Stage E propose-only + manual identify — not Stage D auto-import.
                     </p>
-                    <p>
-                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin2.new_server_settings') }}">
-                        Server settings
-                      </a>
-                    </p>
-
                     <hr class="my-4">
                     <h4 id="thegamesdb">{{ icons.icon('gamepad', size=20) }} TheGamesDB</h4>
                     <p class="text-muted mb-2">
                       Optional API key (<code>THEGAMESDB_API_KEY</code> / GlobalSettings).
                       Console Stage E propose-only + manual identify.
                     </p>
-                    <p>
-                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin2.new_server_settings') }}">
-                        Server settings
-                      </a>
-                    </p>
-
                     <hr class="my-4">
                     <h4 id="hltb">{{ icons.icon('help', size=20) }} HowLongToBeat</h4>
                     <p class="text-muted mb-2">
                       Playtime estimates — toggle under Server Settings
                       (<code>enableHltbIntegration</code>). No API key required.
                     </p>
-                    <p>
-                      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin2.new_server_settings') }}">
-                        Server settings
-                      </a>
-                    </p>
+
+                    <hr class="my-4">
+                    <section id="retroachievements" aria-labelledby="retroachievements-heading">
+                      <h4 id="retroachievements-heading">{{ icons.icon('gamepad', size=20) }} RetroAchievements connection</h4>
+                      <p class="text-muted mb-3">
+                        Connect one household account for achievement-set matching and read-only member progress.
+                        Playing here does not unlock achievements.
+                      </p>
+                      <div class="settings-form" id="retroAchievementsSettings">
+                        <div class="form-group">
+                          <label for="ra-admin-username">RetroAchievements username</label>
+                          <input type="text" id="ra-admin-username" class="form-control input-glass" autocomplete="username" maxlength="64">
+                          <small id="ra-username-source" class="text-muted"></small>
+                        </div>
+                        <div class="form-group">
+                          <label for="ra-admin-api-key">Web API key</label>
+                          <input type="password" id="ra-admin-api-key" class="form-control input-glass" autocomplete="new-password" maxlength="512">
+                          <small class="text-muted">Get the key from retroachievements.org → Settings → Keys. Leave blank to keep the saved key.</small>
+                        </div>
+                        <label class="form-group" id="ra-clear-key-row" hidden>
+                          <input type="checkbox" id="ra-clear-key"> Clear the saved API key
+                        </label>
+                        <div class="button-group">
+                          <button type="button" id="ra-save-settings" class="btn btn-primary">Save connection</button>
+                          <span id="ra-save-status" class="text-muted" role="status" aria-live="polite"></span>
+                        </div>
+                      </div>
+                    </section>
 
                     <hr class="my-4">
                     <h4 id="meta_quest">{{ icons.icon('gamepad', size=20) }} Meta / Quest ownership</h4>
@@ -342,6 +356,7 @@
 <script src="{{ 'js/password_visibility.js'|theme_asset }}"></script>
 <script src="{{ 'js/admin_manage_igdb_settings.js'|theme_asset }}"></script>
 <script src="{{ 'js/admin_metadata_providers.js'|theme_asset }}"></script>
+<script src="{{ 'js/admin_retroachievements_settings.js'|theme_asset }}"></script>
 <script src="{{ 'js/integrations_tabs.js'|theme_asset }}"></script>
 
 <script src="{{ url_for('static', filename='js/od_admin_integrations_oidc.js') }}"></script>

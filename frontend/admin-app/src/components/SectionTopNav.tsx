@@ -17,6 +17,10 @@ const SECTION_HUBS: Record<string, { href: string; label: string }> = {
  */
 export function SectionTopNav() {
   const { pathname, hash } = useLocation()
+  // The Integrations overview already lists every destination as grouped rows.
+  // Adding the same links to the top bar when a row's hash is active duplicates
+  // the Metadata & art buttons on that page.
+  if ((pathname || '').replace(/\/+$/, '') === '/admin/integrations') return null
   const here = findSubSection(pathname, hash)
   if (!here) return null
   const hub = SECTION_HUBS[here.sectionId]

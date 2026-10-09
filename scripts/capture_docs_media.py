@@ -130,6 +130,14 @@ def prep_add_shelf(page) -> None:
     _role(page, "button", "Add shelf", after_ms=1_000)
 
 
+def prep_integrations_artwork(page) -> None:
+    try:
+        page.locator("#retroachievements").scroll_into_view_if_needed(timeout=8_000)
+        page.wait_for_timeout(600)
+    except Exception as exc:  # noqa: BLE001
+        print("    integrations artwork:", type(exc).__name__)
+
+
 # --------------------------------------------------------------------------
 # the surfaces
 # --------------------------------------------------------------------------
@@ -179,7 +187,13 @@ SHOTS: list[Shot] = [
     Shot("admin-settings", "/admin/settings", full_page=True, settle_ms=1_800),
     Shot("admin-scan-match", "/admin/scan_match", full_page=True, settle_ms=1_800),
     Shot("admin-features", "/admin/features", full_page=True, settle_ms=1_800),
-    Shot("admin-integrations", "/admin/integrations", full_page=True, settle_ms=1_800),
+    Shot(
+        "admin-integrations",
+        "/admin/integrations#artwork",
+        prep_integrations_artwork,
+        full_page=True,
+        settle_ms=1_800,
+    ),
     Shot("admin-themes", "/admin/themes", settle_ms=1_800),
     Shot("admin-users", "/admin/users", settle_ms=1_800),
     Shot("admin-invites", "/admin/invites", settle_ms=1_800),
