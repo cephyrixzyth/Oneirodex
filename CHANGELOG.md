@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improved
 - Bring Auto, Manual, and Jobs together on one compact Scans page, with job actions beside the table and no Scan shortcuts in the thin top bar.
+- Move RetroAchievements connection settings under Artwork & Secondary and remove duplicate Metadata & Art actions.
+- Give native, standalone, and Docker startup a shared shaded Onei kaiju adventure that ends with ready or recovery art before server logs.
 
 ## [1.1.7] — 2026-10-08
 

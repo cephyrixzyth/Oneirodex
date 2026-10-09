@@ -110,10 +110,7 @@ export function IntegrationsPage() {
             </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
-                <li
-                  key={item.to}
-                  id={item.to.split('#')[1]}
-                >
+                <li key={item.to} id={item.to.split('#')[1]}>
                   <a className="od-settings-row" href={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}

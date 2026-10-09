@@ -62,24 +62,34 @@ class InitializationManager:
             _safe_print("[..] Starting Oneirodex initialization...")
 
             # Phase 1: Environment setup (load once)
+            _safe_print("\nCHAPTER 1/5 // Beneath black water, Onei's eyes wake on their stalks.")
             if not self._phase1_environment():
                 return False
+            _safe_print("TITAN NOTE // The waking air is safe to breathe.")
 
             # Phase 2: Database structure (tables and migrations)
+            _safe_print("\nCHAPTER 2/5 // Onei follows the old runes across the memory bridge.")
             if not self._phase2_database_structure():
                 return False
+            _safe_print("TITAN NOTE // The world's ledger answers the call.")
 
             # Phase 3: Default data initialization
+            _safe_print("\nCHAPTER 3/5 // The titan gathers lost sparks to kindle the first dawn.")
             if not self._phase3_default_data():
                 return False
+            _safe_print("TITAN NOTE // The starting constellations shine again.")
 
             # Phase 4: Filesystem setup (folders and themes)
+            _safe_print("\nCHAPTER 4/5 // Onei's many legs find safe paths through the sleeping worlds.")
             if not self._phase4_filesystem():
                 return False
+            _safe_print("TITAN NOTE // The worlds have paths, homes, and colors.")
 
             # Phase 5: Cleanup and finalization
+            _safe_print("\nCHAPTER 5/5 // Onei folds its mighty pincers and guards the launch gate.")
             if not self._phase5_cleanup():
                 return False
+            _safe_print("TITAN NOTE // The dream is clear; Onei is ready to stand watch.")
 
             self._initialization_complete = True
             _safe_print("[OK] Oneirodex initialization completed successfully")
@@ -630,6 +640,12 @@ class InitializationManager:
         except Exception as e:
             _safe_print(f"[WARN] Could not log system event: {e}")
 
+
+def print_startup_epilogue(ready):
+    """Close the launcher story before the web server begins its own logs."""
+    from scripts.startup_art import print_startup_epilogue as print_art
+
+    print_art(ready)
 
 # Back-compat for init_data / older imports
 InitManager = InitializationManager

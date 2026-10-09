@@ -9,28 +9,7 @@ fi
 
 cd "$(dirname "$0")"
 
-if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-    printf '\033[0;32m'
-fi
-printf '%s\n' \
-    '╭──────────────────────────────────────────────────────────────╮' \
-    '│  Oneirodex  //  EXPEDITION DECK                 FIELD BOOT  │' \
-    '╰──────────────────────────────────────────────────────────────╯' \
-    '                         .-""""-.' \
-    '                        /  .--.  \' \
-    '                       |  (o  o)  |     ONEI' \
-    '                       |    ∇     |     map scout · field guide' \
-    '                        \  ____  /      d20 packed · radio tuned' \
-    '                       .-|      |-.' \
-    '                      /  |  []  |  \' \
-    '                     /___|______|___\' \
-    '                          /    \' \
-    '                         /______\' \
-    '  QUEST LOG // waking the deck and checking the trail markers...' \
-    ''
-if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-    printf '\033[0m'
-fi
+python3 -m scripts.startup_art splash
 
 source venv/bin/activate
 
@@ -76,6 +55,16 @@ print('Database reset complete. Run ./startweb.sh to start the server.')
     exit 0
 fi
 
+STARTUP_STORY_CLOSED=false
+close_startup_story() {
+    local status="$1"
+    if [[ "$STARTUP_STORY_CLOSED" != "true" ]]; then
+        STARTUP_STORY_CLOSED=true
+        python3 -c "from oneirodex.init_manager import print_startup_epilogue; print_startup_epilogue($status == 0)"
+    fi
+}
+trap 'close_startup_story $?' EXIT
+
 if [ -t 1 ]; then
     printf '\033[0;36m'
 fi
@@ -90,20 +79,11 @@ python3 -c "
 from oneirodex.init_manager import run_complete_startup_initialization
 import sys
 
-print('QUEST LOG // checking the camp ledger and preparing the worlds...')
 if not run_complete_startup_initialization():
     sys.exit(1)
-print('QUEST COMPLETE // initialization ready; opening the launch gate...')
 "
 INIT_STATUS=$?
 if [ "$INIT_STATUS" -ne 0 ]; then
-    if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-        printf '\033[0;31m'
-    fi
-    printf '%s\n' 'FIELD ALERT // startup did not complete; see the log above.'
-    if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-        printf '\033[0m'
-    fi
     exit "$INIT_STATUS"
 fi
 
@@ -118,4 +98,6 @@ export PORT=${PORT:-5006}
 # "CurrentThreadExecutor already quit" under concurrent asset load.
 # Static files are now served natively in asgi.py; keep workers modest.
 WORKERS="${UVICORN_WORKERS:-1}"
+close_startup_story 0
+trap - EXIT
 uvicorn asgi:asgi_app --host 0.0.0.0 --port $PORT --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"
