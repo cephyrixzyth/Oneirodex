@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] — 2026-10-08
+
 ### Added
 - Search additional metadata providers for unmatched games and normalize storefront IDs from folder names before matching.
 - Include the EmulatorJS browser player in the standard image, with an admin setting to turn it off.
@@ -15,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Identify game updates and patches from folder names and offer an admin action to place them under the root game folder.
 - Refresh the built-in themes, avatars, and themed navigation icons; refresh README screenshots and how-to media from the populated capture instance.
 - Redesign scan-management actions and comparisons, merge scan jobs into Scan, and address the annotated admin and member layout issues.
+
+### Fixed
+- Fetch the pinned EmulatorJS release using its published 7z asset so Docker builds can include the browser player.
 
 ## [1.1.5] — 2026-10-08
 

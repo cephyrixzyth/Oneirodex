@@ -21,7 +21,10 @@ EmulatorJS is included in the container image from the pinned release. Keep it
 enabled to offer both browser engines, or turn **Enable EmulatorJS** off in
 Admin → Emulators. WebRetro remains the default unless an admin changes it.
 The manual fetch script remains available for local development; production
-images obtain the pinned archive during the Docker build.
+images obtain the pinned `<version>.7z` release asset during the Docker build.
+The upstream release currently publishes a 7z archive rather than the old
+`EmulatorJS.zip` URL, so the fetch script extracts it with `7z` before locating
+`data/loader.js`.
 
 ## What it changes
 
