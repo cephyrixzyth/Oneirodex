@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.8] — 2026-10-08
+
+### Improved
+- Bring Auto, Manual, and Jobs together on one compact Scans page, with job actions beside the table and no Scan shortcuts in the thin top bar.
+
 ## [1.1.7] — 2026-10-08
 
 ### Fixed

@@ -1,5 +1,5 @@
 {% extends "base_admin.html" %}
-{% block title %}{% if active_tab == 'tools' %}Library tools{% elif active_tab == 'manual' %}Manual scan{% elif active_tab == 'jobs' %}Scan Jobs{% elif active_tab == 'unmatched' %}Unmatched{% elif active_tab == 'scan_filters' %}Filters{% elif active_tab == 'file_extensions' %}Extensions{% elif active_tab == 'image_queue' %}Image queue{% else %}Auto scan{% endif %} · Oneirodex Admin{% endblock %}
+{% block title %}{% if active_tab == 'tools' %}Library tools{% elif active_tab == 'manual' %}Manual scan{% elif active_tab == 'jobs' %}Scan Jobs{% elif active_tab == 'unmatched' %}Unmatched{% elif active_tab == 'scan_filters' %}Filters{% elif active_tab == 'file_extensions' %}Extensions{% elif active_tab == 'image_queue' %}Image queue{% else %}Scans{% endif %} · Oneirodex Admin{% endblock %}
 {% block styles %}
 <link rel="stylesheet" href="{{ 'css/admin/admin_manage_scanjobs.css'|theme_asset }}">
 <link rel="stylesheet" href="{{ 'css/admin/admin_manage_libs.css'|theme_asset }}">
@@ -33,21 +33,13 @@
 {% import 'partials/icons.html' as icons %}
 {% import 'partials/chrome.html' as chrome %}
 
-<meta name="active-tab" content="{{ active_tab }}">
+{% set show_scan_workspace = active_tab in ['auto', 'manual', 'jobs', none, ''] %}
+<meta name="active-tab" content="{{ 'all' if show_scan_workspace else active_tab }}">
 <meta name="selected-library-uuid" content="{{ selected_library_uuid }}">
 <script src="{{ url_for('static', filename='vendor/sortablejs/1.15.2/Sortable.min.js') }}"></script>
 
-{% if enable_new_chrome and (active_tab == 'auto' or active_tab == 'manual' or active_tab == 'jobs' or not active_tab) %}
-        {# LHN owns Libraries / tools / unmatched / filters / … — THN only
-           switches Auto vs Manual while on Scan. #}
-        {% call chrome.contextbar(
-             views=[
-               ('auto', 'Auto', url_for('admin2.scan_management', active_tab='auto')),
-               ('manual', 'Manual', url_for('admin2.scan_management', active_tab='manual')),
-               ('jobs', 'Jobs', url_for('admin2.scan_management', active_tab='jobs')),
-             ],
-             active=active_tab or 'auto') %}
-        {% endcall %}
+{% if enable_new_chrome and show_scan_workspace %}
+        {# Auto, Manual and Jobs are sections on this page; the thin bar stays clear. #}
 {% elif enable_new_chrome and active_tab == 'tools' %}
         {# In-page Library tools views — THN strip; Add many folds scan+import. #}
         {% call chrome.contextbar(
@@ -90,28 +82,6 @@
             </div>
           </div>
         {% endcall %}
-{% elif enable_new_chrome and active_tab == 'jobs' %}
-        {% call chrome.contextbar(
-             views=[],
-             active='jobs',
-             label='Scan Jobs',
-             actions_slot='page') %}
-          <form action="{{ url_for('admin2.clear_scan_jobs') }}" method="post" class="od-contextbar__form">
-            {{ csrf_form.csrf_token }}
-            <input type="hidden" name="status" value="Completed">
-            <button type="submit" class="od-cbtn" data-od-confirm="Clear all Completed jobs?">Clear completed</button>
-          </form>
-          <form action="{{ url_for('admin2.clear_scan_jobs') }}" method="post" class="od-contextbar__form">
-            {{ csrf_form.csrf_token }}
-            <input type="hidden" name="status" value="Failed">
-            <button type="submit" class="od-cbtn" data-od-confirm="Clear all Failed jobs?">Clear failed</button>
-          </form>
-          <form action="{{ url_for('admin2.clear_all_scan_jobs') }}" method="post" class="od-contextbar__form">
-            {{ csrf_form.csrf_token }}
-            <button type="submit" class="od-cbtn od-cbtn--danger" data-od-confirm="Delete ALL jobs (skips Running/Stopping)?">Clear all</button>
-          </form>
-          <button type="button" class="od-cbtn" data-scan-jobs-export title="Export the current filtered list as CSV">Export CSV</button>
-        {% endcall %}
 {% elif enable_new_chrome and active_tab == 'scan_filters' %}
         {% call chrome.contextbar(views=[], active='scan_filters', label='Scan filters', actions_slot='page') %}
           <button type="button" class="od-cbtn od-cbtn--primary" data-bs-toggle="modal" data-bs-target="#addFilterModal" id="odScanFilterAddBtn">
@@ -131,10 +101,10 @@
 {% endif %}
 <div class="admin_manage_scanjobs-nav-panel">
     <div class="container-settings od-adminpage od-adminpage--xl">
-        {# One panel per request; sibling views use the contextbar URLs. #}
+        {# Auto, Manual and Jobs share a workspace; other destinations render one pane per request. #}
 
         <!-- Tab panes -->
-        <div class="admin_manage_scanjobs-tab-content tab-content">
+        <div class="admin_manage_scanjobs-tab-content tab-content{% if show_scan_workspace %} od-scan-workspace{% endif %}">
             <!-- Libraries Tab (W22-1 unified with Library Management) -->
             {% if active_tab == 'libraries' %}
             <div id="librariesPanel" class="admin_manage_scanjobs-tab-panel tab-pane {% if active_tab == 'libraries' %}active{% else %}fade{% endif %}">
@@ -143,8 +113,8 @@
 
             <!-- Auto Scan Tab -->
             {% endif %}
-            {% if active_tab == 'auto' or not active_tab %}
-            <div id="autoScan" class="admin_manage_scanjobs-tab-panel tab-pane {% if active_tab == 'auto' or not active_tab %}active{% else %}fade{% endif %}">
+            {% if show_scan_workspace %}
+            <section id="autoScan" class="admin_manage_scanjobs-tab-panel tab-pane active show" aria-label="Auto scan">
 
                 
                 {% if libraries|length > 0 %}
@@ -344,18 +314,18 @@
                     </div>
                 </div>
                 {% endif %}
-            </div>
+            </section>
 
             <!-- Scan Jobs Tab (full panel; no modal duplicate of jobsTableBody) -->
             {% endif %}
-            {% if active_tab == 'jobs' %}
-            <div id="scanJobs" class="admin_manage_scanjobs-tab-panel tab-pane {% if active_tab == 'jobs' %}active{% else %}fade{% endif %}">
+            {% if show_scan_workspace %}
+            <section id="scanJobs" class="admin_manage_scanjobs-tab-panel tab-pane active show" aria-label="Scan jobs">
                 {% with compact=false %}
-                  {% with actions_in_topbar=true %}
+                  {% with actions_in_topbar=false %}
                     {% include 'admin/partials/admin_scan_jobs_panel.html' %}
                   {% endwith %}
                 {% endwith %}
-            </div>
+            </section>
 
             <!-- Library tools (same page as Auto Scan — W26 Libraries & Scans overhaul) -->
             {% endif %}
@@ -366,8 +336,8 @@
 
             <!-- Manual Scan Tab -->
             {% endif %}
-            {% if active_tab == 'manual' %}
-            <div id="manualScan" class="admin_manage_scanjobs-manual-panel od-adminpage-panel tab-pane {% if active_tab == 'manual' %}active{% else %}fade{% endif %}"><br>
+            {% if show_scan_workspace %}
+            <section id="manualScan" class="admin_manage_scanjobs-manual-panel od-adminpage-panel tab-pane active show" aria-label="Manual scan">
                 <div class="admin_manage_scanjobs-tab-header">
                     <h3>Manual Folder Scan</h3>
                 </div>
@@ -475,7 +445,7 @@
                 </div>
             {% endif %}
 
-                </div>
+            </section>
 
             <!-- Unmatched Folders Tab -->
             {% endif %}
