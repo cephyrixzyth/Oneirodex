@@ -11,8 +11,9 @@ shell — and the member copy says so.
 
 1. Sign in at retroachievements.org and open **Settings → Keys** for the *web API
    key* (not the Connect key).
-2. In Oneirodex, open **Admin → Integrations → RetroAchievements** and save the
-   account username and web API key. The key is stored in the Oneirodex database
+2. In Oneirodex, open **Admin → Integrations → Metadata & art → Artwork &
+   secondary → RetroAchievements connection** and save the account username and
+   web API key. The key is stored in the Oneirodex database
    and is never shown after saving. This works for Docker and Unraid installs
    without editing container environment variables. Environment values, when
    present, take precedence over the saved admin settings.

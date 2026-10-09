@@ -163,10 +163,10 @@ def build_integrations_inventory() -> list[dict[str, Any]]:
     add(
         id='retroachievements',
         name='RetroAchievements',
-        category='emulation',
-        admin_href='/admin/integrations#retro-achievements-settings',
+        category='artwork',
+        admin_href='/admin/integrations#artwork',
         configured=ra_ok,
-        notes='Configure the household account in Integrations; match systems under Emulators. Member progress is read-only.',
+        notes='Connect the household account under Artwork & secondary; match systems under Emulators. Member progress is read-only.',
     )
     try:
         from oneirodex.utils.hash_identify import base_url as _hash_base, is_enabled as _hash_on

@@ -7,21 +7,7 @@ if "%1"=="-fs" set FORCE_SETUP=true
 
 cd /d "%~dp0"
 
-echo +--------------------------------------------------------------+
-echo ^| Oneirodex // EXPEDITION DECK                  FIELD BOOT   ^|
-echo +--------------------------------------------------------------+
-echo                         .------.
-echo                        /  o  o  \
-echo                       ^|    .    ^|     ONEI
-echo                       ^|   /\    ^|     map scout - field guide
-echo                        \  ____  /      d20 packed - radio tuned
-echo                          / ^|\
-echo                         /  ^| \
-echo                        /___^|__\
-echo                           / \
-echo                          /___\
-echo   QUEST LOG // waking the deck and checking the trail markers...
-echo.
+python -m scripts.startup_art splash
 
 call venv\Scripts\activate.bat
 
@@ -58,11 +44,12 @@ echo ONEI ^> The launch gate is coming online.
 echo         Oneirodex will be at http://localhost:%PORT% when ready.
 
 REM Run complete startup initialization once before starting workers
-python -c "from oneirodex.init_manager import run_complete_startup_initialization; import sys; print('QUEST LOG // checking the camp ledger and preparing the worlds...'); result = run_complete_startup_initialization(); print('QUEST COMPLETE // initialization ready; opening the launch gate...' if result else ''); sys.exit(0 if result else 1)"
+python -c "from oneirodex.init_manager import run_complete_startup_initialization; import sys; sys.exit(0 if run_complete_startup_initialization() else 1)"
+set INIT_STATUS=%errorlevel%
+python -c "from oneirodex.init_manager import print_startup_epilogue; print_startup_epilogue(%INIT_STATUS% == 0)"
 
-if %errorlevel% neq 0 (
-    echo FIELD ALERT // startup did not complete; see the log above.
-    exit /b 1
+if %INIT_STATUS% neq 0 (
+    exit /b %INIT_STATUS%
 )
 
 REM Ensure environment variables are set for worker processes

@@ -42,33 +42,24 @@ STATE_FILE = 'standalone.json'
 #: Give up restarting a database that keeps dying: more than this many
 #: restarts inside the window means something is wrong that a restart won't fix.
 MAX_RESTARTS, RESTART_WINDOW = 5, 600
-FIELD_ART = (
-    '╭──────────────────────────────────────────────────────────────╮',
-    '│  Oneirodex  //  EXPEDITION DECK                 FIELD BOOT  │',
-    '╰──────────────────────────────────────────────────────────────╯',
-    '                         .-""""-.',
-    '                        /  .--.  \\',
-    '                       |  (o  o)  |     ONEI',
-    '                       |    ∇     |     map scout · field guide',
-    '                        \\  ____  /      d20 packed · radio tuned',
-    '                       .-|      |-.',
-    '                      /  |  []  |  \\',
-    '                     /___|______|___\\',
-    '                          /    \\',
-    '                         /______\\',
-    '  QUEST LOG // waking the deck and checking the trail markers...',
-)
-
-
 def print_field_boot() -> None:
-    """Show Onei's field-terminal splash when the launcher has a console."""
+    """Show the shared Onei field-terminal splash when a console is attached."""
     if not sys.stdout.isatty():
         return
-    tint = '\033[0;32m' if not os.environ.get('NO_COLOR') else ''
-    reset = '\033[0m' if tint else ''
-    for line in FIELD_ART:
-        print(f'{tint}{line}{reset}')
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from scripts.startup_art import print_startup_splash
 
+    print_startup_splash()
+
+
+def print_startup_epilogue(ready: bool) -> None:
+    """Use the shared startup ending before standalone server logs begin."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from scripts.startup_art import print_startup_epilogue as print_shared_epilogue
+
+    print_shared_epilogue(ready)
 
 def default_data_dir() -> Path:
     if os.name == 'nt':
@@ -208,6 +199,7 @@ def main(argv=None) -> int:
     state = load_state(root)
     pg = BundledPostgres(pg_home=args.pg_home.resolve(), data_dir=root / 'pgdata', log_file=root / 'logs' / 'postgres.log',
                          port=int(state['db_port']), password=state['db_password'])
+    logger.info('CHAPTER PRELUDE // rouse the bundled world\'s sleeping ledger')
     try:
         first_run = not pg.initialized()
         pg.init()
@@ -215,24 +207,28 @@ def main(argv=None) -> int:
         pg.ensure_database()
     except BundleError as exc:
         logger.error('%s', exc)
+        print_startup_epilogue(False)
         return 2
-    logger.info('QUEST LOG // data camp: %s%s', root, ' (created)' if first_run else '')
+    logger.info('TITAN NOTE // the bundled world\'s ledger has awakened')
+    logger.info('TITAN DEN // data home: %s%s', root, ' (created)' if first_run else '')
     if args.init_only:
         pg.stop()
         return 0
 
     env = server_env(pg, state, root)
-    logger.info('QUEST LOG // checking the camp ledger; first start takes longer')
+    logger.info('CHAPTER // the titan follows the ledger into the waking world; first start takes longer')
     if subprocess.run(init_command(), cwd=REPO_ROOT, env=env).returncode != 0:
         logger.error('FIELD ALERT // startup did not complete; server will not start')
+        print_startup_epilogue(False)
         pg.stop()
         return 3
     # As startweb.sh does after the same step: the server's readiness probe
     # and background workers read this to know initialization ran.
     env['ONEIRODEX_INITIALIZATION_COMPLETE'] = 'true'
+    print_startup_epilogue(True)
     server = subprocess.Popen(server_command(args.port), cwd=REPO_ROOT, env=env)
     supervisor = Supervisor(pg, server)
-    logger.info('QUEST COMPLETE // Oneirodex is at http://127.0.0.1:%s', args.port)
+    logger.info('server process started at http://127.0.0.1:%s', args.port)
 
     def _stop(signum, _frame):
         raise KeyboardInterrupt

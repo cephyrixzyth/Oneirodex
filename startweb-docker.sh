@@ -14,28 +14,7 @@ fi
 # We're already in /app directory in Docker, no need to cd
 
 PORT="${PORT:-5006}"
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    printf '\033[0;32m'
-fi
-printf '%s\n' \
-    '╭──────────────────────────────────────────────────────────────╮' \
-    '│  Oneirodex  //  EXPEDITION DECK                 FIELD BOOT  │' \
-    '╰──────────────────────────────────────────────────────────────╯' \
-    '                         .-""""-.' \
-    '                        /  .--.  \' \
-    '                       |  (o  o)  |     ONEI' \
-    '                       |    ∇     |     map scout · field guide' \
-    '                        \  ____  /      d20 packed · radio tuned' \
-    '                       .-|      |-.' \
-    '                      /  |  []  |  \' \
-    '                     /___|______|___\' \
-    '                          /    \' \
-    '                         /______\' \
-    '  QUEST LOG // waking the deck and checking the trail markers...' \
-    ''
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    printf '\033[0m'
-fi
+python3 -m scripts.startup_art splash
 
 if [[ "$FORCE_SETUP" == "true" ]]; then
     echo "🔄 Force setup mode - resetting database..."
@@ -65,6 +44,16 @@ print('Database reset complete. Restart the container to start the server.')
     exit 0
 fi
 
+STARTUP_STORY_CLOSED=false
+close_startup_story() {
+    local status="$1"
+    if [[ "$STARTUP_STORY_CLOSED" != "true" ]]; then
+        STARTUP_STORY_CLOSED=true
+        python3 -c "from oneirodex.init_manager import print_startup_epilogue; print_startup_epilogue($status == 0)"
+    fi
+}
+trap 'close_startup_story $?' EXIT
+
 echo "ONEI > The launch gate is coming online on port $PORT."
 
 # The public preview keeps its redistributable sample ROMs on the configured
@@ -76,21 +65,20 @@ if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
 fi
 
 # Run complete startup initialization once before starting workers
-python3 -c "
+if python3 -c "
 from oneirodex.init_manager import run_complete_startup_initialization
-import sys
-
-print('QUEST LOG // checking the camp ledger and preparing the worlds...')
-if not run_complete_startup_initialization():
-    print('FIELD ALERT // startup did not complete; see the log above.')
-    sys.exit(1)
-print('QUEST COMPLETE // initialization ready; opening the launch gate...')
-"
+import sys; sys.exit(0 if run_complete_startup_initialization() else 1)
+"; then
+    :
+else
+    INIT_STATUS=$?
+    exit "$INIT_STATUS"
+fi
 
 # Render's free Docker service supplies PORT at runtime. The public demo uses
 # the same image and keeps the normal Compose/Unraid port unchanged otherwise.
 if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
-    echo "QUEST LOG // preparing the public demo field kit..."
+    printf '\nQUEST BONUS // Gather the public demo field kit for the new camp...\n'
     if ! PYTHONPATH=/app python3 /app/scripts/fetch-free-roms.py \
         --out "${DATA_FOLDER_GAMES}" \
         --id nestest --id dmg-acid2 --id cascade7 --id genmddj --id atari2600-4paddle-tester; then
@@ -100,6 +88,9 @@ if [[ "${ONEIRODEX_PUBLIC_DEMO:-false}" == "true" ]]; then
     # sys.path[0]. Add the application root so the seed can import oneirodex.
     PYTHONPATH=/app python3 /app/scripts/seed_public_demo.py
 fi
+
+close_startup_story 0
+trap - EXIT
 
 # Ensure environment variables are set for worker processes
 export ONEIRODEX_MIGRATIONS_COMPLETE=true

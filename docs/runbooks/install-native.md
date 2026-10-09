@@ -24,9 +24,14 @@ install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
 
 The Linux, macOS, and Windows installers use the same expedition field-terminal
-presentation: Onei appears as a full-body map scout, install steps read like a
-quest log, and native, standalone, and container startup carry that look through
-initialization. The retro-future console styling and tabletop map / d20 details
+presentation: Onei appears as a shaded, character-ramp portrait of an armored
+abyssal crab kaiju rising over the city; install steps read like an adventure log.
+Native, standalone, and container server startup narrate the five
+real initialization phases (environment, database, default data, filesystem,
+and cleanup); standalone also narrates bundled database startup. Each path closes
+with success or recovery ASCII art before web-server startup logs. On an
+initialization failure, the recovery ending appears with the field notes and the
+launcher exits. The retro-future console styling and tabletop map / d20 details
 are decorative; status lines and errors still report the real operation and its
 result.
 

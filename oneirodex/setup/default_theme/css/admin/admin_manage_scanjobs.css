@@ -1320,6 +1320,81 @@
     color: var(--od-text);
 }
 
+/* Auto, Manual and Jobs are one compact Scan workspace. Keep the source
+   controls in the existing template, but present them in task order with
+   shared edges and minimal gaps instead of three full-height tab pages. */
+.od-scan-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.od-scan-workspace > #autoScan { order: 1; }
+.od-scan-workspace > #manualScan { order: 2; }
+.od-scan-workspace > #scanJobs { order: 3; }
+
+.od-scan-workspace > .tab-pane {
+    display: block;
+    flex: 0 0 auto;
+    margin: 0;
+    min-width: 0;
+    opacity: 1;
+    visibility: visible;
+}
+
+.od-scan-workspace .auto-scan-panel,
+.od-scan-workspace .admin_manage_scanjobs-manual-panel,
+.od-scan-workspace .scan-jobs-card {
+    margin: 0;
+    padding: clamp(0.75rem, 1.3vw, 1.1rem);
+}
+
+.od-scan-workspace .admin_manage_scanjobs-manual-panel {
+    background: var(--od-surface);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-adminpage-radius, var(--border-radius-lg));
+    backdrop-filter: none;
+}
+
+.od-scan-workspace .admin_manage_scanjobs-tab-header,
+.od-scan-workspace .admin_manage_scanjobs-foundgames-header h4 {
+    margin: 0 0 0.65rem;
+}
+
+.od-scan-workspace #manualScanForm {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+}
+
+.od-scan-workspace #manualScanForm > .form-group,
+.od-scan-workspace #manualScanForm > .folder-browser,
+.od-scan-workspace #manualScanForm > .auto-scan-path-row,
+.od-scan-workspace #manualScanForm > .path-input-group {
+    min-width: 0;
+}
+
+.od-scan-workspace .admin_manage_scanjobs-manual-panel .path-input-group,
+.od-scan-workspace .admin_manage_scanjobs-manual-panel .folder-browser,
+.od-scan-workspace #manualScanForm > .form-check {
+    grid-column: 1 / -1;
+}
+
+.od-scan-workspace .admin_manage_scanjobs-manual-panel .form-group,
+.od-scan-workspace .admin_manage_scanjobs-manual-panel .form-check {
+    margin: 0;
+}
+
+.od-scan-workspace .scan-jobs-card .card-header {
+    padding: 0 0 0.7rem;
+}
+
+@media (max-width: 760px) {
+    .od-scan-workspace #manualScanForm {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 /* Unmatched folders styling */
 .admin_manage_scanjobs-unmatched-container {
     color: var(--od-text);

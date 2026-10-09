@@ -105,38 +105,36 @@ def test_the_chrome_stylesheet_stays_syncable_into_every_theme():
 SCANJOBS = ROOT / 'oneirodex' / 'templates' / 'admin' / 'admin_manage_scanjobs.html'
 
 
-def test_libraries_scans_views_are_separate_pages():
-    """Libraries & scans siblings are real navigations, not Bootstrap panes.
-
-    The merged tab document stacked every pane under the libraries table —
-    operators asked for separate pages. The macro still supports `data_toggle`
-    for surfaces that remain genuinely one document (Integrations).
-    """
+def test_libraries_scans_views_keep_only_library_tools_as_in_page_tabs():
+    """Sibling destinations remain real navigations; Scan's three sections
+    share one page, and Library tools keeps its own in-page views."""
     markup = _read(SCANJOBS)
-    # The *siblings* (auto / manual / tools / unmatched / filters / extensions)
-    # are separate pages. Library tools' own five views are genuinely one
-    # document, and the redesign kept them as in-page panes on purpose -- so
-    # the check is "exactly one toggling strip, and it is that one", not "none".
+    # Library tools' five views remain one document; scan workspace sections
+    # are always emitted together, while all other destinations remain pages.
     toggles = markup.count("data_toggle='tab'")
     assert toggles == 1, f'expected only Library tools to toggle in-page, found {toggles} strips'
     at = markup.index("data_toggle='tab'")
     assert "label='Library tools'" in markup[at:at + 200], (
         'the surviving in-page tab strip is not the Library tools one'
     )
-    assert "url_for('admin2.scan_management', active_tab='auto')" in markup
-    assert "url_for('admin2.scan_management', active_tab='manual')" in markup
+    assert "{% set show_scan_workspace = active_tab in ['auto', 'manual', 'jobs', none, ''] %}" in markup
+    for pane in ('autoScan', 'manualScan', 'scanJobs'):
+        assert f'id="{pane}"' in markup
+    assert "url_for('admin2.scan_management', active_tab='auto')" not in markup
+    assert "url_for('admin2.scan_management', active_tab='manual')" not in markup
     assert 'data_toggle' in _read(JINJA), 'the macro no longer supports in-page views'
 
 
-def test_scan_thn_is_auto_manual_only():
-    """THN on Scan is Auto|Manual; sibling destinations live in the LHN."""
+def test_scan_workspace_has_no_thn_switches_or_actions():
+    """Auto, Manual and Jobs are page sections; their controls stay in-page."""
     markup = _read(SCANJOBS)
-    bar = markup.split('chrome.contextbar(')[1].split('{% endcall %}')[0]
-    assert "('auto', 'Auto'," in bar
-    assert "('manual', 'Manual'," in bar
-    assert 'Library tools' not in bar
-    assert 'libraries' not in bar
-    assert 'image_queue' not in bar
+    workspace = markup.split("{% if enable_new_chrome and show_scan_workspace %}", 1)[1]
+    workspace = workspace.split("{% elif enable_new_chrome and active_tab == 'tools' %}", 1)[0]
+    assert 'chrome.contextbar(' not in workspace
+    assert "('auto', 'Auto'," not in markup
+    assert "('manual', 'Manual'," not in markup
+    assert 'data-scan-jobs-export' not in workspace
+    assert "actions_in_topbar=false" in markup
 
 
 def test_library_tools_thn_owns_tool_views():
@@ -244,13 +242,15 @@ def test_lazy_loaded_panels_are_found_by_target_not_by_id():
     assert "getElementById('imageQueue')" in js or "active_tab=image_queue" in markup
 
 
-def test_scan_management_uses_contextbar_page_links():
-    """Scan mode switch is real navigations under the shared contextbar."""
+def test_scan_management_keeps_the_combined_workspace_on_legacy_urls():
+    """Old Auto, Manual and Jobs URLs all render the same set of sections."""
     markup = _read(SCANJOBS)
-    assert 'enable_new_chrome' in markup
-    assert "active_tab='auto'" in markup
-    assert "active_tab='manual'" in markup
+    assert "active_tab in ['auto', 'manual', 'jobs', none, '']" in markup
+    assert "'all' if show_scan_workspace else active_tab" in markup
     assert 'admin_manage_scanjobs-nav-tabs' not in markup
+    js = _read(ROOT / 'oneirodex' / 'setup' / 'default_theme' / 'js' / 'admin_manage_scanjobs.js')
+    assert 'const unifiedScanWorkspace = Boolean(' in js
+    assert 'if (!unifiedScanWorkspace)' in js
 
 
 def test_jinja_views_are_links_not_buttons():

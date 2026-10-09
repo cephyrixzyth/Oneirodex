@@ -18,18 +18,19 @@ sub-section is one rail row; the pages inside it are *not* in the rail.
 | Section | Sub-sections (pages) |
 |---|---|
 | Settings | **Library & matching** (Server settings, Scan / match policy, ROM reference sets, Quality profiles, Storage) · **Play & emulation** (Emulators, Remote play) · **Presentation** (Themes, Art studio, Detail layout, Attract mode) · **Extend** (AI assist, Plugins & exports) |
-| Integrations | **Metadata & art** (IGDB, Artwork & secondary) · **Stores & ownership** (Store connections, Meta / Quest) · **Messaging & identity** (SMTP, OIDC / SSO, Community chat, Chat emoji, LiveKit voice) · **Acquisition** (Arr module, Indexers) |
+| Integrations | **Metadata & art** (IGDB, Artwork & secondary, including the RetroAchievements connection) · **Stores & ownership** (Store connections, Meta / Quest) · **Messaging & identity** (SMTP, OIDC / SSO, Community chat, Chat emoji, LiveKit voice) · **Acquisition** (Arr module, Indexers) |
 
 Each page has one home. The Support inbox is under Users; ES-DE / Pegasus export
 is part of Plugins & exports.
 
 ## Top bar
 
-On any page inside a Settings or Integrations sub-section, the top bar shows that
+On Settings pages and Integration destinations, the top bar shows that
 sub-section's pages as icon buttons (the current page is highlighted) plus a way
-back to the section's overview (**All settings** / **Overview**). The overview
-pages, `/admin/settings` and `/admin/integrations`, list every group as rows —
-the same layout on both.
+back to the section's overview (**All settings** / **Overview**). The
+`/admin/settings` and `/admin/integrations` overview pages list each group as
+rows; Integrations keeps its artwork tab controls in one place to avoid
+duplicating them in the top bar.
 
 ## Page layout
 

@@ -110,14 +110,7 @@ export function IntegrationsPage() {
             </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
-                <li
-                  key={item.to}
-                  id={
-                    item.to.endsWith('#retro-achievements-settings')
-                      ? undefined
-                      : item.to.split('#')[1]
-                  }
-                >
+                <li key={item.to} id={item.to.split('#')[1]}>
                   <a className="od-settings-row" href={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}
@@ -127,11 +120,15 @@ export function IntegrationsPage() {
                 </li>
               ))}
             </ul>
+            {group.id === 'metadata' ? (
+              <div className="od-admin-inventory__group">
+                <h3 className="od-admin-inventory__category">Artwork &amp; secondary</h3>
+                <RetroAchievementsSettingsPanel />
+              </div>
+            ) : null}
           </section>
         ))}
       </div>
-
-      <RetroAchievementsSettingsPanel />
 
       {!inventory && !inventoryError ? (
         <div className="od-admin-panel od-admin-inventory od-admin-panel--stacked">

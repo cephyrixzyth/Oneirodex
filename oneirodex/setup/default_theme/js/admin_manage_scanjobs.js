@@ -1179,13 +1179,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const activeTab = urlActiveTab || storedActiveTab || metaActiveTab || 'auto';
     console.log("Active tab determined:", activeTab, {urlActiveTab, storedActiveTab, metaActiveTab});
 
-    // The libraries pane is not rendered for every operator, so fall back to
-    // Auto Scan the way the old id-based branch did.
-    const requestedPane = SCAN_TAB_PANES[activeTab] || '#autoScan';
-    const targetPane =
-        document.querySelector(requestedPane) ? requestedPane : '#autoScan';
-    console.log("Activating tab pane:", targetPane);
-    showScanTab(targetPane);
+    // Scan's Auto, Manual and Jobs sections now share one page. Keep all three
+    // visible regardless of a legacy query string or saved tab preference.
+    const unifiedScanWorkspace = Boolean(
+        document.getElementById('autoScan')
+        && document.getElementById('manualScan')
+        && document.getElementById('scanJobs')
+    );
+    if (!unifiedScanWorkspace) {
+        // Other Scan Management destinations remain single-pane pages.
+        const requestedPane = SCAN_TAB_PANES[activeTab] || '#autoScan';
+        const targetPane =
+            document.querySelector(requestedPane) ? requestedPane : '#autoScan';
+        console.log("Activating tab pane:", targetPane);
+        showScanTab(targetPane);
+    }
 
     // Add event listeners to all tab links to update URL and localStorage when clicked
     scanTabTriggers().forEach(tab => {
