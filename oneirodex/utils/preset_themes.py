@@ -220,7 +220,11 @@ RETIRED_PRESET_ALIASES = {
 
 def canonical_theme_slug(slug: str | None) -> str:
     """Resolve a retired built-in id to its replacement design."""
-    key = (slug or '').strip() or 'default'
+    # Test doubles and incomplete user-preference records can expose arbitrary
+    # values here. Theme ids are strings; anything else safely selects default.
+    if not isinstance(slug, str):
+        return 'default'
+    key = slug.strip() or 'default'
     replacement = RETIRED_PRESET_ALIASES.get(key)
     if not replacement:
         return key

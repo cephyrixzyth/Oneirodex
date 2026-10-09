@@ -17,6 +17,7 @@ from oneirodex.utils.preset_themes import (
     PRESET_MARKER_KEY,
     PRESET_SLUGS,
     PRESET_THEMES,
+    canonical_theme_slug,
     install_preset_themes,
     is_managed_preset,
     preset_needs_rebuild,
@@ -303,6 +304,11 @@ class TestCustomThemePreservation:
 
         assert read(str(themes_root / 'retrowave' / 'css' / 'base.css')) == '/* neon */\n'
         assert not (themes_root / 'retrowave' / 'js').exists()
+
+
+def test_canonical_theme_slug_defaults_for_non_string_values():
+    assert canonical_theme_slug(None) == 'default'
+    assert canonical_theme_slug(object()) == 'default'
 
 
 def _age_tree(*roots):

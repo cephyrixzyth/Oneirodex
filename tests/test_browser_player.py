@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from flask import Flask
 from flask_login import login_user
 
 from oneirodex.models import GlobalSettings, User
 from oneirodex.utils.browser_player import (
     DEFAULTS,
     SHIPPED_ENGINES,
+    available_engines,
     browser_play_href,
     get_browser_player_settings,
     normalize_browser_player_settings,
@@ -92,6 +94,14 @@ def test_play_engine_fields_without_app():
     assert fields['browser_player'] == 'webretro'
     assert fields['browser_players_available'] == ['webretro']
     assert fields['nostalgist_nes_pilot'] is False
+
+
+def test_available_engines_in_plain_app_context_skips_unavailable_database(monkeypatch):
+    app = Flask(__name__)
+    monkeypatch.setattr('oneirodex.utils.emulatorjs.emulatorjs_installed', lambda: True)
+
+    with app.app_context():
+        assert available_engines() == ('webretro', 'emulatorjs')
 
 
 def test_browse_play_fields_include_engine(monkeypatch):

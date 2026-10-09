@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import g, has_app_context, has_request_context
+from flask import current_app, g, has_app_context, has_request_context
 from sqlalchemy import select
 
 from oneirodex import db
@@ -39,11 +39,9 @@ def available_engines() -> tuple[str, ...]:
     from oneirodex.utils.emulatorjs import emulatorjs_installed
 
     engines = list(SHIPPED_ENGINES)
-    enabled = (
-        _blob(_settings_row()).get('browser_player_emulatorjs_enabled', True)
-        if has_app_context()
-        else True
-    )
+    enabled = True
+    if has_app_context() and current_app.extensions.get('sqlalchemy') is not None:
+        enabled = _blob(_settings_row()).get('browser_player_emulatorjs_enabled', True)
     if isinstance(enabled, str):
         enabled = enabled.strip().lower() in {'1', 'true', 'yes', 'on'}
     if enabled and emulatorjs_installed():
