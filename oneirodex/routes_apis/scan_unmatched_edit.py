@@ -21,6 +21,8 @@ from oneirodex.utils.duplicate_check import (
 from oneirodex.utils.game_name_parse import looks_like_patch_package, parse_game_label
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.security import get_allowed_base_directories, is_safe_path, is_safe_path_strict
+from oneirodex.schemas.scan import PlaceUnmatchedUpdateBody
+from oneirodex.utils.validation import validate_body
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.routes_apis.scan_unmatched import UNMATCHED_BATCH_ID_CAP, VALID_DUPLICATE_FIX_ACTIONS
 from oneirodex.routes_apis.scan_unmatched_rows import _effective_search_name, _soft_name
@@ -582,9 +584,9 @@ def retry_unmatched_folder_match(folder_id):
 @apis_bp.route('/unmatched_folders/<folder_id>/place_update', methods=['POST'])
 @login_required
 @librarian_required
-def place_unmatched_update(folder_id):
+@validate_body(PlaceUnmatchedUpdateBody)
+def place_unmatched_update(folder_id, body: PlaceUnmatchedUpdateBody):
     """Move a confirmed patch folder under its game's Updates directory."""
-    data = request.get_json(silent=True) or {}
     folder = db.session.get(UnmatchedFolder, folder_id)
     if not folder:
         return api_error('Unmatched folder not found', code='not_found')
@@ -611,7 +613,7 @@ def place_unmatched_update(folder_id):
     parsed = parse_game_label(source.name)
     if not (looks_like_patch_package(source.name) or parsed.get('is_bare_update_package')):
         return api_error('This folder is not recognized as a standalone update package', code='bad_request')
-    requested_root_name = str(data.get('game_root_name') or parsed.get('cleaned_name') or '').strip()
+    requested_root_name = str(body.game_root_name or parsed.get('cleaned_name') or '').strip()
     if not requested_root_name:
         return api_error('A game folder name is required', code='bad_request')
     from oneirodex.utils.disk_rename import sanitize_fs_name
