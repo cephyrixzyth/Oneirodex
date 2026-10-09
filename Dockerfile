@@ -95,7 +95,7 @@ COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirode
 RUN pip install -r requirements.txt
 ARG EMULATORJS_VERSION="4.2.3"
 RUN EMULATORJS_DATA_DIR=/app/oneirodex/static/vendor/emulatorjs/data \
-    /app/scripts/fetch-emulatorjs.sh --version "$EMULATORJS_VERSION"
+    bash /app/scripts/fetch-emulatorjs.sh --version "$EMULATORJS_VERSION"
 RUN sed -i 's/\r$//' /app/entrypoint.sh
 RUN sed -i 's/\r$//' /app/startweb-docker.sh
 RUN sed -i 's/\r$//' /app/docker/embedded-db.sh

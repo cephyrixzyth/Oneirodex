@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.7] — 2026-10-08
+
+### Fixed
+- Invoke the EmulatorJS fetcher through Bash in Docker builds so checkout file permissions do not prevent image creation.
+
 ## [1.1.6] — 2026-10-08
 
 ### Added
