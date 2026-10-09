@@ -14,8 +14,16 @@ function mockSettings({
   available = ['webretro'],
   memberChoice = false,
   emulatorjsEnabled = true,
-  emulatorjsInstalled = available.includes('emulatorjs'),
+  emulatorjsInstalled,
+}: {
+  getPilot?: boolean
+  putOk?: boolean
+  available?: string[]
+  memberChoice?: boolean
+  emulatorjsEnabled?: boolean
+  emulatorjsInstalled?: boolean
 } = {}) {
+  const ejsInstalled = emulatorjsInstalled ?? available.includes('emulatorjs')
   globalThis.fetch = vi.fn(async (url, init = {}) => {
     const method = init.method || 'GET'
     if (!String(url).includes('/api/browser-player-settings')) {
@@ -46,7 +54,7 @@ function mockSettings({
           browser_player_allow_member_choice: memberChoice,
           browser_players_available: available,
           browser_player_emulatorjs_enabled: emulatorjsEnabled,
-          emulatorjs_installed: emulatorjsInstalled,
+          emulatorjs_installed: ejsInstalled,
         }),
       }
     }
@@ -78,7 +86,8 @@ function mockSettings({
           browser_player_default: body.browser_player_default || 'webretro',
           browser_player_allow_member_choice: Boolean(body.browser_player_allow_member_choice),
           browser_players_available: available,
-          browser_player_emulatorjs_enabled: body.browser_player_emulatorjs_enabled ?? emulatorjsEnabled,
+          browser_player_emulatorjs_enabled:
+            body.browser_player_emulatorjs_enabled ?? emulatorjsEnabled,
           emulatorjs_installed: emulatorjsInstalled,
         }),
       }

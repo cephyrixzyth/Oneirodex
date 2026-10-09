@@ -130,21 +130,27 @@ export function BrowserPlayerPilot() {
     [apply, engine],
   )
 
-  const onEmulatorjsToggle = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const next = event.target.checked
-    setBusy(true)
-    setError(null)
-    try {
-      const saved = await putJson(ENDPOINT, { browser_player_emulatorjs_enabled: next })
-      apply(saved)
-      showToast(next ? 'EmulatorJS is available for browser play.' : 'EmulatorJS is disabled.', 'success')
-    } catch (err) {
-      setError(err)
-      showToast(errorText(err) || 'Could not save EmulatorJS settings.', 'error')
-    } finally {
-      setBusy(false)
-    }
-  }, [apply])
+  const onEmulatorjsToggle = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const next = event.target.checked
+      setBusy(true)
+      setError(null)
+      try {
+        const saved = await putJson(ENDPOINT, { browser_player_emulatorjs_enabled: next })
+        apply(saved)
+        showToast(
+          next ? 'EmulatorJS is available for browser play.' : 'EmulatorJS is disabled.',
+          'success',
+        )
+      } catch (err) {
+        setError(err)
+        showToast(errorText(err) || 'Could not save EmulatorJS settings.', 'error')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [apply],
+  )
 
   const emulatorjsAvailable = available.includes('emulatorjs')
 
@@ -155,8 +161,8 @@ export function BrowserPlayerPilot() {
       </h2>
       <p className="od-admin-lede">
         WebRetro and EmulatorJS are available on this server. Keep WebRetro as the default, or
-        disable EmulatorJS when the household does not need it. Unsupported systems continue to
-        use WebRetro.
+        disable EmulatorJS when the household does not need it. Unsupported systems continue to use
+        WebRetro.
       </p>
       <PageStatus
         loading={loading}
@@ -177,7 +183,9 @@ export function BrowserPlayerPilot() {
               onChange={onEmulatorjsToggle}
             />{' '}
             Enable EmulatorJS
-            {!emulatorjsInstalled ? <span className="od-muted"> — not installed in this build</span> : null}
+            {!emulatorjsInstalled ? (
+              <span className="od-muted"> — not installed in this build</span>
+            ) : null}
           </label>
           <fieldset className="od-fieldset" disabled={busy}>
             <legend>Default engine</legend>
@@ -195,7 +203,10 @@ export function BrowserPlayerPilot() {
                   />{' '}
                   {ENGINE_LABELS[id]}
                   {id === 'emulatorjs' && !installed ? (
-                    <span className="od-muted"> — {emulatorjsInstalled ? 'disabled' : 'not installed in this build'}</span>
+                    <span className="od-muted">
+                      {' '}
+                      — {emulatorjsInstalled ? 'disabled' : 'not installed in this build'}
+                    </span>
                   ) : null}
                 </label>
               )

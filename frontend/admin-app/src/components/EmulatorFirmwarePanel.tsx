@@ -528,7 +528,9 @@ export function EmulatorFirmwarePanel() {
             </p>
           ) : (
             <details className="od-fold">
-              <summary className="od-fold__summary">Firmware files · {files.length} uploaded</summary>
+              <summary className="od-fold__summary">
+                Firmware files · {files.length} uploaded
+              </summary>
               <ul className="od-list">
                 {files.map((file) => (
                   <li key={`${file.subdir}/${file.name}`} className="od-list__row">
