@@ -27,18 +27,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$VERSION" == "latest" ]]; then
-  URL="https://github.com/EmulatorJS/EmulatorJS/releases/latest/download/EmulatorJS.zip"
-else
-  URL="https://github.com/EmulatorJS/EmulatorJS/releases/download/v${VERSION}/EmulatorJS.zip"
+  VERSION="$(curl -fsSL https://api.github.com/repos/EmulatorJS/EmulatorJS/releases/latest | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"].removeprefix("v"))')"
 fi
+URL="https://github.com/EmulatorJS/EmulatorJS/releases/download/v${VERSION}/${VERSION}.7z"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "==> Downloading $URL"
-curl -fsSL "$URL" -o "$TMP/EmulatorJS.zip"
+curl -fsSL "$URL" -o "$TMP/EmulatorJS.7z"
 echo "==> Unpacking"
-unzip -q "$TMP/EmulatorJS.zip" -d "$TMP/unpacked"
-# The release zip carries data/ at its root (loader.js, emulator.min.js,
+7z x "$TMP/EmulatorJS.7z" "-o$TMP/unpacked" -y >/dev/null
+# The release archive carries data/ at its root (loader.js, emulator.min.js,
 # cores/, ...). Some releases nest it one directory down.
 SRC="$(find "$TMP/unpacked" -type f -name loader.js -path '*/data/*' -print -quit | xargs -r dirname)"
 if [[ -z "${SRC:-}" ]]; then
