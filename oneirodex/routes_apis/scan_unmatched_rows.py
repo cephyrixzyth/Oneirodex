@@ -223,7 +223,12 @@ def _unmatched_list_row(
     cover_by_uuid: dict | None = None,
     include_transforms: bool = False,
 ) -> dict:
+    from oneirodex.utils.game_name_parse import parse_game_label
+    from oneirodex.utils.game_name_parse import looks_like_patch_package
+
     kind_fields = _suggested_kind_fields(folder)
+    disk_name = folder_basename(getattr(folder, 'folder_path', None) or '') or ''
+    parsed_name = parse_game_label(disk_name)
     matched_uuid = getattr(folder, 'matched_game_uuid', None)
     include_matched = bool(getattr(folder, 'status', None) == 'Duplicate' or matched_uuid)
     matched_game = None
@@ -247,6 +252,12 @@ def _unmatched_list_row(
         'match_score': getattr(folder, 'match_score', None),
         'search_name': _soft_name(getattr(folder, 'search_name', None)),
         'display_name': _soft_name(getattr(folder, 'display_name', None)),
+        'suggested_search_name': (parsed_name.get('cleaned_name') or '').strip() or None,
+        'update_folder_hint': bool(parsed_name.get('update_folder_hint')),
+        'is_bare_update_package': bool(
+            parsed_name.get('is_bare_update_package') or looks_like_patch_package(disk_name)
+        ),
+        'update_match_reason': parsed_name.get('update_match_reason'),
         'matched_game': matched_game if include_matched else None,
         # UX-C5 feedback state. Without these the triage UI cannot show that a
         # row is already flagged, so an operator has no way to see their own

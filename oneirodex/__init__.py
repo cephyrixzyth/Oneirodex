@@ -194,7 +194,9 @@ def create_app(config_object=None):
         icon_pack_css = None
         icon_pack_previews_css = None
         if current_user.is_authenticated and hasattr(current_user, 'preferences') and current_user.preferences:
-            current_theme = current_user.preferences.theme or 'default'
+            from oneirodex.utils.preset_themes import canonical_theme_slug
+
+            current_theme = canonical_theme_slug(current_user.preferences.theme)
             current_icon_pack = getattr(current_user.preferences, 'icon_pack', None) or 'outline'
         try:
             icon_pack_css = icon_pack_css_url(current_icon_pack)

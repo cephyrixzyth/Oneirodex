@@ -26,6 +26,7 @@ from oneirodex.utils.ai_artwork import (
 from oneirodex.utils.preset_themes import (
     PRESET_BY_SLUG,
     PRESET_SLUGS,
+    canonical_theme_slug,
     era_for_theme,
     preset_tokens,
 )
@@ -158,7 +159,7 @@ def marks_root(package_root: str | Path | None = None) -> Path:
 
 
 def theme_dir(theme: str, package_root: str | Path | None = None) -> Path:
-    slug = _validate_slug(theme, kind='theme')
+    slug = canonical_theme_slug(_validate_slug(theme, kind='theme'))
     if slug != 'default' and slug not in PRESET_BY_SLUG:
         raise ValueError(f'Unknown theme slug: {slug}')
     return marks_root(package_root) / slug
@@ -172,7 +173,7 @@ def mark_path(theme: str, platform: str, package_root: str | Path | None = None)
 
 
 def static_mark_url(theme: str, platform: str) -> str:
-    theme_slug = _validate_slug(theme, kind='theme')
+    theme_slug = canonical_theme_slug(_validate_slug(theme, kind='theme'))
     plat = _validate_slug(platform, kind='platform')
     return f'/static/library/system-marks/{theme_slug}/{plat}.webp'
 
@@ -196,7 +197,7 @@ def _hardware_look(platform_id: str) -> str:
 
 
 def _theme_style_bits(theme: str) -> dict[str, str]:
-    slug = _validate_slug(theme, kind='theme')
+    slug = canonical_theme_slug(_validate_slug(theme, kind='theme'))
     era = era_for_theme(slug)
     light = _ERA_LIGHT.get(era, _ERA_LIGHT['wood_den_80s'])
     if slug == 'default':
@@ -206,15 +207,25 @@ def _theme_style_bits(theme: str) -> dict[str, str]:
             'era': era,
             'light': light,
             'label': 'Default',
+            'art_direction': 'clean editorial vector illustration, restrained green accents, crisp edges',
         }
     preset = PRESET_BY_SLUG[slug]
     tokens = preset_tokens(preset)
+    art_directions = {
+        'greenhouse': 'clean editorial vector illustration, restrained botanical geometry, crisp edges',
+        'afterglow': 'bold arcade poster illustration, stepped pixel accents, high contrast cel shading',
+        'monochrome': 'minimal monochrome industrial illustration, precise hard-surface shapes, no glow',
+        'signal': 'warm retro screenprint illustration, tactile molded details, amber edge light',
+        'tape-deck': 'playful 1990s airbrush illustration, soft molded forms, rounded highlights',
+        'deep-space': 'premium cool-toned product illustration, angular surfaces, subtle glass reflections',
+    }
     return {
         'accent': str(tokens.get('od-accent') or preset.get('btn_primary') or '#2fd67b'),
         'bg': str(tokens.get('od-bg') or '#0b0d10'),
         'era': era,
         'light': light,
         'label': str(preset.get('name') or slug),
+        'art_direction': art_directions.get(slug, 'distinctive illustrated hardware emblem'),
     }
 
 
@@ -231,7 +242,8 @@ def build_system_mark_prompt(*, platform: str, theme: str) -> str:
         f'product icon of {look}, clearly recognizable {label}, '
         f'single centered object, three-quarter view, sharp silhouette, '
         f'solid dark background {style["bg"]}, subtle accent glow {style["accent"]}, '
-        f'{style["light"]}, game hardware product shot, high detail, no text'
+        f'{style["light"]}, {style["art_direction"]}, game hardware illustration, '
+        f'clear edge-to-edge subject, high detail, no text'
     )
 
 
@@ -254,7 +266,7 @@ def system_mark_lab_spec(
     plat = _validate_slug(platform, kind='platform')
     if plat not in set(platform_ids()):
         raise ValueError(f'Unknown platform id: {plat}')
-    theme_slug = _validate_slug(theme, kind='theme')
+    theme_slug = canonical_theme_slug(_validate_slug(theme, kind='theme'))
     if theme_slug != 'default' and theme_slug not in PRESET_BY_SLUG:
         raise ValueError(f'Unknown theme slug: {theme_slug}')
     return {

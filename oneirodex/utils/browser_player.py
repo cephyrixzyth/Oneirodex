@@ -1,15 +1,14 @@
-"""Browser play engine settings (BP-0 stub).
+"""Browser play engine settings.
 
 Admin keys live under ``GlobalSettings.settings['browser_player']``.
-Only engines that are actually wired may be the default or listed as
-available — honesty lock: no fake EmulatorJS Play until that shell ships.
+Only engines that are actually wired may be the default or listed as available.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from flask import g, has_request_context
+from flask import g, has_app_context, has_request_context
 from sqlalchemy import select
 
 from oneirodex import db
@@ -19,8 +18,8 @@ STORAGE_KEY = 'browser_player'
 
 # Names we recognize in settings. Availability is a separate set.
 KNOWN_ENGINES = ('webretro', 'emulatorjs')
-# WebRetro ships in the image. EmulatorJS (BP-2) is offered only when the
-# operator has dropped a release into the data bind -- see utils/emulatorjs.py.
+# Both browser engines ship in the image; admins can disable EmulatorJS in the
+# browser play settings without removing the bundled release.
 SHIPPED_ENGINES = ('webretro',)
 
 
@@ -40,7 +39,14 @@ def available_engines() -> tuple[str, ...]:
     from oneirodex.utils.emulatorjs import emulatorjs_installed
 
     engines = list(SHIPPED_ENGINES)
-    if emulatorjs_installed():
+    enabled = (
+        _blob(_settings_row()).get('browser_player_emulatorjs_enabled', True)
+        if has_app_context()
+        else True
+    )
+    if isinstance(enabled, str):
+        enabled = enabled.strip().lower() in {'1', 'true', 'yes', 'on'}
+    if enabled and emulatorjs_installed():
         engines.append('emulatorjs')
     resolved = tuple(engines)
     if has_request_context():
@@ -49,9 +55,9 @@ def available_engines() -> tuple[str, ...]:
 
 DEFAULTS: dict[str, Any] = {
     'browser_player_default': 'webretro',
+    'browser_player_emulatorjs_enabled': True,
     'browser_player_allow_member_choice': False,
-    # BP-1: NES-only Nostalgist host. Off by default; does not advertise a
-    # second shipped engine until EmulatorJS lands (BP-2).
+    # BP-1: NES-only Nostalgist host. Off by default.
     'nostalgist_nes_pilot': False,
     'webrcade_sidecar_url': '',
     'webrcade_feed_export': False,
@@ -96,11 +102,6 @@ def normalize_browser_player_settings(raw: dict[str, Any] | None) -> dict[str, A
     default = str(src.get('browser_player_default') or DEFAULTS['browser_player_default']).strip().lower()
     if default not in KNOWN_ENGINES:
         raise ValueError(f'Unsupported browser_player_default: {default}')
-    available = available_engines()
-    if default not in available:
-        raise ValueError(
-            f'{default} is not installed on this box — default must be one of: {", ".join(available)}'
-        )
     allow = src.get(
         'browser_player_allow_member_choice',
         DEFAULTS['browser_player_allow_member_choice'],
@@ -119,13 +120,34 @@ def normalize_browser_player_settings(raw: dict[str, Any] | None) -> dict[str, A
         pilot = pilot.strip().lower() in ('1', 'true', 'yes', 'on')
     else:
         pilot = bool(pilot)
+    emulatorjs_enabled = src.get('browser_player_emulatorjs_enabled', DEFAULTS['browser_player_emulatorjs_enabled'])
+    if isinstance(emulatorjs_enabled, str):
+        emulatorjs_enabled = emulatorjs_enabled.strip().lower() in ('1', 'true', 'yes', 'on')
+    else:
+        emulatorjs_enabled = bool(emulatorjs_enabled)
+    from oneirodex.utils.emulatorjs import emulatorjs_installed
+
+    emulatorjs_installed_here = emulatorjs_installed()
+    available = (
+        (*SHIPPED_ENGINES, 'emulatorjs')
+        if emulatorjs_enabled and emulatorjs_installed_here
+        else tuple(SHIPPED_ENGINES)
+    )
+    if default not in available:
+        if default == 'emulatorjs' and emulatorjs_enabled and not emulatorjs_installed_here:
+            raise ValueError(
+                f'emulatorjs is not installed in this build — default must be one of: {", ".join(available)}'
+            )
+        default = 'webretro'
     return {
         'browser_player_default': default,
+        'browser_player_emulatorjs_enabled': emulatorjs_enabled,
         'browser_player_allow_member_choice': allow,
         'nostalgist_nes_pilot': pilot,
         'webrcade_sidecar_url': _clean_url(src.get('webrcade_sidecar_url')),
         'webrcade_feed_export': export,
         'browser_players_available': list(available),
+        'emulatorjs_installed': emulatorjs_installed_here,
     }
 
 
@@ -157,6 +179,7 @@ def set_browser_player_settings(payload: dict[str, Any] | None) -> dict[str, Any
     current = dict(row.settings) if isinstance(row.settings, dict) else {}
     stored = {
         'browser_player_default': cleaned['browser_player_default'],
+        'browser_player_emulatorjs_enabled': cleaned['browser_player_emulatorjs_enabled'],
         'browser_player_allow_member_choice': cleaned['browser_player_allow_member_choice'],
         'nostalgist_nes_pilot': cleaned['nostalgist_nes_pilot'],
         'webrcade_sidecar_url': cleaned['webrcade_sidecar_url'],

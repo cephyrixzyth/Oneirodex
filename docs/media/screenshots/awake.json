@@ -1,1 +1,1 @@
-{"checks":{"database":{"error":null,"ok":true},"initialization":{"complete":true,"ok":true,"testing_bypass":false}},"probe":"readiness","status":"ok","version":"1.1.4"}
+{"checks":{"database":{"error":null,"ok":true},"initialization":{"complete":true,"ok":true,"testing_bypass":false}},"probe":"readiness","status":"ok","version":"1.1.5"}

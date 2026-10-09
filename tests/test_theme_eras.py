@@ -35,30 +35,21 @@ def test_every_preset_names_a_real_play_room():
         assert preset_tokens(preset)['od-era'] == era
 
 
-def test_decade_presets_cover_every_play_room():
-    decade = {p['era'] for p in PRESET_THEMES if p.get('group') == 'decade'}
-    assert decade == set(ROOMS)
+def test_replacement_presets_use_distinct_rooms():
+    assert len({p['era'] for p in PRESET_THEMES}) >= 5
 
 
-def test_picker_groups_decade_rooms_ahead_of_cabinets():
+def test_picker_groups_new_designs_without_empty_categories():
     choices = (
         [('default', 'Default (system)')]
         + [(p['slug'], p['name']) for p in PRESET_THEMES]
         + [('custom-pack', 'Household upload')]
     )
     groups = theme_picker_groups(choices)
-    # E1 (v11 H-T): system families sit between the rooms and the cabinets.
-    assert [g['id'] for g in groups] == ['decade', 'console', 'cabinet', 'installed']
-    decade_slugs = {item['slug'] for item in groups[0]['items']}
-    assert 'era-80s' in decade_slugs
-    assert 'era-90s' in decade_slugs
-    console_slugs = {item['slug'] for item in groups[1]['items']}
-    assert console_slugs == {p['slug'] for p in PRESET_THEMES if p.get('group') == 'console'}
-    assert len(console_slugs) == 6
-    cabinet_slugs = {item['slug'] for item in groups[2]['items']}
-    assert 'default' in cabinet_slugs
-    assert 'aurora' in cabinet_slugs
-    assert groups[3]['items'][0]['slug'] == 'custom-pack'
+    assert [g['id'] for g in groups] == ['cabinet', 'installed']
+    shipped = {item['slug'] for item in groups[0]['items']}
+    assert shipped == {'default', *{preset['slug'] for preset in PRESET_THEMES}}
+    assert groups[1]['items'][0]['slug'] == 'custom-pack'
 
 
 def test_era_css_and_atmosphere_are_wired_into_every_shell():

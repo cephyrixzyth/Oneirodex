@@ -17,7 +17,7 @@
 {% endif %}
 {% endwith %}
 
-{% set active_theme = (current_user.preferences.theme if current_user.preferences and current_user.preferences.theme else 'default') %}
+{% set active_theme = current_theme|default('default') %}
 
 <div class="od-adminpage od-adminpage--xl od-themes-page">
     <header class="od-adminpage-header od-themes-header">
@@ -25,7 +25,7 @@
             <p class="od-themes-kicker">Oneirodex · Admin</p>
             <h1 class="od-adminpage-title">Themes</h1>
             <p class="od-adminpage-lede">
-                Upload custom packs, or reset the shipped presets onto the library volume.
+                Upload custom packs, or replace the retired presets with the current six designs.
                 Choosing your own theme lives in Preferences.
             </p>
         </div>
@@ -60,7 +60,7 @@
         <div class="od-themes-block-head">
             <h2 id="od-themes-tools-heading">Install &amp; reset</h2>
             <p class="od-themes-block-hint">
-                Upload a ZIP theme pack, or restore shipped defaults after a deploy that changes tokens.
+                Upload a ZIP theme pack, or install the current designs after a deploy. Uploaded themes are kept.
             </p>
         </div>
         <div class="od-themes-tools">
@@ -71,7 +71,7 @@
                 {{ form.submit(class="btn btn-primary od-themes-btn") }}
             </form>
             <form method="POST" action="{{ url_for('admin2.reset_default_themes') }}" class="od-themes-reset"
-                  data-od-confirm="Reset all default themes? This overwrites modifications to shipped themes.">
+                  data-od-confirm="Replace the old shipped presets with the current designs? Uploaded themes are kept.">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-warning od-themes-btn">Reset Default Themes</button>
             </form>

@@ -77,13 +77,12 @@ sample ROMs or cores from a CDN in our host: `play.html` points `rom` at same-or
 
 ## EmulatorJS
 
-`emulatorjs/` holds only Oneirodex's own play shell (`play.html`, AGPL like the rest of the
-app). The EmulatorJS release itself is **not vendored**: an operator fetches it with
-`scripts/fetch-emulatorjs.sh` into the `EMULATORJS_HOST_PATH` bind (served as
-`emulatorjs/data/`, gitignored), and the engine is offered only when it is there. EmulatorJS is
+`emulatorjs/` holds Oneirodex's play shell (`play.html`, AGPL like the rest of the
+app) and the pinned EmulatorJS release fetched during Docker image build. The
+engine can be disabled in Admin → Emulators. EmulatorJS is
 GPL-3.0 (https://github.com/EmulatorJS/EmulatorJS, Copyright (c) EmulatorJS contributors); its
 licence text ships inside that release (`data/LICENSE`) and the libretro cores it bundles carry
-their own — the operator who installs it accepts them, exactly as with the WebRetro cores tree.
+their own — use remains subject to those licences, exactly as with the WebRetro cores tree.
 The shell fetches nothing from a CDN: ROM over same-origin `/api/downloadrom/<uuid>`, loader
 and cores from `emulatorjs/data/` on this origin.
 

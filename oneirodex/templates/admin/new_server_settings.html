@@ -23,10 +23,8 @@
                     <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
                 </div>
 
-                <div class="row">
-                    <!-- Column 1: Core Features -->
-                    <div class="col-lg-4">
-                        <div class="settings-section">
+                <div class="settingsform-admin__sections">
+                    <section class="settings-section">
                             <h5 class="section-header">
                                 {{ icons.icon('plug', size=18) }} Core Features
                             </h5>
@@ -73,12 +71,9 @@
                                 <input type="url" class="form-control form-control-sm" id="siteUrl" name="siteUrl"
                                     placeholder="http://yoursite.com">
                             </div>
-                        </div>
-                    </div>
+                    </section>
 
-                    <!-- Column 2: Scanning & Performance -->
-                    <div class="col-lg-4">
-                        <div class="settings-section">
+                    <section class="settings-section">
                             <h5 class="section-header">
                                 {{ icons.icon('search', size=18) }} Scanning & Performance
                             </h5>
@@ -92,8 +87,6 @@
                             <div class="form-group mb-3">
                                 <input type="text" class="form-control form-control-sm" id="updateFolderName" name="updateFolderName"
                                     placeholder="Updates folder name" data-toggle="tooltip" title="Specify the common name for update subfolders">
-                            </div>
-
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="enableGameExtras">
                                 <label class="form-check-label" for="enableGameExtras" data-toggle="tooltip" title="Enables scanning for Extra files in the game's defined subdirectory.">
@@ -199,12 +192,9 @@
                                 <a href="/admin/scan_match">Scan / match policy</a>
                                 (soft-degrades if Backend mid-rollout). No mega-library or depth-3 family walk.
                             </p>
-                        </div>
-                    </div>
+                    </section>
 
-                    <!-- Column 3: Interface -->
-                    <div class="col-lg-4">
-                        <div class="settings-section">
+                    <section class="settings-section">
                             <h5 class="section-header">
                                 {{ icons.icon('layout', size=18) }} Interface
                             </h5>
@@ -257,8 +247,7 @@
                                     Show Trailers
                                 </label>
                             </div>
-                        </div>
-                    </div>
+                    </section>
                 </div>
             </form>
         </div>

@@ -54,7 +54,7 @@
     "file": "howto-game-details.mp4",
     "poster": "howto-game-details.png",
     "vtt": "howto-game-details.vtt",
-    "seconds": 64,
+    "seconds": 62,
     "transcript": [
       "Read a game page. Download, play, install, versions, saved states and cheats \u2014 in one place.",
       "Open any tile and you land on the game page.",
@@ -199,7 +199,7 @@
     "file": "howto-collections.mp4",
     "poster": "howto-collections.png",
     "vtt": "howto-collections.vtt",
-    "seconds": 47,
+    "seconds": 46,
     "transcript": [
       "Collections, wishlist and favourites. The lists that organise a library \u2014 and Downloads for what you took.",
       "Collections are named lists you build from any game page or tile menu.",
@@ -239,7 +239,7 @@
     "file": "howto-preferences.mp4",
     "poster": "howto-preferences.png",
     "vtt": "howto-preferences.vtt",
-    "seconds": 62,
+    "seconds": 60,
     "transcript": [
       "Themes, rooms, icons and fonts. Make it yours from the Preferences modal.",
       "Preferences lives under the account menu.",
@@ -261,7 +261,7 @@
     "file": "howto-command-palette.mp4",
     "poster": "howto-command-palette.png",
     "vtt": "howto-command-palette.vtt",
-    "seconds": 37,
+    "seconds": 36,
     "transcript": [
       "The command palette. Ctrl-K or Cmd-K to search titles and jump anywhere.",
       "From any page, press Control K.",
@@ -319,7 +319,7 @@
     "file": "howto-admin-discover.mp4",
     "poster": "howto-admin-discover.png",
     "vtt": "howto-admin-discover.vtt",
-    "seconds": 51,
+    "seconds": 50,
     "transcript": [
       "Shelves and events. Arrange Discover: reorder, hide, and add custom shelves with dates.",
       "Discovery sections controls what members see on Discover.",

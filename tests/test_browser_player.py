@@ -65,6 +65,7 @@ def test_normalize_defaults():
     assert cleaned['webrcade_feed_export'] is False
     assert cleaned['browser_player_allow_member_choice'] is False
     assert cleaned['nostalgist_nes_pilot'] is False
+    assert cleaned['browser_player_emulatorjs_enabled'] is True
 
 
 def test_normalize_rejects_unwired_engine():
@@ -221,6 +222,19 @@ def test_emulatorjs_absent_is_not_offered(tmp_path, monkeypatch):
     assert available_engines() == ('webretro',)
     with pytest.raises(ValueError, match='not installed'):
         normalize_browser_player_settings({'browser_player_default': 'emulatorjs'})
+
+
+def test_disabling_emulatorjs_falls_back_from_emulatorjs_default(tmp_path, monkeypatch):
+    from oneirodex.utils.browser_player import normalize_browser_player_settings
+
+    _install_emulatorjs(tmp_path, monkeypatch)
+    cleaned = normalize_browser_player_settings({
+        'browser_player_default': 'emulatorjs',
+        'browser_player_emulatorjs_enabled': False,
+    })
+    assert cleaned['browser_player_default'] == 'webretro'
+    assert cleaned['browser_player_emulatorjs_enabled'] is False
+    assert cleaned['browser_players_available'] == ['webretro']
 
 
 def test_emulatorjs_present_is_offered_and_accepted(tmp_path, monkeypatch):

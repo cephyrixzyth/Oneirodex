@@ -40,7 +40,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers. Older harness notes and the 2026-09-16 failure list are in [dev/archive/](dev/archive/README.md) |
 | Admin Jinja → React (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — which admin pages still render server-side, their handlers and APIs, and the port order (H-D.5) |
 | Writing an API route (maintainers) | [dev/pydantic-adoption.md](dev/pydantic-adoption.md) — `@validate_body` request models · which routes are migrated · adoption backlog |
-| Maintainers / browser engines | [dev/browser-play-engines.md](dev/browser-play-engines.md) — WebRetro · Nostalgist/koin · EmulatorJS · webЯcade sidecar · [runbooks/emulatorjs.md](runbooks/emulatorjs.md) (install engine B) |
+| Maintainers / browser engines | [dev/browser-play-engines.md](dev/browser-play-engines.md) — WebRetro · Nostalgist/koin · EmulatorJS · webЯcade sidecar · [runbooks/emulatorjs.md](runbooks/emulatorjs.md) (bundled engine B) |
 | OIDC / Authentik SSO | [runbooks/oidc-sso.md](runbooks/oidc-sso.md), [runbooks/oidc-authentik-unraid.md](runbooks/oidc-authentik-unraid.md) |
 | API | [openapi/openapi.json](openapi/openapi.json) |
 | How-to videos | [media/video/howto/](media/video/howto/README.md) — 20 narrated clips (AI voice, captions, WebVTT + transcripts), one worked example per feature, members + admins |

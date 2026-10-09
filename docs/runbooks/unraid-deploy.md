@@ -211,8 +211,8 @@ docker compose up -d --build
 
 This household’s Unraid `.env` pins `COMPOSE_FILE=docker-compose.single.yml` and points
 `APPDATA_PATH` to a durable appdata directory. PostgreSQL data and generated secrets stay
-under that `/config` bind; the current library, game, WebRetro-core, and EmulatorJS binds
-remain separate. `APP_ENV_FILE` can point at a protected file in appdata with the existing
+under that `/config` bind; the current library, game, and WebRetro-core binds remain
+separate. EmulatorJS ships inside the image. `APP_ENV_FILE` can point at a protected file in appdata with the existing
 app settings. Product flags keep **`ENABLE_AI_AUTO_APPLY=false`** and
 **`ALLOW_HARDLINK_APPLY=false`**. Artwork stays on the Windows 2080 box (`AI_ARTWORK_URL`).
 `ONEIRODEX_LIBRARY_WATCH` stays off on `/mnt/user` FUSE. The old Compose PostgreSQL

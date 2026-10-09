@@ -164,7 +164,9 @@ def theme_asset_filter(_ctx, path):
 
     # Get current theme from user preferences or default
     if current_user.is_authenticated and hasattr(current_user, 'preferences') and current_user.preferences:
-        current_theme = current_user.preferences.theme or 'default'
+        from oneirodex.utils.preset_themes import canonical_theme_slug
+
+        current_theme = canonical_theme_slug(current_user.preferences.theme)
     else:
         current_theme = 'default'
 

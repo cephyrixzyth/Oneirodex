@@ -531,28 +531,12 @@ input[type="checkbox"] {
    is --od-accent in css/od-tokens.css. tests/test_theme_picker_ui.py
    reads both and fails if the values below drift out of sync. */
 .theme-swatch-default { --od-swatch-fill: #2fd67b; background: var(--od-swatch-fill); }
-.theme-swatch-aurora { --od-swatch-fill: #22d3ee; background: var(--od-swatch-fill); }
-.theme-swatch-ember { --od-swatch-fill: #f472b6; background: var(--od-swatch-fill); }
-.theme-swatch-violet { --od-swatch-fill: #a78bfa; background: var(--od-swatch-fill); }
-.theme-swatch-forest { --od-swatch-fill: #4ade80; background: var(--od-swatch-fill); }
-.theme-swatch-ocean { --od-swatch-fill: #3b82f6; background: var(--od-swatch-fill); }
-.theme-swatch-rose { --od-swatch-fill: #fb7185; background: var(--od-swatch-fill); }
-.theme-swatch-mono { --od-swatch-fill: #94a3b8; background: var(--od-swatch-fill); }
-.theme-swatch-sunset { --od-swatch-fill: #fbbf24; background: var(--od-swatch-fill); }
-.theme-swatch-ice { --od-swatch-fill: #7dd3fc; background: var(--od-swatch-fill); }
-.theme-swatch-era-80s { --od-swatch-fill: #e8c07d; background: var(--od-swatch-fill); }
-.theme-swatch-era-90s { --od-swatch-fill: #c9a0d4; background: var(--od-swatch-fill); }
-.theme-swatch-era-late90s { --od-swatch-fill: #8aa4ff; background: var(--od-swatch-fill); }
-.theme-swatch-era-00s { --od-swatch-fill: #3f9bff; background: var(--od-swatch-fill); }
-.theme-swatch-era-arcade { --od-swatch-fill: #ff2d6f; background: var(--od-swatch-fill); }
-.theme-swatch-era-desk { --od-swatch-fill: #5ef08a; background: var(--od-swatch-fill); }
-/* E1 system-family packs (generator 40). */
-.theme-swatch-console-cartridge { --od-swatch-fill: #e60012; background: var(--od-swatch-fill); }
-.theme-swatch-console-disc { --od-swatch-fill: #0070d1; background: var(--od-swatch-fill); }
-.theme-swatch-console-signal { --od-swatch-fill: #3ddb7a; background: var(--od-swatch-fill); }
-.theme-swatch-console-deepblue { --od-swatch-fill: #1a66ff; background: var(--od-swatch-fill); }
-.theme-swatch-console-woodgrain { --od-swatch-fill: #f5a623; background: var(--od-swatch-fill); }
-.theme-swatch-console-terminal { --od-swatch-fill: #14b8a6; background: var(--od-swatch-fill); }
+.theme-swatch-greenhouse { --od-swatch-fill: #75e6a4; background: var(--od-swatch-fill); }
+.theme-swatch-afterglow { --od-swatch-fill: #ff5b9b; background: var(--od-swatch-fill); }
+.theme-swatch-monochrome { --od-swatch-fill: #d9e0e8; background: var(--od-swatch-fill); }
+.theme-swatch-signal { --od-swatch-fill: #f1b85b; background: var(--od-swatch-fill); }
+.theme-swatch-tape-deck { --od-swatch-fill: #c4a3ff; background: var(--od-swatch-fill); }
+.theme-swatch-deep-space { --od-swatch-fill: #6ac7ff; background: var(--od-swatch-fill); }
 
 /* Icon pack picker — orthogonal to color themes; previews use .od-icon + data-icon-pack.
    Mirrors the theme swatch grid: the <select> is a visually-hidden form-data

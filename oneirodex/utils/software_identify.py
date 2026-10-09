@@ -419,6 +419,7 @@ def apply_catalog_identity_to_game(game, rows: list[dict] | None) -> None:
 def resolve_stage_d_store_candidate(
     *,
     cleaned_name: str,
+    search_variants: list[str] | None = None,
     steam_app_id: int | None = None,
     steam_title: str | None = None,
     sources=None,
@@ -464,7 +465,7 @@ def resolve_stage_d_store_candidate(
         # Details miss or title mismatch: do not invent steam_app_id identity.
 
     queries: list[str] = []
-    for q in (cleaned_name, steam_title):
+    for q in (cleaned_name, *(search_variants or ()), steam_title):
         text = (q or '').strip()
         if not text:
             continue
@@ -511,6 +512,7 @@ def try_stage_d_store_identify(
     *,
     raw_label: str,
     cleaned_name: str,
+    search_variants: list[str] | None = None,
     full_disk_path: str,
     library_uuid: str,
     steam_app_id: int | None = None,
@@ -531,6 +533,7 @@ def try_stage_d_store_identify(
     if candidate is None:
         candidate = resolve_stage_d_store_candidate(
             cleaned_name=cleaned_name or raw_label,
+            search_variants=search_variants,
             steam_app_id=steam_app_id,
             steam_title=steam_title,
             sources=sources,

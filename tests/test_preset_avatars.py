@@ -80,8 +80,8 @@ def test_generated_avatars_carry_the_preset_palette(tmp_path):
     """A generated avatar contains the preset's accent and none of the source's."""
     # Arcade Neon: the preset the original report named, and the one whose
     # accent (#22d3ee) is furthest from the source green.
-    preset = next(p for p in PRESET_THEMES if p['slug'] == 'aurora')
-    target = tmp_path / 'aurora'
+    preset = next(p for p in PRESET_THEMES if p['slug'] == 'afterglow')
+    target = tmp_path / 'afterglow'
     target.mkdir()
 
     _write_preset_avatars(os.path.dirname(SOURCE_DIR), str(target), preset)
@@ -94,10 +94,7 @@ def test_generated_avatars_carry_the_preset_palette(tmp_path):
         assert AVATAR_SOURCE_ACCENT.lower() not in svg, (
             f'{name} still carries the source accent after recolouring'
         )
-        # default.svg is the muted "no picture chosen" mark and is the one file
-        # that legitimately has no accent in it.
-        if name != 'default.svg':
-            assert accent in svg, f'{name} does not carry the preset accent'
+        assert accent in svg, f'{name} does not carry the preset accent'
 
 
 def test_generator_is_a_no_op_without_source_art(tmp_path):
@@ -177,7 +174,7 @@ def test_a_deleted_preset_avatar_is_restored(tmp_path):
     themes.mkdir()
     install_preset_themes(str(themes), str(source))
 
-    victim = themes / 'rose' / 'avatars' / 'controller.svg'
+    victim = themes / 'tape-deck' / 'avatars' / 'controller.svg'
     assert victim.is_file()
     victim.unlink()
 
@@ -194,9 +191,9 @@ def test_sync_does_not_overwrite_recoloured_avatars(tmp_path):
     themes.mkdir()
     install_preset_themes(str(themes), str(source))
 
-    themed = (themes / 'rose' / 'avatars' / 'controller.svg').read_text(encoding='utf-8')
+    themed = (themes / 'tape-deck' / 'avatars' / 'controller.svg').read_text(encoding='utf-8')
     sync_preset_themes(str(themes), str(source))
-    after = (themes / 'rose' / 'avatars' / 'controller.svg').read_text(encoding='utf-8')
+    after = (themes / 'tape-deck' / 'avatars' / 'controller.svg').read_text(encoding='utf-8')
 
     assert after == themed
     assert AVATAR_SOURCE_ACCENT.lower() not in after.lower()

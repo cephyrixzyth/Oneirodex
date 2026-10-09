@@ -19,9 +19,15 @@ A theme is not a hue. It is six things that have to agree:
 | **Motifs** — loading animations | shared, tinted | `css/od-loading-motifs.css`, `currentColor` throughout |
 | **Glyphs** — rail and chrome icons | the icon pack the preset names | `icon_pack` on the preset |
 
-Fifteen presets map onto **six eras**. That is deliberate: a room is a setting,
-and several colour languages can live in one. Arcade Neon and Hot Cabinet are
-both *in the arcade*; they are not two arcades.
+The shipped catalogue now has six redesigned presets: Mosslight, Afterglow
+Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Each has
+its own palette, geometry, type, glyph treatment, room, avatar treatment, and
+platform-mark art direction. The former built-in presets are retired; uploaded
+themes remain untouched. Existing preferences are mapped to the closest new
+preset until the member picks another one.
+
+The retired presets are removed only when their folder still carries the
+Oneirodex generator marker. A custom upload with the same folder name is kept.
 
 ## The rule that keeps rooms from becoming nine copies of one room
 
@@ -45,6 +51,16 @@ Anyone authoring or generating room art works inside that contract:
   that *reads* as a console, a cabinet, a CRT, without being anyone's product;
 - quiet. This is backdrop. Anything with hard contrast in the centre fights the
   catalogue grid that sits on top of it.
+
+## Avatars and platform marks
+
+The seven stock avatar SVGs are newly drawn in one matching emblem style. They
+use only the accent, panel, and muted source colours so the preset generator can
+recolour the complete set without changing member-uploaded portraits. Platform
+marks use a theme-specific illustration direction in addition to the platform
+hardware silhouette and theme palette. Recreate generated marks from Art Studio
+after changing a preset's art direction; generated image files are runtime
+library assets and are not overwritten automatically.
 
 ## How a room is drawn
 

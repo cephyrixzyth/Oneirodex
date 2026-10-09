@@ -78,6 +78,7 @@ RUN mkdir -p /etc/postgresql-common \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.conf \
     && apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    unzip \
     bash \
     libarchive-tools \
     p7zip-full \
@@ -92,6 +93,9 @@ COPY --from=frontend-build /build/oneirodex/static/dist/admin-app /app/oneirodex
 COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirodex/static/dist/ops-glance
 
 RUN pip install -r requirements.txt
+ARG EMULATORJS_VERSION="4.2.3"
+RUN EMULATORJS_DATA_DIR=/app/oneirodex/static/vendor/emulatorjs/data \
+    /app/scripts/fetch-emulatorjs.sh --version "$EMULATORJS_VERSION"
 RUN sed -i 's/\r$//' /app/entrypoint.sh
 RUN sed -i 's/\r$//' /app/startweb-docker.sh
 RUN sed -i 's/\r$//' /app/docker/embedded-db.sh

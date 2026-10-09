@@ -1,11 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Arcade stick">
-  <title>Arcade stick</title>
-  <g fill="none" stroke="#2fd67b" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M64 40v34"/>
-    <path d="M34 96c0-9 13-16 30-16s30 7 30 16"/>
-    <path d="M30 96h68"/>
-  </g>
-  <circle cx="64" cy="32" r="14" fill="#2fd67b"/>
-  <circle cx="42" cy="70" r="5" fill="#2fd67b"/>
-  <circle cx="86" cy="70" r="5" fill="#2fd67b"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Joystick avatar"><title>Joystick avatar</title><circle cx="64" cy="64" r="58" fill="#12161c" stroke="#8a94a3" stroke-width="3"/><path d="M43 63 58 43" stroke="#2fd67b" stroke-width="8" stroke-linecap="round"/><path d="M45 57c-8-4-14 2-12 10 2 7 12 11 20 7 7-3 8-11 3-15" fill="#2fd67b"/><path d="M26 84h76l-7 20H33z" fill="#12161c" stroke="#2fd67b" stroke-width="5" stroke-linejoin="round"/><circle cx="82" cy="91" r="4" fill="#2fd67b"/><circle cx="94" cy="91" r="4" fill="#8a94a3"/><path d="M48 77v7" stroke="#8a94a3" stroke-width="4" stroke-linecap="round"/></svg>

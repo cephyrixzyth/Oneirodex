@@ -39,7 +39,7 @@
 .od-vr__card img {
   width: 100%;
   aspect-ratio: 2 / 3;
-  object-fit: contain;
+  object-fit: cover;
   background: var(--od-surface-2);
   border-radius: var(--od-radius-sm);
 }

@@ -1,8 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Cartridge">
-  <title>Cartridge</title>
-  <g fill="none" stroke="#2fd67b" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M36 26h56v58l-12 18H48L36 84z"/>
-    <rect x="48" y="38" width="32" height="22" rx="3"/>
-    <path d="M52 88h24"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Cartridge avatar"><title>Cartridge avatar</title><circle cx="64" cy="64" r="58" fill="#12161c" stroke="#8a94a3" stroke-width="3"/><path d="M40 24h48l6 15v49l-8 15H42l-8-15V39z" fill="#12161c" stroke="#2fd67b" stroke-width="5" stroke-linejoin="round"/><path d="M41 39h46v34H41z" fill="#2fd67b"/><path d="M47 45h34v22H47z" fill="#12161c"/><path d="M46 84h36M50 91h28" stroke="#8a94a3" stroke-width="4" stroke-linecap="round"/><path d="M52 25v8m12-8v8m12-8v8" stroke="#8a94a3" stroke-width="3"/></svg>

@@ -1,5 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="D-pad">
-  <title>D-pad</title>
-  <path d="M52 32h24v20h20v24H76v20H52V76H32V52h20z" fill="none" stroke="#2fd67b" stroke-width="6" stroke-linejoin="round"/>
-  <circle cx="64" cy="64" r="5" fill="#2fd67b"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="D-pad avatar"><title>D-pad avatar</title><circle cx="64" cy="64" r="58" fill="#12161c" stroke="#8a94a3" stroke-width="3"/><path d="M51 25h26v26h26v26H77v26H51V77H25V51h26z" fill="#2fd67b" stroke="#2fd67b" stroke-width="3" stroke-linejoin="round"/><path d="M57 31h14v26h26v14H71v26H57V71H31V57h26z" fill="#12161c"/><circle cx="64" cy="64" r="5" fill="#8a94a3"/></svg>

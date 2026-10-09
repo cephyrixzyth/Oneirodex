@@ -278,8 +278,7 @@
 
 .od-systems-tile__completion a {
   color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
 }
 
 .od-systems-tile__links {
@@ -292,8 +291,13 @@
 .od-systems-tile__set-link {
   font-size: var(--od-font-xs);
   color: var(--od-accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
+}
+
+.od-systems-tile__completion a:hover,
+.od-systems-tile__set-link:hover {
+  color: var(--od-text);
+  text-decoration: none;
 }
 
 .od-systems-tile__regions {

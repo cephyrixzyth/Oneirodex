@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.430 --> 00:00:07.486
+00:00:00.426 --> 00:00:07.482
 Shelves and events. Arrange Discover: reorder, hide, and add custom shelves with dates.
 
 2
-00:00:08.096 --> 00:00:11.840
+00:00:08.095 --> 00:00:11.839
 Discovery sections controls what members see on Discover.
 
 3
-00:00:13.036 --> 00:00:18.484
+00:00:12.954 --> 00:00:18.402
 Drag to reorder. Toggle Visible to hide a built-in shelf without deleting it.
 
 4
-00:00:19.238 --> 00:00:26.102
+00:00:19.154 --> 00:00:26.018
 Add shelf creates a custom one — a hand-picked list, or a library, platform or genre filter.
 
 5
-00:00:26.865 --> 00:00:33.801
+00:00:26.780 --> 00:00:33.716
 Give it a start and end date and it becomes an event: a seasonal row that appears and retires on its own.
 
 6
-00:00:34.561 --> 00:00:39.817
+00:00:34.480 --> 00:00:39.736
 Newsletter, Announcements and Attract mode sit alongside it under Content.
 
 7
-00:00:40.923 --> 00:00:49.395
+00:00:40.811 --> 00:00:49.283
 That is shelves and events. The written guide is in the docs folder, at docs/admin/discover-sections.md.

@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 41** in `oneirodex/utils/preset_themes.py` (41 = metadata-providers handler learns the hash-identify switch; 40 = six system-family presets; 39 = `.od-seg` wraps on narrow screens; 38 = per-console loading-motif colour; 37 = drawn room art per era; 36 = Library tools THN). **Reset Default Themes** after this bump — volume copies stay on the previous generator until you do.
+Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 42** in `oneirodex/utils/preset_themes.py`; the new catalogue replaces the former built-in presets with six redesigned dark themes. On startup, only old folders carrying Oneirodex's own preset marker are retired; uploaded themes remain. **Reset Default Themes** installs the six current designs on the volume.
 
 ## Uploading a theme
 
@@ -92,7 +92,7 @@ Or delete `themes/default` (and stale presets) under the library volume and rest
 | Per-console loading-motif colour (`GENERATOR_VERSION` **38** — `.od-loading-motif` reads `--od-platform-accent`, falls back to the theme accent) | Theme tree CSS → **library volume** | Rebuild **and** Reset Default Themes. |
 | Segmented strips wrap (`GENERATOR_VERSION` **39** — `.od-seg` gets `flex-wrap`; a six-item strip no longer pushes Admin → Integrations sideways on a phone) | Theme tree CSS → **library volume** | Rebuild **and** Reset Default Themes. |
 | Hash-identify switch (`GENERATOR_VERSION` **41** — `admin_metadata_providers.js` on the volume reads a fourth checkbox, `mp_hash_identify`) | Theme tree JS → **library volume** | Rebuild **and** Reset Default Themes — without Reset the Integrations form shows the checkbox but the old handler never saves it. |
-| System-family presets (`GENERATOR_VERSION` **40** — six `group: 'console'` packs in `preset_themes_catalog.py`, their picker swatches in `form-components.css`; the fifteen existing presets are byte-identical) | Preset folders + theme tree CSS → **library volume** | Rebuild **and** Reset Default Themes — without Reset the six new folders do not exist on the volume and the picker offers themes that 404. |
+| Theme redesign (`GENERATOR_VERSION` **42** — six replacement dark designs, new avatars, old marked built-ins retired) | Preset folders + theme tree CSS → **library volume** | Rebuild **and** Reset Default Themes — old preset choices migrate to replacements, uploaded themes stay installed. |
 
 If a fresh Unraid pull looks half-applied (new play-skins room art shows but admin still looks old, or vice versa), check which of the two you skipped.
 
@@ -100,8 +100,10 @@ If a fresh Unraid pull looks half-applied (new play-skins room art shows but adm
 
 **Preferences is the only theme picker.** Everyone — admins included — chooses a theme in
 **Preferences**, which sets colour theme, icon pack, font and tile size together. The picker
-is grouped **Decade rooms** / **Colour cabinets** / **Installed** with a miniature of the
-era room on each card, so fifteen-plus presets stay scannable.
+lists the six current built-in designs — Mosslight, Afterglow Arcade,
+Graphite Studio, Signal Room, Tape Deck, and Deep Space Media — alongside
+uploaded themes under Installed. Saved choices under retired built-in names
+map to a replacement design; uploaded folders keep their own identity.
 
 > **Changed 2026-08-16.** The Admin → Themes page used to carry its own swatch grid writing the same
 > `current_user.preferences.theme` that Preferences writes, so the two surfaces could disagree about

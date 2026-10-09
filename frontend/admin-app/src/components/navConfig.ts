@@ -394,7 +394,6 @@ export const HUB_LINKS = {
     { href: '/libraries', label: 'Libraries' },
     // Auto + Manual share one LHN row; mode switch lives in the THN.
     { href: '/scan_management?active_tab=auto', label: 'Scan' },
-    { href: '/scan_management?active_tab=jobs', label: 'Scan Jobs' },
     { href: '/scan_management?active_tab=tools', label: 'Library tools' },
     { href: '/scan_management?active_tab=unmatched', label: 'Unmatched' },
     { href: '/scan_management?active_tab=scan_filters', label: 'Filters' },

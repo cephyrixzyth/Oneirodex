@@ -18,18 +18,19 @@ const ENGINE_LABELS: Record<EngineId, string> = {
  * Emulators page next to firmware because that is where operators already
  * decide how browser play boots.
  *
- * Engine B (EmulatorJS, BP-2) appears in the choice only when the server
- * reports it installed (`browser_players_available`); otherwise the option is
- * shown disabled with the reason, so an operator learns *how* to get it rather
- * than wondering why it is missing.
+ * Engine B appears when the bundled release is present and the admin has left
+ * it enabled; otherwise the choice is shown disabled with the reason.
  */
 export function BrowserPlayerPilot() {
   const checkboxId = useId()
+  const emulatorjsId = useId()
   const memberChoiceId = useId()
   const radioName = useId()
   const [pilot, setPilot] = useState(false)
   const [memberChoice, setMemberChoice] = useState(false)
   const [engine, setEngine] = useState<EngineId>('webretro')
+  const [emulatorjsEnabled, setEmulatorjsEnabled] = useState(true)
+  const [emulatorjsInstalled, setEmulatorjsInstalled] = useState(false)
   const [available, setAvailable] = useState<EngineId[]>(['webretro'])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -37,6 +38,8 @@ export function BrowserPlayerPilot() {
 
   const apply = useCallback((data: Record<string, unknown>) => {
     setPilot(Boolean(data.nostalgist_nes_pilot))
+    setEmulatorjsEnabled(Boolean(data.browser_player_emulatorjs_enabled))
+    setEmulatorjsInstalled(Boolean(data.emulatorjs_installed))
     setMemberChoice(Boolean(data.browser_player_allow_member_choice))
     const next = data.browser_player_default
     if (next === 'webretro' || next === 'emulatorjs') setEngine(next)
@@ -127,7 +130,23 @@ export function BrowserPlayerPilot() {
     [apply, engine],
   )
 
-  const emulatorjsInstalled = available.includes('emulatorjs')
+  const onEmulatorjsToggle = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.checked
+    setBusy(true)
+    setError(null)
+    try {
+      const saved = await putJson(ENDPOINT, { browser_player_emulatorjs_enabled: next })
+      apply(saved)
+      showToast(next ? 'EmulatorJS is available for browser play.' : 'EmulatorJS is disabled.', 'success')
+    } catch (err) {
+      setError(err)
+      showToast(errorText(err) || 'Could not save EmulatorJS settings.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }, [apply])
+
+  const emulatorjsAvailable = available.includes('emulatorjs')
 
   return (
     <section className="od-admin-panel" aria-labelledby="od-browser-player-heading">
@@ -135,10 +154,9 @@ export function BrowserPlayerPilot() {
         Browser play engine
       </h2>
       <p className="od-admin-lede">
-        WebRetro ships with the image. EmulatorJS is a second shell with its own UI and cores; it is
-        offered once an EmulatorJS release is in the server&rsquo;s data bind (
-        <code>scripts/fetch-emulatorjs.sh</code>). Either way ROMs and cores stay on this box, and a
-        system the chosen engine cannot run falls back to WebRetro.
+        WebRetro and EmulatorJS are available on this server. Keep WebRetro as the default, or
+        disable EmulatorJS when the household does not need it. Unsupported systems continue to
+        use WebRetro.
       </p>
       <PageStatus
         loading={loading}
@@ -150,10 +168,21 @@ export function BrowserPlayerPilot() {
       />
       {loading || error ? null : (
         <>
+          <label htmlFor={emulatorjsId}>
+            <input
+              id={emulatorjsId}
+              type="checkbox"
+              checked={emulatorjsEnabled}
+              disabled={busy || !emulatorjsInstalled}
+              onChange={onEmulatorjsToggle}
+            />{' '}
+            Enable EmulatorJS
+            {!emulatorjsInstalled ? <span className="od-muted"> — not installed in this build</span> : null}
+          </label>
           <fieldset className="od-fieldset" disabled={busy}>
             <legend>Default engine</legend>
             {(['webretro', 'emulatorjs'] as EngineId[]).map((id) => {
-              const installed = available.includes(id)
+              const installed = id === 'emulatorjs' ? emulatorjsAvailable : available.includes(id)
               return (
                 <label key={id} className="od-radio" data-engine={id}>
                   <input
@@ -166,18 +195,12 @@ export function BrowserPlayerPilot() {
                   />{' '}
                   {ENGINE_LABELS[id]}
                   {id === 'emulatorjs' && !installed ? (
-                    <span className="od-muted"> — not installed on this server</span>
+                    <span className="od-muted"> — {emulatorjsInstalled ? 'disabled' : 'not installed in this build'}</span>
                   ) : null}
                 </label>
               )
             })}
           </fieldset>
-          {emulatorjsInstalled ? null : (
-            <p className="od-muted">
-              To offer EmulatorJS: run <code>scripts/fetch-emulatorjs.sh</code> into the directory
-              Compose binds as <code>EMULATORJS_HOST_PATH</code>, then reload this page.
-            </p>
-          )}
           {/* Stored regardless; only has an effect once two engines are
               installed, and the member modal only shows the picker then. */}
           <label htmlFor={memberChoiceId}>
