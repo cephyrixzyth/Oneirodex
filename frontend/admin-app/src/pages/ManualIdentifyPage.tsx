@@ -3,23 +3,8 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, postJson, putJson } from '../api/adminApi'
 import { Page } from '../components/Page'
+import { Candidate, Options, TAXONOMIES } from './manualIdentifyTypes'
 import './ManualIdentifyPage.css'
-
-type Choice = { id: number; name: string }
-type Options = {
-  libraries: Array<{ uuid: string; name: string; platform_name: string }>
-  taxonomies: Record<string, Choice[]>
-  categories: Array<{ value: string; label: string }>
-  statuses: Array<{ value: string; label: string }>
-}
-type Candidate = Record<string, any> & { id: number; name: string }
-const TAXONOMIES = [
-  ['genres', 'Genres', 'genre_ids'],
-  ['game_modes', 'Game modes', 'game_mode_ids'],
-  ['themes', 'Themes', 'theme_ids'],
-  ['platforms', 'Platforms', 'platform_ids'],
-  ['player_perspectives', 'Player perspectives', 'player_perspective_ids'],
-] as const
 
 export function ManualIdentifyPage() {
   const location = useLocation()
@@ -104,9 +89,8 @@ export function ManualIdentifyPage() {
     }
   }, [gameUuid])
 
-  function setField(name: string, value: unknown) {
+  const setField = (name: string, value: unknown) =>
     setForm((current) => ({ ...current, [name]: value }))
-  }
 
   async function search(event: FormEvent) {
     event.preventDefault()
