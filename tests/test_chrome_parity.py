@@ -103,6 +103,7 @@ ADMIN_ROUTES = ROOT / 'frontend' / 'admin-app' / 'src' / 'components' / 'AdminRo
 NATIVE_LIBRARIES = ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'NativeLibrariesPage.tsx'
 LIBRARIES_PANEL = ROOT / 'frontend' / 'admin-app' / 'src' / 'components' / 'LibrariesPanel.tsx'
 SCAN_CONTROLS = ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ScanControlsPage.tsx'
+SCAN_CONTROL_HOOK = ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'useScanControls.ts'
 SCANS_PAGE = ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ScansPage.tsx'
 
 
@@ -118,10 +119,11 @@ def test_library_and_scan_destinations_are_separate_react_routes():
 
 def test_manual_scan_and_jobs_render_as_single_page_sections():
     controls = _read(SCAN_CONTROLS)
+    controller = _read(SCAN_CONTROL_HOOK)
     jobs = _read(SCANS_PAGE)
     assert 'Manual scan' in controls or 'Manual Scan' in controls
-    assert 'queue_policy: queuePolicy' in controls
-    assert "chooseManualConflict(policy: 'queue' | 'force')" in controls
+    assert 'queue_policy: queuePolicy' in controller
+    assert "chooseManualConflict(policy: 'queue' | 'force')" in controller
     assert '<DataTable' in jobs
     assert 'error_message' in jobs
     assert 'Refresh all libraries' in jobs

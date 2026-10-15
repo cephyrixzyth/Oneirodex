@@ -26,6 +26,9 @@ def test_every_table_belongs_to_exactly_one_scope():
     import oneirodex.models  # noqa: F401  — populates db.metadata
 
     all_tables = {table.name for table in db.metadata.sorted_tables}
+    # NativeSessionProbe is declared by test_native_db_session for its isolated
+    # SQLite fixture and is not an application table or migration target.
+    all_tables.discard('native_session_probe')
 
     seen: set[str] = set()
     duplicated: list[str] = []

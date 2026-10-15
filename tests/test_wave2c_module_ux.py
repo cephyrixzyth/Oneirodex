@@ -60,8 +60,9 @@ def test_arr_module_toggle_endpoint_exists():
 def test_arr_admin_page_shows_enable_toggle_even_when_off():
     assert not (TEMPLATES / 'arr_module.html').exists()
     spa = _read(ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ArrPage.tsx')
-    assert "getJson('/api/arr/module')" in spa
-    assert "putJson('/api/arr/module'" in spa
+    controller = _read(ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'useArrController.ts')
+    assert "getJson('/api/arr/module')" in controller
+    assert "putJson('/api/arr/module'" in controller
 
 
 def test_ai_config_endpoint_and_save_ui():
