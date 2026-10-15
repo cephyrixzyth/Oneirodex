@@ -6,7 +6,18 @@ import os
 from typing import Any
 
 from werkzeug.utils import secure_filename
-from oneirodex.utils.runtime_config import get_runtime_config
+
+
+def _runtime_config():
+    """Resolve app configuration only for server-side BIOS helpers.
+
+    The standalone firmware import script loads this module by file path so it
+    can run outside the application package and without a server secret. Keep
+    the package import lazy so that path stays true.
+    """
+    from oneirodex.utils.runtime_config import get_runtime_config
+
+    return get_runtime_config()
 
 # Common libretro system files (operators supply legally obtained BIOS).
 #
@@ -236,7 +247,7 @@ def firmware_play_state(platform_key: str | None, core: str | None) -> dict[str,
 
 
 def bios_root() -> str:
-    root = (get_runtime_config() or {}).get('EMULATOR_BIOS_PATH')
+    root = (_runtime_config() or {}).get('EMULATOR_BIOS_PATH')
     if root:
         return root
     # Imported here: scripts/import_bios.py loads this module by path, without
@@ -373,7 +384,7 @@ DEFAULT_BIOS_MAX_BYTES = 64 * 1024 * 1024
 
 def _max_bios_bytes() -> int:
     try:
-        value = int((get_runtime_config() or {}).get('EMULATOR_BIOS_MAX_BYTES') or 0)
+        value = int((_runtime_config() or {}).get('EMULATOR_BIOS_MAX_BYTES') or 0)
     except (TypeError, ValueError):
         value = 0
     return value if value > 0 else DEFAULT_BIOS_MAX_BYTES
