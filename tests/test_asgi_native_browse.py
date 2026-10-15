@@ -1081,7 +1081,8 @@ class FakeAccountPasswordData:
 
 
 class FakeClientReadData:
-    def capabilities(self, device_kind, token):
+    def capabilities(self, device_kind, token, user):
+        assert user.id == 7
         assert token is None
         return {
             'device_kind': device_kind or 'companion',
@@ -1097,8 +1098,12 @@ class FakeClientReadData:
         assert (user_id, records, replace) == (7, [], False)
         return {'records': []}
 
-    def heartbeat(self, user_id, device_id, device_kind, device_name, client_version, user_agent, token):
+    def heartbeat(
+        self, user_id, device_id, device_kind, device_name, client_version,
+        user_agent, token, user,
+    ):
         assert user_id == 7
+        assert user.id == 7
         assert device_kind is None
         assert token is None
         return {'device_id': device_id, 'commands': []}
