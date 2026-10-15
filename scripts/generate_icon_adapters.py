@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,19 @@ def generate_react(manifest: dict[str, Any]) -> str:
 
 def outputs() -> dict[Path, str]:
     manifest = load_manifest()
-    return {REACT_OUTPUT: generate_react(manifest)}
+    generated = generate_react(manifest)
+    # Keep the generated file in the repository's canonical Prettier format.
+    # The frontend CI installs npm dependencies before this script is checked.
+    prettier_cli = ROOT / 'node_modules' / 'prettier' / 'bin' / 'prettier.cjs'
+    formatted = subprocess.run(
+        ['node', str(prettier_cli), '--stdin-filepath', str(REACT_OUTPUT)],
+        input=generated,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        check=True,
+    ).stdout
+    return {REACT_OUTPUT: formatted}
 
 
 def main() -> int:
