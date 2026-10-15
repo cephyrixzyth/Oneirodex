@@ -149,8 +149,19 @@ def upload_attachment(
                 'send a message or wait'
             )
 
-        storage_limit = int(storage_max_bytes or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_BYTES)
-        file_limit = int(storage_max_files or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_FILES)
+        config = get_runtime_config() or {}
+        storage_limit = int(
+            storage_max_bytes
+            if storage_max_bytes is not None
+            else config.get('CHAT_ATTACHMENT_STORAGE_MAX_BYTES')
+            or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_BYTES
+        )
+        file_limit = int(
+            storage_max_files
+            if storage_max_files is not None
+            else config.get('CHAT_ATTACHMENT_STORAGE_MAX_FILES')
+            or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_FILES
+        )
         folder = attachments_dir(upload_folder)
         if _stored_attachment_bytes(folder, file_limit) + len(raw) > storage_limit:
             raise ValueError(

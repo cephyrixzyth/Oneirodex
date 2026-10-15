@@ -257,11 +257,15 @@ _FONT_MAGIC = (
 
 
 def _max_font_bytes(configured_limit: int | None = None) -> int:
+    if configured_limit is None:
+        try:
+            from flask import current_app
+
+            configured_limit = current_app.config.get('FONT_MAX_BYTES')
+        except (ImportError, RuntimeError):
+            configured_limit = None
     try:
-        value = int(
-            configured_limit if configured_limit is not None
-            else current_app.config.get('FONT_MAX_BYTES') or 0
-        )
+        value = int(configured_limit or 0)
     except (TypeError, ValueError):
         value = 0
     return value if value > 0 else DEFAULT_FONT_MAX_BYTES

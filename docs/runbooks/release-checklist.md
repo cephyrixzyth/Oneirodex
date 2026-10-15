@@ -19,7 +19,7 @@ Use before tagging a release; read the intended version from the root [`VERSION`
 
 GitHub Actions [`.github/workflows/ci-tests.yml`](../../.github/workflows/ci-tests.yml) runs on PRs and pushes to `main` / `master` / `feature/**` (and similar). Toolchain is pinned: Python **3.12** (`.python-version`) and Node **22** (`.nvmrc`, `engines: ">=22 <23"` in every `package.json`).
 
-- **Pytest core** (Python 3.12 + Postgres service): health probes, ASGI static, ops summary/routes, security suite, RBAC unit — not the full `tests/` tree. Hand-listed subset (not the `-m "not integration"` marker — that set is currently the whole tree). Also runs `--cov=oneirodex --cov-report=term-missing --cov-fail-under=35` (the subset reports ~38% line coverage; the floor sits 3 points below for env variance slack — raise it as coverage climbs, see [`ci-gates.md`](../dev/ci-gates.md)), the API envelope lint, and the `print()` ratchet (`scripts/print_lint.py`).
+- **Pytest core** (Python 3.12 + Postgres service): builds the member, auth-pilot, and admin React shells, then runs `tests/ -m "not integration"` minus the named exceptions in `ci-tests.yml`, with coverage at a 65% floor and the API-envelope, print, and get-json ratchets. The gate has a 35-minute timeout; inspect the current workflow result rather than relying on historical test counts. See [`ci-gates.md`](../dev/ci-gates.md).
 - **Alembic (upgrade + check)** (Python 3.12 + Postgres service, independent of pytest-core): `pip install -r requirements-dev.txt`, then `python -m alembic upgrade head` and `python -m alembic check`. `check` fails hard on any diff — the baseline is kept clean by the `include_object` allow-list in `alembic/env.py` ([`alembic-baseline-notes.md`](../dev/alembic-baseline-notes.md)), so a new operation means a migration is missing.
 - **Lint & format** (repo root, Node 22): root `npm ci`, then `npm run lint` (ESLint flat config `eslint.config.js`) + `npm run format:check` (Prettier over `frontend/**`).
 - **Member-app vitest** (`frontend/member-app`): `npm test -- --run` + `npm run typecheck`.
@@ -33,7 +33,7 @@ The repo is an npm-workspaces monorepo: the single root [`package-lock.json`](..
 
 Dependency bumps arrive weekly via Dependabot ([`.github/dependabot.yml`](../../.github/dependabot.yml)) — `pip`, `npm` per app, and `github-actions`. Grouped so each `directory` produces at most one PR per run: minor, patch **and major** bumps are bundled together (npm entries split only production vs development deps). A grouped PR can carry a breaking major, so review it carefully before merging.
 
-Full pytest remains **local / release** (see [local-postgres-pytest.md](local-postgres-pytest.md)). Confirm the core CI job is green before tagging; still run a broader local slice below.
+The CI marker set is the pull-request gate. Follow [local-postgres-pytest.md](local-postgres-pytest.md) for any additional local verification requested by the release plan. Confirm every required check is green on the exact merged commit before tagging.
 
 Before image publish: rebuild SPA `static/dist` and grep against the private banned list — [scrub-shipped-bundles.md](scrub-shipped-bundles.md) (SCRUB-7).
 

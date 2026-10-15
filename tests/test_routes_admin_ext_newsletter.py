@@ -162,15 +162,16 @@ class TestNewsletterRoute:
         assert response.status_code == 302
 
     def test_newsletter_smtp_not_enabled(self, client, admin_user, global_settings_smtp_disabled):
-        """Test newsletter page when SMTP is not enabled."""
+        """The React page shell loads; readiness is supplied by the JSON API."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'Newsletter sending is not ready' in response.data
-        assert b'/admin/smtp_settings' in response.data
+        assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'/static/dist/admin-app/admin-app.js' in response.data
 
     def test_newsletter_feature_disabled(self, client, admin_user, global_settings_newsletter_disabled):
         """Test newsletter page when newsletter feature is disabled."""
@@ -180,7 +181,8 @@ class TestNewsletterRoute:
 
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'Enable the newsletter feature' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'/static/dist/admin-app/admin-app.js' in response.data
 
     def test_newsletter_no_sender_configured(self, client, admin_user, global_settings_no_sender):
         """Test newsletter page when no default sender is configured."""
@@ -190,7 +192,8 @@ class TestNewsletterRoute:
 
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'Configure an enabled mail server and sender' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'/static/dist/admin-app/admin-app.js' in response.data
 
     def test_newsletter_get_request_success(self, client, admin_user, global_settings_smtp_enabled, sample_newsletter):
         """Test successful GET request to newsletter page."""
@@ -200,8 +203,9 @@ class TestNewsletterRoute:
 
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
-        assert b'Newsletter' in response.data
-        assert b'Test Newsletter' in response.data
+        assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'/static/dist/admin-app/admin-app.js' in response.data
 
     @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
     def test_newsletter_post_success(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):

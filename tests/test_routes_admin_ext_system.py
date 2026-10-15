@@ -302,8 +302,9 @@ class TestDiscoverySectionsRoute:
         
         response = client.get('/admin/discovery_sections')
         assert response.status_code == 200
-        assert b'Popular Games' in response.data
-        assert b'New Releases' in response.data
+        assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'/static/dist/admin-app/admin-app.js' in response.data
 
 
 class TestCustomDiscoveryZones:
