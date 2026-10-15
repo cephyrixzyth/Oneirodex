@@ -113,13 +113,13 @@ class TestHydrationDoesNotScaleWithTiles:
         shelf, so seeding more changes nothing. Patching the limit varies
         exactly the dimension under test and holds the shelf count still.
         """
-        import oneirodex.routes_discover as routes_discover
+        import oneirodex.utils.discover_builder as discover_builder
         from oneirodex.routes_discover import build_discover_sections
 
         def build_at_depth(limit):
-            # routes_discover imports the window by value, so the patch has to
-            # land on its own name, not on the providers module it came from.
-            monkeypatch.setattr(routes_discover, 'ROW_WINDOW', limit)
+            # The feed assembly lives in discover_builder; patch its imported
+            # window so this varies the depth the selector actually receives.
+            monkeypatch.setattr(discover_builder, 'ROW_WINDOW', limit)
             # Nothing cached: a lazy relationship must re-emit its query, or an
             # N+1 would hide behind the identity map instead of being counted.
             db.session.expire_all()

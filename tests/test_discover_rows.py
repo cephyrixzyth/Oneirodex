@@ -130,7 +130,7 @@ class TestSeeAllTarget:
     def test_news_row_points_at_the_news_page(self):
         from types import SimpleNamespace
 
-        from oneirodex.routes_discover import _more_href, _section_has_more
+        from oneirodex.utils.discover_builder import _more_href, _section_has_more
 
         row = SimpleNamespace(
             identifier='news',
@@ -142,7 +142,7 @@ class TestSeeAllTarget:
         assert _section_has_more(row, 0) is False
 
     def test_chart_row_points_at_its_own_page(self, app, latest_shelf):
-        from oneirodex.routes_discover import _more_href
+        from oneirodex.utils.discover_builder import _more_href
         from oneirodex.utils.discover_providers import resolve_identifier
 
         with app.app_context():
@@ -154,7 +154,7 @@ class TestSeeAllTarget:
 
         The catalog is still the full list from the hub's Browse catalog link.
         """
-        from oneirodex.routes_discover import _more_href
+        from oneirodex.utils.discover_builder import _more_href
         from oneirodex.utils.discover_providers import resolve_section
 
         section = DiscoverySection(
@@ -174,7 +174,7 @@ class TestSeeAllTarget:
         Linking one there would silently show the whole library, so a library
         zone keeps its own page instead.
         """
-        from oneirodex.routes_discover import _more_href
+        from oneirodex.utils.discover_builder import _more_href
         from oneirodex.utils.discover_providers import resolve_section
 
         identifier = f'zone_{uuid4().hex[:6]}'
@@ -338,7 +338,7 @@ class TestFeedTokenCarriesDedupe:
     ):
         from oneirodex.routes_discover import build_discover_feed, build_discover_row
         from oneirodex.utils.discover_feed import excluded_for
-        from oneirodex.routes_discover import _load_manifest
+        from oneirodex.utils.discover_builder import _load_manifest
 
         with app.app_context(), app.test_request_context('/'):
             feed = build_discover_feed(row_user)

@@ -1,6 +1,7 @@
 """DB-free wiring guards for collections delete/remove/counts/picker."""
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +80,8 @@ def test_statistics_charts_sit_in_a_bounded_grid():
         encoding='utf-8',
     )
     assert 'repeat(auto-fit, minmax(min(100%, 26rem), 1fr))' in css
-    assert '.od-stats-chart { min-width: 0; }' in css
+    chart_rule = re.search(r'\.od-stats-chart\s*\{([^}]*)\}', css)
+    assert chart_rule and re.search(r'\bmin-width\s*:\s*0\s*;', chart_rule.group(1))
 
 
 def test_orphaned_manage_downloads_css_is_gone():
