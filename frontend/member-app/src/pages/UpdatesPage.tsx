@@ -401,9 +401,11 @@ export function UpdatesPage() {
                                 showToast(`${pack.kind} download added to Downloads.`, 'success')
                                 navigate('/downloads')
                               })
-                              .catch((error: any) => {
+                              .catch((error: unknown) => {
                                 showToast(
-                                  error?.message || 'Unable to start this download.',
+                                  error instanceof Error
+                                    ? error.message
+                                    : 'Unable to start this download.',
                                   'error',
                                 )
                               })

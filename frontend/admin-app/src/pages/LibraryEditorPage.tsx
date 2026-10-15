@@ -70,7 +70,10 @@ export function LibraryEditorPage() {
       body.append('scan_depth', depth)
       body.append('watch_enabled', watch)
       if (image) body.append('image', image, image.name)
-      const updated = await putForm(`/api/admin/libraries/${encodeURIComponent(libraryUuid)}`, body)
+      const updated = await putForm<LibraryEditorModel>(
+        `/api/admin/libraries/${encodeURIComponent(libraryUuid)}`,
+        body,
+      )
       setLibrary(updated)
       setName(String(updated?.name || ''))
       setPlatform(String(updated?.platform || ''))

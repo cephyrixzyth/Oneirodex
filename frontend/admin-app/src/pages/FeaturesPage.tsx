@@ -17,12 +17,21 @@ const FIELDS = [
 ] as const
 type Preferences = Record<(typeof FIELDS)[number][0], boolean>
 type Solver = { enabled: boolean; url: string; provider: string; max_tier: number }
-function solverDraft(config: any): Solver {
+type SolverConfig = { db_enabled?: unknown; url?: unknown; provider?: unknown; max_tier?: unknown }
+type ScannerStatus = {
+  enabled: boolean
+  block_on_hit: boolean
+  heuristics: { enabled: boolean; block_on_match: boolean }
+  clamav: { reachable: boolean; version?: string; error?: string }
+  settings: { socket_configured: boolean; host?: string; port?: number | string }
+}
+function solverDraft(config: SolverConfig): Solver {
   if (
     !config ||
     typeof config.db_enabled !== 'boolean' ||
     typeof config.url !== 'string' ||
-    typeof config.max_tier !== 'number'
+    typeof config.max_tier !== 'number' ||
+    typeof config.provider !== 'string'
   )
     throw new Error('Solver settings returned an invalid response.')
   return {
@@ -32,15 +41,15 @@ function solverDraft(config: any): Solver {
     max_tier: config.max_tier,
   }
 }
-function preferences(data: any): Preferences {
+function preferences(data: Record<string, unknown>): Preferences {
   if (!data || FIELDS.some(([key]) => typeof data[key] !== 'boolean'))
     throw new Error('Feature settings returned an invalid response.')
-  return data
+  return data as unknown as Preferences
 }
 export function FeaturesPage() {
   const [draft, setDraft] = useState<Preferences | null>(null)
   const [process, setProcess] = useState<any[]>([])
-  const [scanner, setScanner] = useState<any>(null)
+  const [scanner, setScanner] = useState<ScannerStatus | null>(null)
   const [solver, setSolver] = useState<Solver | null>(null)
   const [savedSolver, setSavedSolver] = useState<Solver | null>(null)
   const [effectiveSolver, setEffectiveSolver] = useState(false)

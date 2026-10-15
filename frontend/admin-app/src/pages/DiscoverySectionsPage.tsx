@@ -13,7 +13,7 @@ type Shelf = {
   is_visible: boolean
   count: number
   description: string
-  config: any
+  config: { mode?: string; filter_type?: string; filter_value?: string; game_uuids?: string[] }
   layout: string
   starts_at: string | null
   ends_at: string | null
@@ -21,6 +21,11 @@ type Shelf = {
   is_live: boolean
 }
 type Pick = { uuid: string; name: string }
+type DiscoveryOptions = {
+  libraries: Pick[]
+  platforms: { id: string; label: string }[]
+  genres: { name: string }[]
+}
 type Editor = {
   id?: number
   name: string
@@ -34,7 +39,11 @@ function utcInput(value: string | null) {
 }
 export function DiscoverySectionsPage() {
   const [sections, setSections] = useState<Shelf[]>([])
-  const [options, setOptions] = useState<any>({ libraries: [], platforms: [], genres: [] })
+  const [options, setOptions] = useState<DiscoveryOptions>({
+    libraries: [],
+    platforms: [],
+    genres: [],
+  })
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [reload, setReload] = useState(0)
@@ -54,7 +63,7 @@ export function DiscoverySectionsPage() {
   const [hits, setHits] = useState<Pick[] | null>(null)
   const [searching, setSearching] = useState(false)
   const searchRequest = useRef(0)
-  function accept(data: any) {
+  function accept(data: Record<string, unknown>) {
     if (
       !Array.isArray(data.sections) ||
       !Array.isArray(data.libraries) ||
@@ -62,8 +71,12 @@ export function DiscoverySectionsPage() {
       !Array.isArray(data.genres)
     )
       throw new Error('Discovery sections returned an invalid response.')
-    setSections(data.sections)
-    setOptions(data)
+    setSections(data.sections as Shelf[])
+    setOptions({
+      libraries: data.libraries as Pick[],
+      platforms: data.platforms as DiscoveryOptions['platforms'],
+      genres: data.genres as DiscoveryOptions['genres'],
+    })
   }
   useEffect(() => {
     let cancelled = false
@@ -206,10 +219,10 @@ export function DiscoverySectionsPage() {
   const filterOptions = !editor
     ? []
     : editor.filter_type === 'library'
-      ? options.libraries.map((row: any) => ({ value: row.uuid, label: row.name }))
+      ? options.libraries.map((row) => ({ value: row.uuid, label: row.name }))
       : editor.filter_type === 'platform'
-        ? options.platforms.map((row: any) => ({ value: row.id, label: row.label }))
-        : options.genres.map((row: any) => ({ value: row.name, label: row.name }))
+        ? options.platforms.map((row) => ({ value: row.id, label: row.label }))
+        : options.genres.map((row) => ({ value: row.name, label: row.name }))
   function edit(patch: Partial<Editor>) {
     setEditor((current) => (current ? { ...current, ...patch } : null))
     setMessage('')
@@ -527,7 +540,7 @@ export function DiscoverySectionsPage() {
                       onChange={(event) => edit({ filter_value: event.target.value })}
                     >
                       <option value="">Choose a value</option>
-                      {filterOptions.map((option: any) => (
+                      {filterOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>

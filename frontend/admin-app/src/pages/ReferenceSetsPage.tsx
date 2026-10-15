@@ -52,7 +52,16 @@ const BUCKETS = [
       ['hashed', 'Hashed'],
     ],
   },
-]
+] as const
+type BucketKey = (typeof BUCKETS)[number]['key']
+type RepairRow = Record<string, string | number | boolean | null>
+type RepairReport = {
+  dry_run: boolean
+  counts: Record<BucketKey, number>
+  owned_total: number
+  verified: number
+  unhashed_name_matches: number
+} & Record<BucketKey, RepairRow[]>
 export function ReferenceSetsPage() {
   const [sets, setSets] = useState<ReferenceSet[]>([])
   const [platforms, setPlatforms] = useState<Platform[]>([])
@@ -69,7 +78,7 @@ export function ReferenceSetsPage() {
   const [repairPlatform, setRepairPlatform] = useState('')
   const [repairRegion, setRepairRegion] = useState('')
   const [catalogPlatform, setCatalogPlatform] = useState('')
-  const [report, setReport] = useState<any>(null)
+  const [report, setReport] = useState<RepairReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -363,7 +372,7 @@ export function ReferenceSetsPage() {
                   })
                   if (!result.dry_run || !result.counts)
                     throw new Error('Repair preview returned an invalid response.')
-                  setReport(result)
+                  setReport(result as RepairReport)
                   setMessage(
                     `${result.owned_total} owned · ${result.verified} verified by hash and name · ${result.unhashed_name_matches} name-only (not hashed yet) · dry run, nothing changed.`,
                   )

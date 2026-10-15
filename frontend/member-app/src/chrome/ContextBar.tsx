@@ -38,20 +38,25 @@ const HOST_ATTR = 'data-od-contextbar-host'
  * Jinja admin renders the identical bar (UIR-4) without duplicating anything.
  */
 
-function useDismiss(open: any, onClose: any, refs: any, returnFocusRef: any = null) {
+function useDismiss(
+  open: boolean,
+  onClose: () => void,
+  refs: Array<{ current: Element | null }>,
+  returnFocusRef: { current: HTMLElement | null } | null = null,
+) {
   useEffect(() => {
     if (!open) return undefined
 
-    function onKey(event: any) {
+    function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
         onClose()
         returnFocusRef?.current?.focus()
       }
     }
-    function onPointer(event: any) {
+    function onPointer(event: MouseEvent) {
       // Clicking the trigger toggles; the trigger handles that itself.
-      const inside = refs.some((ref: any) => ref.current?.contains(event.target))
+      const inside = refs.some((ref) => ref.current?.contains(event.target as Node | null))
       if (!inside) onClose()
     }
 

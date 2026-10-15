@@ -86,10 +86,13 @@ export function AttractModePage() {
       setMessage('')
     }
   }
-  function filter(key: keyof Config['filters'], value: any) {
+  function filter(key: keyof Config['filters'], value: Config['filters'][keyof Config['filters']]) {
     edit({ ...form, filters: { ...form.filters, [key]: value } })
   }
-  function autoplay(key: keyof Config['autoplay'], value: any) {
+  function autoplay(
+    key: keyof Config['autoplay'],
+    value: Config['autoplay'][keyof Config['autoplay']],
+  ) {
     edit({ ...form, autoplay: { ...form.autoplay, [key]: value } })
   }
   async function save(event: FormEvent) {

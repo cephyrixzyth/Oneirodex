@@ -66,12 +66,15 @@ const LABELS: Record<string, string> = {
   nzbget_password: 'NZBGet password',
 }
 
-function arrConfig(data: any): { draft: Config; secrets: Record<string, boolean> } {
-  if (!data || URL_FIELDS.some((key) => typeof data[key] !== 'string'))
+function arrConfig(data: Record<string, unknown>): {
+  draft: Config
+  secrets: Record<string, boolean>
+} {
+  if (URL_FIELDS.some((key) => typeof data[key] !== 'string'))
     throw new Error('Arr connector settings returned an invalid response.')
   const draft: Config = {}
   const secrets: Record<string, boolean> = {}
-  for (const key of URL_FIELDS) draft[key] = data[key] || ''
+  for (const key of URL_FIELDS) draft[key] = typeof data[key] === 'string' ? data[key] : ''
   for (const key of USER_FIELDS) draft[key] = typeof data[key] === 'string' ? data[key] : ''
   for (const key of SECRET_FIELDS) {
     const presenceKey = key.endsWith('_api_key')
@@ -117,7 +120,7 @@ export function ArrPage() {
     setLoadFailed(false)
     setError('')
     getJson('/api/arr/module')
-      .then(async (module: any) => {
+      .then(async (module: { enabled?: unknown; db_enabled?: unknown; env_enabled?: unknown }) => {
         if (
           !module ||
           typeof module.enabled !== 'boolean' ||

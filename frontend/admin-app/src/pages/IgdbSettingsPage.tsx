@@ -20,7 +20,11 @@ export function IgdbSettingsPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const dirty = clientId !== savedId || Boolean(secret)
-  function accept(data: any) {
+  function accept(data: {
+    igdb_client_id?: unknown
+    secret_present?: unknown
+    last_tested?: string | null
+  }) {
     if (
       !data ||
       typeof data.igdb_client_id !== 'string' ||

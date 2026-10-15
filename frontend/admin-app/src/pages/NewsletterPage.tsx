@@ -68,7 +68,7 @@ export function NewsletterPage() {
           throw new Error('Newsletter history response was incomplete.')
         }
         setData(value)
-        setSelected(value.recipients.map((row: any) => row.email))
+        setSelected(value.recipients.map((row: { email: string }) => row.email))
       })
       .catch((err) => {
         if (!cancelled) {

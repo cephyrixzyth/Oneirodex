@@ -6,6 +6,7 @@ import { errorText } from '../utils/errorText'
 
 const API = '/api/admin/server-settings'
 type Field = { key: string; label: string; type?: 'text' | 'url' | 'number'; help?: string }
+type ServerSettingsValues = Record<string, string | number | boolean | null>
 export const SERVER_SETTING_GROUPS: { title: string; fields: Field[] }[] = [
   {
     title: 'Core features',
@@ -137,8 +138,8 @@ export const SERVER_SETTING_GROUPS: { title: string; fields: Field[] }[] = [
 ]
 const FIELDS = SERVER_SETTING_GROUPS.flatMap((group) => group.fields)
 export function ServerSettingsPage() {
-  const [draft, setDraft] = useState<Record<string, any> | null>(null)
-  const [saved, setSaved] = useState<Record<string, any> | null>(null)
+  const [draft, setDraft] = useState<ServerSettingsValues | null>(null)
+  const [saved, setSaved] = useState<ServerSettingsValues | null>(null)
   const [bounds, setBounds] = useState<Record<string, any>>({})
   const [textLimits, setTextLimits] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -148,20 +149,25 @@ export function ServerSettingsPage() {
   const lock = useRef(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  function accept(data: any) {
+  function accept(data: {
+    settings?: Record<string, unknown>
+    bounds?: Record<string, unknown>
+    text_limits?: Record<string, number>
+  }) {
+    const settings = data.settings
     if (
-      !data?.settings ||
+      !settings ||
       !data.bounds ||
       !data.text_limits ||
       FIELDS.some(
         (field) =>
-          typeof data.settings[field.key] !==
+          typeof settings[field.key] !==
           (field.type === 'number' ? 'number' : field.type ? 'string' : 'boolean'),
       )
     )
       throw new Error('Server settings returned an invalid response.')
-    setDraft(data.settings)
-    setSaved(data.settings)
+    setDraft(settings as ServerSettingsValues)
+    setSaved(settings as ServerSettingsValues)
     setBounds(data.bounds)
     setTextLimits(data.text_limits)
   }
@@ -213,7 +219,7 @@ export function ServerSettingsPage() {
       setBusy(false)
     }
   }
-  function edit(key: string, value: any) {
+  function edit(key: string, value: string | number | boolean) {
     setDraft((current) => ({ ...current, [key]: value }))
     setMessage('')
   }
@@ -259,7 +265,7 @@ export function ServerSettingsPage() {
                       <input
                         id={`server-${field.key}`}
                         type="checkbox"
-                        checked={draft[field.key]}
+                        checked={Boolean(draft[field.key])}
                         onChange={(event) => edit(field.key, event.target.checked)}
                         aria-describedby={field.help ? `server-${field.key}-help` : undefined}
                       />

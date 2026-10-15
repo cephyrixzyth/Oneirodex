@@ -60,7 +60,7 @@ export function GameCard({
   discoverReason = '',
 }: LooseProps) {
   const cardRef = useRef<any>(null)
-  const menuButtonRef = useRef<any>(null)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const longPressTimer = useRef(0)
   const longPressFired = useRef(false)
   const trailerTimer = useRef(0)

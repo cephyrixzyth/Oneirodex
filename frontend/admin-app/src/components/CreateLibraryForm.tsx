@@ -76,7 +76,7 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
       body.append('scan_depth', String(depth))
       body.append('watch_enabled', watch)
       if (image) body.append('image', image, image.name)
-      const created = await postForm('/api/admin/libraries', body)
+      const created = await postForm<{ library_uuid?: string }>('/api/admin/libraries', body)
       uuid = String(created.library_uuid || '')
       if (!uuid) throw new Error('Library was created but its ID was not returned.')
     } catch (err) {

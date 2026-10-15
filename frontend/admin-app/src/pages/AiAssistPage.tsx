@@ -22,7 +22,7 @@ type AiStatus = {
 }
 type Suggestion = { rank?: number; title: string }
 
-function configFrom(data: any): Config {
+function configFrom(data: Partial<Config> & Record<string, unknown>): Config {
   if (
     !data ||
     ['enabled', 'db_enabled', 'env_enabled', 'auto_apply_enabled'].some(
@@ -154,11 +154,11 @@ export function AiAssistPage() {
       setError('Enter a folder or game title first.')
       return
     }
-    const result: any = await runAction('Suggestions loaded.', () =>
+    const result = (await runAction('Suggestions loaded.', () =>
       postJson('/api/ai/triage', { name: term }),
-    )
+    )) as { suggestions?: Suggestion[] }
     const next = Array.isArray(result?.suggestions)
-      ? result.suggestions.filter((item: any) => typeof item?.title === 'string')
+      ? result.suggestions.filter((item) => typeof item?.title === 'string')
       : []
     setSuggestions(next)
     if (next[0]?.title) setApplyTitle(next[0].title)

@@ -173,8 +173,9 @@ export function ManualIdentifyPage() {
   function choose(row: Candidate) {
     const resolveIds = (key: string) =>
       (Array.isArray(row[key]) ? row[key] : [])
-        .map((value: any) => {
-          const name = typeof value === 'object' ? value.name : value
+        .map((value: unknown) => {
+          const name =
+            value && typeof value === 'object' ? (value as { name?: unknown }).name : value
           return options?.taxonomies[key]?.find(
             (option) => option.name.toLowerCase() === String(name).toLowerCase(),
           )?.id
@@ -193,7 +194,10 @@ export function ManualIdentifyPage() {
       first_release_date: timestamp,
       video_urls: Array.isArray(row.videos)
         ? row.videos
-            .map((video: any) => `https://www.youtube.com/watch?v=${video.video_id}`)
+            .map(
+              (video: Record<string, unknown>) =>
+                `https://www.youtube.com/watch?v=${String(video.video_id ?? '')}`,
+            )
             .join(', ')
         : '',
       aggregated_rating: row.aggregated_rating ?? '',

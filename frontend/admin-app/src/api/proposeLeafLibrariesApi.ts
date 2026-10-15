@@ -289,7 +289,7 @@ export async function createLibraryFromCandidate(
   form.append('platform', candidate.platform || 'OTHER')
   form.append('scan_depth', String(candidate.scan_depth || 1))
   form.append('watch_enabled', 'default')
-  const created = await postForm(LIBRARY_CREATE_URL, form)
+  const created = await postForm<{ library_uuid?: string }>(LIBRARY_CREATE_URL, form)
   const libraryUuid = typeof created?.library_uuid === 'string' ? created.library_uuid : ''
   if (!libraryUuid) {
     return { ok: false, error: 'Library was created but its ID was not returned.' }

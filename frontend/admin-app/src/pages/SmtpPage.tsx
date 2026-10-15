@@ -23,7 +23,7 @@ const EMPTY: SmtpForm = {
   smtp_use_tls: true,
   smtp_default_sender: '',
 }
-function formFrom(data: any): SmtpForm {
+function formFrom(data: Partial<SmtpForm>): SmtpForm {
   return {
     smtp_enabled: Boolean(data.smtp_enabled),
     smtp_server: data.smtp_server || '',
@@ -48,7 +48,9 @@ export function SmtpPage() {
   const [message, setMessage] = useState('')
   const dirty = JSON.stringify(form) !== JSON.stringify(saved)
 
-  function accept(data: any) {
+  function accept(
+    data: Partial<SmtpForm> & { password_saved?: boolean; last_tested?: string | null },
+  ) {
     const next = formFrom(data)
     setForm(next)
     setSaved(next)

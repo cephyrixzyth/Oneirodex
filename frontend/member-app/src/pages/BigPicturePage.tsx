@@ -102,12 +102,12 @@ export function BigPicturePage() {
     download: (uuid: string) => void
   }>({ games: [], index: 0, select: () => {}, download: () => {} })
 
-  const requestDownload = async (uuid: any) => {
+  const requestDownload = async (uuid: string) => {
     try {
       await initiateGameDownload(uuid)
       navigate('/downloads')
-    } catch (error: any) {
-      showToast(error?.message || 'Unable to start this download.', 'error')
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : 'Unable to start this download.', 'error')
     }
   }
   padState.current.download = requestDownload

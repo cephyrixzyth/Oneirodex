@@ -394,7 +394,12 @@ export function loadBoardLayout({
 
 function sameWidgetLayout(stored: unknown, expected: WidgetItem[]): boolean {
   if (!Array.isArray(stored) || stored.length !== expected.length) return false
-  const actualById = new Map(stored.map((item: any) => [item?.id, item]))
+  const actualById = new Map(
+    stored.map((item: unknown) => {
+      const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+      return [record.id, record] as const
+    }),
+  )
   return expected.every((item) => {
     const actual = actualById.get(item.id) as Partial<WidgetItem> | undefined
     return (
