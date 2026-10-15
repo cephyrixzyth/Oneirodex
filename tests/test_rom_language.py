@@ -7,6 +7,7 @@ from oneirodex.utils.rom_language import (
     classify_patch_file,
     parse_rom_language_tags,
     preferred_locale_matches,
+    rom_language_fields_from_path,
 )
 from oneirodex.utils.rom_name_peel import parse_console_rom_label
 
@@ -30,6 +31,15 @@ def test_parse_explicit_lang_list():
     assert parsed['rom_region'] == 'EUR'
     assert parsed['languages'] == ['en', 'fr', 'de']
     assert parsed['has_english'] is True
+
+
+def test_path_projection_handles_windows_separators_and_empty_paths():
+    assert rom_language_fields_from_path(r'R:\ROMs\Game (Japan) (En,Ja).zip') == {
+        'rom_region': 'JPN', 'rom_languages': 'en,ja',
+    }
+    assert rom_language_fields_from_path(None) == {
+        'rom_region': None, 'rom_languages': None,
+    }
 
 
 def test_preferred_locale_mismatch_jpn_vs_en_us():

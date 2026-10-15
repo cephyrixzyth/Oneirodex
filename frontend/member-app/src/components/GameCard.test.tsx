@@ -57,6 +57,74 @@ test('places hamburger and favorite together in the top-right stack', () => {
   ).toHaveAttribute('data-chrome-anchor', 'top-right')
 })
 
+test('Escape closes the tile action menu and restores focus to its opener', async () => {
+  const user = userEvent.setup()
+  renderRouted(<GameCard game={baseGame} showPlayStatus={false} isAdmin={false} />)
+  const opener = screen.getByRole('button', { name: /open actions for archery kings vr/i })
+  expect(opener).not.toHaveAttribute('aria-controls')
+
+  await user.click(opener)
+  expect(opener).toHaveAttribute('aria-controls', `popupMenu-${baseGame.uuid}`)
+  const reportLink = screen.getByRole('link', { name: /report an issue/i })
+  reportLink.focus()
+  expect(reportLink).toHaveFocus()
+
+  await user.keyboard('{Escape}')
+
+  expect(screen.queryByRole('link', { name: /report an issue/i })).toBeNull()
+  expect(opener).toHaveAttribute('aria-expanded', 'false')
+  expect(opener).not.toHaveAttribute('aria-controls')
+  expect(opener).toHaveFocus()
+})
+
+test('the open tile menu exposes its native actions in keyboard tab order', async () => {
+  const user = userEvent.setup()
+  renderRouted(<GameCard game={baseGame} showPlayStatus={false} isAdmin={false} />)
+  const opener = screen.getByRole('button', { name: /open actions for archery kings vr/i })
+
+  await user.click(opener)
+  await user.tab() // Focus moves from the disclosure into its first native action.
+
+  expect(screen.getByRole('button', { name: 'Download' })).toHaveFocus()
+})
+
+test('outside click closes a tile menu without taking focus from the clicked control', async () => {
+  const user = userEvent.setup()
+  renderRouted(
+    <>
+      <a href="#outside">Outside destination</a>
+      <GameCard game={baseGame} showPlayStatus={false} isAdmin={false} />
+    </>,
+  )
+  await user.click(screen.getByRole('button', { name: /open actions for archery kings vr/i }))
+
+  const outsideControl = screen.getByRole('link', { name: 'Outside destination' })
+  await user.click(outsideControl)
+
+  expect(screen.queryByRole('link', { name: /report an issue/i })).toBeNull()
+  expect(outsideControl).toHaveFocus()
+})
+
+test('opening another tile menu closes the previous one', async () => {
+  const user = userEvent.setup()
+  const secondGame = {
+    ...baseGame,
+    uuid: '22222222-2222-4222-8222-222222222222',
+    name: 'Second Game',
+  }
+  renderRouted(
+    <>
+      <GameCard game={baseGame} showPlayStatus={false} isAdmin={false} />
+      <GameCard game={secondGame} showPlayStatus={false} isAdmin={false} />
+    </>,
+  )
+  await user.click(screen.getByRole('button', { name: /open actions for archery kings vr/i }))
+  await user.click(screen.getByRole('button', { name: /open actions for second game/i }))
+
+  expect(document.getElementById(`popupMenu-${baseGame.uuid}`)).toBeNull()
+  expect(document.getElementById(`popupMenu-${secondGame.uuid}`)).not.toBeNull()
+})
+
 test('play status joins the top-right chrome stack; NEW stays top-left', () => {
   // Relative to now — a hardcoded date silently ages out of the 14-day NEW window.
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()

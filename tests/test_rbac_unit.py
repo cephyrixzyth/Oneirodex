@@ -8,6 +8,10 @@ from oneirodex.utils.rbac import (
     normalize_role,
     role_at_least,
 )
+from oneirodex.utils.role_catalog import (
+    can_request_games as catalog_can_request_games,
+    is_librarian as catalog_is_librarian,
+)
 
 
 class _User:
@@ -41,3 +45,12 @@ def test_child_cannot_request_games():
     assert can_request_games(_User('librarian'))
     assert not can_request_games(_User('child'))
     assert not can_request_games(_User('user', authenticated=False))
+
+
+def test_framework_independent_role_catalog_matches_native_role_rules():
+    assert catalog_is_librarian(_User('librarian'))
+    assert catalog_is_librarian(_User('admin'))
+    assert not catalog_is_librarian(_User('user'))
+    assert catalog_can_request_games(_User('user'))
+    assert not catalog_can_request_games(_User('child'))
+    assert not catalog_can_request_games(_User('user', authenticated=False))

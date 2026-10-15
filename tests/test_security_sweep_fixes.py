@@ -197,14 +197,15 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
 
 # -- the readiness probe does not describe the database to strangers -----------
 
-def test_the_readiness_probe_hides_the_database_error_text(app, monkeypatch):
+def test_the_readiness_probe_hides_the_database_error_text(app):
     from oneirodex.utils import health_probes
+    from types import SimpleNamespace
 
     def boom(*_a, **_k):
         raise RuntimeError('could not connect to server at "db.internal" port 5432 user "oneirodex"')
 
-    monkeypatch.setattr(health_probes.db.session, 'execute', boom)
-    ok, error = health_probes.check_database()
+    database = SimpleNamespace(session=SimpleNamespace(execute=boom))
+    ok, error = health_probes.check_database(database)
     assert ok is False and 'db.internal' not in error and error == 'RuntimeError'
 
 
@@ -261,7 +262,9 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     assert user.email == email.lower()
     assert user.is_email_verified is False
 
-    confirmed = app.test_client().get(f'/confirm/{user.email_verification_token}')
+    # /confirm/<token> now serves the static React shell. The API owns the
+    # one-time state transition; Flask's test client does not execute the SPA.
+    confirmed = app.test_client().get(f'/api/auth/confirm/{user.email_verification_token}')
     assert confirmed.status_code == 200
     db_session.expire_all()
     assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is True

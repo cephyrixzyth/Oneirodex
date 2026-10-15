@@ -10,11 +10,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from flask import url_for
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Library
+from oneirodex.utils.static_urls import static_asset_url
 from oneirodex.utils.cover_art_studio import (
     SIZE_MATRIX,
     SYSTEM_TEMPLATES,
@@ -171,7 +171,7 @@ def _stock_static_path(pack_id: str, filename: str) -> str:
 
 def _stock_static_url(pack_id: str, filename: str) -> str:
     try:
-        return url_for('static', filename=f'library/stock/{pack_id}/{filename}')
+        return static_asset_url(f'library/stock/{pack_id}/{filename}')
     except RuntimeError:
         return _stock_static_path(pack_id, filename)
 
@@ -408,6 +408,7 @@ def apply_pack_to_library(
     library_uuid: str,
     *,
     package_root: str | Path | None = None,
+    static_url_path: str | None = None,
 ) -> dict[str, Any]:
     """Set Library.image_url to the pack's wide/hero static path."""
     library = db.session.execute(
@@ -425,7 +426,12 @@ def apply_pack_to_library(
         fmt = (manifest.get('format') or 'webp').lower()
     src = _pick_library_file(pack_dir, fmt)
     rel_parent = 'library/stock' if pack_dir.parent.name == 'stock' else 'library/generated'
-    image_url = url_for('static', filename=f'{rel_parent}/{pack_id}/{src.name}')
+    if static_url_path is None:
+        image_url = static_asset_url(f'{rel_parent}/{pack_id}/{src.name}')
+    else:
+        image_url = (
+            f"{static_url_path.rstrip('/')}/{rel_parent}/{pack_id}/{src.name}"
+        )
     library.image_url = image_url
     try:
         db.session.commit()

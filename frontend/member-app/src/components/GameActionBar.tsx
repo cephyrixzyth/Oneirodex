@@ -21,7 +21,6 @@ export function GameActionBar({
   // Details shows companion presence as a chip on the status row instead, so it
   // can opt out rather than render the same fact twice.
   showPresence = true,
-  downloadHref,
   updateHref,
   className = '',
   onCommandQueued,
@@ -35,10 +34,8 @@ export function GameActionBar({
   const [statusMessage, setStatusMessage] = useState('')
   const [assistPack, setAssistPack] = useState(assistPackProp === undefined ? null : assistPackProp)
   const [remotePlay, setRemotePlay] = useState(remotePlayProp === undefined ? null : remotePlayProp)
-  const downloadUrl = downloadHref || `/download_game/${gameUuid}`
   const updatesUrl = updateHref || `/game_details/${gameUuid}#updates`
   const compact = variant === 'compact'
-  const useLegacyDownloadHref = Boolean(downloadHref)
 
   useEffect(() => {
     if (assistPackProp !== undefined) {
@@ -196,11 +193,7 @@ export function GameActionBar({
     void sendCommand('uninstall')
   }
 
-  async function onDownloadClick(event: any) {
-    if (useLegacyDownloadHref) {
-      return
-    }
-    event.preventDefault()
+  async function onDownloadClick() {
     if (!gameUuid || busyAction) {
       return
     }
@@ -306,23 +299,17 @@ export function GameActionBar({
           {clientConnected ? 'Companion online' : 'Companion offline'}
         </span>
       ) : null}
-      {useLegacyDownloadHref ? (
-        <a className="od-action-bar__btn od-action-bar__btn--primary" href={downloadUrl}>
-          Download
-        </a>
-      ) : (
-        <button
-          type="button"
-          className="od-action-bar__btn od-action-bar__btn--primary"
-          data-action="download"
-          disabled={busyAction === 'download_file'}
-          onClick={(event) => {
-            void onDownloadClick(event)
-          }}
-        >
-          {busyAction === 'download_file' ? 'Queuing…' : 'Download'}
-        </button>
-      )}
+      <button
+        type="button"
+        className="od-action-bar__btn od-action-bar__btn--primary"
+        data-action="download"
+        disabled={busyAction === 'download_file'}
+        onClick={() => {
+          void onDownloadClick()
+        }}
+      >
+        {busyAction === 'download_file' ? 'Queuing…' : 'Download'}
+      </button>
       <button
         type="button"
         className="od-action-bar__btn"

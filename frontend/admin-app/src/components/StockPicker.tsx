@@ -235,9 +235,9 @@ export function StockPicker({
           state, so it stays as it is. */}
       <PageStatus error={error} />
       {status ? (
-        <p className="od-admin-lede" role="status">
+        <PageStatus announcement="status" className="od-admin-lede">
           {status}
-        </p>
+        </PageStatus>
       ) : null}
 
       <div className="od-stock-picker__filters" role="group" aria-label="Catalog filter">

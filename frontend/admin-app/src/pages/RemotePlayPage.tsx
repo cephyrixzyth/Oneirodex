@@ -6,6 +6,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { showToast } from '../utils/toast'
 import { Page } from '../components/Page'
+import { getJson, putJson } from '../api/adminApi'
+import { errorText } from '../utils/errorText'
 
 interface RemotePlayForm {
   enabled: boolean
@@ -32,13 +34,18 @@ const EMPTY: RemotePlayForm = {
 export function RemotePlayPage() {
   const [form, setForm] = useState(EMPTY)
   const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/admin/remote-play/config', { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    setLoading(true)
+    setError('')
+    setLoadFailed(false)
+    getJson('/api/admin/remote-play/config')
       .then((data) => {
         if (cancelled) return
         setForm({
@@ -52,8 +59,11 @@ export function RemotePlayPage() {
           host_label: data.host_label || '',
         })
       })
-      .catch(() => {
-        if (!cancelled) setMessage('Could not load remote play settings.')
+      .catch((err) => {
+        if (!cancelled) {
+          setError(errorText(err) || 'Could not load remote play settings.')
+          setLoadFailed(true)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -61,7 +71,7 @@ export function RemotePlayPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   function updateField<K extends keyof RemotePlayForm>(key: K, value: RemotePlayForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -69,34 +79,18 @@ export function RemotePlayPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy || loading || loadFailed) return
     setBusy(true)
     setMessage('')
+    setError('')
     try {
-      const response = await fetch('/api/admin/remote-play/config', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: form.enabled,
-          provider: form.provider,
-          sunshine_base_url: form.sunshine_base_url,
-          wolf_base_url: form.wolf_base_url,
-          token_hint: form.token_hint,
-          pin_hint: form.pin_hint,
-          app_hint: form.app_hint,
-          host_label: form.host_label,
-        }),
-      })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        setMessage(data.error || 'Save failed.')
-        showToast(data.error || 'Remote play save failed.', 'error')
-        return
-      }
+      await putJson('/api/admin/remote-play/config', { ...form })
       setMessage('Remote play settings saved.')
       showToast('Remote play settings saved.', 'success')
-    } catch {
-      setMessage('Save failed.')
+    } catch (err) {
+      const text = errorText(err) || 'Remote play save failed.'
+      setError(text)
+      showToast(text, 'error')
     } finally {
       setBusy(false)
     }
@@ -112,6 +106,10 @@ export function RemotePlayPage() {
         </>
       }
     >
+      <PageStatus error={error || null} />
+      {loadFailed ? (
+        <Button onClick={() => setReloadKey((key) => key + 1)}>Retry loading settings</Button>
+      ) : null}
       {loading ? (
         <PageStatus loading loadingMessage="Loading remote play settings…" />
       ) : (
@@ -126,7 +124,11 @@ export function RemotePlayPage() {
           </label>
           <label className="od-admin-field">
             Primary provider
-            <select value={form.provider} onChange={(e) => updateField('provider', e.target.value)}>
+            <select
+              className="od-admin-input"
+              value={form.provider}
+              onChange={(e) => updateField('provider', e.target.value)}
+            >
               <option value="sunshine">Sunshine (single session)</option>
               <option value="wolf">Wolf (multi-user)</option>
             </select>
@@ -134,6 +136,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             Sunshine base URL
             <input
+              className="od-admin-input"
               type="url"
               placeholder="http://192.168.1.50:47989"
               value={form.sunshine_base_url}
@@ -143,6 +146,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             Wolf base URL
             <input
+              className="od-admin-input"
               type="url"
               placeholder="http://192.168.1.50:8080"
               value={form.wolf_base_url}
@@ -152,6 +156,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             Host label (shown to members)
             <input
+              className="od-admin-input"
               type="text"
               placeholder="Basement GPU PC"
               value={form.host_label}
@@ -161,6 +166,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             App hint (Moonlight app name)
             <input
+              className="od-admin-input"
               type="text"
               placeholder="Steam Big Picture"
               value={form.app_hint}
@@ -170,6 +176,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             PIN hint
             <input
+              className="od-admin-input"
               type="text"
               placeholder="Pair in Sunshine first"
               value={form.pin_hint}
@@ -179,6 +186,7 @@ export function RemotePlayPage() {
           <label className="od-admin-field">
             Token hint
             <input
+              className="od-admin-input"
               type="text"
               placeholder="Ask admin for Wolf token"
               value={form.token_hint}
@@ -190,14 +198,14 @@ export function RemotePlayPage() {
             connection hints — it does not run Sunshine/Wolf in the app container.
           </p>
           <div className="od-admin-actions-row">
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || loadFailed}>
               {busy ? 'Saving…' : 'Save settings'}
             </Button>
             <a className="od-btn od-btn--ghost" href="/admin/settings">
               Settings hub
             </a>
           </div>
-          {message ? <p role="status">{message}</p> : null}
+          {message ? <PageStatus announcement="status">{message}</PageStatus> : null}
         </form>
       )}
     </Page>

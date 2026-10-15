@@ -83,9 +83,13 @@ class TestEditFiltersRoute:
         
         response = client.get('/admin/edit_filters')
         assert response.status_code == 200
-        response_data = response.get_data(as_text=True)
-        assert f'TestGroup1_{unique_suffix}' in response_data
-        assert f'TestGroup2_{unique_suffix}' in response_data
+        assert b'<title>Release filters' in response.data
+        assert b'data-admin-render="spa"' in response.data
+        api_response = client.get('/api/admin/scan-filters')
+        filters = api_response.get_json()['filters']
+        patterns = {row['filter_pattern'] for row in filters}
+        assert f'TestGroup1_{unique_suffix}' in patterns
+        assert f'TestGroup2_{unique_suffix}' in patterns
     
     def test_edit_filters_empty_groups(self, client, admin_user):
         """Test edit_filters with no existing groups."""
@@ -149,10 +153,11 @@ class TestEditFiltersRoute:
             'filter_pattern': '',  # Empty filter_pattern should fail validation
             'case_sensitive': 'no',
             'submit': 'Add'
-        })
+        }, follow_redirects=True)
         
-        # Should return the form page with errors, not redirect
+        # Invalid legacy form submissions return to the shared React page with a flash.
         assert response.status_code == 200
+        assert b'required' in response.data.lower() or b'valid scanning filter' in response.data.lower()
     
     def test_edit_filters_post_flash_message(self, client, admin_user):
         """Test that flash message is shown after successful add."""
@@ -187,19 +192,9 @@ class TestEditFiltersRoute:
         
         response = client.get('/admin/edit_filters')
         assert response.status_code == 200
-        
-        # Verify ordering in database
-        from sqlalchemy import select
-        groups = db.session.execute(
-            select(ReleaseGroup).where(
-                ReleaseGroup.filter_pattern.in_([f'ZGroup_{unique_suffix}', f'AGroup_{unique_suffix}', f'MGroup_{unique_suffix}'])
-            ).order_by(ReleaseGroup.filter_pattern.asc())
-        ).scalars().all()
-        
-        assert len(groups) == 3
-        assert groups[0].filter_pattern == f'AGroup_{unique_suffix}'
-        assert groups[1].filter_pattern == f'MGroup_{unique_suffix}'
-        assert groups[2].filter_pattern == f'ZGroup_{unique_suffix}'
+        filters = client.get('/api/admin/scan-filters').get_json()['filters']
+        matching = [row['filter_pattern'] for row in filters if unique_suffix in row['filter_pattern']]
+        assert matching == [f'AGroup_{unique_suffix}', f'MGroup_{unique_suffix}', f'ZGroup_{unique_suffix}']
 
 
 class TestDeleteFilterRoute:
@@ -221,7 +216,7 @@ class TestDeleteFilterRoute:
         assert 'login' in response.location
     
     def test_delete_filter_success(self, client, admin_user):
-        """Test successful deletion of an existing filter."""
+        """Test confirmed React delete API removes an existing filter."""
         unique_suffix = str(int(time.time() * 1000))[-6:]
         test_group = ReleaseGroup(filter_pattern=f'ToDelete_{unique_suffix}', case_sensitive='no')
         db.session.add(test_group)
@@ -232,9 +227,9 @@ class TestDeleteFilterRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
         
-        response = client.get(f'/delete_filter/{group_id}')
-        assert response.status_code == 302
-        assert '/admin/edit_filters' in response.location
+        response = client.delete(f'/api/admin/scan-filters/{group_id}')
+        assert response.status_code == 200
+        assert response.get_json()['ok'] is True
         
         # Verify the group was deleted
         deleted_group = db.session.get(ReleaseGroup, group_id)
@@ -247,11 +242,12 @@ class TestDeleteFilterRoute:
             sess['_fresh'] = True
         
         # Use a very high ID that shouldn't exist
-        response = client.get('/delete_filter/999999')
+        response = client.delete('/api/admin/scan-filters/999999')
         assert response.status_code == 404
+        assert response.get_json()['error_code'] == 'not_found'
     
-    def test_delete_filter_flash_message(self, client, admin_user):
-        """Test that flash message is shown after successful deletion."""
+    def test_delete_filter_get_does_not_mutate(self, client, admin_user):
+        """The former delete link now redirects without changing data."""
         unique_suffix = str(int(time.time() * 1000))[-6:]
         test_group = ReleaseGroup(filter_pattern=f'ToDeleteFlash_{unique_suffix}', case_sensitive='no')
         db.session.add(test_group)
@@ -264,7 +260,21 @@ class TestDeleteFilterRoute:
         
         response = client.get(f'/delete_filter/{group_id}', follow_redirects=True)
         assert response.status_code == 200
-        assert b'Scanning filter removed.' in response.data
+        assert b'confirm removal' in response.data
+        assert db.session.get(ReleaseGroup, group_id) is not None
+
+    def test_delete_filter_post_compatibility(self, client, admin_user):
+        unique_suffix = str(int(time.time() * 1000))[-6:]
+        row = ReleaseGroup(filter_pattern=f'PostDelete_{unique_suffix}', case_sensitive='no')
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+        response = client.post(f'/delete_filter/{row_id}')
+        assert response.status_code == 302
+        assert db.session.get(ReleaseGroup, row_id) is None
     
     def test_delete_filter_removes_from_database(self, client, admin_user):
         """Test that filter is actually removed from database."""
@@ -282,7 +292,7 @@ class TestDeleteFilterRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
         
-        client.get(f'/delete_filter/{group_id}')
+        client.delete(f'/api/admin/scan-filters/{group_id}')
         
         # Verify it's gone after deletion
         deleted_group = db.session.get(ReleaseGroup, group_id)
@@ -337,10 +347,10 @@ class TestFiltersIntegration:
         })
         
         # Make a new GET request
-        response = client.get('/admin/edit_filters')
+        response = client.get('/api/admin/scan-filters')
         assert response.status_code == 200
-        response_data = response.get_data(as_text=True)
-        assert f'Persist_{unique_suffix}' in response_data
+        patterns = {row['filter_pattern'] for row in response.get_json()['filters']}
+        assert f'Persist_{unique_suffix}' in patterns
     
     def test_filters_routes_blueprint_registration(self, app):
         """Test that filter routes are properly registered."""

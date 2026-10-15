@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.8-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.1.8" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.9-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.1.9" /></a>
   <a href="https://github.com/cephyrixzyth/oneirodex"><img src="https://img.shields.io/badge/github-cephyrixzyth%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
@@ -39,14 +39,14 @@
 <a id="-what-is-oneirodex"></a>
 <img src="docs/assets/readme/h-what.svg" alt="01 · Overview — What is Oneirodex?" width="100%" />
 
-Oneirodex is a **Flask + React** server you run at home or on a NAS. Point it at folders of DRM-free games and ROMs, let it identify them against IGDB / Steam / GOG / RAWG, then give the household a modern browser app to **browse, download, play in the browser where a system supports it, and hang out** — with a desktop companion for PC titles and a ten-foot mode for the TV.
+Oneirodex is a **FastAPI + React** server you run at home or on a NAS. Point it at folders of DRM-free games and ROMs, let it identify them against IGDB / Steam / GOG / RAWG, then give the household a modern browser app to **browse, download, play in the browser where a system supports it, and hang out** — with a desktop companion for PC titles and a ten-foot mode for the TV.
 
 Every screenshot and clip on this page is **live UI** from a stock install seeded with five legal free ROMs: what you see is what ships.
 
 <table>
-<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.1.8</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
-<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.1.8</code></td></tr>
-<tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — Flask under ASGI (uvicorn)</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
+<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.1.9</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
+<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.1.9</code></td></tr>
+<tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — FastAPI under uvicorn</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
 </table>
 
 > **Legal.** Use Oneirodex only with software you are authorised to share. It ships **no** Discord bots, pirate marketplaces or store download queues. **Authentik / OIDC is optional** — local username and password is the default for a home install.
@@ -364,12 +364,12 @@ Full lists: [`.env.example`](.env.example) · [`.env.docker.example`](.env.docke
 ```text
 ┌─────────────────┐   ┌──────────────────┐   ┌────────────┐   ┌────────────┐
 │  Member SPA     │   │  Admin SPA       │   │  Desktop   │   │  Quest PWA │
-│  (React)        │   │  (React + Jinja) │   │  companion │   │  (/vr)     │
+│  (React)        │   │  (React)         │   │  companion │   │  (/vr)     │
 └────────┬────────┘   └────────┬─────────┘   └─────┬──────┘   └─────┬──────┘
          └─────────────┬───────┴───────────────────┴────────────────┘
                        ▼
               ┌─────────────────┐
-              │  Flask on ASGI  │  ← oneirodex/  :5006
+              │  FastAPI / ASGI │  ← oneirodex/  :5006
               │  APIs · auth    │
               └───────┬─────────┘
           ┌───────────┼────────────┐
@@ -391,12 +391,17 @@ Full lists: [`.env.example`](.env.example) · [`.env.docker.example`](.env.docke
 
 | Area | What Oneirodex uses |
 |---|---|
-| Language / server | **Python 3.12**, **Flask** under ASGI (uvicorn), SQLAlchemy + Alembic migrations |
-| Front ends | **React 19 + Vite + TypeScript** single-page apps (member, admin, ops-glance); admin also uses Jinja templates |
+| Language / server | **Python 3.12**, **FastAPI** (uvicorn), SQLAlchemy + Alembic; Flask compatibility tools are development-only |
+| Front ends | **React 19 + Vite + TypeScript** single-page apps (member, admin, ops-glance); no application-authored Jinja templates remain |
 | Desktop / VR | **Tauri** desktop companion · Quest PWA |
 | Database | **PostgreSQL 17** — the only required service |
 | Node.js | Build-time only (the Docker image compiles the SPAs, then ships Python); not a runtime dependency |
 | Not used | Next.js, PHP, Django, MySQL/MariaDB |
+
+The admin and member interfaces are React single-page apps. Application-authored
+Jinja templates and the WSGI bridge have been retired. FastAPI owns request
+dispatch; the runtime requirements exclude Flask, its extensions, and Jinja.
+Legacy Flask route modules remain available to development and parity tests.
 
 **Default ports:** `5006` (web app) and `5432` (PostgreSQL, internal to Compose).
 

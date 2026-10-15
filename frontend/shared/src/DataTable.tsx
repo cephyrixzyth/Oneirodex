@@ -22,6 +22,8 @@ export interface DataTableProps {
   initialSort?: { key: string; dir: 'asc' | 'desc' } | null
   dense?: boolean
   caption?: ReactNode
+  /** Name/focus entry point for tables that need a keyboard-scrollable region. */
+  scrollLabel?: string
   toolbar?: boolean
   columnFilters?: boolean
   showCount?: boolean
@@ -57,6 +59,7 @@ export function DataTable({
   initialSort = null,
   dense = false,
   caption,
+  scrollLabel,
   toolbar = true,
   columnFilters = false,
   showCount,
@@ -231,7 +234,12 @@ export function DataTable({
         </div>
       ) : null}
 
-      <div className="od-table-scroll">
+      <div
+        className="od-table-scroll"
+        role={scrollLabel ? 'region' : undefined}
+        aria-label={scrollLabel || undefined}
+        tabIndex={scrollLabel ? 0 : undefined}
+      >
         <table className="od-table">
           {caption ? <caption className="od-table__caption">{caption}</caption> : null}
           <thead>

@@ -9,7 +9,7 @@ through the star re-exports below, and every attribute a test patches as
 """
 import threading  # noqa: F401  -- re-export: `patch('oneirodex.utils.game_core.threading.Thread')`
 
-from oneirodex import db  # noqa: F401  -- re-export
+from oneirodex.runtime_native.db_session import native_db as db
 
 from oneirodex.utils.services.igdb_maps import *  # noqa: F401,F403
 from oneirodex.utils.services.entities import *  # noqa: F401,F403

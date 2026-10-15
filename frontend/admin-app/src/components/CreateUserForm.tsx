@@ -80,7 +80,7 @@ export function CreateUserForm({
       </p>
 
       <PageStatus error={error} />
-      {done ? <p role="status">{done}</p> : null}
+      {done ? <PageStatus announcement="status">{done}</PageStatus> : null}
 
       <label className="od-admin-field">
         Username

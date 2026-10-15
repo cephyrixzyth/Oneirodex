@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game
-from oneirodex.routes_discover import serialize_discover_game
+from oneirodex.utils.discover_projections import serialize_discover_game
 from oneirodex.utils.discover_hydrate import DiscoverHydration
 from oneirodex.utils.library_acl import apply_game_access_filters
 

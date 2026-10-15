@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { SupportInboxPage } from './SupportInboxPage'
 
@@ -61,4 +62,90 @@ test('an empty inbox is a good state, not an empty one', async () => {
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+function jsonResponse(body: any, status = 200) {
+  return {
+    ok: status < 400,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    text: async () => JSON.stringify(body),
+    json: async () => body,
+  }
+}
+afterEach(() => vi.unstubAllGlobals())
+
+test('failed loading stops progress, retains title and retries', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'Inbox unavailable' }, 503))
+      .mockResolvedValueOnce(jsonResponse({ tickets: [] })),
+  )
+  render(<SupportInboxPage />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Inbox unavailable')
+  expect(screen.getByRole('heading', { name: 'Support inbox' })).toBeInTheDocument()
+  expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+  expect(screen.queryByLabelText('Support')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+  expect(await screen.findByText('No tickets yet.')).toBeInTheDocument()
+  expect(screen.getByRole('table', { name: 'Support tickets' })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Support tickets table' })).toHaveAttribute(
+    'tabindex',
+    '0',
+  )
+})
+
+test('resolve uses shared transport, blocks repeat actions and refreshes the list', async () => {
+  const user = userEvent.setup()
+  let release!: (value: any) => void
+  let resolved = false
+  const fetcher = vi.fn((_url, init) => {
+    if (init?.method === 'POST')
+      return new Promise((resolve) => {
+        release = resolve
+      })
+    return Promise.resolve(
+      jsonResponse({
+        tickets: [{ id: 7, title: 'Review ticket', status: resolved ? 'resolved' : 'open' }],
+      }),
+    )
+  })
+  vi.stubGlobal('fetch', fetcher)
+  render(<SupportInboxPage />)
+  const button = await screen.findByRole('button', { name: 'Resolve Review ticket' })
+  await user.click(button)
+  expect(button).toBeDisabled()
+  await user.click(button)
+  expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  expect(fetcher.mock.calls.find(([, init]) => init?.method === 'POST')?.[0]).toBe(
+    '/api/support/tickets/7/resolve',
+  )
+  resolved = true
+  release(jsonResponse({ ok: true }))
+  expect(await screen.findByText('resolved')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Resolve Review ticket' })).not.toBeInTheDocument()
+})
+
+test('resolve failure is visible and retains the ticket', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url, init) =>
+      Promise.resolve(
+        jsonResponse(
+          init?.method === 'POST'
+            ? { error: 'Resolve unavailable', ok: false }
+            : { tickets: [{ id: 9, title: 'Unchanged ticket', status: 'open' }] },
+          init?.method === 'POST' ? 503 : 200,
+        ),
+      ),
+    ),
+  )
+  render(<SupportInboxPage />)
+  await user.click(await screen.findByRole('button', { name: 'Resolve Unchanged ticket' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Resolve unavailable')
+  expect(screen.getByRole('button', { name: 'Resolve Unchanged ticket' })).toBeEnabled()
 })

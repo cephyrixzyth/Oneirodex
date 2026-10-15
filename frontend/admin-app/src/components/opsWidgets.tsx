@@ -114,6 +114,8 @@ function IconReset(props: SVGProps<SVGSVGElement>) {
 
 export function OpsStatusBanner({
   severity = 'good',
+  loading = false,
+  unavailable = false,
   asOf,
   items,
   ariaLabel = 'System status',
@@ -122,6 +124,8 @@ export function OpsStatusBanner({
   refreshDisabled = false,
 }: {
   severity?: string
+  loading?: boolean
+  unavailable?: boolean
   asOf?: string
   items?: any
   ariaLabel?: string
@@ -129,11 +133,20 @@ export function OpsStatusBanner({
   refreshing?: boolean
   refreshDisabled?: boolean
 }) {
-  const tone = resolveBannerSeverity(items, severity)
+  const tone = loading ? 'loading' : unavailable ? 'na' : resolveBannerSeverity(items, severity)
+  const label = loading
+    ? 'Checking health…'
+    : unavailable
+      ? 'Health status unavailable'
+      : severityLabel(tone)
   return (
-    <section className={`od-ops-status od-ops-status--${tone}`} aria-label={ariaLabel}>
+    <section
+      className={`od-ops-status od-ops-status--${tone}`}
+      aria-label={ariaLabel}
+      aria-busy={loading ? 'true' : undefined}
+    >
       <div className="od-ops-status__head">
-        <strong>{severityLabel(tone)}</strong>
+        <strong>{label}</strong>
         {/* Trail chrome only when this banner owns Updated/refresh. Dashboard
             and Ops put those in the top bar, so leave the slot empty. */}
         {asOf || onRefresh ? (

@@ -198,8 +198,7 @@ export async function loadScanMatchConfig() {
         ok: false,
         form: {},
         exposed: [],
-        degradeReason:
-          'Scan/match API responded but exposed no policy keys yet (Backend mid-rollout).',
+        degradeReason: 'Scan/match settings are unavailable.',
       }
     }
     return { ok: true, form, exposed, degradeReason: null, raw: data }
@@ -211,7 +210,7 @@ export async function loadScanMatchConfig() {
       exposed: [],
       degradeReason:
         message.includes('404') || message.toLowerCase().includes('not found')
-          ? 'Scan/match settings API is not available yet (Backend mid-rollout). Propose-only still lives under Server Settings until this endpoint ships.'
+          ? 'Scan/match settings are unavailable. Configure propose-only scanning in Server Settings.'
           : `Could not load scan/match settings (${message}).`,
     }
   }

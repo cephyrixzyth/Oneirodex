@@ -41,7 +41,20 @@ function installFetch(overrides: { jobs?: any; scan?: any } = {}) {
     'fetch',
     vi.fn(async (url, opts) => {
       const href = String(url)
-      calls.push({ url: href, body: opts?.body ? JSON.parse(opts.body) : null })
+      calls.push({
+        url: href,
+        body:
+          opts?.body instanceof FormData
+            ? Object.fromEntries(
+                [...opts.body.entries()].map(([key, value]) => [
+                  key,
+                  value instanceof File ? value.name : value,
+                ]),
+              )
+            : opts?.body
+              ? JSON.parse(opts.body)
+              : null,
+      })
       if (href.includes('/api/admin/library_platforms')) {
         return jsonResponse({
           platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }],
@@ -116,7 +129,7 @@ test('each library row can start its own scan', async () => {
   )
 
   expect(await screen.findByText('PCWIN')).toBeInTheDocument()
-  const scanButtons = screen.getAllByRole('button', { name: 'Scan' })
+  const scanButtons = screen.getAllByRole('button', { name: /^Scan / })
   expect(scanButtons).toHaveLength(2)
 
   await user.click(scanButtons[0])
@@ -145,13 +158,12 @@ test('manual create form creates a library and queues its first scan', async () 
           platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }],
         })
       }
-      if (href.includes('/api/get_libraries')) {
-        return jsonResponse([{ uuid: 'new-lib', name: 'NES Games' }])
-      }
-      if (href.includes('/admin/library/add')) {
+      if (href.includes('/api/get_libraries')) return jsonResponse([])
+      if (href.endsWith('/api/admin/libraries') && opts?.method === 'POST') {
         expect((opts?.body as FormData).get('name')).toBe('NES Games')
         expect((opts?.body as FormData).get('platform')).toBe('NES')
-        return { ...jsonResponse({}), redirected: true, url: 'http://localhost/libraries' }
+        expect((opts?.body as FormData).get('watch_enabled')).toBe('default')
+        return jsonResponse({ library_uuid: 'new-lib', name: 'NES Games' })
       }
       if (href.includes('/api/admin/libraries/scan')) {
         const body = JSON.parse(opts?.body as string)
@@ -176,8 +188,8 @@ test('manual create form creates a library and queues its first scan', async () 
   await user.type(screen.getByLabelText('Folder path inside the server'), '/storage/games/nes')
   await user.click(screen.getByRole('button', { name: 'Create library and start scan' }))
 
-  expect(await screen.findByText('Created and queued first scan.')).toBeInTheDocument()
-  expect(seen.some((url) => url.includes('/admin/library/add'))).toBe(true)
+  expect(await screen.findByText('Library created and first scan queued.')).toBeInTheDocument()
+  expect(seen.some((url) => url.includes('/api/admin/libraries'))).toBe(true)
   expect(seen.some((url) => url.includes('/api/admin/libraries/scan'))).toBe(true)
 })
 
@@ -189,7 +201,7 @@ test('a library with no last scan folder says so instead of posting', async () =
   )
 
   await screen.findByText('PS2')
-  const buttons = screen.getAllByRole('button', { name: 'Scan' })
+  const buttons = screen.getAllByRole('button', { name: /^Scan / })
   // Row order is name-ascending: PCWIN, PS2.
   expect(buttons[1]).toBeDisabled()
   expect(buttons[1]).toHaveAttribute('title', expect.stringContaining('No last scan folder'))

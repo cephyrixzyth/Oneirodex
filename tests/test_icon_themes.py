@@ -12,6 +12,8 @@ from oneirodex.utils.icon_themes import (
     PACK_CSS,
     PACK_DRAWING_KEYS,
     PACK_GLYPH_KEYS,
+    PACK_STYLED_DATA_ICONS,
+    _pack_base_selector,
     pack_glyph_override_css,
 )
 
@@ -54,6 +56,20 @@ def test_drawing_packs_ship_pack_drawing_key_svgs():
         assert pack_glyph_override_css(pack_id) in PACK_CSS[pack_id]
 
 
+def test_drawing_pack_base_styles_only_target_icons_with_pack_drawings():
+    supported = set(PACK_STYLED_DATA_ICONS)
+    assert 'downloads' in supported
+    assert 'activity' not in supported
+    for pack_id in DRAWING_PACKS:
+        expected = _pack_base_selector(pack_id)
+        source = (SETUP / pack_id / 'pack.css').read_text(encoding='utf-8')
+        fallback = PACK_CSS[pack_id]
+        assert source.splitlines()[0] == f'{expected} {{'
+        assert fallback.splitlines()[0] == f'{expected} {{'
+        assert 'activity' not in source.splitlines()[0]
+        assert 'activity' not in fallback.splitlines()[0]
+
+
 def test_member_rail_icon_exposes_data_icon():
     """`data-icon` is what the icon-pack CSS hooks onto, so it must survive.
 
@@ -62,7 +78,8 @@ def test_member_rail_icon_exposes_data_icon():
     the shared module. A source-text assertion has to follow the source.
     """
     text = (REPO / 'frontend' / 'shared' / 'src' / 'railIcons.tsx').read_text(encoding='utf-8')
-    assert 'data-icon={name}' in text
+    assert 'data-icon={canonicalName}' in text
+    assert 'sharedIconAliases[name] ?? name' in text
 
     # And the old paths still resolve, or every call site breaks.
     for shim in (
@@ -76,17 +93,17 @@ def test_chrome_icon_components_expose_leftover_data_icons():
     text = (REPO / 'frontend' / 'member-app' / 'src' / 'chrome' / 'icons.tsx').read_text(
         encoding='utf-8'
     )
-    for key in ('user', 'menu', 'more'):
-        assert f'data-icon="{key}"' in text
+    for key in ('user', 'menu'):
+        assert f'RailIcon name="{key}"' in text
 
 
 def test_preferences_pack_chips_preview_pack_glyph_keys():
-    html = (
-        REPO / 'oneirodex' / 'templates' / 'settings' / 'modal_preferences.html'
+    component = (
+        REPO / 'frontend' / 'shared' / 'src' / 'PreferencesModal.tsx'
     ).read_text(encoding='utf-8')
-    chip = html.split('id="iconPackPreview"', 1)[1].split('icon-pack-chip-label', 1)[0]
+    chip = component.split('id="iconPackPreview"', 1)[1].split('icon-pack-chip-label', 1)[0]
     keys = tuple(
         match.group(1)
-        for match in re.finditer(r"icons\.icon\('([a-z]+)'", chip)
+        for match in re.finditer(r'RailIcon name="([a-z]+)"', chip)
     )
     assert keys == PACK_GLYPH_KEYS

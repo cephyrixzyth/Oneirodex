@@ -21,7 +21,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import UserDiscoverImpression
 
 #: Score multiplier floor. A damped title is pushed down, never suppressed —

@@ -67,6 +67,7 @@ class TestA1111Adapter:
             'x', width=512, height=768, timeout=5,
         )
         assert data.startswith(b'\x89PNG')
+        assert mock_post.call_args.kwargs['allow_redirects'] is False
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_tolerates_a_data_url_prefix(self, mock_post):
@@ -85,6 +86,13 @@ class TestA1111Adapter:
             A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
+    def test_redirect_is_rejected_without_following(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=302, json=lambda: {})
+        with pytest.raises(ArtworkGenerationError, match='HTTP 302'):
+            A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
+        assert mock_post.call_args.kwargs['allow_redirects'] is False
+
+    @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_empty_image_list_is_an_error(self, mock_post):
         mock_post.return_value = MagicMock(status_code=200, json=lambda: {'images': []})
         with pytest.raises(ArtworkGenerationError, match='no image'):
@@ -94,9 +102,14 @@ class TestA1111Adapter:
     def test_unreachable_endpoint_is_an_error(self, mock_post):
         import requests as _requests
 
-        mock_post.side_effect = _requests.RequestException('refused')
-        with pytest.raises(ArtworkGenerationError, match='unreachable'):
+        mock_post.side_effect = _requests.RequestException(
+            'refused https://user:password@sd.local:7860/generate?token=secret'
+        )
+        with pytest.raises(ArtworkGenerationError) as error:
             A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
+        assert 'unreachable' in str(error.value)
+        assert 'password' not in str(error.value)
+        assert 'token=secret' not in str(error.value)
 
 
 class TestComfyUI:

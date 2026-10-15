@@ -117,12 +117,31 @@ class TestWhitelistRoutes:
         
         response = client.get('/admin/whitelist')
         assert response.status_code == 200
-        
-        # Check that entries are displayed
-        response_text = response.get_data(as_text=True)
-        assert whitelist_entries[0].email in response_text
-        assert whitelist_entries[1].email in response_text
-        assert whitelist_entries[2].email in response_text
+        assert b'<title>Whitelist' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'data-admin-render="spa"' in response.data
+
+    def test_whitelist_api_lists_entries_with_registration_status(
+        self, client, admin_user, whitelist_entries, registered_user_for_whitelist
+    ):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        response = client.get('/admin/api/whitelist')
+        assert response.status_code == 200
+        entries = response.get_json()['entries']
+        by_email = {item['email']: item for item in entries}
+        assert by_email[whitelist_entries[0].email]['is_registered'] is False
+        assert by_email[whitelist_entries[1].email]['is_registered'] is False
+        assert by_email[whitelist_entries[2].email]['is_registered'] is True
+
+    def test_whitelist_api_requires_admin(self, client, regular_user):
+        assert client.get('/admin/api/whitelist').status_code == 302
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(regular_user.id)
+            sess['_fresh'] = True
+        assert client.get('/admin/api/whitelist').status_code == 302
 
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
     def test_whitelist_post_adds_new_email(self, mock_log, client, db_session, admin_user):
@@ -405,22 +424,20 @@ class TestWhitelistRegistrationStatus:
     """Tests for whitelist registration status checking functionality."""
 
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
-    def test_whitelist_shows_registration_status(self, mock_log, client, db_session, admin_user, 
+    def test_whitelist_api_shows_registration_status(self, mock_log, client, db_session, admin_user,
                                                whitelist_entries, registered_user_for_whitelist):
-        """Test that whitelist view correctly shows registration status for entries."""
+        """Test that whitelist API correctly shows registration status for entries."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
         
-        response = client.get('/admin/whitelist')
+        response = client.get('/admin/api/whitelist')
         assert response.status_code == 200
-        
-        # The template should show registration status
-        # This is a basic check - in a real scenario you'd check for specific HTML elements
-        response_text = response.get_data(as_text=True)
-        assert whitelist_entries[0].email in response_text
-        assert whitelist_entries[1].email in response_text
-        assert whitelist_entries[2].email in response_text
+        entries = response.get_json()['entries']
+        by_email = {item['email']: item for item in entries}
+        assert by_email[whitelist_entries[0].email]['is_registered'] is False
+        assert by_email[whitelist_entries[1].email]['is_registered'] is False
+        assert by_email[whitelist_entries[2].email]['is_registered'] is True
 
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
     def test_whitelist_efficient_registration_check(self, mock_log, client, db_session, admin_user):
@@ -457,7 +474,7 @@ class TestWhitelistRegistrationStatus:
         
         # Mock the database session to count queries
         with patch.object(db_session, 'execute', wraps=db_session.execute) as mock_execute:
-            response = client.get('/admin/whitelist')
+            response = client.get('/admin/api/whitelist')
             assert response.status_code == 200
             
             # Should be efficient - not making individual queries for each email

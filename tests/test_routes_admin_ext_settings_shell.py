@@ -56,6 +56,13 @@ def login(client, user):
         sess['_fresh'] = True
 
 
+def test_oidc_legacy_tab_url_still_redirects_to_existing_settings(admin_user, client):
+    login(client, admin_user)
+    response = client.get('/admin/integrations/oidc')
+    assert response.status_code == 302
+    assert response.headers['Location'] == '/admin/integrations#oidc'
+
+
 class TestSettingsShellSections:
     """Test the SETTINGS_SHELL_SECTIONS configuration itself."""
 
@@ -74,7 +81,7 @@ class TestSettingsShellSections:
         import re
         from pathlib import Path
 
-        nav = Path('frontend/admin-app/src/navConfig.js').read_text(encoding='utf-8')
+        nav = Path('frontend/admin-app/src/components/navConfig.ts').read_text(encoding='utf-8')
         # `to:` for router cards, `href:` for full-page links and the
         # integrations inventory — a section reachable from the top nav or an
         # inventory entry is reachable, even without a settings card. Fragments
@@ -108,8 +115,8 @@ class TestSettingsShellSections:
     def test_icons_are_semantic_keys_not_font_awesome_classes(self):
         for key, section in SETTINGS_SHELL_SECTIONS.items():
             assert not section['icon'].startswith('fa-'), (
-                f"{key} still carries a Font Awesome class; the shell renders "
-                "inline SVG via templates/partials/icons.html"
+                f"{key} still carries a Font Awesome class; React icon consumers "
+                "use semantic keys from the shared icon catalog"
             )
 
     def test_each_section_endpoint_resolves(self, app):

@@ -41,3 +41,7 @@ Global settings: `admin_notify_support` (and related `admin_notify_*` for librar
 - `GET /api/announcements` — `{ announcements, empty }` (+ `body_preview` per row)
 - `GET /api/news/gaming` — `{ items, empty }` (never 500 on RSS failure)
 - `GET /api/news/free-games` — `{ items, enabled, connected_stores, empty }`
+
+## React admin page behavior
+
+Support Inbox is served at the existing URL through the shared React admin shell. Loading and errors use the shared page shell, with Try again after a failed list request. Resolve controls identify their ticket and prevent overlapping requests; failures leave the ticket visible with an error. Table sorting/filtering and GitHub links retain their existing behavior.

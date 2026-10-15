@@ -11,9 +11,9 @@ from urllib.parse import quote, urlencode
 
 from sqlalchemy import func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Genre, UserGameProgress, user_favorites
-from oneirodex.routes_discover import serialize_discover_game
+from oneirodex.utils.discover_projections import serialize_discover_game
 from oneirodex.utils.discover_hydrate import DiscoverHydration
 from oneirodex.utils.discover_providers import ROW_WINDOW, _access_filtered
 

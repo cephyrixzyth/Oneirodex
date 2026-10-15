@@ -6,6 +6,7 @@
   "workspaces": [
     "frontend/member-app",
     "frontend/admin-app",
+    "frontend/ui-catalog",
     "frontend/ops-glance",
     "frontend/api-client",
     "frontend/shared",
@@ -28,5 +29,5 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0"
   },
-  "version": "1.1.8"
+  "version": "1.1.9"
 }

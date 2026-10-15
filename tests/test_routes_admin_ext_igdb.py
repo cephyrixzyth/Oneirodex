@@ -103,9 +103,10 @@ class TestIGDBSettingsRoute:
         
         response = client.get('/admin/igdb_settings')
         assert response.status_code == 200
-        # The template should receive the settings object
+        # The React settings route is served from the shared admin shell.
         response_data = response.get_data(as_text=True)
-        assert 'admin_manage_igdb_settings.html' in response_data or 'settings' in response_data
+        assert 'id="admin-app-root"' in response_data
+        assert 'admin_manage_igdb_settings.html' not in response_data
     
     def test_igdb_settings_get_no_existing_settings(self, client, admin_user):
         """Test GET request when no settings exist."""

@@ -60,10 +60,20 @@ describe('apply_patch helpers', () => {
       }
       return undefined
     })
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      arrayBuffer: async () => new TextEncoder().encode('BPS1').buffer,
-    })) as unknown as typeof fetch
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: 'https://gt.example/api/downloads/games/game-42',
+        json: async () => ({ ok: true, stream_url: '/download_zip/80' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: 'https://gt.example/download_zip/80',
+        arrayBuffer: async () => new TextEncoder().encode('BPS1').buffer,
+      }) as unknown as typeof fetch
 
     const result = await stagePatchFile({
       gameUuid: 'game-42',
@@ -74,9 +84,20 @@ describe('apply_patch helpers', () => {
     })
 
     expect(result).toEqual({ ok: true, path: '/appdata/patches/game-42/en.bps' })
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://gt.example/download_other/extra/game-42/patch-9',
-      expect.objectContaining({ credentials: 'include' }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'https://gt.example/api/downloads/games/game-42',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        redirect: 'error',
+        body: JSON.stringify({ kind: 'extra', version_uuid: 'patch-9' }),
+      }),
+    )
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://gt.example/download_zip/80',
+      expect.objectContaining({ credentials: 'omit' }),
     )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/patches/game-42/en.bps',

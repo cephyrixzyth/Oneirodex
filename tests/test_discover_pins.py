@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from oneirodex import db
 from oneirodex.models import DiscoverySection, User, UserPreference
+from oneirodex.utils.api_tokens import generate_api_token
 from oneirodex.utils.discover_feed import MAX_ADMIN_FORCED, MAX_MEMBER_PINS
 
 
@@ -52,6 +53,34 @@ def _force(db_session, identifier, rank):
 
 
 class TestMemberPins:
+    def test_read_only_bearer_can_read_discover_pins(self, client, db_session, pin_user):
+        _row, token = generate_api_token(pin_user, 'read-only-pins-get', ['read:library'])
+        response = client.get(
+            '/api/discover/pins',
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert response.status_code == 200
+        assert 'pins' in response.get_json()
+
+    def test_read_only_bearer_cannot_change_discover_pins(self, client, db_session, pin_user):
+        _row, token = generate_api_token(pin_user, 'read-only-pins', ['read:library'])
+        response = client.put(
+            '/api/discover/pins', json={'pins': [], 'hidden': []},
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert response.status_code == 403
+        assert response.get_json()['error_code'] == 'forbidden'
+
+    def test_write_bearer_can_change_discover_pins(self, client, db_session, pin_user):
+        _row, token = generate_api_token(
+            pin_user, 'writable-pins', ['read:library', 'write:library'],
+        )
+        response = client.put(
+            '/api/discover/pins', json={'pins': [], 'hidden': []},
+            headers={'Authorization': f'Bearer {token}'},
+        )
+        assert response.status_code == 200, response.get_json()
+
     def test_a_member_with_no_preferences_row_has_no_pins(self, app, pin_user):
         from oneirodex.utils.discover_pins import member_pins
 

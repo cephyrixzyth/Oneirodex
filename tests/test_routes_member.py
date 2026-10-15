@@ -1,8 +1,9 @@
 """Member-blueprint SPA shells must carry global nav flags.
 
 ``/systems``, ``/chat``, ``/collections`` and the rest of ``member_bp`` used
-to render ``member_spa.html`` without a settings context processor. Jinja then
-treated ``show_trailers`` / ``show_help_button`` as unset (false) and the
+to render ``member_spa.html`` without a settings context processor. The
+Python-built shell now resolves the shared settings contract for every route, so
+``show_trailers`` / ``show_help_button`` cannot silently default false and the
 React rail hid Help and Trailers on a full load of those routes — while
 ``/discover`` and ``/favorites`` (other blueprints) stayed correct.
 """

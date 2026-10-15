@@ -148,7 +148,8 @@ class InitializationManager:
                 from oneirodex import models
 
                 # Create all tables (idempotent operation)
-                models.db.metadata.create_all(engine)
+                from oneirodex.models.orm import ModelBase
+                ModelBase.metadata.create_all(engine)
                 _safe_print("[OK] Database tables created")
 
                 # Run schema migrations

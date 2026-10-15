@@ -1,6 +1,5 @@
 import { memo, useEffect, useMemo, useState, type Key, type ReactNode } from 'react'
-import { Button, confirmAction } from '@oneirodex/ui'
-import { PageStatus } from '@oneirodex/ui'
+import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { PM_IGNORE } from './formIgnore'
 import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
@@ -351,11 +350,7 @@ export const DupeGlance = memo(function DupeGlance({
         </div>
       </div>
 
-      {fixLog ? (
-        <p className={`od-dupe-glance__log${fixLog.ok ? ' is-ok' : ' is-error'}`} role="status">
-          {fixLog.message}
-        </p>
-      ) : null}
+      {fixLog ? <PageStatus announcement="status">{fixLog.message}</PageStatus> : null}
 
       <PageStatus
         loading={loading}

@@ -1,8 +1,0 @@
-{% extends "base_admin.html" %}
-{% block title %}Storage / hardlinks · Oneirodex Admin{% endblock %}
-{% block admin_render %}spa{% endblock %}
-{% block content %}
-{# React StoragePage in admin-app — declared spa, so content here no longer
-   silently disables the React body (GT-A3).
-   Env gates: ENABLE_HARDLINK_HELPERS · ALLOW_HARDLINK_APPLY (status via GET /api/storage/status). #}
-{% endblock %}

@@ -81,6 +81,8 @@ def test_livekit_enabled_flag(monkeypatch):
     assert livekit_enabled() is True
     monkeypatch.setenv('ENABLE_LIVEKIT', 'false')
     assert livekit_enabled() is False
+    assert livekit_enabled(config={'ENABLE_LIVEKIT': True}) is True
+    assert livekit_enabled(config={'ENABLE_LIVEKIT': False}) is False
 
 
 def test_mint_token_shape(monkeypatch):

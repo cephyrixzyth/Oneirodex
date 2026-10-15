@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 from flask_login import current_user, login_required
 
 from oneirodex import db
@@ -26,6 +26,7 @@ from oneirodex.utils.discover_pins import (
     set_member_pins,
 )
 from oneirodex.utils.discover_providers import resolve_feed
+from oneirodex.utils.api_tokens import user_has_scope
 
 from . import apis_bp
 
@@ -168,6 +169,16 @@ def discover_pins():
     other alone, so the row controls in the feed can send just the half they
     changed.
     """
+    if (
+        request.method == 'PUT'
+        and getattr(g, 'api_token', None) is not None
+        and not user_has_scope('write:library')
+    ):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
+
     available = [row.identifier for row in resolve_feed(current_user)]
 
     if request.method == 'GET':

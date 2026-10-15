@@ -190,7 +190,7 @@ class TestSetupRoute:
         assert response.status_code == 302
         assert '/login' in response.location
     
-    @patch('oneirodex.routes_setup.render_template')
+    @patch('oneirodex.routes_setup.render_member_auth_spa')
     def test_setup_get_renders_template_when_no_user(self, mock_render, client, db_session):
         """Test GET /setup renders template when no users exist."""
         # Ensure no users exist for this test
@@ -204,9 +204,8 @@ class TestSetupRoute:
         assert response.status_code == 200
         mock_render.assert_called_once()
         args, kwargs = mock_render.call_args
-        assert args[0] == 'setup/setup.html'
-        assert 'form' in kwargs
-        assert isinstance(kwargs['form'], SetupForm)
+        assert args == ()
+        assert kwargs == {}
 
 
 class TestSetupSubmitRoute:
@@ -340,12 +339,12 @@ class TestSetupSubmitRoute:
         mock_form.errors = {'email': ['Invalid email address'], 'password': ['Field must be at least 8 characters long']}
         mock_form_class.return_value = mock_form
         
-        with patch('oneirodex.routes_setup.render_template') as mock_render:
+        with patch('oneirodex.routes_setup.render_member_auth_spa') as mock_render:
             mock_render.return_value = 'error template'
             response = client.post('/setup/submit', data={})
             
             assert response.status_code == 200
-            mock_render.assert_called_with('setup/setup.html', form=mock_form, is_setup_mode=True)
+            mock_render.assert_called_once_with()
 
 
 class TestSetupSmtpRoute:
@@ -380,7 +379,7 @@ class TestSetupSmtpRoute:
             assert '/setup' in response.location
             mock_flash.assert_called_with('Please complete the admin account setup first.', 'warning')
     
-    @patch('oneirodex.routes_setup.render_template')
+    @patch('oneirodex.routes_setup.render_member_auth_spa')
     def test_setup_smtp_get_correct_step(self, mock_render, client, db_session, admin_user):
         """Test GET /setup/smtp renders template in correct step."""
         # Use existing admin_user fixture and set database to step 2
@@ -391,7 +390,7 @@ class TestSetupSmtpRoute:
         response = client.get('/setup/smtp')
         
         assert response.status_code == 200
-        mock_render.assert_called_with('setup/setup_smtp.html', is_setup_mode=True)
+        mock_render.assert_called_once_with()
     
     def test_setup_smtp_post_skip_button(self, client, db_session, admin_user):
         """Test POST /setup/smtp with skip button."""
@@ -486,7 +485,7 @@ class TestSetupIgdbRoute:
             assert '/setup' in response.location
             mock_flash.assert_called_with('Please complete the previous setup steps first.', 'warning')
     
-    @patch('oneirodex.routes_setup.render_template')
+    @patch('oneirodex.routes_setup.render_member_auth_spa')
     def test_setup_igdb_get_correct_step(self, mock_render, client, db_session, admin_user):
         """Test GET /setup/igdb renders template in correct step."""
         # Use existing admin_user fixture and set database to step 3
@@ -499,10 +498,8 @@ class TestSetupIgdbRoute:
         assert response.status_code == 200
         mock_render.assert_called_once()
         args, kwargs = mock_render.call_args
-        assert args[0] == 'setup/setup_igdb.html'
-        assert 'form' in kwargs
-        assert isinstance(kwargs['form'], IGDBSetupForm)
-        assert kwargs['is_setup_mode'] is True
+        assert args == ()
+        assert kwargs == {}
 
     def test_igdb_skip_bypasses_required_browser_validation(self, client, db_session, admin_user):
         from oneirodex.utils.setup import set_setup_step
@@ -510,10 +507,8 @@ class TestSetupIgdbRoute:
         set_setup_step(4)
         response = client.get('/setup/igdb')
         assert response.status_code == 200
-        assert b'name="skip_igdb"' in response.data
-        assert b'formnovalidate' in response.data
-        assert b'id="igdb_client_secret"' in response.data
-        assert b'type="password"' in response.data
+        assert b'id="member-auth-root"' in response.data
+        assert b'igdb_client_secret' not in response.data
     
     @patch('oneirodex.routes_setup.IGDBSetupForm')
     @patch('oneirodex.routes_setup.log_system_event')
@@ -594,12 +589,12 @@ class TestSetupIgdbRoute:
         mock_form.errors = {'igdb_client_id': ['Field must be between 20 and 50 characters']}
         mock_form_class.return_value = mock_form
         
-        with patch('oneirodex.routes_setup.render_template') as mock_render:
+        with patch('oneirodex.routes_setup.render_member_auth_spa') as mock_render:
             mock_render.return_value = 'error template'
             response = client.post('/setup/igdb', data={})
             
             assert response.status_code == 200
-            mock_render.assert_called_with('setup/setup_igdb.html', form=mock_form, is_setup_mode=True)
+            mock_render.assert_called_once_with()
 
 
 class TestSetupWorkflow:
@@ -776,8 +771,8 @@ class TestSetupApiConnections:
 
         page = client.get('/setup/integrations')
         assert page.status_code == 200
+        assert b'id="member-auth-root"' in page.data
         assert b'existing-secret-value' not in page.data
-        assert b'type="password"' in page.data
 
         response = client.post('/setup/integrations', data={
             'configure_steam_web_api_key': 'on',
@@ -962,9 +957,11 @@ class TestSetupFormIntegration:
         
         response = client.post('/setup/submit', data=form_data)
         
-        # Should render the setup form again with errors
+        # The server returns the shared auth shell and preserves validation
+        # feedback as an escaped alert for the React setup wizard.
         assert response.status_code == 200
-        assert b'setup' in response.data or b'Setup' in response.data
+        assert b'id="member-auth-root"' in response.data
+        assert b'role="alert"' in response.data
     
     def test_igdb_form_validation_error_handling(self, client, db_session, admin_user):
         """Test how IGDB setup handles real form validation errors."""
@@ -980,6 +977,7 @@ class TestSetupFormIntegration:
         
         response = client.post('/setup/igdb', data=form_data)
         
-        # Should render the IGDB setup form again with errors
+        # Validation feedback is inserted into the shared auth shell.
         assert response.status_code == 200
-        assert b'igdb' in response.data or b'IGDB' in response.data
+        assert b'id="member-auth-root"' in response.data
+        assert b'role="alert"' in response.data

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createPersistedLifecycleRegistry } from './lifecycle-store.js'
+import {
+  createPersistedLifecycleRegistry,
+  syncLifecycleRegistryToServer,
+} from './lifecycle-store.js'
 import { createLifecycleRegistry } from './lifecycle.js'
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -32,5 +35,19 @@ describe('lifecycle persistence helpers', () => {
     })
 
     expect(registry.get('game-9')).toBe('update_available')
+  })
+
+  it('refuses redirects when syncing bearer-authenticated lifecycle state', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 })) as unknown as typeof fetch
+    await syncLifecycleRegistryToServer(
+      { getBaseUrl: () => 'https://server.example', getToken: () => 'gt_secret' } as never,
+      [],
+      fetchImpl,
+    )
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://server.example/api/client/lifecycle',
+      expect.objectContaining({ redirect: 'error' }),
+    )
   })
 })

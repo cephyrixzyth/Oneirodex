@@ -66,11 +66,6 @@ from pydantic import BaseModel, ValidationError
 
 from oneirodex.utils.api_response import api_error
 
-try:  # pragma: no cover - trivial import shim
-    from flask import request
-except Exception:  # pragma: no cover
-    request = None  # type: ignore[assignment]
-
 __all__ = ['validate_body', 'validate_batch_body', 'format_validation_errors']
 
 
@@ -117,6 +112,10 @@ def format_validation_errors(exc: ValidationError) -> dict[str, Any]:
 
 def _json_object() -> Any:
     """``request.get_json(silent=True)`` or ``{}`` when the body is missing."""
+    try:
+        from flask import request
+    except ImportError:  # Native routes parse their ASGI request explicitly.
+        request = None
     payload = request.get_json(silent=True) if request is not None else None
     return payload if payload is not None else {}
 

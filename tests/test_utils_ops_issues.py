@@ -144,3 +144,45 @@ def test_companions_stale_is_info_not_action():
     item = next(i for i in result['items'] if i['id'] == 'companions_stale')
     assert item['severity'] == 'info'
     assert item['category'] == 'info'
+
+
+def test_livekit_enabled_configuration_problems_are_warnings():
+    base = {
+        'disk_base_percent': 10,
+        'disk_games_percent': 10,
+        'path_problems': [],
+        'scan_failures': 0,
+        'recent_error_count': 0,
+    }
+    incomplete = derive_issues(
+        **base,
+        livekit={'enabled': True, 'configured': False, 'reachable': None},
+    )
+    assert incomplete['overall'] == 'warn'
+    assert next(i for i in incomplete['items'] if i['id'] == 'livekit_incomplete_config')['severity'] == 'warn'
+
+    unreachable = derive_issues(
+        **base,
+        livekit={'enabled': True, 'configured': True, 'reachable': False},
+    )
+    assert unreachable['overall'] == 'warn'
+    assert next(i for i in unreachable['items'] if i['id'] == 'livekit_unreachable')['severity'] == 'warn'
+
+
+def test_livekit_disabled_or_unknown_fields_do_not_create_issues():
+    base = {
+        'disk_base_percent': 10,
+        'disk_games_percent': 10,
+        'path_problems': [],
+        'scan_failures': 0,
+        'recent_error_count': 0,
+    }
+    for livekit in (
+        {'enabled': False, 'configured': False, 'reachable': None},
+        {'enabled': None, 'configured': None, 'reachable': None},
+        {'enabled': True, 'configured': True, 'reachable': None},
+        {},
+        None,
+    ):
+        result = derive_issues(**base, livekit=livekit)
+        assert result == {'overall': 'good', 'items': []}

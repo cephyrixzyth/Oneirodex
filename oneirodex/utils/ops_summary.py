@@ -2,10 +2,9 @@ from datetime import datetime, timedelta, timezone
 from time import perf_counter
 from urllib.parse import urlparse
 
-from flask import current_app
 from sqlalchemy import func, or_, select, text
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     ClientDevice,
     DownloadRequest,
@@ -158,14 +157,24 @@ def _scan_job_payload(job):
     }
 
 
-def _scan_snapshot():
+def _scan_snapshot(app=None):
     """Return active + queued + recent scan jobs (with live counters) and failure count."""
     # Safety drain only when idle+Queued. Skip while Running so a 15s Ops poll
     # does not contend with the live worker (same gate as scan_jobs_status).
-    try:
-        maybe_drain_scan_queue(current_app._get_current_object())
-    except Exception:
-        pass
+    if app is None:
+        # Preserve the Flask route's historical queue-drain behavior while
+        # keeping native FastAPI callers independent of a current_app proxy.
+        try:
+            from flask import current_app
+
+            app = current_app._get_current_object()
+        except (ImportError, RuntimeError):
+            app = None
+    if app is not None:
+        try:
+            maybe_drain_scan_queue(app)
+        except Exception:
+            pass
 
     active_jobs = db.session.execute(
         select(ScanJob)
@@ -317,10 +326,13 @@ def _malware_pulse():
     """Reuse malware module_status (ClamAV ping + heuristics flags)."""
     status = module_status()
     clam = status.get('clamav') or {}
+    clamav_reachable = clam.get('reachable')
+    if clamav_reachable is None:
+        clamav_reachable = clam.get('available')
     return {
-        'enabled': bool(status.get('enabled')),
-        'block_on_hit': bool(status.get('block_on_hit')),
-        'clamav_reachable': bool(clam.get('reachable') or clam.get('available')),
+        'enabled': status.get('enabled'),
+        'block_on_hit': status.get('block_on_hit'),
+        'clamav_reachable': clamav_reachable,
         'clamav_version': clam.get('version'),
         'clamav_error': clam.get('error'),
         'heuristics': status.get('heuristics') or {},
@@ -532,7 +544,7 @@ def _services_snapshot():
     }
 
 
-def build_ops_summary(app_start_time):
+def build_ops_summary(app_start_time, *, app=None, config=None):
     """Build a single snapshot for the admin operations dashboard."""
     def get_host_section():
         cpu = get_cpu_usage()
@@ -540,7 +552,7 @@ def build_ops_summary(app_start_time):
         disk_base = get_disk_usage()
         disk_games = get_games_folder_usage()
         system_info = get_system_info()
-        config_values = get_config_values()
+        config_values = get_config_values(config=config)
         return {
             'host': {
                 'os': system_info.get('Operating System'),
@@ -566,7 +578,7 @@ def build_ops_summary(app_start_time):
 
     host_data, host_error = _section('host', get_host_section)
     network, network_error = _section('network', get_network_stats)
-    scans, scans_error = _section('scans', _scan_snapshot)
+    scans, scans_error = _section('scans', lambda: _scan_snapshot(app=app))
     library, library_error = _section('library', _library_pulse)
     recent_errors_data, recent_errors_error = _section('recent errors', _recent_errors)
     services, services_error = _section('services', _services_snapshot)
@@ -585,7 +597,9 @@ def build_ops_summary(app_start_time):
         db_reachable = host.get('db_ping_ms') is not None
     awake_ok = None
     companions_stale = None
+    livekit = None
     if services:
+        livekit = services.get('livekit')
         awake = services.get('awake')
         if awake is None:
             awake_ok = False
@@ -612,6 +626,7 @@ def build_ops_summary(app_start_time):
             db_reachable=db_reachable,
             awake_ok=awake_ok,
             companions_stale=companions_stale,
+            livekit=livekit,
         ),
         'scans': {
             'active_count': scans['active_count'],

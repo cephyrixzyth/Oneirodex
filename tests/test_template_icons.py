@@ -1,259 +1,49 @@
-"""
-Template-level checks for the shared inline SVG icon set.
+"""Checks for the framework-neutral icon catalog and generated React adapter."""
 
-These render templates/partials/icons.html through a bare Jinja environment,
-so they need neither a Flask app nor a database and stay fast.
-"""
-
-import re
+from copy import deepcopy
 from pathlib import Path
-from xml.etree import ElementTree
+import subprocess
+import sys
 
 import pytest
-from jinja2 import Environment, FileSystemLoader
 
-from oneirodex.routes_admin_ext.settings import SETTINGS_SHELL_SECTIONS
+from scripts.generate_icon_adapters import load_manifest, validate_manifest
 
-TEMPLATE_ROOT = Path(__file__).resolve().parents[1] / 'oneirodex' / 'templates'
-
-# Templates converted to the SVG macro set. Every template here must contain
-# zero literal Font Awesome class strings (see test_no_font_awesome_left_in_converted_templates).
-CONVERTED_TEMPLATES = [
-    'base.html',
-    # The rail carries every destination icon base.html used to render inline,
-    # so it inherits base.html's coverage rather than going unguarded (GT-B2).
-    'partials/rail.html',
-    'admin/admin_settings_shell.html',
-    'admin/admin_dashboard.html',
-    'admin/admin_manage_library_create.html',
-    'admin/admin_server_status.html',
-    'admin/admin_library_tools.html',
-    'admin/partials/admin_library_tools_body.html',
-    'admin/arr_module.html',
-    'admin/admin_manage_smtp_settings.html',
-    'admin/detail_layout.html',
-    'admin/integrations.html',
-    'admin/attract_mode_settings.html',
-    # 'admin/admin_manage_users.html' retired with the classic editor (W27-D1);
-    # the React roster at /admin/users is the only user editor now.
-    'admin/emulator_profiles.html',
-    'admin/admin_manage_downloads.html',
-    'admin/admin_manage_whitelist.html',
-    'admin/admin_manage_filters.html',
-    'admin/quality_profiles.html',
-    'admin/admin_help.html',
-    'admin/new_server_settings.html',
-    'admin/ai_assist.html',
-    'admin/admin_game_identify.html',
-    'admin/admin_server_logs.html',
-    'admin/storage.html',
-    'admin/admin_manage_libraries.html',
-    'admin/admin_manage_extensions.html',
-    # 'admin/new_server_info.html' retired with the page (W27-D1).
-    'admin/admin_discovery_sections.html',
-    'games/game_details.html',
-    'login/user_invites.html',
-    'settings/modal_preferences.html',
-    'settings/settings_password.html',
-    'settings/settings_profile_edit.html',
-    'settings/settings_profile_view.html',
-    'partials/integrations/igdb_form.html',
-    'partials/integrations/steamgriddb_status.html',
-]
-
-# Templates that intentionally still contain a handful of literal Font Awesome
-# classes after the SVG conversion. Empty after O11 (local .od-spinner).
-DOCUMENTED_FA_LEFTOVERS = {}
-
-# Matches any literal Font Awesome class pairing, e.g. "fas fa-trash",
-# "fa fa-file-alt", "fa-solid fa-cog", "fa-brands fa-github".
-FONT_AWESOME_CLASS_RE = re.compile(
-    r'fa[srb]?\s+fa-[\w-]+|fa-(?:solid|brands|regular)\s+fa-[\w-]+'
-)
-
-# Rendered only when icon() is handed a name it does not know. Matched in full
-# because several real glyphs also use r="2" circles.
-FALLBACK_GLYPH = '<circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>'
+ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture(scope='module')
-def icon():
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_ROOT)))
-    return env.get_template('partials/icons.html').module.icon
+def test_shared_catalog_has_accessibility_guidance_for_each_icon():
+    manifest = load_manifest()
+    assert all(icon['accessible_use'] for icon in manifest['icons'].values())
 
 
-def read_template(relative_path):
-    return (TEMPLATE_ROOT / relative_path).read_text(encoding='utf-8')
+def test_generated_react_adapter_is_current():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / 'scripts' / 'generate_icon_adapters.py'), '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
-class TestIconMacro:
-    """The macro itself: shape, theming, and graceful failure."""
+def test_manifest_rejects_unsafe_shapes_and_duplicate_aliases():
+    manifest = load_manifest()
+    bad_tag = deepcopy(manifest)
+    bad_tag['icons']['ownership']['shapes'][0]['tag'] = 'script'
+    with pytest.raises(ValueError, match='unsupported SVG tag'):
+        validate_manifest(bad_tag)
 
-    def test_mirrors_the_member_spa_svg_contract(self, icon):
-        svg = icon('library')
-        assert 'stroke="currentColor"' in svg
-        assert 'stroke-width="2"' in svg
-        assert 'viewBox="0 0 24 24"' in svg
-        assert 'fill="none"' in svg
-        assert 'class="od-icon"' in svg
-
-    def test_pins_no_colour_of_its_own(self, icon):
-        """Every glyph must inherit the theme via currentColor."""
-        for name in ('discover', 'palette', 'robot', 'more'):
-            svg = icon(name)
-            assert 'color:' not in svg
-            assert not re.search(r'#[0-9a-fA-F]{3,6}', svg)
-
-    def test_decorative_by_default_labelled_on_request(self, icon):
-        assert 'aria-hidden="true"' in icon('user')
-        labelled = icon('user', title='Profile')
-        assert 'role="img"' in labelled
-        assert 'aria-label="Profile"' in labelled
-        assert '<title>Profile</title>' in labelled
-
-    def test_size_is_caller_controlled(self, icon):
-        assert 'width="18"' in icon('cogs')
-        assert 'width="28"' in icon('cogs', size=28)
-
-    def test_extra_class_is_appended_not_replaced(self, icon):
-        assert 'class="od-icon collapse-icon"' in icon('chevron-up', extra_class='collapse-icon')
-
-    def test_unknown_name_degrades_to_a_dot(self, icon):
-        svg = icon('definitely-not-an-icon')
-        assert svg.startswith('<svg')
-        assert FALLBACK_GLYPH in svg
+    duplicate_alias = deepcopy(manifest)
+    duplicate_alias['icons']['ownership']['aliases'] = ['store', 'store']
+    with pytest.raises(ValueError, match='duplicate alias/canonical key'):
+        validate_manifest(duplicate_alias)
 
 
-class TestIconCoverage:
-    """Every name the templates ask for must actually exist."""
-
-    def test_every_defined_glyph_is_well_formed_svg(self, icon):
-        source = (TEMPLATE_ROOT / 'partials' / 'icons.html').read_text(encoding='utf-8')
-        names = sorted({
-            name
-            for branch in re.findall(r"name (?:==|in) ([^\n]+?)\s*-%\}", source)
-            for name in re.findall(r"'([a-z0-9-]+)'", branch)
-        })
-        assert names, 'could not find any icon branches to check'
-        for name in names:
-            root = ElementTree.fromstring(str(icon(name)))
-            assert len(root), f"{name} renders an empty <svg>"
-            assert root.get('stroke') == 'currentColor'
-
-    def test_settings_sections_all_resolve(self, icon):
-        missing = [
-            key for key, section in SETTINGS_SHELL_SECTIONS.items()
-            if FALLBACK_GLYPH in icon(section['icon'])
-        ]
-        assert not missing, f"Sections falling back to the placeholder glyph: {missing}"
-
-    def test_literal_icon_names_in_converted_templates_all_resolve(self, icon):
-        unknown = set()
-        for relative_path in CONVERTED_TEMPLATES:
-            for name in re.findall(r"icons\.icon\(\s*'([^']+)'", read_template(relative_path)):
-                if FALLBACK_GLYPH in icon(name):
-                    unknown.add((relative_path, name))
-        assert not unknown, f"Unknown icon names: {sorted(unknown)}"
-
-
-class TestConvertedTemplates:
-    """Regression guards for the WP3 conversion."""
-
-    def test_no_font_awesome_left_in_converted_templates(self):
-        offenders = [p for p in CONVERTED_TEMPLATES if 'fas fa-' in read_template(p)]
-        assert not offenders, f"Font Awesome markup still present in: {offenders}"
-
-    def test_no_undocumented_font_awesome_remains_anywhere(self):
-        """Every remaining literal FA class in the whole template tree must be
-        one of the animated spinners tracked in DOCUMENTED_FA_LEFTOVERS, with
-        the exact count we expect. Anything else means a template regressed or
-        a new template was added with FA instead of the SVG macro.
-        """
-        found_counts = {}
-        for path in sorted(TEMPLATE_ROOT.rglob('*.html')):
-            relative = path.relative_to(TEMPLATE_ROOT).as_posix()
-            matches = FONT_AWESOME_CLASS_RE.findall(path.read_text(encoding='utf-8'))
-            if matches:
-                found_counts[relative] = len(matches)
-
-        assert found_counts == DOCUMENTED_FA_LEFTOVERS, (
-            f"Font Awesome usage drifted from the documented leftovers.\n"
-            f"Found: {found_counts}\nExpected: {DOCUMENTED_FA_LEFTOVERS}"
-        )
-
-    def test_base_html_does_not_hardcode_icon_colour(self):
-        assert 'color: white' not in read_template('base.html')
-
-    def test_shell_ids_the_inline_js_depends_on_survive(self):
-        """This replaces a check for the #sidebar-era ids.
-
-        GT-B2 retired the left sidebar: the shell grid reads `data-rail` off
-        `#od-shell` and the toggle moved into the topbar partial, so the old
-        assertion pinned markup that is *gone on purpose*. The contract worth
-        keeping is that base.html's inline JS still finds what it queries — and
-        those hooks now span two files.
-        """
-        base = read_template('base.html')
-        for required in ('id="od-shell"', 'id="content"', 'id="preferencesModalContainer"'):
-            assert required in base, f"base.html lost {required}, which its inline JS queries"
-
-        assert 'id="od-rail-toggle"' in read_template('partials/topbar.html'), (
-            "the rail toggle lost its id, which base.html's inline JS queries"
-        )
-
-    def test_no_js_left_behind_for_the_retired_account_menu(self):
-        """The account menu is a <details> in the rail (see od-shell.css).
-
-        Open/close and click-outside are the browser's now, so a *lookup* of any
-        of these means dead code came back: they resolve to null against
-        everything the templates render. Matched as DOM calls rather than bare
-        names so the comment explaining the retirement does not trip this.
-        """
-        base = read_template('base.html')
-        for retired in ('userAccountIcon', 'userAccountMenu', 'toggleSidebar',
-                        '.user-expand-icon'):
-            lookup = re.compile(
-                r"""(?:getElementById|querySelector(?:All)?)\(\s*['"]%s['"]"""
-                % re.escape(retired)
-            )
-            assert not lookup.search(base), (
-                f"base.html queries {retired}, retired with the sidebar in GT-B2"
-            )
-        assert '<details class="od-rail__account">' in read_template('partials/rail.html')
-
-    def test_shell_rail_js_has_no_dead_sidebar_handlers(self):
-        """GT-B2 leftover: submenu / filter-visibility lookups matched nothing."""
-        src = (
-            Path(__file__).resolve().parents[1]
-            / 'oneirodex' / 'static' / 'js' / 'od_shell_rail.js'
-        ).read_text(encoding='utf-8')
-        assert 'od-rail-toggle' in src
-        assert 'closeAllSubmenus' not in src
-        assert 'has-submenu' not in src
-        assert 'container-filtersandsort' not in src
-        assert 'user-expand-icon' not in src
-
-    def test_settings_shell_has_no_second_vertical_nav(self):
-        shell = read_template('admin/admin_settings_shell.html')
-        assert 'settings-shell-nav' not in shell
-        assert 'settings-shell-layout' not in shell
-
-    def test_the_dashboard_is_a_react_shell_and_keeps_no_body(self):
-        """This replaces a check for `od-health-*` ids in this template.
-
-        Those ids were real once. Wave 7 moved the dashboard body — library
-        health widget included — into admin-app's React `DashboardPage`/
-        `OpsPage`, leaving a five-line shell behind, so the old assertion had
-        been failing against a template that is *correct*: it was pinning the
-        pre-migration structure, and its failure said nothing about health
-        widgets, which are covered by `opsWidgets.test.jsx`.
-
-        What is worth pinning here is the shell contract itself. Putting markup
-        back into this template would render it underneath the React hub rather
-        than replacing it.
-        """
-        dashboard = read_template('admin/admin_dashboard.html')
-        assert '{% block admin_render %}spa{% endblock %}' in dashboard
-        body = dashboard.split('{% block content %}', 1)[1].split('{% endblock %}', 1)[0]
-        markup = [line for line in body.splitlines() if line.strip() and '{#' not in line]
-        assert not markup, f'dashboard shell grew a body again: {markup}'
+def test_spas_use_generated_shared_icons_without_template_adapters():
+    generated = (ROOT / 'frontend' / 'shared' / 'src' / 'generatedIconPaths.tsx').read_text(encoding='utf-8')
+    renderer = (ROOT / 'frontend' / 'shared' / 'src' / 'railIcons.tsx').read_text(encoding='utf-8')
+    assert 'sharedIconPaths' in generated
+    assert 'sharedIconPaths' in renderer
+    templates = ROOT / 'oneirodex' / 'templates'
+    assert not templates.exists() or not list(templates.rglob('*.html'))

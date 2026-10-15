@@ -2,7 +2,7 @@
 of titles a member owns elsewhere (browse-badge matching; never downloads)."""
 from datetime import datetime, timezone
 
-from oneirodex import db
+from oneirodex.models.orm import db
 
 class StoreAccount(db.Model):
     """Linked external store account for register-only ownership sync (no downloads)."""

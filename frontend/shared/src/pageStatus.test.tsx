@@ -89,3 +89,17 @@ test('empty state is a status, and still renders children beneath it', () => {
   expect(screen.getByRole('status')).toHaveTextContent('Nothing here yet')
   expect(screen.getByRole('button', { name: 'Add one' })).toBeInTheDocument()
 })
+
+test('announcements keep rich children inside the shared live region', () => {
+  render(
+    <PageStatus announcement="status" className="custom-status">
+      <p>Working through the request.</p>
+      <progress value={1} max={2} />
+    </PageStatus>,
+  )
+
+  const status = screen.getByRole('status')
+  expect(status).toHaveClass('od-page-status', 'custom-status')
+  expect(status).toHaveTextContent('Working through the request.')
+  expect(status.querySelector('progress')).toBeInTheDocument()
+})

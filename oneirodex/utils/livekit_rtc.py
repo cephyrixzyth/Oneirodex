@@ -10,14 +10,17 @@ import os
 import time
 from typing import Any
 
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
+from oneirodex.utils.runtime_config import get_runtime_config
 
 
-def livekit_enabled() -> bool:
+def livekit_enabled(*, config=None) -> bool:
     try:
-        from flask import current_app
+        app_config = config if config is not None else get_runtime_config()
+        if app_config is None:
+            raise RuntimeError('Runtime configuration is unavailable')
 
-        return bool(current_app.config.get('ENABLE_LIVEKIT', True))
+        return bool(app_config.get('ENABLE_LIVEKIT', True))
     except RuntimeError:
         return os.getenv('ENABLE_LIVEKIT', 'true').lower() in ('1', 'true', 'yes')
 
@@ -69,7 +72,7 @@ def user_may_join_room(user, room: str) -> bool:
         raw_id = name[len(_VOICE_PREFIX):]
         if not raw_id.isdigit():
             return False
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatChannel
         from oneirodex.utils.chat_spaces import user_can_access_channel
 
@@ -83,7 +86,7 @@ def user_may_join_room(user, room: str) -> bool:
         game_uuid = name[len(_PARTY_PREFIX):].strip()
         if not game_uuid:
             return False
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
         from oneirodex.utils.library_acl import user_can_access_game
         from sqlalchemy import select

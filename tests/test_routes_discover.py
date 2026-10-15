@@ -288,7 +288,7 @@ def _discover_game(**overrides):
 class TestGameDetails:
     """Test game details functionality."""
 
-    @patch('oneirodex.routes_discover.game_card_flags')
+    @patch('oneirodex.utils.discover_projections.game_card_flags')
     def test_discover_game_data_matches_shared_card_shape(
         self, mock_game_card_flags, tmp_path
     ):
@@ -307,7 +307,7 @@ class TestGameDetails:
         # test_utils_cover_url.py, and depending on it here made the assertion
         # a statement about the developer's filesystem.
         with app.test_request_context(), patch(
-            'oneirodex.routes_discover.resolve_game_cover_url',
+            'oneirodex.utils.discover_projections.resolve_game_cover_url',
             return_value='/static/library/images/cover.jpg',
         ):
             result = serialize_discover_game(

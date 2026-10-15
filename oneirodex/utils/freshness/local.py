@@ -46,7 +46,7 @@ def _folder_mtime(path: str | None) -> str | None:
         return None
 
 
-def _resolved_game_folder(folder: str) -> str | None:
+def _resolved_game_folder(folder: str, app=None) -> str | None:
     """The game folder resolved once, or None when it is outside every library.
 
     Resolving once and comparing against that fixed string means a folder
@@ -55,21 +55,28 @@ def _resolved_game_folder(folder: str) -> str | None:
     """
     real = os.path.realpath(folder)
     try:
-        from flask import current_app, has_app_context
-
-        if has_app_context():
+        if app is not None:
             from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 
-            bases = get_allowed_base_directories(current_app)
+            bases = get_allowed_base_directories(app)
             if bases and not is_safe_path(real, bases)[0]:
                 return None
+        else:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+
+                bases = get_allowed_base_directories(current_app)
+                if bases and not is_safe_path(real, bases)[0]:
+                    return None
     except Exception:  # noqa: BLE001 -- a freshness hint must never break a scan
         return None
     return real
 
 
-def _read_version_file(folder: str) -> tuple[str | None, str | None]:
-    folder = _resolved_game_folder(folder)
+def _read_version_file(folder: str, app=None) -> tuple[str | None, str | None]:
+    folder = _resolved_game_folder(folder, app=app)
     if folder is None:
         return None, None
     for name in VERSION_FILE_NAMES:
@@ -110,7 +117,7 @@ def _scan_update_dlc_hints(game) -> list[str]:
     return hints
 
 
-def detect_local_facts(game) -> dict:
+def detect_local_facts(game, *, app=None) -> dict:
     """Collect local version / DLC facts without network I/O."""
     name = getattr(game, 'name', None) or ''
     path = getattr(game, 'full_disk_path', None) or ''
@@ -135,7 +142,7 @@ def detect_local_facts(game) -> dict:
 
     version_file = None
     if path and os.path.isdir(path):
-        file_ver, file_name = _read_version_file(path)
+        file_ver, file_name = _read_version_file(path, app=app)
         sources_tried.append('version_file')
         if file_ver and not version:
             version = file_ver

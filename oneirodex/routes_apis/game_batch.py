@@ -26,6 +26,7 @@ from oneirodex.utils.rbac import can_request_games, librarian_required
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.scanning import refresh_images_in_background
 from oneirodex.utils.validation import validate_batch_body
+from oneirodex.utils.api_tokens import require_api_token_scope
 from sqlalchemy import and_, delete, select
 from . import apis_bp
 
@@ -69,6 +70,7 @@ def _normalize_batch_uuids(raw, *, max_size: int) -> tuple[list[str] | None, dic
 
 @apis_bp.route('/games/batch/favorite', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_batch_body(BatchFavoriteBody, limit=BATCH_FAVORITE_MAX)
 def games_batch_favorite(body: BatchFavoriteBody):
     """Set favorite on/off for many library titles (member multi-select).
@@ -165,6 +167,7 @@ def games_batch_favorite(body: BatchFavoriteBody):
 
 @apis_bp.route('/games/batch/status', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def games_batch_status():
     """Set or clear play status for many library titles (member multi-select).
 
@@ -317,6 +320,7 @@ def games_batch_status():
 
 @apis_bp.route('/games/batch/wishlist', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def games_batch_wishlist():
     """Queue wishlist / request rows for selected library titles (by UUID).
 
@@ -478,6 +482,7 @@ def games_batch_wishlist():
 
 @apis_bp.route('/games/batch/freshness/check', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def games_batch_freshness_check():
     """On-demand freshness re-probe for selected titles (member multi-select).
 

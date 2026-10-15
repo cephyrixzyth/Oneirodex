@@ -294,6 +294,8 @@ class TestManageThemesRoute:
             
             response = client.get('/admin/themes')
             assert response.status_code == 200
+            assert b'id="admin-app-root"' in response.data
+            mock_theme_manager.assert_not_called()
 
     @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
     @patch('oneirodex.routes_admin_ext.themes.Path')
@@ -523,6 +525,7 @@ class TestThemeReadmeRoute:
         
         response = client.get('/admin/themes/readme')
         assert response.status_code == 200
+        assert b'id="admin-app-root"' in response.data
 
     def test_theme_readme_get_method_only(self, client, admin_user):
         """Test that theme readme only accepts GET requests."""

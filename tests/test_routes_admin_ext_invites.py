@@ -14,6 +14,43 @@ from sqlalchemy import text
 from oneirodex.models import User, InviteToken
 
 
+@pytest.mark.parametrize(('path', 'title'), [
+    ('/admin/dashboard', 'Dashboard · Oneirodex Admin'),
+    ('/admin/announcements', 'Announcements · Oneirodex Admin'),
+    ('/admin/art_studio', 'Art studio · Oneirodex Admin'),
+    ('/admin/invites', 'Invites · Oneirodex Admin'),
+    ('/admin/manage_invites', 'Invites · Oneirodex Admin'),
+    ('/admin/images', 'Images · Oneirodex Admin'),
+    ('/admin/ownership', 'Store connections · Oneirodex Admin'),
+    ('/admin/remote_play', 'Remote play · Oneirodex Admin'),
+    ('/admin/support', 'Support inbox · Oneirodex Admin'),
+    ('/admin/emulator_profiles', 'Emulators · Oneirodex Admin'),
+    ('/admin/quality_profiles', 'Quality Profiles · Oneirodex Admin'),
+    ('/admin/detail_layout', 'Detail layout · Oneirodex Admin'),
+    ('/admin/scan_match', 'Scan / match policy · Oneirodex Admin'),
+    ('/admin/users', 'Users · Oneirodex Admin'),
+    ('/admin/system/danger', 'Danger zone · Oneirodex Admin'),
+    ('/admin/extensions', 'File Extensions · Oneirodex Admin'),
+    ('/admin/ops', 'Ops · Oneirodex Admin'),
+    ('/admin/settings', 'All settings · Oneirodex Admin'),
+    ('/admin/storage', 'Storage / hardlinks · Oneirodex Admin'),
+    ('/admin/plugins', 'Export to emulator frontends · Oneirodex Admin'),
+])
+def test_react_only_admin_pages_use_the_non_template_shell(client, admin_user, configured_install, path, title):
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(admin_user.id)
+        sess['_fresh'] = True
+
+    response = client.get(path)
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert f'<title>{title}</title>' in html
+    assert 'data-admin-render="spa"' in html
+    assert 'id="admin-app-root"' in html
+    assert 'name="csrf-token"' in html
+    assert '/static/dist/admin-app/admin-app.js' in html
+
+
 @pytest.fixture(scope='function', autouse=True)
 def clean_database(db_session):
     """Clean database before each test to ensure isolation."""
@@ -142,63 +179,40 @@ class TestManageInvitesAuthentication:
 class TestManageInvitesGet:
     """Test GET requests to manage_invites route."""
 
-    @patch('oneirodex.routes_admin_ext.invites.render_template')
-    def test_admin_can_access_manage_invites_empty(self, mock_render, client, admin_user):
+    def test_admin_can_access_manage_invites_empty(self, client, admin_user):
         """Test admin can access manage invites page with no users."""
-        mock_render.return_value = 'mocked_template'
-        
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
         response = client.get('/admin/manage_invites')
-        
-        assert response.status_code == 200  # Renders template after processing
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert args[0] == 'admin/admin_manage_invites.html'
-        assert 'users' in kwargs
-        assert 'user_unused_invites' in kwargs
-        assert len(kwargs['users']) == 1  # Only the admin user
-        assert kwargs['user_unused_invites'] == {admin_user.user_id: 0}
+        assert response.status_code == 200
+        assert 'data-admin-render="spa"' in response.get_data(as_text=True)
 
-    @patch('oneirodex.routes_admin_ext.invites.render_template')
-    def test_admin_can_access_with_multiple_users(self, mock_render, client, admin_user, regular_user):
+    def test_admin_can_access_with_multiple_users(self, client, admin_user, regular_user):
         """Test admin can access manage invites page with multiple users."""
-        mock_render.return_value = 'mocked_template'
-        
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/manage_invites')
-        
-        assert response.status_code == 200  # Renders template after processing
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert len(kwargs['users']) == 2
-        assert kwargs['user_unused_invites'][admin_user.user_id] == 0
-        assert kwargs['user_unused_invites'][regular_user.user_id] == 0
+        response = client.get('/admin/api/invites')
+        assert response.status_code == 200
+        rows = response.get_json()['users']
+        assert len(rows) == 2
+        assert all(row['unused_invites'] == 0 for row in rows)
 
-    @patch('oneirodex.routes_admin_ext.invites.render_template')
-    def test_admin_sees_correct_unused_invite_count(self, mock_render, client, admin_user, regular_user, invite_token_unused, invite_token_used):
+    def test_admin_sees_correct_unused_invite_count(self, client, admin_user, regular_user, invite_token_unused, invite_token_used):
         """Test that unused invite counts are calculated correctly."""
-        mock_render.return_value = 'mocked_template'
-        
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/manage_invites')
-        
-        assert response.status_code == 200  # Renders template after processing
-        args, kwargs = mock_render.call_args
-        # Regular user should have 1 unused invite (invite_token_used is used, invite_token_unused is not)
-        assert kwargs['user_unused_invites'][regular_user.user_id] == 1
-        assert kwargs['user_unused_invites'][admin_user.user_id] == 0
+        response = client.get('/admin/api/invites')
+        rows = {row['user_id']: row for row in response.get_json()['users']}
+        assert rows[regular_user.user_id]['unused_invites'] == 1
+        assert rows[admin_user.user_id]['unused_invites'] == 0
 
-    @patch('oneirodex.routes_admin_ext.invites.render_template')
-    def test_admin_sees_multiple_unused_invites(self, mock_render, client, admin_user, regular_user, db_session):
+    def test_admin_sees_multiple_unused_invites(self, client, admin_user, regular_user, db_session):
         """Test that multiple unused invites are counted correctly."""
         # Create multiple unused invite tokens for regular user
         for i in range(3):
@@ -211,17 +225,13 @@ class TestManageInvitesGet:
             db_session.add(token)
         db_session.commit()
         
-        mock_render.return_value = 'mocked_template'
-        
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.get('/admin/manage_invites')
-        
-        assert response.status_code == 200  # Renders template after processing
-        args, kwargs = mock_render.call_args
-        assert kwargs['user_unused_invites'][regular_user.user_id] == 3
+        response = client.get('/admin/api/invites')
+        rows = {row['user_id']: row for row in response.get_json()['users']}
+        assert rows[regular_user.user_id]['unused_invites'] == 3
 
 
 class TestManageInvitesPost:
@@ -431,28 +441,15 @@ class TestManageInvitesEdgeCases:
         db.session.refresh(regular_user)
         assert regular_user.invite_quota == original_quota
 
-    @patch('oneirodex.routes_admin_ext.invites.render_template')
-    def test_database_error_handling_get(self, mock_render, client, admin_user, regular_user, monkeypatch):
-        """Test that database errors in GET request are handled gracefully."""
-        mock_render.return_value = 'mocked_template'
-        
+    def test_invites_shell_get_does_not_load_roster_in_route(self, client, admin_user):
+        """The shell loads roster data through its API after the document is served."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        # Mock the select function to throw an exception
-        with patch('oneirodex.routes_admin_ext.invites.select') as mock_select:
-            mock_select.side_effect = Exception("Database connection failed")
-
-            # This should now handle the database error gracefully
-            response = client.get('/admin/manage_invites')
-            assert response.status_code == 200
-            
-            # Check that template was called with empty data due to error
-            mock_render.assert_called_once()
-            args, kwargs = mock_render.call_args
-            assert kwargs['users'] == []
-            assert kwargs['user_unused_invites'] == {}
+        response = client.get('/admin/manage_invites')
+        assert response.status_code == 200
+        assert 'id="admin-app-root"' in response.get_data(as_text=True)
 
     def test_database_error_handling_post(self, client, admin_user, regular_user, monkeypatch):
         """Test that database errors in POST request are handled gracefully."""

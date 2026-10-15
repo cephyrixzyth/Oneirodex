@@ -23,7 +23,7 @@ from oneirodex.utils.duplicate_check import (
 )
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.scan_match_settings import resolve_scan_match_policy
-from oneirodex.routes_apis.scan_unmatched_rows import _duplicate_compare_payload, _prefetch_matched_game_maps, _rom_language_fields_from_path, _unmatched_list_row
+from oneirodex.utils.scan_unmatched_rows import _duplicate_compare_payload, _prefetch_matched_game_maps, _rom_language_fields_from_path, _unmatched_list_row
 from . import apis_bp
 
 

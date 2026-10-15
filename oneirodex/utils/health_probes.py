@@ -6,26 +6,25 @@ from typing import Any
 
 import logging
 
-from flask import current_app
 from sqlalchemy import text
 
-from oneirodex import app_version, db
-from oneirodex.init_manager import is_initialization_complete
+from oneirodex import app_version
+from oneirodex.runtime_native.health import liveness_payload
 
 
 def build_liveness() -> dict[str, Any]:
     """Process is up — no dependency checks."""
-    return {
-        'status': 'ok',
-        'probe': 'liveness',
-        'version': app_version,
-    }
+    return liveness_payload(app_version)
 
 
-def check_database() -> tuple[bool, str | None]:
+def check_database(database=None) -> tuple[bool, str | None]:
     """Return (ok, error_message)."""
     try:
-        db.session.execute(text('SELECT 1'))
+        if database is None:
+            from oneirodex.runtime_native.db_session import native_db
+
+            database = native_db
+        database.session.execute(text('SELECT 1'))
         return True, None
     except Exception as exc:  # noqa: BLE001 — surface any DB failure to probes
         # The probe is unauthenticated: the class name only, never the driver's
@@ -34,15 +33,24 @@ def check_database() -> tuple[bool, str | None]:
         return False, type(exc).__name__
 
 
-def build_readiness() -> tuple[dict[str, Any], int]:
+def build_readiness(*, config=None, database=None, initialization_check=None) -> tuple[dict[str, Any], int]:
     """
     Ready when the database answers and startup init is marked complete.
 
     In Flask TESTING, init env may be unset — DB success alone is enough.
     """
-    db_ok, db_error = check_database()
-    testing = bool(current_app.config.get('TESTING'))
-    init_ok = is_initialization_complete() or testing
+    if config is None:
+        from flask import current_app
+
+        config = current_app.config
+    if initialization_check is None:
+        from oneirodex.init_manager import is_initialization_complete
+
+        initialization_check = is_initialization_complete
+    db_ok, db_error = check_database(database)
+    testing = bool(config.get('TESTING'))
+    initialization_complete = initialization_check()
+    init_ok = initialization_complete or testing
 
     payload: dict[str, Any] = {
         'status': 'ok' if (db_ok and init_ok) else 'not_ready',
@@ -52,8 +60,8 @@ def build_readiness() -> tuple[dict[str, Any], int]:
             'database': {'ok': db_ok, 'error': db_error},
             'initialization': {
                 'ok': init_ok,
-                'complete': is_initialization_complete(),
-                'testing_bypass': testing and not is_initialization_complete(),
+                'complete': initialization_complete,
+                'testing_bypass': testing and not initialization_complete,
             },
         },
     }

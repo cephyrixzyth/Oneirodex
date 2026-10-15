@@ -97,7 +97,7 @@ def _runtime_status_map() -> dict[str, str]:
     except Exception:
         pass
     try:
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import GlobalSettings
         from sqlalchemy import select
         row = db.session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()

@@ -1,12 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { AccountModal, useShellConfig } from '@oneirodex/ui'
+import {
+  useTopBarReserve,
+  AccountModal,
+  PreferencesModalHost,
+  openPreferencesModal,
+  useShellConfig,
+} from '@oneirodex/ui'
 
 import { TOPBAR_LEAD_ID, TOPBAR_SLOT_ID, TOPBAR_TITLE_ID, TOPBAR_TRAIL_ID } from './ContextBar'
 import { IconMenu, IconUser } from './icons'
 import { TileSizeControl } from './TileSizeControl'
 import { getPageTitle, hasTileSizeControl } from './navConfig'
-import { openPreferencesModal } from '../api/preferences'
 
 /**
  * Bar one, reduced to page scope (GT-B2).
@@ -48,6 +53,7 @@ export function TopBar({
   onOpenCommandPalette,
   onToggleRail,
   railState = 'expanded',
+  isMobile = false,
   views = null,
 }: LooseProps) {
   const shellConfig = useShellConfig() as LooseProps
@@ -59,14 +65,31 @@ export function TopBar({
     enableVr,
     enableActivity,
   } = shellConfig
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const pageTitle = getPageTitle(pathname, { showTrailers, showHelp, enableVr, enableActivity })
   const showTileSize = hasTileSizeControl(pathname)
   const [accountOpen, setAccountOpen] = useState(false)
   const [accountModal, setAccountModal] = useState<any>(null)
   const accountId = useId()
   const rootRef = useRef<any>(null)
+  useTopBarReserve(rootRef)
+  const accountButtonRef = useRef<HTMLButtonElement | null>(null)
   const paletteHint = commandPaletteHint()
+
+  useEffect(() => {
+    const requested = new URLSearchParams(search).get('account')
+    if (
+      requested === 'profile' ||
+      requested === 'avatar' ||
+      requested === 'password' ||
+      requested === 'invites'
+    ) {
+      setAccountModal(requested)
+    }
+    if (new URLSearchParams(search).get('preferences') === '1') {
+      void openPreferencesModal()
+    }
+  }, [search])
 
   useEffect(() => {
     if (!accountOpen) return undefined
@@ -74,7 +97,11 @@ export function TopBar({
       if (!rootRef.current?.contains(event.target)) setAccountOpen(false)
     }
     function onKey(event: any) {
-      if (event.key === 'Escape') setAccountOpen(false)
+      if (event.key === 'Escape' && rootRef.current?.contains(document.activeElement)) {
+        event.preventDefault()
+        setAccountOpen(false)
+        accountButtonRef.current?.focus()
+      }
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKey)
@@ -87,11 +114,7 @@ export function TopBar({
   async function handlePreferencesClick(event: any) {
     event.preventDefault()
     setAccountOpen(false)
-    try {
-      await openPreferencesModal()
-    } catch {
-      window.location.href = '/settings_panel'
-    }
+    await openPreferencesModal()
   }
 
   /* Profile opens the modal directly.
@@ -134,8 +157,10 @@ export function TopBar({
             <button
               type="button"
               className="od-cbtn od-topbar__rail-toggle"
+              id="od-rail-toggle"
               aria-label="Toggle navigation"
-              aria-expanded={railState !== 'collapsed'}
+              aria-controls="od-primary-navigation"
+              aria-expanded={isMobile ? railState === 'open' : railState !== 'collapsed'}
               onClick={onToggleRail}
             >
               <IconMenu />
@@ -201,7 +226,7 @@ export function TopBar({
               it sat next to the slider it is not — one is a continuous
               control you drag while watching the grid, the other is a
               one-shot preference. The form field it writes was always in
-              `modal_preferences.html`'s form; only the control moved. */}
+              shared Preferences dialog; only the launcher moved. */}
           {showTileSize ? (
             <TileSizeControl
               value={tileSize || shellConfig.tileSize || '50'}
@@ -227,10 +252,11 @@ export function TopBar({
                 the bar; the avatar is sized to the control rather than the
                 other way round. */}
             <button
+              ref={accountButtonRef}
               type="button"
               className="od-cbtn od-topbar__account"
               aria-expanded={accountOpen}
-              aria-controls={accountId}
+              aria-controls={accountOpen ? accountId : undefined}
               aria-label="Account menu"
               onClick={() => setAccountOpen((open) => !open)}
             >
@@ -248,14 +274,18 @@ export function TopBar({
               )}
             </button>
             {accountOpen ? (
-              <div className="od-topnav__dropdown-panel od-menu-surface" id={accountId} role="menu">
+              <div
+                className="od-topnav__dropdown-panel od-menu-surface"
+                id={accountId}
+                role="group"
+                aria-label="Account actions"
+              >
                 {username ? <div className="od-topnav__username">{username}</div> : null}
                 {/* Only remaining home for the palette hint now the bar's
                     search button is gone. CommandPalette binds ⌘K itself, so
                     this is discoverability, not the trigger. */}
                 <button
                   type="button"
-                  role="menuitem"
                   className="od-topnav__palette-hint"
                   onClick={() => {
                     setAccountOpen(false)
@@ -269,35 +299,20 @@ export function TopBar({
                     // Still an <a href>: middle-click and "open in new tab"
                     // land on the server-rendered page, which is the fallback.
                     return (
-                      <a
-                        key={link.id}
-                        href={link.href}
-                        role="menuitem"
-                        onClick={openAccountModal(link.modal)}
-                      >
+                      <a key={link.id} href={link.href} onClick={openAccountModal(link.modal)}>
                         {link.label}
                       </a>
                     )
                   }
                   if (link.preferences) {
                     return (
-                      <a
-                        key={link.id}
-                        href={link.href}
-                        role="menuitem"
-                        onClick={handlePreferencesClick}
-                      >
+                      <a key={link.id} href={link.href} onClick={handlePreferencesClick}>
                         {link.label}
                       </a>
                     )
                   }
                   return (
-                    <a
-                      key={link.id}
-                      href={link.href}
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                    >
+                    <a key={link.id} href={link.href} onClick={() => setAccountOpen(false)}>
                       {link.label}
                     </a>
                   )
@@ -308,7 +323,12 @@ export function TopBar({
         </div>
       </header>
 
-      <AccountModal panel={accountModal} onClose={() => setAccountModal(null)} />
+      <AccountModal
+        panel={accountModal}
+        onClose={() => setAccountModal(null)}
+        returnFocusRef={accountButtonRef}
+      />
+      <PreferencesModalHost />
     </>
   )
 }

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 
 import { TopBar } from './TopBar'
 import { ShellHarness } from '../testShell'
@@ -15,14 +15,85 @@ import { ShellHarness } from '../testShell'
  */
 
 function renderTopBar(props = {}) {
+  const initialEntries = (props as { initialEntries?: string[] }).initialEntries || ['/library']
   return render(
-    <MemoryRouter initialEntries={['/library']}>
+    <MemoryRouter initialEntries={initialEntries}>
       <ShellHarness shell={{ username: 'ada' }}>
         <TopBar {...props} />
       </ShellHarness>
     </MemoryRouter>,
   )
 }
+
+test('legacy account destinations open their React panel after direct entry', async () => {
+  window.history.replaceState({}, '', '/')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = vi.fn(async () => ({
+    ok: true,
+    json: async () => ({
+      username: 'ada',
+      email: 'ada@example.com',
+      role: 'user',
+      avatar_path: '/avatar.svg',
+      stock_avatars: [],
+      invite_quota: 0,
+      invites_used: 0,
+      invites_remaining: 0,
+      smtp_enabled: false,
+    }),
+  })) as unknown as typeof fetch
+  try {
+    renderTopBar({ initialEntries: ['/library?account=password'] })
+    expect(await screen.findByRole('heading', { name: 'Change password' })).toBeInTheDocument()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('legacy invite destination opens the shared React invite panel', async () => {
+  window.history.replaceState({}, '', '/')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = vi.fn(async (input) => ({
+    ok: true,
+    json: async () =>
+      String(input).includes('/api/account/invites')
+        ? {
+            invites: [],
+            quota: 5,
+            remaining: 5,
+            smtp_enabled: false,
+            ttl_hours: 48,
+            site_url_configured: true,
+          }
+        : {
+            username: 'ada',
+            email: 'ada@example.com',
+            role: 'user',
+            avatar_path: '/avatar.svg',
+            stock_avatars: [],
+            invite_quota: 5,
+            invites_used: 0,
+            invites_remaining: 5,
+            smtp_enabled: false,
+          },
+  })) as unknown as typeof fetch
+  try {
+    renderTopBar({ initialEntries: ['/library?account=invites'] })
+    expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeInTheDocument()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('legacy preferences destination opens the shared React dialog', () => {
+  const dispatch = vi.spyOn(window, 'dispatchEvent')
+  try {
+    renderTopBar({ initialEntries: ['/library?preferences=1'] })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'od:open-preferences' }))
+  } finally {
+    dispatch.mockRestore()
+  }
+})
 
 test('the rail toggle reports whether the rail is showing', () => {
   // The rail has three states and this one button drives all of them, so

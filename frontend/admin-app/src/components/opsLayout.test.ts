@@ -28,8 +28,8 @@ describe('defaultOpsLayout', () => {
   })
 })
 
-test('opsWidgetMins keeps status and wide panels above metric floor', () => {
-  expect(opsWidgetMins('status').h).toBeGreaterThanOrEqual(2)
+test('opsWidgetMins keeps status compact and wide panels above metric floor', () => {
+  expect(opsWidgetMins('status').h).toBe(1)
   expect(opsWidgetMins('m-cpu')).toEqual({ w: 2, h: 2 })
   expect(opsWidgetMins('recent-log').w).toBeGreaterThanOrEqual(4)
   expect(opsWidgetMins('detail-system').w).toBeGreaterThanOrEqual(3)

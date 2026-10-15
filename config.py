@@ -185,9 +185,12 @@ class Config(object):
     DEV_MODE = _env_bool('DEV_MODE', False)
 
     # Reverse proxy / HTTPS termination — number of trusted proxy hops (0 = disabled).
-    # Set to 1 when Oneirodex sits behind a single reverse proxy (nginx, Caddy, Traefik)
-    # so X-Forwarded-Proto/Host are honored for OIDC redirects and external URLs.
+    # Set to the forwarded hop count when behind a proxy; forwarded values are
+    # honored only when that peer also matches TRUSTED_PROXY_CIDRS below.
     TRUSTED_PROXIES = int(os.getenv('TRUSTED_PROXIES', '0') or '0')
+    # The hop count does not authenticate a proxy; only matching peer addresses
+    # in this comma-separated IP/CIDR list may supply forwarded headers.
+    TRUSTED_PROXY_CIDRS = os.getenv('TRUSTED_PROXY_CIDRS', '')
 
     # Hosts allowed to become the origin of an emailed link (password reset,
     # invite). Empty = trust private/LAN hosts only, which is what a household
@@ -416,11 +419,6 @@ class Config(object):
     DELUGE_PASSWORD = os.getenv('DELUGE_PASSWORD', '')
     SABNZBD_URL = os.getenv('SABNZBD_URL', '')
     SABNZBD_API_KEY = os.getenv('SABNZBD_API_KEY', '')
-
-    # Flask-Babel / i18n
-    BABEL_DEFAULT_LOCALE = os.getenv('BABEL_DEFAULT_LOCALE', 'en')
-    BABEL_SUPPORTED_LOCALES = ['en', 'es']
-
 
 class ProdConfig(Config):
     """Explicit production profile — what create_app() selects outside pytest.

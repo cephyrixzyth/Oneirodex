@@ -61,6 +61,14 @@ listing and downloads require `read:library`; uploads and deletion require
 `write:library`. RetroArch cheat files follow the same boundary: list/download
 requires `read:library`, while upload/delete requires `write:library`. PC cheat
 notes are readable with `read:library`; authoring/deletion stays librarian-only.
+Favorite and play-status changes, Discover pins and saved filters, wishlist
+requests, wanted-update entries, member preferences and detail layouts,
+personal collections, playtime sessions, and on-demand freshness checks also
+require `write:library` for Bearer tokens; `read:library` alone cannot invoke
+these write routes. Bounded update scans, store ownership links/imports/syncs,
+launcher imports, and owned-title matching use the same bearer scope. Free-game
+ownership assistance, which may update ownership data and start a store sync,
+also uses this scope.
 Registration invite management requires a signed-in browser session, including
 the classic invite page. API tokens cannot list, create or delete these invites.
 Private account summaries and support report reads also require the signed-in
@@ -75,6 +83,7 @@ Normal browser account flows and public invite redemption remain available.
 
 - No `admin`, `write:library`, or `write:download` — on **session cookies and Bearer tokens**
 - Cannot mint those scopes (including the Desktop companion preset)
+- Existing Bearer-token scopes are checked against the current account role when companion commands are delivered; changing a member to `child` stops lifecycle command delivery even if an older token remains active
 - `GET /api/acquire/search` returns 403
 - Companion download / install / update / uninstall / patch / mod-pack commands are denied
 - Personal playtime and download history hide games outside the child's current library/content access

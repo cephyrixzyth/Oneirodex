@@ -117,6 +117,26 @@ def test_a_browser_session_never_receives_the_install_queue(client, app, world):
     assert web.post('/api/client/commands/ack', json={'ids': ['x']}).status_code in (400, 401, 403)
 
 
+def test_read_only_companion_token_cannot_ack_or_nack_commands(app, world):
+    _row, raw = generate_api_token(world['user'], 'read-only-companion', ['read:library'])
+    read_only = FakeCompanion(app, raw)
+
+    ack = read_only.ack(['known-command-id'])
+    nack = read_only.nack(['known-command-id'])
+
+    assert ack.status_code == 403
+    assert ack.get_json()['detail']['required_scope'] == 'write:download or write:library'
+    assert nack.status_code == 403
+    assert nack.get_json()['detail']['required_scope'] == 'write:download or write:library'
+
+    _row, lifecycle_raw = generate_api_token(
+        world['user'], 'lifecycle-companion', ['read:library', 'write:download'],
+    )
+    lifecycle = FakeCompanion(app, lifecycle_raw)
+    assert lifecycle.ack(['missing-command-id']).status_code == 200
+    assert lifecycle.nack(['missing-command-id']).status_code == 200
+
+
 def test_lifecycle_round_trip_from_the_companion(app, world):
     fake = FakeCompanion(app, world['token'])
     body = {'records': [{'game_uuid': world['game'].uuid, 'state': 'installed'}]}

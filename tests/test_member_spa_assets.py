@@ -6,17 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_member_spa_links_member_app_css():
-    spa = (ROOT / 'oneirodex' / 'templates' / 'site' / 'member_spa.html').read_text(
-        encoding='utf-8',
-    )
-    empty = (ROOT / 'oneirodex' / 'templates' / 'base_empty.html').read_text(
-        encoding='utf-8',
-    )
-    needle = "dist/member-app/member-app.css"
-    assert needle in spa or needle in empty
-    assert needle in empty
-    assert 'member-app.js' in spa
+def test_member_spa_links_member_app_assets_without_jinja():
+    shell = (ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+    assert 'dist_asset_url("member-app/member-app.css")' in shell
+    assert "dist_asset_url('member-app/member-app.js')" in shell
+    assert 'render_template' not in shell
 
 
 def test_entrypoint_warns_on_missing_member_app_css():
@@ -35,10 +29,8 @@ def test_default_accent_is_green():
     assert '--od-tile-gap:' in tokens
 
 
-def test_member_spa_shell_loads_admin_delete_scripts():
-    empty = (ROOT / 'oneirodex' / 'templates' / 'base_empty.html').read_text(
-        encoding='utf-8',
-    )
-    assert 'js/popup_menu.js' in empty
-    assert 'js/delete_game_modal.js' in empty
-    assert "partials/delete_game_modal.html" in empty
+def test_member_spa_shell_keeps_shared_delete_actions():
+    shell = (ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+    assert 'popup_menu.js' in shell
+    assert 'delete_game_modal.js' in shell
+    assert 'delete_full_game' in shell

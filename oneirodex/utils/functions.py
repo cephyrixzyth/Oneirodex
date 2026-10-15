@@ -6,7 +6,7 @@ into ``oneirodex/utils/helpers/`` (pure/leaf) and ``oneirodex/utils/clients/``
 still resolves through the star re-exports below, and every attribute a test
 patches as ``oneirodex.utils.functions.<name>`` is still reachable here.
 """
-from oneirodex import db  # noqa: F401  -- re-export + `patch('oneirodex.utils.functions.db.*')`
+from oneirodex.runtime_native.db_session import native_db as db  # noqa: F401 -- legacy-compatible re-export; native workers use their active session
 
 from oneirodex.utils.helpers.fs import *  # noqa: F401,F403
 from oneirodex.utils.helpers.images import *  # noqa: F401,F403

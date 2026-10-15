@@ -219,3 +219,37 @@ def test_companion_kind_without_download_scope_skips_commands(client, db_session
     )
     assert response.status_code == 200
     assert response.get_json()['commands'] == []
+
+
+def test_downgraded_child_cannot_receive_commands_from_existing_companion_token(
+    client, app, db_session, user, tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path))
+    cc.enqueue_client_command(user.id, 'game-demoted', 'install')
+    _, raw = generate_api_token(
+        user, 'Existing companion',
+        ['read:library', 'write:download', 'write:presence'],
+    )
+
+    # The token remains valid after a role change, but its former lifecycle
+    # grants must stop applying as soon as the role policy changes.
+    user.role = 'child'
+    db_session.commit()
+    headers = {'Authorization': f'Bearer {raw}', 'Content-Type': 'application/json'}
+
+    heartbeat = client.post(
+        '/api/client/heartbeat', headers=headers,
+        json={'device_id': 'demoted-seat', 'device_kind': 'companion'},
+    )
+    poll = client.get(
+        '/api/client/commands?device_kind=companion', headers=headers,
+    )
+    capabilities = client.get(
+        '/api/client/capabilities?device_kind=companion', headers=headers,
+    )
+
+    assert heartbeat.status_code == 200
+    assert heartbeat.get_json()['commands'] == []
+    assert poll.status_code == 200
+    assert poll.get_json()['commands'] == []
+    assert 'download' in capabilities.get_json()['denies']

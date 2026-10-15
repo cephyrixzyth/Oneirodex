@@ -5,21 +5,21 @@ WEBVTT
 Help and reporting a problem. The in-app guide, and Report issue straight to the admin inbox.
 
 2
-00:00:07.011 --> 00:00:11.235
+00:00:07.014 --> 00:00:11.238
 Help is the in-app guide — pick a topic and the answer opens underneath.
 
 3
-00:00:12.384 --> 00:00:14.952
+00:00:12.580 --> 00:00:15.148
 Expand all reads it straight through.
 
 4
-00:00:15.708 --> 00:00:21.708
+00:00:15.910 --> 00:00:21.910
 Topics cover browser play, controllers, cheats, translations and the licence.
 
 5
-00:00:22.473 --> 00:00:28.065
+00:00:22.664 --> 00:00:28.256
 Report sends an issue to the admin's Support inbox, and on to GitHub when configured.
 
 6
-00:00:29.138 --> 00:00:37.418
+00:00:29.348 --> 00:00:37.628
 That is help and reporting a problem. The written guide is in the docs folder, at docs/user/faq.md.

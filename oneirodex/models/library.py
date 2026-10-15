@@ -7,7 +7,7 @@ from uuid import uuid4
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
 
-from oneirodex import db
+from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 from oneirodex.platform import LibraryPlatform
 

@@ -283,3 +283,22 @@ def require_api_scope(scope: str):
         return wrapped
 
     return decorator
+
+
+def require_api_token_scope(scope: str):
+    """Require a scope for Bearer callers while preserving browser sessions."""
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            if getattr(g, 'api_token', None) is not None and not user_has_scope(scope):
+                return api_error(
+                    f'Missing scope: {scope}',
+                    code='forbidden',
+                    detail={'required_scope': scope},
+                )
+            return fn(*args, **kwargs)
+
+        return wrapped
+
+    return decorator

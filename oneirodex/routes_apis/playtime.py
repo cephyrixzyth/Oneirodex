@@ -10,6 +10,7 @@ from oneirodex.schemas.playtime import StartPlaytimeSessionBody
 from oneirodex.utils.api_response import api_error
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.playtime import end_session, heartbeat_session, start_session
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
@@ -17,6 +18,7 @@ from . import apis_bp
 
 @apis_bp.route('/playtime/sessions', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(StartPlaytimeSessionBody)
 def playtime_start(body: StartPlaytimeSessionBody):
     try:
@@ -30,6 +32,7 @@ def playtime_start(body: StartPlaytimeSessionBody):
 
 @apis_bp.route('/playtime/sessions/<int:session_id>/heartbeat', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def playtime_heartbeat(session_id: int):
     session = db.session.get(PlaySession, session_id)
     if not session or session.user_id != current_user.id:
@@ -43,6 +46,7 @@ def playtime_heartbeat(session_id: int):
 
 @apis_bp.route('/playtime/sessions/<int:session_id>/stop', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def playtime_stop(session_id: int):
     session = db.session.get(PlaySession, session_id)
     if not session or session.user_id != current_user.id:

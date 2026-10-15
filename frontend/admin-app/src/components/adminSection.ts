@@ -5,9 +5,8 @@
  * "which section am I in" (SECTION_HOME) and, in (c), by the route table.
  * It renders nothing and must stay free of React / JSX imports.
  *
- * '/admin/help' is a Jinja page (admin_help.html); App renders chrome only for
- * it, so 'help' has no SPA element. It still classifies here so the top nav can
- * highlight the section.
+ * '/admin/help' redirects to the shared member Help route. It still classifies
+ * here so the top nav can highlight the section during legacy navigation.
  */
 export function resolveAdminPage(pathname: string): string {
   if (pathname === '/admin/dashboard' || pathname === '/admin' || pathname === '/admin/') {
@@ -17,6 +16,7 @@ export function resolveAdminPage(pathname: string): string {
   if (pathname === '/admin/invites') return 'invites'
   if (pathname === '/admin/plugins') return 'plugins'
   if (pathname === '/admin/extensions') return 'extensions'
+  if (pathname === '/admin/features' || pathname === '/admin/chat_emoji') return 'integrations'
   if (
     pathname.startsWith('/libraries') ||
     pathname.startsWith('/admin/library') ||

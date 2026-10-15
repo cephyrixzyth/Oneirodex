@@ -1,12 +1,11 @@
 /** Propose / import leaf libraries API helpers (preview-only; never auto-create). */
 
-import { csrfHeaders, csrfToken, getJson, postJsonResult } from './adminApi'
+import { csrfHeaders, getJson, postForm, postJsonResult } from './adminApi'
 
 export const PROPOSE_LEAF_URL = '/api/library_tools/propose_leaf_libraries'
 export const IMPORT_LEAF_PREVIEW_URL = '/api/library_tools/import_leaf_libraries/preview'
-export const LIBRARY_ADD_URL = '/admin/library/add'
+export const LIBRARY_CREATE_URL = '/api/admin/libraries'
 export const LIBRARY_SCAN_URL = '/api/admin/libraries/scan'
-export const GET_LIBRARIES_URL = '/api/get_libraries'
 
 /** One normalized candidate row (propose or import preview). */
 export interface CandidateRow {
@@ -279,65 +278,23 @@ export async function fetchImportLeafLibrariesPreview(
 }
 
 /**
- * Create one library via existing form POST (name / platform / scan_depth).
- * @returns {Promise<{ ok: boolean, error?: string }>}
+ * Create one library through the validated admin API.
+ * @returns {Promise<{ ok: boolean, library_uuid?: string, error?: string }>}
  */
 export async function createLibraryFromCandidate(
   candidate: CandidateRow,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; library_uuid?: string; error?: string }> {
   const form = new FormData()
-  form.append('csrf_token', csrfToken())
   form.append('name', candidate.suggested_name)
   form.append('platform', candidate.platform || 'OTHER')
   form.append('scan_depth', String(candidate.scan_depth || 1))
   form.append('watch_enabled', 'default')
-
-  const response = await fetch(LIBRARY_ADD_URL, {
-    method: 'POST',
-    credentials: 'same-origin',
-    body: form,
-  })
-
-  if (response.status === 401) {
-    window.location.href = '/login'
-    throw new Error('unauthorized')
+  const created = await postForm(LIBRARY_CREATE_URL, form)
+  const libraryUuid = typeof created?.library_uuid === 'string' ? created.library_uuid : ''
+  if (!libraryUuid) {
+    return { ok: false, error: 'Library was created but its ID was not returned.' }
   }
-
-  // Success redirects away from /admin/library/add; validation errors re-render the form.
-  const landedOnAdd = String(response.url || '').includes('/admin/library/add')
-  if (response.ok && !landedOnAdd) {
-    return { ok: true }
-  }
-  if (response.redirected && !landedOnAdd) {
-    return { ok: true }
-  }
-  return {
-    ok: false,
-    error: landedOnAdd
-      ? 'Library form rejected this candidate (check name/platform).'
-      : `Create failed (${response.status})`,
-  }
-}
-
-/**
- * Match a newly created library by suggested name (best-effort).
- * @returns {Promise<string|null>} uuid
- */
-export async function findLibraryUuidByName(name: string): Promise<string | null> {
-  const data = await getJson(GET_LIBRARIES_URL)
-  const rows: unknown[] = Array.isArray(data) ? data : data.libraries || []
-  const want = String(name || '')
-    .trim()
-    .toLowerCase()
-  const hit = rows.find(
-    (row): row is Record<string, unknown> =>
-      !!row &&
-      typeof row === 'object' &&
-      String((row as Record<string, unknown>).name || '')
-        .trim()
-        .toLowerCase() === want,
-  )
-  return hit && typeof hit.uuid === 'string' ? hit.uuid : null
+  return { ok: true, library_uuid: libraryUuid }
 }
 
 export interface QueueLeafScanOpts {
@@ -403,13 +360,7 @@ export async function confirmCreateSelected(selected: CandidateRow[]) {
     }
     created += 1
 
-    let uuid: string | null = null
-    try {
-      uuid = await findLibraryUuidByName(candidate.suggested_name)
-    } catch {
-      uuid = null
-    }
-
+    const uuid = create.library_uuid || null
     if (!uuid) {
       results.push({
         path: candidate.path,

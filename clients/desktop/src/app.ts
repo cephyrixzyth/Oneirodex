@@ -90,7 +90,9 @@ let els: {
   lifecyclePanel: HTMLElement
 }
 function setStatus(message: string, tone: 'info' | 'error' | 'success' = 'info'): void {
-  els.status.textContent = message
+  if (els.status.textContent !== message) {
+    els.status.textContent = message
+  }
   els.status.dataset.tone = tone
 }
 function setGameActivity(gameUuid: string, message: string): void {
@@ -157,7 +159,7 @@ async function renderLifecyclePanel(): Promise<void> {
         ? `<div class="install-exe muted">exe: <code>${escapeHtml(install.exePath)}</code></div>`
         : ''
       const revealBit = install?.extractPath
-        ? `<button type="button" class="action-btn action-btn--reveal" data-action="reveal_path" data-uuid="${escapeHtml(record.gameUuid)}" title="Open install folder in Explorer / Finder">Show in Explorer</button>`
+        ? `<button type="button" class="action-btn secondary action-btn--reveal" data-action="reveal_path" data-uuid="${escapeHtml(record.gameUuid)}" title="Open install folder in Explorer / Finder">Show in Explorer</button>`
         : ''
       return `<li class="${stateClass}">
         <div><strong>${escapeHtml(title)}</strong> — <span class="state-pill">${escapeHtml(record.state)}</span></div>
@@ -207,11 +209,12 @@ function renderLibrary(): void {
           const disabled = isBusy || blocked ? 'disabled' : ''
           const updateClass =
             action === 'update' && state === 'update_available' ? ' action-btn--update' : ''
-          return `<button type="button" class="action-btn${updateClass}" data-action="${action}" data-uuid="${escapeHtml(uuid)}"${title} ${disabled}>${action}</button>`
+          const label = action.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
+          return `<button type="button" class="action-btn secondary${updateClass}" data-action="${action}" data-uuid="${escapeHtml(uuid)}"${title} ${disabled}>${label}</button>`
         })
         .join('')
       const playButton = canLaunchGame(state)
-        ? `<button type="button" class="action-btn play-btn" data-action="play" data-uuid="${escapeHtml(uuid)}" ${isBusy ? 'disabled' : ''}>Play</button>`
+        ? `<button type="button" class="action-btn primary play-btn" data-action="play" data-uuid="${escapeHtml(uuid)}" ${isBusy ? 'disabled' : ''}>Play</button>`
         : ''
       const modBlocked = modApplyBlockedReason({
         connectionOnline: connectionMode === 'online',
@@ -225,10 +228,10 @@ function renderLibrary(): void {
       const modDisabled = isBusy || Boolean(modBlocked) ? 'disabled' : ''
       const modButton =
         modsTrackingEnabled && (gamesWithEnabledMods.has(uuid) || canLaunchGame(state))
-          ? `<button type="button" class="action-btn action-btn--mods" data-action="apply_mods" data-uuid="${escapeHtml(uuid)}"${modTitle} ${modDisabled}>Apply mods</button>`
+          ? `<button type="button" class="action-btn secondary action-btn--mods" data-action="apply_mods" data-uuid="${escapeHtml(uuid)}"${modTitle} ${modDisabled}>Apply mods</button>`
           : ''
       const revealButton = canLaunchGame(state)
-        ? `<button type="button" class="action-btn action-btn--reveal" data-action="reveal_path" data-uuid="${escapeHtml(uuid)}" title="Open install folder in Explorer / Finder">Show in Explorer</button>`
+        ? `<button type="button" class="action-btn secondary action-btn--reveal" data-action="reveal_path" data-uuid="${escapeHtml(uuid)}" title="Open install folder in Explorer / Finder">Show in Explorer</button>`
         : ''
       const activityHtml = activity ? `<p class="activity">${escapeHtml(activity)}</p>` : ''
       return `
@@ -747,7 +750,9 @@ function bindTrustedShares(root: HTMLElement): void {
   const status = root.querySelector<HTMLElement>('#trusted-shares-status')!
   const saveBtn = root.querySelector<HTMLButtonElement>('#trusted-shares-save')!
   const show = (message: string, tone: 'info' | 'error' | 'success') => {
-    status.textContent = message
+    if (status.textContent !== message) {
+      status.textContent = message
+    }
     status.dataset.tone = tone
   }
   void loadTrustedShares()
@@ -796,10 +801,10 @@ export async function mountApp(root: HTMLElement): Promise<void> {
             API token
             <input id="token" name="token" type="password" placeholder="gt_… (paste from Account → API tokens)" autocomplete="off" />
           </label>
-          <button id="connect-btn" type="submit">Connect</button>
-          <button id="friends-btn" type="button">Open friends window</button>
+          <button id="connect-btn" type="submit" class="primary">Connect</button>
+          <button id="friends-btn" type="button" class="secondary">Open friends window</button>
         </form>
-        <p id="status" class="status" data-tone="info"></p>
+        <p id="status" class="status" data-tone="info" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>
       <section class="panel">
         <h2>Trusted network shares</h2>
@@ -808,8 +813,8 @@ export async function mountApp(root: HTMLElement): Promise<void> {
           Shares
           <textarea id="trusted-shares" rows="3" spellcheck="false" autocomplete="off" placeholder="&#92;&#92;nas&#92;roms"></textarea>
         </label>
-        <button id="trusted-shares-save" type="button">Save shares</button>
-        <p id="trusted-shares-status" class="status" data-tone="info"></p>
+        <button id="trusted-shares-save" type="button" class="secondary">Save shares</button>
+        <p id="trusted-shares-status" class="status" data-tone="info" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>
       <section class="panel">
         <h2>Library preview</h2>

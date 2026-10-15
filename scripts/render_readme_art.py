@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "assets" / "readme"
 HOWTO = ROOT / "docs" / "media" / "video" / "howto"
 ICONS_TSX = ROOT / "frontend" / "shared" / "src" / "railIcons.tsx"
+SHARED_ICONS_TSX = ROOT / "frontend" / "shared" / "src" / "generatedIconPaths.tsx"
 
 T = {
     "bg": "#0b0d10",
@@ -49,16 +50,21 @@ FONT_STACK = "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, san
 # --------------------------------------------------------------------------
 
 def load_rail_icons() -> dict[str, str]:
-    src = ICONS_TSX.read_text(encoding="utf-8")
-    body = src.split("export const railIconPaths", 1)[1]
     icons: dict[str, str] = {}
-    for m in re.finditer(r"\n  '?([a-z-]+)'?: \(\s*<>(.*?)</>\s*\),", body, re.S):
-        name, jsx = m.group(1), m.group(2)
-        svg = re.sub(r"\b(strokeWidth|strokeLinecap|strokeLinejoin|fillRule|clipRule)=",
-                     lambda mm: {"strokeWidth": "stroke-width", "strokeLinecap": "stroke-linecap",
-                                 "strokeLinejoin": "stroke-linejoin", "fillRule": "fill-rule",
-                                 "clipRule": "clip-rule"}[mm.group(1)] + "=", jsx)
-        icons[name] = " ".join(svg.split())
+    sources = (
+        (SHARED_ICONS_TSX, "export const sharedIconPaths"),
+        (ICONS_TSX, "export const railIconPaths"),
+    )
+    for path, declaration in sources:
+        src = path.read_text(encoding="utf-8")
+        body = src.split(declaration, 1)[1]
+        for m in re.finditer(r"\n  '?([a-z-]+)'?: \(\s*<>(.*?)</>\s*\),", body, re.S):
+            name, jsx = m.group(1), m.group(2)
+            svg = re.sub(r"\b(strokeWidth|strokeLinecap|strokeLinejoin|fillRule|clipRule)=",
+                         lambda mm: {"strokeWidth": "stroke-width", "strokeLinecap": "stroke-linecap",
+                                     "strokeLinejoin": "stroke-linejoin", "fillRule": "fill-rule",
+                                     "clipRule": "clip-rule"}[mm.group(1)] + "=", jsx)
+            icons[name] = " ".join(svg.split())
     return icons
 
 
@@ -66,7 +72,9 @@ ICONS = load_rail_icons()
 
 
 def icon_svg(name: str, size: int, color: str) -> str:
-    inner = ICONS.get(name) or ICONS["discover"]
+    if name not in ICONS:
+        raise ValueError(f"README card references unknown shared rail icon: {name}")
+    inner = ICONS[name]
     return (
         f'<svg width="{size}" height="{size}" viewBox="-1 -1 26 26" fill="none" stroke="{color}" '
         f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '

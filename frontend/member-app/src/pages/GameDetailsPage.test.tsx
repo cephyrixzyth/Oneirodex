@@ -295,10 +295,20 @@ test('admin ⋮ menu exposes Edit Details / Edit Images', async () => {
   await user.click(adminBtn)
   expect(
     within(coverWrap! as HTMLElement).getByRole('menuitem', { name: 'Edit Details' }),
+  ).toHaveFocus()
+  expect(
+    within(coverWrap! as HTMLElement).getByRole('menuitem', { name: 'Edit Details' }),
   ).toHaveAttribute('href', `/game_edit/${detailsPayload.uuid}`)
   expect(
     within(coverWrap! as HTMLElement).getByRole('menuitem', { name: 'Edit Images' }),
   ).toHaveAttribute('href', `/edit_game_images/${detailsPayload.uuid}`)
+  await user.keyboard('{ArrowDown}')
+  expect(
+    within(coverWrap! as HTMLElement).getByRole('menuitem', { name: 'Edit Images' }),
+  ).toHaveFocus()
+  await user.keyboard('{Escape}')
+  expect(adminBtn).toHaveFocus()
+  expect(within(coverWrap! as HTMLElement).queryByRole('menu')).toBeNull()
   expect(screen.getByText('/games/Celeste')).toBeInTheDocument()
   expect(screen.getByText('/mnt/user/games/Celeste')).toBeInTheDocument()
   expect(screen.getByLabelText('Admin paths')).toBeInTheDocument()

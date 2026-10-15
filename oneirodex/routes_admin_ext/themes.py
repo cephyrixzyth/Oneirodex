@@ -1,31 +1,25 @@
-from flask import render_template, request, redirect, url_for, flash, current_app, jsonify
+from flask import request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
 from oneirodex import db
 from oneirodex.models import UserPreference
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.forms import ThemeUploadForm
 from oneirodex.utils.themes import ThemeManager
 from oneirodex.utils.event_logging import log_system_event
-from oneirodex.utils.preset_themes import install_preset_themes
-from oneirodex.routes_theme import clear_theme_asset_versions
 from oneirodex.utils.icon_themes import get_icon_pack
 import json
 import os
-import shutil
 from pathlib import Path
 from typing import Any, Optional, Union
 from . import admin2_bp
-from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.theme_validation import (
+    MAX_THEME_FILE_SIZE, WINDOWS_RESERVED_NAMES, ZIP_MAGIC_BYTES,
+    is_valid_theme_name, validate_theme_file,
+)
 
 # Configuration constants
-MAX_THEME_FILE_SIZE = 25 * 1024 * 1024  # 25MB in bytes
-ZIP_MAGIC_BYTES = [b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08']  # Standard ZIP file signatures
-WINDOWS_RESERVED_NAMES = {
-    'CON', 'PRN', 'AUX', 'NUL',
-    'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-    'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
-}
-
 def _read_theme_default_icon_pack(themes_root: Path, theme: str) -> Optional[str]:
     """Return ``default_icon_pack`` from an installed theme's ``theme.json``, if any."""
     theme_json = themes_root / theme / 'theme.json'
@@ -70,74 +64,6 @@ def resolve_apply_icon_pack(
     return None
 
 
-def validate_theme_file(file) -> tuple[bool, Optional[str]]:
-    """Validate uploaded theme file for security and format requirements.
-    
-    Args:
-        file: Uploaded file object from form
-        
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    if not file or not file.filename:
-        return False, "No file provided"
-    
-    # Check file size
-    file.seek(0, 2)  # Seek to end
-    file_size = file.tell()
-    file.seek(0)  # Reset to beginning
-    
-    if file_size > MAX_THEME_FILE_SIZE:
-        return False, f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum allowed size (25MB)"
-    
-    if file_size == 0:
-        return False, "File is empty"
-    
-    # Check magic bytes for ZIP file
-    file_header = file.read(4)
-    file.seek(0)  # Reset to beginning
-    
-    if not any(file_header.startswith(magic) for magic in ZIP_MAGIC_BYTES):
-        return False, "File is not a valid ZIP archive"
-    
-    return True, None
-
-
-def is_valid_theme_name(name: str) -> tuple[bool, Optional[str]]:
-    """Check if theme name is valid and safe to use.
-    
-    Args:
-        name: Theme name to validate
-        
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    if not name or not name.strip():
-        return False, "Theme name cannot be empty"
-    
-    # Check for Windows reserved names
-    name_upper = name.upper()
-    if name_upper in WINDOWS_RESERVED_NAMES:
-        return False, f"'{name}' is a reserved system name and cannot be used"
-    
-    # Check for reserved names with extensions
-    if '.' in name_upper:
-        base_name = name_upper.split('.')[0]
-        if base_name in WINDOWS_RESERVED_NAMES:
-            return False, f"'{name}' uses a reserved system name and cannot be used"
-    
-    # Check for dangerous characters
-    dangerous_chars = ['<', '>', ':', '"', '|', '?', '*', '\\', '/']
-    if any(char in name for char in dangerous_chars):
-        return False, f"Theme name contains invalid characters: {', '.join(char for char in dangerous_chars if char in name)}"
-    
-    # Check for path traversal attempts  
-    if '..' in name or (name.startswith('.') and name != '.') or name.endswith('.'):
-        return False, "Theme name contains invalid path elements"
-    
-    return True, None
-
-
 @admin2_bp.route('/admin/themes', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -147,6 +73,9 @@ def manage_themes():
     Returns:
         Response: Rendered template or redirect
     """
+    if request.method == 'GET':
+        return render_admin_spa(title='Themes · Oneirodex Admin')
+
     form = ThemeUploadForm()
     theme_manager = ThemeManager(current_app)
     upload_folder = Path(current_app.config['UPLOAD_FOLDER']) / 'themes'
@@ -167,6 +96,11 @@ def manage_themes():
             )
             flash("Error processing request. Please try again.", 'error')
             return redirect(url_for('admin2.manage_themes'))
+
+    # JSON requests are the native admin SPA upload path. Keep the existing
+    # multipart Flask-WTF form below as the compatibility route.
+    if request.method == 'POST' and request.is_json:
+        return api_error('Upload a ZIP file using multipart form data', code='bad_request')
 
     if form.validate_on_submit():
         theme_zip = form.theme_zip.data
@@ -225,9 +159,9 @@ def manage_themes():
             flash(f"An unexpected error occurred: {str(e)}", 'error')
         return redirect(url_for('admin2.manage_themes'))
 
-    installed_themes = theme_manager.get_installed_themes()
-    default_theme = theme_manager.get_default_theme()
-    return render_template('admin/admin_manage_themes.html', form=form, themes=installed_themes, default_theme=default_theme)
+    if form.errors:
+        flash('Please choose a valid theme archive and try again.', 'error')
+    return redirect(url_for('admin2.manage_themes'))
 
 @admin2_bp.route('/admin/themes/readme')
 @login_required
@@ -238,7 +172,7 @@ def theme_readme():
     Returns:
         Response: Rendered template with theme documentation
     """
-    return render_template('admin/admin_manage_themes_readme.html')
+    return render_admin_spa(title='Theme authoring guide · Oneirodex Admin')
 
 @admin2_bp.route('/admin/themes/delete/<theme_name>', methods=['POST'])
 @login_required
@@ -289,91 +223,29 @@ def delete_theme(theme_name: str):
         flash(f"An unexpected error occurred: {str(e)}", 'error')
     return redirect(url_for('admin2.manage_themes'))
 
+def perform_default_theme_reset() -> tuple[bool, str]:
+    """Reset default assets and presets; shared by classic and native routes."""
+    from oneirodex.utils.theme_reset import reset_default_theme_assets
+
+    return reset_default_theme_assets(
+        current_app.root_path,
+        audit_user_id=getattr(current_user, 'id', None),
+        logger=current_app.logger,
+    )
+
+
 @admin2_bp.route('/admin/themes/reset', methods=['POST'])
 @login_required
 @admin_required
 def reset_default_themes():
-    """Reset themes to default by copying from source directory.
-
-    Returns:
-        Response: Redirect to themes management page
-    """
-    try:
-        # Resolve against the app package root — not process CWD (Docker/uvicorn).
-        app_root = Path(current_app.root_path)
-        default_theme_source = app_root / 'setup' / 'default_theme'
-        if not default_theme_source.exists():
-            error_msg = "Failed to reset default themes: source directory not found"
-            flash('Error: default theme source not found in oneirodex/setup/default_theme', 'error')
-            log_system_event(
-                error_msg,
-                event_type='themes',
-                event_level='error'
-            )
-            return redirect(url_for('admin2.manage_themes'))
-
-        default_theme_target = Path(library_dir(app_root)) / 'themes' / 'default'
-
-        log_system_event(
-            "Starting default themes reset...",
-            event_type='themes',
-            event_level='information'
-        )
-
-        # Remove existing default theme if it exists
-        if default_theme_target.exists():
-            try:
-                shutil.rmtree(default_theme_target)
-                log_system_event(
-                    "Removed existing default theme directory",
-                    event_type='themes',
-                    event_level='information'
-                )
-            except Exception as e:
-                error_message = f"Failed to remove existing default theme: {str(e)}"
-                flash(error_message, 'error')
-                log_system_event(error_message, event_type='themes', event_level='error')
-                return redirect(url_for('admin2.manage_themes'))
-
-        # Create themes directory if it doesn't exist
-        default_theme_target.parent.mkdir(parents=True, exist_ok=True)
-
-        # Copy default theme from source and (re)install color presets
-        try:
-            shutil.copytree(default_theme_source, default_theme_target)
-            themes_root = default_theme_target.parent
-            presets = install_preset_themes(
-                str(themes_root),
-                str(default_theme_source),
-                force=True,
-            )
-            # The files on disk are new; the URLs pointing at them are not until
-            # this runs. Without it the reset succeeds server-side and the
-            # browser keeps serving the previous stylesheet for up to an hour,
-            # which is precisely how a working reset came to look broken.
-            clear_theme_asset_versions()
-            log_system_event(
-                f"Default theme reset; installed {presets} preset theme(s)",
-                event_type='themes',
-                event_level='information'
-            )
-            flash(
-                f'Default theme reset and {presets} preset themes installed. '
-                'Pick a theme under Preferences.',
-                'success',
-            )
-        except Exception as e:
-            error_message = f"Failed to copy default theme: {str(e)}"
-            flash(error_message, 'error')
-            log_system_event(error_message, event_type='themes', event_level='error')
-
-    except Exception as e:
-        error_message = f"Error resetting default themes: {str(e)}"
-        flash(error_message, 'error')
-        log_system_event(error_message, event_type='themes', event_level='error')
-
+    """Reset bundled theme assets while retaining custom installed themes."""
+    ok, message = perform_default_theme_reset()
+    flash(message, 'success' if ok else 'error')
+    if request.is_json:
+        if ok:
+            return api_ok({'status': 'reset', 'message': message})
+        return api_error('Default theme reset failed. Please try again.', code='internal')
     return redirect(url_for('admin2.manage_themes'))
-
 
 
 # POST /admin/themes/apply is retired (W28). It set the calling admin's own

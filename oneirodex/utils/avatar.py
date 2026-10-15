@@ -14,7 +14,6 @@ from uuid import uuid4
 from PIL import Image as PILImage
 from werkzeug.utils import secure_filename
 
-from oneirodex.utils.functions import square_image
 from oneirodex.utils.library_paths import library_dir
 
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
@@ -73,7 +72,13 @@ def is_shipped_avatar(path: str | None) -> bool:
     )
 
 
-def avatar_url(path: str | None, *, theme: str | None = None) -> str:
+def avatar_url(
+    path: str | None,
+    *,
+    theme: str | None = None,
+    static_url=None,
+    package_root=None,
+) -> str:
     """Browser URL for an avatar, themed when it is one of ours.
 
     Two kinds of avatar, two resolutions:
@@ -96,13 +101,24 @@ def avatar_url(path: str | None, *, theme: str | None = None) -> str:
     unset it reads the signed-in member's preference the same way `theme_asset`
     does.
     """
-    from flask import current_app, url_for
-
     if not path:
         path = DEFAULT_AVATAR
 
+    if static_url is None:
+        def build_static_url(filename):
+            try:
+                from flask import has_app_context, url_for
+
+                if has_app_context():
+                    return url_for('static', filename=filename)
+            except ImportError:
+                pass
+            return '/static/' + filename.lstrip('/')
+    else:
+        build_static_url = static_url
+
     if not is_shipped_avatar(path):
-        return url_for('static', filename=path)
+        return build_static_url(path)
 
     name = os.path.basename(path)
     # The legacy default is a JPG that never had a themed twin; point it at the
@@ -113,7 +129,7 @@ def avatar_url(path: str | None, *, theme: str | None = None) -> str:
     if theme is None:
         theme = _current_theme()
 
-    root = os.path.join(library_dir(), 'themes')
+    root = os.path.join(library_dir(package_root), 'themes')
     from oneirodex.utils.preset_themes import canonical_theme_slug
 
     theme = canonical_theme_slug(theme)
@@ -122,11 +138,9 @@ def avatar_url(path: str | None, *, theme: str | None = None) -> str:
             continue
         themed = os.path.join(root, candidate, 'avatars', name)
         if os.path.isfile(themed):
-            return url_for(
-                'static', filename=f'library/themes/{candidate}/avatars/{name}'
-            )
+            return build_static_url(f'library/themes/{candidate}/avatars/{name}')
 
-    return url_for('static', filename=path)
+    return build_static_url(path)
 
 
 def _current_theme() -> str:
@@ -252,6 +266,8 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
 
     previous = user.avatarpath
     try:
+        from oneirodex.utils.functions import square_image
+
         file.save(image_path)
         img = PILImage.open(image_path)
         if img.format == 'GIF' and 'duration' in img.info:

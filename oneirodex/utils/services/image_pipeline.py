@@ -5,12 +5,13 @@ Bodies moved verbatim from ``oneirodex/utils/game_core.py`` in wave A2.3.
 import os
 import time
 import threading
+from contextlib import nullcontext
 from datetime import datetime, UTC
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import current_app
+
 from sqlalchemy import select, update
 from werkzeug.utils import secure_filename
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Image, Game
 from oneirodex.utils.image_kinds import IGDB_DOWNLOAD_KINDS
 from oneirodex.utils.global_settings import global_settings_row
@@ -19,18 +20,46 @@ from oneirodex.utils.worker_caps import (
     clamp_image_download_threads,
     cooperative_yield,
 )
-from oneirodex.utils.clients.igdb import (
-    normalize_igdb_image_ref,
-    _resolve_igdb_download_url,
-)
-from oneirodex.utils.clients.images import (
-    download_image,
-    download_stored_image,
-    cover_title_for_uuid,
-)
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _current_app():
+    """Load Flask's context proxy only when a legacy path needs it."""
+    from flask import current_app
+
+    return current_app
+
+
+def normalize_igdb_image_ref(*args, **kwargs):
+    from oneirodex.utils.clients.igdb import normalize_igdb_image_ref as resolve
+
+    return resolve(*args, **kwargs)
+
+
+def _resolve_igdb_download_url(*args, **kwargs):
+    from oneirodex.utils.clients.igdb import _resolve_igdb_download_url as resolve
+
+    return resolve(*args, **kwargs)
+
+
+def download_image(*args, **kwargs):
+    from oneirodex.utils.clients.images import download_image as download
+
+    return download(*args, **kwargs)
+
+
+def download_stored_image(*args, **kwargs):
+    from oneirodex.utils.clients.images import download_stored_image as download
+
+    return download(*args, **kwargs)
+
+
+def cover_title_for_uuid(*args, **kwargs):
+    from oneirodex.utils.clients.images import cover_title_for_uuid as title_for_uuid
+
+    return title_for_uuid(*args, **kwargs)
 
 __all__ = [
     "store_image_url_for_download",
@@ -90,6 +119,7 @@ def smart_process_images_for_game(
     cover_data=None,
     screenshots_data=None,
     app=None,
+    database_scope=None,
     download_immediately=True,
 ):
     """Smart image processing that uses settings to determine single-thread vs turbo mode.
@@ -100,10 +130,12 @@ def smart_process_images_for_game(
     Cover and screenshot refs may be bare IGDB ids or expanded ``{id, url}`` objects.
     """
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     
     try:
-        with app.app_context():
+        scope = database_scope(app) if database_scope else nullcontext()
+        app_scope = app.app_context() if database_scope is None else nullcontext()
+        with app_scope, scope:
             # Get settings to determine processing mode
             from oneirodex.models import GlobalSettings
             from oneirodex.utils.cover_selection import image_save_path_status
@@ -123,7 +155,10 @@ def smart_process_images_for_game(
             if not download_immediately:
                 return 0
 
-            path_status = image_save_path_status()
+            path_status = (
+                image_save_path_status(app.config)
+                if database_scope is not None else image_save_path_status()
+            )
             if not path_status.get('writable'):
                 err = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
                 now = datetime.now(UTC)
@@ -145,25 +180,34 @@ def smart_process_images_for_game(
                 threads = clamp_image_download_threads(
                     settings.turbo_download_threads or 4
                 )
-                return download_images_for_game_turbo(game_uuid, app, max_workers=threads)
+                download_kwargs = {'max_workers': threads}
+                if database_scope is not None:
+                    download_kwargs['database_scope'] = database_scope
+                return download_images_for_game_turbo(game_uuid, app, **download_kwargs)
             else:
                 # SINGLE THREAD MODE - Download one by one
                 logger.warning(f"🐌 SINGLE THREAD: Processing images for game {game_uuid}")
-                return download_images_for_game(game_uuid, app)
+                if database_scope is None:
+                    return download_images_for_game(game_uuid, app)
+                return download_images_for_game(
+                    game_uuid, app, database_scope=database_scope,
+                )
                 
     except Exception as e:
         logger.error(f"Error in smart image processing for game {game_uuid}: {e}")
         return 0
 
 
-def download_images_for_game_turbo(game_uuid, app=None, max_workers=5):
+def download_images_for_game_turbo(game_uuid, app=None, max_workers=5, database_scope=None):
     """Download all pending images for a specific game using turbo mode."""
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     max_workers = clamp_image_download_threads(max_workers)
 
     try:
-        with app.app_context():
+        scope = database_scope(app) if database_scope else nullcontext()
+        app_scope = app.app_context() if database_scope is None else nullcontext()
+        with app_scope, scope:
             pending_images = db.session.execute(select(Image).filter_by(game_uuid=game_uuid, is_downloaded=False)).scalars().all()
             
             if not pending_images:
@@ -243,7 +287,7 @@ def process_and_save_image(game_uuid, image_data, image_type='cover'):
 
     id_part = image_id if image_id is not None else 'url'
     file_name = secure_filename(f"{game_uuid}_{image_type}_{id_part}.jpg")
-    save_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], file_name)
+    save_path = os.path.join(_current_app().config['IMAGE_SAVE_PATH'], file_name)
 
     path_status = image_save_path_status()
     if not path_status.get('writable'):
@@ -285,10 +329,12 @@ def process_and_save_image(game_uuid, image_data, image_type='cover'):
 
 
 
-def download_pending_images(batch_size=10, delay_between_downloads=1, app=None):
+def download_pending_images(
+    batch_size=10, delay_between_downloads=1, app=None, *, use_app_context=True,
+):
     """Download images that are queued but not yet downloaded."""
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
         
     try:
         with app.app_context():
@@ -353,7 +399,7 @@ def download_pending_images(batch_size=10, delay_between_downloads=1, app=None):
 def start_background_image_downloader(interval_seconds=60):
     """Start a background thread that periodically downloads pending images."""
     # Capture the current app instance
-    app = current_app._get_current_object()
+    app = _current_app()._get_current_object()
     
     def background_worker():
         from oneirodex.utils.shutdown import should_continue_processing, sleep_interruptible
@@ -375,13 +421,15 @@ def start_background_image_downloader(interval_seconds=60):
     return thread
 
 
-def download_images_for_game(game_uuid, app=None):
+def download_images_for_game(game_uuid, app=None, database_scope=None):
     """Download all pending images for a specific game immediately."""
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
         
     try:
-        with app.app_context():
+        scope = database_scope(app) if database_scope else nullcontext()
+        app_scope = app.app_context() if database_scope is None else nullcontext()
+        with app_scope, scope:
             pending_images = db.session.execute(select(Image).filter_by(game_uuid=game_uuid, is_downloaded=False)).scalars().all()
             
             if not pending_images:
@@ -460,7 +508,7 @@ def download_single_image_worker(image, app, title=None):
 def turbo_download_images(batch_size=100, max_workers=5, app=None):
     """MAXIMUM SPEED parallel image downloading with multiple threads."""
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     max_workers = clamp_image_download_threads(max_workers)
     batch_size = clamp_image_download_batch(batch_size)
 
@@ -554,7 +602,7 @@ def turbo_download_images(batch_size=100, max_workers=5, app=None):
 
 def start_turbo_background_downloader(interval_seconds=30, max_workers=4, batch_size=50):
     """Start a HIGH SPEED background downloader with parallel processing."""
-    app = current_app._get_current_object()
+    app = _current_app()._get_current_object()
     max_workers = clamp_image_download_threads(max_workers)
     batch_size = clamp_image_download_batch(batch_size)
 
@@ -593,10 +641,12 @@ def find_missing_images_for_library(library_uuid=None, app=None):
     - Dictionary with statistics and list of missing images
     """
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     
     try:
-        with app.app_context():
+        from contextlib import nullcontext
+        scope = app.app_context() if use_app_context else nullcontext()
+        with scope:
             # Build query based on library filter
             if library_uuid:
                 images_query = select(Image).join(Game).filter(Game.library_uuid == library_uuid)
@@ -681,7 +731,7 @@ def queue_missing_images_for_download(missing_images_list, app=None):
     - Number of images successfully queued
     """
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     
     if not missing_images_list:
         logger.info("No missing images to queue.")
@@ -740,7 +790,7 @@ def process_missing_images_for_scan(library_uuid=None, app=None):
     - Dictionary with results summary
     """
     if app is None:
-        app = current_app._get_current_object()
+        app = _current_app()._get_current_object()
     
     logger.info(f"🔍 Starting missing images processing for library: {library_uuid or 'ALL'}")
     

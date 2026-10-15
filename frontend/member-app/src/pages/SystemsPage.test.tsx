@@ -142,3 +142,36 @@ test('prefers themed system-mark WebP for the active data-theme', async () => {
     document.documentElement.removeAttribute('data-theme')
   }
 })
+
+test('canonical themes reuse retired system-mark folders before the SVG fallback', async () => {
+  document.documentElement.setAttribute('data-theme', 'greenhouse')
+  mockFetch([
+    {
+      id: 'NES',
+      value: 'NES',
+      name: 'Nintendo Entertainment System (NES)',
+      game_count: 3,
+    },
+  ])
+
+  try {
+    const { container } = render(
+      <MemoryRouter>
+        <SystemsPage />
+      </MemoryRouter>,
+    )
+    await screen.findByRole('link', { name: /Nintendo Entertainment System/i })
+    const image = container.querySelector('img.od-systems-tile__mark-img')!
+    expect(image.getAttribute('src')).toBe('/static/library/system-marks/greenhouse/nes.webp')
+
+    fireEvent.error(image)
+    expect(container.querySelector('img.od-systems-tile__mark-img')?.getAttribute('src')).toBe(
+      '/static/library/system-marks/forest/nes.webp',
+    )
+    fireEvent.error(container.querySelector('img.od-systems-tile__mark-img')!)
+    expect(container.querySelector('img.od-systems-tile__mark-img')).toBeNull()
+    expect(container.querySelector('.od-systems-tile__mark svg')).toBeInTheDocument()
+  } finally {
+    document.documentElement.removeAttribute('data-theme')
+  }
+})

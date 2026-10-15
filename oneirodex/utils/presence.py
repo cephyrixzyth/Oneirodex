@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import or_, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import ClientDevice, Game, PlaySession, User, UserFriendship
 from oneirodex.utils.client_presence import CLIENT_HEARTBEAT_TTL_SECONDS
 from oneirodex.utils.library_acl import user_can_access_game

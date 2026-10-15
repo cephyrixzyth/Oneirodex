@@ -16,10 +16,9 @@ static handlers serve an override ahead of the shipped file.
 from __future__ import annotations
 
 import os
+import sys
 import shutil
 from pathlib import Path
-
-from flask import current_app, has_app_context
 
 LIBRARY_DIR_ENV = 'ONEIRODEX_LIBRARY_DIR'
 STATIC_OVERRIDES = 'static-overrides'
@@ -43,7 +42,13 @@ def library_dir(package_root: str | Path | None = None) -> str:
     if relocated:
         return relocated
     if package_root is None:
-        package_root = current_app.root_path if has_app_context() else PACKAGE_ROOT
+        if 'flask' in sys.modules:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                package_root = current_app.root_path
+        if package_root is None:
+            package_root = PACKAGE_ROOT
     return os.path.join(str(package_root), 'static', 'library')
 
 
@@ -93,5 +98,11 @@ def static_write_dir(*parts: str, package_root: str | Path | None = None) -> Pat
     if relocated:
         return Path(relocated, STATIC_OVERRIDES, *parts)
     if package_root is None:
-        package_root = current_app.root_path if has_app_context() else PACKAGE_ROOT
+        if 'flask' in sys.modules:
+            from flask import current_app, has_app_context
+
+            if has_app_context():
+                package_root = current_app.root_path
+        if package_root is None:
+            package_root = PACKAGE_ROOT
     return Path(str(package_root), 'static', *parts)

@@ -10,6 +10,7 @@ import json
 from uuid import uuid4
 
 from oneirodex.models import User, Game, Library, LibraryPlatform
+from oneirodex.utils.api_tokens import generate_api_token
 
 
 @pytest.fixture
@@ -269,7 +270,8 @@ class TestToggleFavoriteEndpoint:
         # Refresh user to check database changes
         db_session.refresh(regular_user)
         assert sample_game in regular_user.favorites
-    
+
+
     def test_toggle_favorite_remove_from_favorites(self, client, regular_user, sample_game, db_session):
         """Test toggle_favorite removing a game from favorites."""
         # Add game to favorites first
@@ -329,3 +331,146 @@ class TestToggleFavoriteEndpoint:
         
         db_session.refresh(regular_user)
         assert sample_game in regular_user.favorites
+
+def _library_write_routes(sample_game):
+    return [
+        ('POST', '/api/toggle_favorite/' + sample_game.uuid, None),
+        ('POST', '/api/set_game_status/' + sample_game.uuid, {'status': 'completed'}),
+        ('POST', '/api/games/batch/favorite', {'uuids': [sample_game.uuid], 'favorite': True}),
+        ('POST', '/api/games/batch/status', {'uuids': [sample_game.uuid], 'status': 'completed'}),
+        ('POST', '/api/games/batch/wishlist', {'uuids': [], 'action': 'add'}),
+        ('POST', '/api/games/batch/freshness/check', {'uuids': []}),
+        ('POST', '/api/games/missing/freshness/check', {}),
+        ('POST', '/api/updates/scan', {}),
+        ('PUT', '/api/account/preferences', {}),
+        ('POST', '/api/requests', {'title': 'Bearer request', 'notes': None}),
+        ('DELETE', '/api/requests/1', None),
+        ('POST', '/api/collections', {'name': 'Bearer collection'}),
+        ('POST', '/api/updates/wanted', {'game_uuid': sample_game.uuid, 'kind': 'dlc'}),
+        ('POST', '/api/updates/wanted/fulfill', {'game_uuid': sample_game.uuid, 'kind': 'dlc'}),
+        ('PUT', '/api/layouts/detail/mine', {}),
+        ('DELETE', '/api/layouts/detail/mine', None),
+        ('POST', '/api/layouts/detail/presets', {'name': 'Bearer preset', 'layout': {}}),
+        ('PUT', '/api/discover/pins', {'pins': [], 'hidden': []}),
+        ('POST', '/api/filters/saved', {
+            'name': 'Bearer filter', 'tree': {'field': 'is_vr', 'value': True},
+        }),
+        ('PUT', '/api/filters/saved/1', {'name': 'Updated'}),
+        ('DELETE', '/api/filters/saved/1', None),
+        ('POST', '/api/playtime/sessions', {}),
+        ('POST', '/api/playtime/sessions/40/heartbeat', {}),
+        ('POST', '/api/playtime/sessions/40/stop', {}),
+    ]
+
+
+def test_read_only_bearer_cannot_write_member_game_state(client, regular_user, sample_game):
+    _, read_token = generate_api_token(
+        regular_user, 'read-only-write-regression', ['read:library'],
+    )
+    for method, path, payload in _library_write_routes(sample_game):
+        denied = client.open(
+            path, method=method, json=payload,
+            headers={'Authorization': f'Bearer {read_token}'},
+        )
+        assert denied.status_code == 403, (path, denied.get_json())
+        assert denied.get_json()['error_code'] == 'forbidden'
+
+
+def test_read_only_bearer_cannot_connect_store_ownership(client, regular_user):
+    _, read_token = generate_api_token(
+        regular_user, 'read-only-ownership-write', ['read:library'],
+    )
+    denied = client.post(
+        '/api/ownership/steam', json={'steam_id': '123'},
+        headers={'Authorization': f'Bearer {read_token}'},
+    )
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+
+def test_read_only_bearer_cannot_import_launcher_library_data(client, regular_user):
+    _, read_token = generate_api_token(
+        regular_user, 'read-only-import-write', ['read:library'],
+    )
+    denied = client.post(
+        '/api/imports/playnite', json={'games': [{'Name': 'Fixture'}]},
+        headers={'Authorization': f'Bearer {read_token}'},
+    )
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+def test_write_bearer_can_write_member_game_state(client, regular_user, sample_game):
+    write_row, write_token = generate_api_token(
+        regular_user, 'library-write-regression', ['read:library', 'write:library'],
+    )
+    assert write_row.scopes == ['read:library', 'write:library']
+    for method, path, payload in _library_write_routes(sample_game):
+        allowed = client.open(
+            path, method=method, json=payload,
+            headers={'Authorization': f'Bearer {write_token}'},
+        )
+        assert allowed.status_code != 403, (path, allowed.get_json())
+
+
+def test_read_only_bearer_wanted_update_is_denied_with_csrf_enabled(
+    client, regular_user, sample_game,
+):
+    client.application.config['WTF_CSRF_ENABLED'] = True
+    _, read_token = generate_api_token(
+        regular_user, 'read-only-wanted-test', ['read:library'],
+    )
+    denied = client.post(
+        '/api/updates/wanted',
+        json={'game_uuid': sample_game.uuid, 'kind': 'dlc'},
+        headers={'Authorization': f'Bearer {read_token}'},
+    )
+    assert denied.status_code == 403
+
+
+def test_write_bearer_wanted_update_works_without_csrf(client, regular_user, sample_game):
+    client.application.config['WTF_CSRF_ENABLED'] = True
+    _, write_token = generate_api_token(
+        regular_user, 'write-wanted-test', ['read:library', 'write:library'],
+    )
+    allowed = client.post(
+        '/api/updates/wanted',
+        json={'game_uuid': sample_game.uuid, 'kind': 'dlc'},
+        headers={'Authorization': f'Bearer {write_token}'},
+    )
+    assert allowed.status_code == 201, allowed.get_json()
+
+
+def test_wanted_update_cookie_write_still_requires_csrf(client, regular_user, sample_game):
+    client.application.config['WTF_CSRF_ENABLED'] = True
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(regular_user.id)
+        sess['_fresh'] = True
+    response = client.post(
+        '/api/updates/wanted',
+        json={'game_uuid': sample_game.uuid, 'kind': 'dlc'},
+    )
+    assert response.status_code == 400
+
+
+def test_read_only_bearer_cannot_start_free_game_ownership_assist(client, regular_user):
+    _, token = generate_api_token(regular_user, 'read-only-claim-assist', ['read:library'])
+    client.application.config['ENABLE_FREE_GAMES'] = False
+    response = client.post(
+        '/api/news/free-games/12/claim-assist',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == 403
+    assert response.get_json()['error'] == 'Missing scope: write:library'
+
+
+def test_write_bearer_reaches_free_game_feature_gate(client, regular_user):
+    _, token = generate_api_token(
+        regular_user, 'write-claim-assist', ['read:library', 'write:library'],
+    )
+    client.application.config['ENABLE_FREE_GAMES'] = False
+    response = client.post(
+        '/api/news/free-games/12/claim-assist',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    assert response.status_code == 403
+    assert response.get_json()['error'] == 'Free games are switched off'

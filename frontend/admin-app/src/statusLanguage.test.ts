@@ -10,45 +10,10 @@ import { describe, expect, it } from 'vitest'
  * admin `src/` tree. */
 
 /**
- * One status language for admin (GT-B33) — a ratchet, not a cleanup mandate.
- *
- * The member SPA has had a shared `PageStatus` since GT-A2. Admin never did, so
- * fifteen files grew their own answers to "this page is busy" / "this page
- * failed" — at least eight different shapes:
- *
- *   <p>Loading…</p>                              bare, unannounced
- *   <div role="alert" className="od-admin-alert">
- *   <p className="od-admin-lede" role="status">
- *   <div className="od-error" role="alert">
- *   <p className="od-adminpage-status" role="status">
- *   <div className="od-admin-banner od-admin-banner--warn" role="status">
- *   <p role="alert">{error}</p>
- *   <span role="status" aria-busy="true">
- *
- * The visual mismatch with the member app is the obvious cost. The quieter one
- * is accessibility: several of those announce a failure politely, or carry no
- * live region at all, and none of them surface the envelope's `error_code`.
- *
- * Same model as `scripts/api_envelope_lint.py` and `scripts/css-token-lint.mjs`:
- * baseline-counted per file, a file may never exceed its recorded count, and a
- * file with no record must have zero. Lower a number when you convert a site to
- * `PageStatus`; delete the row when a file reaches zero. Never raise one.
- *
- * **Zero is not the target for every file.** `role="status"` / `role="alert"` are
- * correct markup for several things `PageStatus` deliberately does not model,
- * and those are meant to stay:
- *
- *   - success/completion messages ("Saved", "N files added") — PageStatus has no
- *     success variant, and inventing one would make it a notification system
- *   - persistent configuration disclosure (StoragePage's five
- *     `od-admin-banner` blocks: helpers off, apply gated, mount read-only) —
- *     page content, not a transient page state
- *   - inline progress on a single control ("Uploading…", "Refreshing…",
- *     "Scanning…") — scoped to one widget, not to the page
- *
- * What the ratchet is actually preventing is a *new* hand-rolled
- * loading/error/empty block for a page's data. Judge a rise on that, not on the
- * number alone.
+ * One status language for admin (GT-B33). Hand-written status/alert roles are
+ * kept out of pages and widgets so the shared PageStatus component owns their
+ * live-region semantics and visual treatment. PageStatus supports rich live
+ * content as well as loading, error and empty messages.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -73,28 +38,9 @@ function collectJsx(dir: any, acc: any) {
 }
 const JSX_BY_NAME = collectJsx(HERE, new Map())
 
-/* Recorded 2026-08-25 after the GT-B33 conversion: 59 → 27 sites, 21 → 16
- * files, five files at zero. What remains is largely the deliberate categories
- * listed above rather than debt. */
-const STATUS_BASELINE = {
-  'ArtStudioPage.tsx': 1,
-  'ArtworkPicker.tsx': 1,
-  'CreateUserForm.tsx': 1,
-  'DupeGlance.tsx': 1,
-  'EmulatorFirmwarePanel.tsx': 2,
-  'ImportLeafLibraries.tsx': 2,
-  'OpenPathModal.tsx': 1,
-  'ProposeLeafLibraries.tsx': 2,
-  'RemotePlayPage.tsx': 1,
-  'ScanMatchSettingsPage.tsx': 3,
-  'StockPicker.tsx': 1,
-  'SystemMarksPanel.tsx': 1,
-  'StoragePage.tsx': 5,
-  'SystemResetPanel.tsx': 2,
-  // PR-4 (b) split pages.jsx; this one `role="status"` site (the scan-live
-  // pill) moved verbatim into ScansPage. Same total, new file key.
-  'ScansPage.tsx': 1,
-}
+/* All admin source now uses the shared PageStatus implementation for
+ * announcements. Keep this empty baseline to prevent local role regressions. */
+const STATUS_BASELINE: Record<string, number> = {}
 
 /**
  * PageStatus is the shared implementation — it is meant to carry these roles.

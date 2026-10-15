@@ -423,7 +423,7 @@ html[data-era='desk'],
   }
 }
 
-/* After member-app.css (see base_empty.html). Beats GameGrid.css edge-pinned
+/* After member-app.css (see member_spa.py). Beats GameGrid.css edge-pinned
    hover origins in the SPA bundle so enlarge stays centred on the resting box.
    First/last-column selectors must match the bundle's higher-specificity
    edge pins or those tiles still grow from a corner. */

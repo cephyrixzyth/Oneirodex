@@ -239,7 +239,7 @@
     "file": "howto-preferences.mp4",
     "poster": "howto-preferences.png",
     "vtt": "howto-preferences.vtt",
-    "seconds": 60,
+    "seconds": 61,
     "transcript": [
       "Themes, rooms, icons and fonts. Make it yours from the Preferences modal.",
       "Preferences lives under the account menu.",
@@ -319,7 +319,7 @@
     "file": "howto-admin-discover.mp4",
     "poster": "howto-admin-discover.png",
     "vtt": "howto-admin-discover.vtt",
-    "seconds": 50,
+    "seconds": 51,
     "transcript": [
       "Shelves and events. Arrange Discover: reorder, hide, and add custom shelves with dates.",
       "Discovery sections controls what members see on Discover.",
@@ -379,7 +379,7 @@
     "file": "howto-admin-settings.mp4",
     "poster": "howto-admin-settings.png",
     "vtt": "howto-admin-settings.vtt",
-    "seconds": 69,
+    "seconds": 63,
     "transcript": [
       "Settings, features and integrations. Server settings, module toggles, metadata providers, SSO.",
       "Settings is the index \u2014 library and matching, play and emulation, presentation, extend.",

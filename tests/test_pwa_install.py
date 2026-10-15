@@ -19,7 +19,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / 'oneirodex' / 'static'
-TEMPLATES = ROOT / 'oneirodex' / 'templates'
 SW = (STATIC / 'app-sw.js').read_text(encoding='utf-8')
 
 
@@ -52,9 +51,9 @@ def test_service_worker_is_served_at_the_root_with_root_scope(client, configured
     assert response.headers['Cache-Control'] == 'no-cache'
 
 
-def test_every_shell_links_the_manifest_and_loads_the_installer():
-    for name in ('base_empty.html', 'base.html', 'base_admin.html'):
-        html = (TEMPLATES / name).read_text(encoding='utf-8')
+def test_python_shells_link_the_manifest_and_load_the_installer():
+    for name in ('member_spa.py', 'admin_spa.py'):
+        html = (ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
         assert "rel=\"manifest\"" in html, name
         assert 'member.app_manifest' in html, name
         # Count the <script> tags, not the string: the surrounding comments
@@ -63,12 +62,21 @@ def test_every_shell_links_the_manifest_and_loads_the_installer():
         assert len(tags) == 1, f'{name} loads the installer {len(tags)} times'
         assert 'name="theme-color"' in html, name
 
+    renderer = (ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py').read_text(encoding='utf-8')
+    assert 'member.app_manifest' in renderer
+    assert 'od_pwa_install.js' in renderer
+    assert 'name="theme-color"' in renderer
+
 
 def test_offline_page_carries_no_member_data(client, configured_install):
     response = client.get('/offline')
     assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'no-cache'
     html = response.get_data(as_text=True)
     assert 'No route to your library' in html
+    assert 'id="od-offline-retry"' in html
+    assert '/static/js/od_offline_retry.js?v=' in html
+    assert '{{' not in html and '{%' not in html
     # Not a shelf: nothing member-specific may be precached with this page.
     assert 'game-card' not in html
     assert 'browse_games' not in html
@@ -109,14 +117,11 @@ def test_installer_refuses_insecure_origins_and_says_where_the_control_is():
 
 
 def test_preferences_offers_the_install_hidden_by_default():
-    html = (TEMPLATES / 'settings' / 'modal_preferences.html').read_text(encoding='utf-8')
-    assert 'id="od-install-app"' in html
-    # Hidden until the script decides it is installable.
-    block = html.split('id="od-install-app"', 1)[1][:200]
-    assert 'hidden' in block
-    assert 'data-od-install-action' in html
-    assert 'data-od-install-hint' in html
-    assert 'Add to Home Screen' in html
+    component = (ROOT / 'frontend' / 'shared' / 'src' / 'PreferencesModal.tsx').read_text(encoding='utf-8')
+    assert 'window.isSecureContext' in component
+    assert 'installPrompt ?' in component
+    assert 'Install this library' in component
+    assert 'Add to Home Screen' in component
 
 
 def test_worker_only_caches_urls_that_change_when_their_bytes_change():

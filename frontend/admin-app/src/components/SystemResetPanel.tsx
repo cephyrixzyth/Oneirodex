@@ -241,7 +241,7 @@ export function SystemResetPanel() {
       </div>
 
       {plan ? (
-        <div className="od-danger-zone__plan" role="status">
+        <PageStatus announcement="status" className={'od-danger-zone__plan'}>
           <p>
             This will empty <strong>{plan.table_count}</strong> table
             {plan.table_count === 1 ? '' : 's'}
@@ -271,16 +271,16 @@ export function SystemResetPanel() {
               {busy ? 'Resetting…' : 'Reset now'}
             </Button>
           </div>
-        </div>
+        </PageStatus>
       ) : null}
 
       {done ? (
-        <p className="od-danger-zone__done" role="status">
+        <PageStatus announcement="status" className="od-danger-zone__done">
           Reset complete — {done.table_count} table
           {done.table_count === 1 ? '' : 's'} cleared
           {done.actor_restored ? ', your admin account was kept' : ''}. No files were touched.
           Reload to see the empty install.
-        </p>
+        </PageStatus>
       ) : null}
 
       {/* The plan and done blocks above stay hand-rolled: one is a disclosure

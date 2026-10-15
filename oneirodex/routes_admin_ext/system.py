@@ -1,8 +1,9 @@
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import current_app, redirect, render_template, request, jsonify, session, url_for
+from flask import current_app, redirect, request, jsonify, session, url_for
 from flask_login import login_required, current_user
 from oneirodex.product import RESET_CONFIRM_PHRASE, is_reset_confirm
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.models import SystemEvents, DiscoverySection, Game, Genre, Library, user_favorites
 from oneirodex import db
 from oneirodex.platform import LibraryPlatform
@@ -17,9 +18,14 @@ from oneirodex.utils.discovery_shelves import (
     describe_shelf_config,
     validate_shelf_config,
 )
+from oneirodex.utils.discovery_sections import (
+    discovery_section_public,
+    discovery_sections_data,
+    utc_naive as _utc_naive,
+)
 from oneirodex.utils.validation import validate_body
 from sqlalchemy import select, and_, func
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import uuid
 from . import admin2_bp
@@ -73,63 +79,26 @@ def system_logs():
 @admin2_bp.route('/admin/discovery_sections')
 @login_required
 @admin_required
-def discovery_sections() -> str:
-    """
-    Display and manage discovery sections configuration.
+def discovery_sections():
+    return render_admin_spa(title='Discovery sections · Oneirodex Admin')
 
-    Returns a page where admins can view, reorder, and toggle visibility
-    of discovery sections on the main discovery page.
-    """
-    sections = db.session.execute(select(DiscoverySection).order_by(DiscoverySection.display_order)).scalars().all()
 
-    # Calculate item counts for each section
-    section_counts = {}
-    shelf_descriptions = {}
-
-    for section in sections:
-        if section.identifier == 'libraries':
-            count = db.session.execute(select(func.count(Library.uuid))).scalar()
-        elif section.identifier == 'latest_games':
-            # Counts what the shelf can actually draw from: titles with a known
-            # release date. See routes_discover — this shelf is newest released,
-            # not newest imported.
-            count = db.session.execute(
-                select(func.count(Game.id)).where(Game.first_release_date != None)  # noqa: E711
-            ).scalar()
-        elif section.identifier == 'new_library_games':
-            count = db.session.execute(select(func.count(Game.id))).scalar()
-        elif section.identifier == 'most_downloaded':
-            count = db.session.execute(select(func.count(Game.id)).where(Game.times_downloaded > 0)).scalar()
-        elif section.identifier == 'highest_rated':
-            count = db.session.execute(select(func.count(Game.id)).where(Game.rating != None)).scalar()
-        elif section.identifier == 'last_updated':
-            count = db.session.execute(select(func.count(Game.id)).where(Game.last_updated != None)).scalar()
-        elif section.identifier == 'most_favorited':
-            count = db.session.execute(
-                select(func.count(func.distinct(Game.uuid)))
-                .join(user_favorites, Game.uuid == user_favorites.c.game_uuid)
-            ).scalar()
-        elif section.section_type == 'custom':
-            count = count_custom_shelf_games(section.config)
-            shelf_descriptions[section.id] = describe_shelf_config(section.config)
-        else:
-            count = 0
-
-        section_counts[section.identifier] = count
-
-    libraries = db.session.execute(select(Library).order_by(Library.name)).scalars().all()
-    genres = db.session.execute(select(Genre).order_by(Genre.name)).scalars().all()
-    platforms = list(LibraryPlatform)
-
-    return render_template(
-        'admin/admin_discovery_sections.html',
-        sections=sections,
-        section_counts=section_counts,
-        shelf_descriptions=shelf_descriptions,
-        libraries=libraries,
-        genres=genres,
-        platforms=platforms,
-    )
+@admin2_bp.route('/admin/api/discovery_sections', methods=['GET'])
+@login_required
+@admin_required
+def discovery_sections_state_api():
+    try:
+        data = discovery_sections_data()
+        response = current_app.make_response(api_ok({
+            'sections': [discovery_section_public(section, data) for section in data['sections']],
+            'libraries': [{'uuid': row.uuid, 'name': row.name} for row in data['libraries']],
+            'platforms': [{'id': row.name, 'label': row.value} for row in data['platforms']],
+            'genres': [{'name': row.name} for row in data['genres']], 'max_games': 60,
+        }))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except Exception:
+        return api_error('Could not load discovery sections', code='internal')
 
 
 @admin2_bp.route('/admin/api/discovery_sections', methods=['POST'])
@@ -272,41 +241,53 @@ def update_discovery_section_schedule(section_id: int) -> tuple[Dict[str, Any], 
     if not section:
         return api_error('Shelf not found', code='not_found')
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data or set(data) - {'layout', 'starts_at', 'ends_at'}:
+        return api_error('Provide only layout and schedule fields', code='bad_request')
+    layout = section.layout
+    starts = _utc_naive(section.starts_at) if section.starts_at else None
+    ends = _utc_naive(section.ends_at) if section.ends_at else None
 
     if 'layout' in data:
-        layout = str(data.get('layout') or 'shelf').strip().lower()
+        raw_layout = data.get('layout')
+        if not isinstance(raw_layout, str):
+            return api_error('layout must be shelf, hero, or carousel', code='bad_request')
+        layout = (raw_layout or 'shelf').strip().lower()
         if layout not in ('shelf', 'hero', 'carousel'):
             return api_error(
                 'layout must be shelf, hero, or carousel',
                 code='bad_request',
             )
-        section.layout = layout
 
     def _parse(key):
         raw = data.get(key)
         if raw in (None, ''):
             return None, None
         try:
-            return datetime.fromisoformat(str(raw).replace('Z', '+00:00')), None
-        except ValueError:
+            if not isinstance(raw, str):
+                raise ValueError
+            return _utc_naive(datetime.fromisoformat(raw.replace('Z', '+00:00'))), None
+        except (ValueError, TypeError):
             return None, f'{key} must be an ISO timestamp'
 
     if 'starts_at' in data:
         value, error = _parse('starts_at')
         if error:
             return api_error(error, code='bad_request')
-        section.starts_at = value
+        starts = value
     if 'ends_at' in data:
         value, error = _parse('ends_at')
         if error:
             return api_error(error, code='bad_request')
-        section.ends_at = value
+        ends = value
 
     # A window that closes before it opens would silently hide the shelf forever.
-    if section.starts_at and section.ends_at and section.ends_at <= section.starts_at:
-        db.session.rollback()
+    if starts and ends and ends <= starts:
         return api_error('ends_at must be after starts_at', code='bad_request')
+
+    section.layout = layout
+    section.starts_at = starts
+    section.ends_at = ends
 
     try:
         db.session.commit()
@@ -350,15 +331,16 @@ def update_discovery_section_pin(section_id: int) -> tuple[Dict[str, Any], int]:
     if not section:
         return api_error('Shelf not found', code='not_found')
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) != {'pin_rank'}:
+        return api_error('Provide a pin rank or null', code='bad_request')
     raw = data.get('pin_rank')
     if raw in (None, ''):
         section.pin_rank = None
     else:
-        try:
-            section.pin_rank = int(raw)
-        except (TypeError, ValueError):
+        if type(raw) is not int or not -(2 ** 31) <= raw < 2 ** 31:
             return api_error('pin_rank must be a whole number or null', code='bad_request')
+        section.pin_rank = raw
 
     try:
         db.session.commit()
@@ -447,7 +429,12 @@ def update_section_order(body: UpdateSectionOrderBody) -> tuple[Dict[str, Any], 
     """
     try:
         updated_sections = []
+        staged = []
+        ids = set()
         for item in body.sections:
+            if item.id in ids:
+                return api_error('Section IDs must be unique', code='bad_request')
+            ids.add(item.id)
             if item.order < 0:
                 return api_error('Display order must be non-negative', code='bad_request')
 
@@ -455,8 +442,10 @@ def update_section_order(body: UpdateSectionOrderBody) -> tuple[Dict[str, Any], 
             if not section:
                 return api_error(f'Section with ID {item.id} not found', code='not_found')
 
-            section.display_order = item.order
+            staged.append((section, item.order))
             updated_sections.append(section.name)
+        for section, order in staged:
+            section.display_order = order
         
         db.session.commit()
         

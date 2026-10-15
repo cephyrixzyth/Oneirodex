@@ -496,6 +496,60 @@ class TestLibraryScanApi:
         assert body['status'] == 'started'
         assert 'risk' in body or 'parallel' in body['message'].lower()
 
+    def test_api_accepts_auto_form_options_for_native_clients(
+        self, client, admin_user, sample_library, db_session
+    ):
+        from unittest.mock import patch
+
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+        with patch('oneirodex.utils.scan_queue.start_or_queue_scan', return_value={
+            'status': 'queued', 'job_id': 'job-test', 'position': 1, 'message': 'queued',
+        }) as start:
+            resp = client.post(
+                '/api/admin/libraries/scan',
+                json={
+                    'library_uuid': sample_library.uuid,
+                    'folder': '/games/pc',
+                    'scan_mode': 'files',
+                    'remove_missing': False,
+                    'download_missing_images': True,
+                    'force_updates_extras_scan': True,
+                    'fetch_hltb': True,
+                    'force_hltb_refetch': True,
+                    'schedule': 'interval',
+                    'schedule_interval_value': 2,
+                    'schedule_interval_unit': 'hours',
+                },
+            )
+        assert resp.status_code == 200
+        call = start.call_args.kwargs
+        assert call['folder_path'].replace('\\', '/').endswith('/games/pc')
+        assert call['scan_mode'] == 'files'
+        assert call['remove_missing'] is False
+        assert call['download_missing_images'] is True
+        assert call['force_updates_extras_scan'] is True
+        assert call['fetch_hltb'] is True
+        assert call['force_hltb_refetch'] is True
+        assert call['schedule_fields']['schedule_kind'] == 'interval'
+        assert call['schedule_fields']['schedule_interval_minutes'] == 120
+
+    def test_api_rejects_unknown_scan_mode(self, client, admin_user, sample_library):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+        resp = client.post(
+            '/api/admin/libraries/scan',
+            json={
+                'library_uuid': sample_library.uuid,
+                'folder': '/games/pc',
+                'scan_mode': 'guess',
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.get_json()['error_code'] == 'bad_request'
+
     def test_non_admin_forbidden_on_scan_api(self, client, regular_user, sample_library):
         with client.session_transaction() as sess:
             sess['_user_id'] = str(regular_user.id)

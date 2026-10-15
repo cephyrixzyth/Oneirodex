@@ -25,7 +25,6 @@ const API_DIR = path.dirname(fileURLToPath(import.meta.url))
  * short and reasoned — it is the escape hatch that could hollow out the guard.
  */
 const EXEMPT = new Map([
-  ['preferences.ts', '/settings_panel renders HTML, so there is no envelope to parse'],
   ['discover.ts', 'guards a missing JSON body after an ok response, not a failed one'],
 ])
 

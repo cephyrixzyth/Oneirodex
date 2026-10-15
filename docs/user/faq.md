@@ -49,7 +49,7 @@ Preferences → items per page: **20 / 50 / 100 / 200 / 250 / 300 / 400 / 500 / 
 Inside Library Filters: UPDATE · MISSING · NEW · LANG — same browse params as the badges; they persist with other filters. VR is a tile badge / More → VR, not a Signals chip. MISSING means files were removed from disk. Tile badges sit in four corners only (occupied corners; rounded-square chrome). No OUT / ~ / RELEASE on tiles or Signals chips (UPDATE alone covers freshness-behind).
 
 **When do “N games added” toasts show?**  
-When a library scan **finishes** (or is cancelled after titles landed), not while it is still running. Watch/import still group into a short digest. More than five toasts at once collapse to **N notifications** (inbox still has every row). Toasts are dismissible (×) on member and admin, including classic admin pages.
+When a library scan **finishes** (or is cancelled after titles landed), not while it is still running. Watch/import still group into a short digest. More than five toasts at once collapse to **N notifications** (inbox still has every row). Toasts are dismissible (×) on member and admin, on member and admin pages.
 
 **I marked a game "Won’t play" and Discover keeps suggesting it.**  
 Fixed. The status was recorded but nothing read it, so the recommendations never took the hint. A title you mark **Won’t play** is now left out of the personal rows on Discover — yours only, so it does not change what anyone else in the household sees. Clearing a status is not the same as saying no: *no opinion* leaves the title in the running. You can also set it on several titles at once now from the multi-select bar, which previously offered four of the five statuses and quietly refused this one.

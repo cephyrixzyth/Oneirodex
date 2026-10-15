@@ -4,6 +4,13 @@
 
 /* Literal fallbacks so the board stays readable if theme vars are missing. */
 
+/* The standalone entry has no Flask shell to provide the page inset. */
+body.ops-glance-standalone {
+  min-height: 100vh;
+  margin: 0;
+  padding: var(--od-space-5, 1rem);
+}
+
 .container-settings-dashboard > h1 {
   color: var(--text-white, var(--od-text));
   font-size: var(--od-font-4xl);
@@ -38,6 +45,18 @@
   font-size: var(--od-font-xl);
   font-weight: 500;
   color: var(--text-white);
+}
+
+.ops-glance__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ops-glance__header button {
@@ -219,5 +238,21 @@
 
   .container-settings-dashboard > h1 {
     font-size: var(--od-font-2xl);
+  }
+}
+
+@media (max-width: 480px) {
+  body.ops-glance-standalone {
+    padding: var(--od-space-4, 0.75rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-glance *,
+  .ops-glance *::before,
+  .ops-glance *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }

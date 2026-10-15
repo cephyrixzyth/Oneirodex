@@ -185,6 +185,10 @@ test('StoragePage hides the readiness strip when status could not be read', asyn
     // The banner explains the failure; the strip must not also assert findings.
     expect(await screen.findByText(/Status API unavailable/i)).toBeInTheDocument()
     expect(screen.queryByLabelText('Storage readiness')).toBeNull()
+    expect(screen.queryByText(/Hardlink helpers are/i)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Retry storage status' })).toBeInTheDocument()
   } finally {
     globalThis.fetch = originalFetch
   }

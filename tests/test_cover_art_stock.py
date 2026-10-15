@@ -105,8 +105,8 @@ def test_apply_pack_updates_library_image_url(tmp_path):
             with patch('oneirodex.utils.cover_art_stock.db') as mock_db:
                 mock_db.session.execute.return_value = execute_result
                 with patch(
-                    'oneirodex.utils.cover_art_stock.url_for',
-                    side_effect=lambda _ep, filename='': f'/static/{filename}',
+                    'oneirodex.utils.cover_art_stock.static_asset_url',
+                    side_effect=lambda path: f'/static/{path}',
                 ):
                     result = apply_pack_to_library(
                         'platform-nes', lib_uuid, package_root=tmp_path,

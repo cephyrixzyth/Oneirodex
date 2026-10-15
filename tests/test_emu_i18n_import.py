@@ -13,7 +13,7 @@ from flask_login import login_user
 
 from oneirodex.models import Game, Library, User, UserOwnedTitle
 from oneirodex.platform import LibraryPlatform
-from oneirodex.utils.i18n import normalize_locale
+from oneirodex.utils.locale_core import normalize_locale
 from oneirodex.utils.playnite_import import import_playnite_json
 from oneirodex.utils.rom_archive import ArchiveRomError, resolve_playable_rom_path
 

@@ -10,6 +10,8 @@
  * "Not recorded" is worded with care: it means no linked store or imported
  * list mentions the game, which is not proof the member does not own it.
  */
+import { FilterChipGroup } from '@oneirodex/ui'
+
 type Option = { id: string; name: string }
 type Props = {
   filters: Record<string, string | undefined>
@@ -94,28 +96,14 @@ export function OwnershipFilterControls({
         ))}
       </div>
       {ownership && stores.length ? (
-        <div className="od-badge-filter-chips" role="group" aria-label={t('Stores')}>
-          {stores.map((store) => {
-            const active = selected.includes(store.id)
-            return (
-              <button
-                key={store.id}
-                type="button"
-                className={`od-badge-filter-chip${active ? ' is-active' : ''}`}
-                aria-pressed={active}
-                onClick={() =>
-                  commit(
-                    active ? selected.filter((s) => s !== store.id) : [...selected, store.id],
-                    ownership,
-                    mode,
-                  )
-                }
-              >
-                {store.name}
-              </button>
-            )
-          })}
-        </div>
+        <FilterChipGroup
+          label={t('Stores')}
+          options={stores.map((store) => ({ value: store.id, label: store.name }))}
+          value={selected}
+          onChange={(nextStores) => commit(nextStores, ownership, mode)}
+          size="compact"
+          className="od-badge-filter-chips"
+        />
       ) : null}
       {ownership === 'owned' && selected.length >= 2 ? (
         <div

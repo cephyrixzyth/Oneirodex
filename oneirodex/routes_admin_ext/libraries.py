@@ -1,6 +1,7 @@
-from flask import render_template, request, redirect, url_for, flash, current_app, abort
+from flask import request, redirect, url_for, flash, current_app, abort
 from flask_login import login_required
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.auth import admin_required
 from oneirodex.models import Library, LibraryPlatform
 from oneirodex import db
@@ -93,6 +94,8 @@ def _save_library(library, is_new=False):
 @admin_required
 def add_library():
     """Handle adding new libraries."""
+    if request.method == 'GET':
+        return render_admin_spa(title='Add library · Oneirodex Admin')
     form = LibraryForm()
     page_title = "Add Library"
     print("Adding new library")
@@ -108,7 +111,7 @@ def add_library():
             library.platform = LibraryPlatform[form.platform.data]
         except KeyError:
             flash(f'Invalid platform selected: {form.platform.data}', 'error')
-            return render_template('admin/admin_manage_library_create.html', form=form, library=None, page_title=page_title)
+            return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
         library.scan_depth = int(form.scan_depth.data or 1)
         library.watch_enabled = coerce_library_watch_enabled(form.watch_enabled.data)
@@ -117,7 +120,7 @@ def add_library():
         file = form.image.data
         image_result = _process_library_image(file, library)
         if image_result is False:  # Explicit check for file size error
-            return render_template('admin/admin_manage_library_create.html', form=form, library=None, page_title=page_title)
+            return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
         # Save library
         if _save_library(library, is_new=True):
@@ -128,7 +131,7 @@ def add_library():
             flash('Please correct the errors below.', 'error')
             print(f"Form validation errors: {form.errors}")
 
-    return render_template('admin/admin_manage_library_create.html', form=form, library=None, page_title=page_title)
+    return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
 @admin2_bp.route('/admin/library/edit/<library_uuid>', methods=['GET', 'POST'])
 @login_required
@@ -136,6 +139,8 @@ def add_library():
 def edit_library(library_uuid):
     """Handle editing existing libraries."""
     library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalars().first() or abort(404)
+    if request.method == 'GET':
+        return render_admin_spa(title='Edit library · Oneirodex Admin')
     form = LibraryForm(obj=library)
     page_title = "Edit Library"
     print(f"Editing library: {library.name}, Platform: {library.platform.name}")
@@ -157,7 +162,7 @@ def edit_library(library_uuid):
             library.platform = LibraryPlatform[form.platform.data]
         except KeyError:
             flash(f'Invalid platform selected: {form.platform.data}', 'error')
-            return render_template('admin/admin_manage_library_create.html', form=form, library=library, page_title=page_title)
+            return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
         library.scan_depth = int(form.scan_depth.data or 1)
         library.watch_enabled = coerce_library_watch_enabled(form.watch_enabled.data)
@@ -166,7 +171,7 @@ def edit_library(library_uuid):
         file = form.image.data
         image_result = _process_library_image(file, library)
         if image_result is False:  # Explicit check for file size error
-            return render_template('admin/admin_manage_library_create.html', form=form, library=library, page_title=page_title)
+            return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
         # Save library
         if _save_library(library, is_new=False):
@@ -177,7 +182,7 @@ def edit_library(library_uuid):
             flash('Please correct the errors below.', 'error')
             print(f"Form validation errors: {form.errors}")
 
-    return render_template('admin/admin_manage_library_create.html', form=form, library=library, page_title=page_title)
+    return render_admin_spa(title=f'{page_title} · Oneirodex Admin')
 
 @admin2_bp.route('/api/library/preview-cropped-image', methods=['POST'])
 @login_required

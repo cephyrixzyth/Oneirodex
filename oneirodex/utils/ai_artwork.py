@@ -43,33 +43,41 @@ class ArtworkGenerationError(RuntimeError):
     """Generation failed. Never fatal — callers keep the existing artwork."""
 
 
-def ai_artwork_enabled() -> bool:
+def ai_artwork_enabled(config=None) -> bool:
+    if config is not None:
+        return bool(config.get('ENABLE_AI_ARTWORK', False))
     try:
         from flask import current_app
 
         return bool(current_app.config.get('ENABLE_AI_ARTWORK', False))
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         return os.getenv('ENABLE_AI_ARTWORK', 'false').lower() in ('1', 'true', 'yes')
 
 
-def artwork_endpoint() -> str:
+def artwork_endpoint(config=None) -> str:
+    if config is not None:
+        return (config.get('AI_ARTWORK_URL') or '').rstrip('/')
     try:
-        from flask import current_app
+        from flask import current_app, has_app_context
 
-        configured = current_app.config.get('AI_ARTWORK_URL')
-    except RuntimeError:
-        configured = None
-    return (configured or os.getenv('AI_ARTWORK_URL') or '').rstrip('/')
+        if has_app_context():
+            return (current_app.config.get('AI_ARTWORK_URL') or '').rstrip('/')
+    except (ImportError, RuntimeError):
+        pass
+    return (os.getenv('AI_ARTWORK_URL') or '').rstrip('/')
 
 
-def artwork_engine() -> str:
+def artwork_engine(config=None) -> str:
+    if config is not None:
+        return (config.get('AI_ARTWORK_ENGINE') or 'a1111').strip().lower()
     try:
-        from flask import current_app
+        from flask import current_app, has_app_context
 
-        configured = current_app.config.get('AI_ARTWORK_ENGINE')
-    except RuntimeError:
-        configured = None
-    return (configured or os.getenv('AI_ARTWORK_ENGINE') or 'a1111').strip().lower()
+        if has_app_context():
+            return (current_app.config.get('AI_ARTWORK_ENGINE') or 'a1111').strip().lower()
+    except (ImportError, RuntimeError):
+        pass
+    return (os.getenv('AI_ARTWORK_ENGINE') or 'a1111').strip().lower()
 
 
 def build_prompt(*, name: str, platform: str | None = None, genres=None) -> str:
@@ -132,10 +140,16 @@ class A1111Generator:
         }
         try:
             response = requests.post(
-                f'{self.base_url}/sdapi/v1/txt2img', json=payload, timeout=timeout,
+                f'{self.base_url}/sdapi/v1/txt2img',
+                json=payload,
+                timeout=timeout,
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
-            raise ArtworkGenerationError(f'Artwork endpoint unreachable: {exc}') from exc
+            # requests exceptions can embed the configured URL, including
+            # credentials or signed query parameters. Keep the public error
+            # useful without reflecting endpoint details.
+            raise ArtworkGenerationError('Artwork endpoint unreachable') from exc
 
         if response.status_code != 200:
             raise ArtworkGenerationError(
@@ -186,11 +200,11 @@ class ComfyUIGenerator:
         )
 
 
-def get_generator() -> ArtworkGenerator:
-    endpoint = artwork_endpoint()
+def get_generator(config=None) -> ArtworkGenerator:
+    endpoint = artwork_endpoint(config)
     if not endpoint:
         raise ArtworkGenerationError('AI_ARTWORK_URL is not configured')
-    engine = artwork_engine()
+    engine = artwork_engine(config)
     if engine in ('a1111', 'automatic1111', 'sdnext', 'forge'):
         return A1111Generator(endpoint)
     if engine == 'comfyui':
@@ -206,19 +220,22 @@ def generate_cover_bytes(
     width: int = DEFAULT_WIDTH,
     height: int = DEFAULT_HEIGHT,
     timeout: float = 120.0,
+    config=None,
 ) -> bytes:
     """Generate cover bytes for a title. Raises :class:`ArtworkGenerationError`.
 
     Callers should treat failure as "keep what you have" — generated art is an
     improvement on a placeholder, never a reason to lose existing artwork.
     """
-    if not ai_artwork_enabled():
+    if not ai_artwork_enabled(config):
         raise ArtworkGenerationError('AI artwork is disabled (ENABLE_AI_ARTWORK)')
     prompt = build_prompt(name=name, platform=platform, genres=genres)
-    return get_generator().generate(prompt, width=width, height=height, timeout=timeout)
+    return get_generator(config).generate(prompt, width=width, height=height, timeout=timeout)
 
 
-def generate_and_store_cover(game_uuid: str, *, image_type: str = 'cover') -> dict:
+def generate_and_store_cover(
+    game_uuid: str, *, image_type: str = 'cover', config=None,
+) -> dict:
     """Generate artwork for a game and persist it, labelled as generated.
 
     Never destroys existing artwork on failure — a generation miss leaves the
@@ -228,13 +245,18 @@ def generate_and_store_cover(game_uuid: str, *, image_type: str = 'cover') -> di
     import os
     import uuid as _uuid
 
-    from flask import current_app, url_for
     from sqlalchemy import select
     from werkzeug.utils import secure_filename
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import Game, Image
     from oneirodex.utils.image_kinds import SINGULAR_IMAGE_KINDS, parse_image_kind
+
+    if config is None:
+        from flask import current_app
+        runtime_config = current_app.config
+    else:
+        runtime_config = config
 
     kind = parse_image_kind(image_type, default='cover')
 
@@ -247,13 +269,14 @@ def generate_and_store_cover(game_uuid: str, *, image_type: str = 'cover') -> di
         platform=getattr(getattr(game, 'library', None), 'platform', None)
         and game.library.platform.value,
         genres=[g.name for g in (game.genres or [])],
+        config=runtime_config,
     )
     if not data:
         raise ArtworkGenerationError('Generator returned no data')
 
-    engine = artwork_engine()
+    engine = artwork_engine(runtime_config)
     file_name = secure_filename(f'{game_uuid}_{kind}_gen_{_uuid.uuid4().hex[:10]}.png')
-    save_dir = current_app.config['IMAGE_SAVE_PATH']
+    save_dir = runtime_config['IMAGE_SAVE_PATH']
     os.makedirs(save_dir, exist_ok=True)
     with open(os.path.join(save_dir, file_name), 'wb') as handle:
         handle.write(data)
@@ -279,12 +302,13 @@ def generate_and_store_cover(game_uuid: str, *, image_type: str = 'cover') -> di
     db.session.add(image)
     db.session.commit()
 
+    static_url_path = (runtime_config.get('STATIC_URL_PATH') or '/static').rstrip('/')
     return {
         'game_uuid': game_uuid,
         'image_id': image.id,
         'kind': kind,
         'filename': file_name,
-        'url': url_for('static', filename=f'library/images/{file_name}'),
+        'url': f'{static_url_path}/library/images/{file_name}',
         'generated_by': engine,
         'is_generated': True,
     }

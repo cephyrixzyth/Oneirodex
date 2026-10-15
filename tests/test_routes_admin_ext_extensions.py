@@ -117,7 +117,7 @@ class TestExtensionsRoute:
         response = client.get('/admin/extensions')
         assert response.status_code == 200
     
-    def test_extensions_template_context(self, client, admin_user):
+    def test_extensions_shell_does_not_require_server_template_context(self, client, admin_user):
         unique_suffix = str(int(time.time() * 1000))[-6:]
         file_type = AllowedFileType(value=f'.ctx{unique_suffix}')
         db.session.add(file_type)

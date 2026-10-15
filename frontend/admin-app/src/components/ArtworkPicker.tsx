@@ -282,9 +282,9 @@ export function ArtworkPicker({
       </p>
 
       {!gameUuid ? (
-        <p className="od-admin-lede" role="status">
+        <PageStatus announcement="status" className="od-admin-lede">
           Select a library title (search above, or Open picker from a queue group) to enable Apply.
-        </p>
+        </PageStatus>
       ) : (
         <p className="od-admin-lede">
           Target: <strong>{gameName || gameUuid}</strong>{' '}

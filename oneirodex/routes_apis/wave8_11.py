@@ -124,7 +124,11 @@ def activity_feed():
     # Child accounts only see their own sessions via playtime/me; keep feed for others.
     if role == 'child':
         return jsonify({'activity': [], 'now_playing': [], 'restricted': True})
-    limit = min(100, max(1, int(request.args.get('limit') or 25)))
+    try:
+        limit = min(100, max(1, int(request.args.get('limit') or 25)))
+    except (TypeError, ValueError, OverflowError):
+        # Match the native ASGI route: malformed pagination uses its default.
+        limit = 25
     friends_only = str(request.args.get('friends_only') or '').lower() in ('1', 'true', 'yes')
     return jsonify({
         'activity': list_recent_activity(

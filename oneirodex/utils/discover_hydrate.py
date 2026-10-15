@@ -28,7 +28,7 @@ from typing import Any, Iterable, Iterator, Sequence
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameUpdate, GlobalSettings, Image
 from oneirodex.utils.client_lifecycle import load_lifecycle_map
 from oneirodex.utils.client_presence import user_client_connected

@@ -116,7 +116,9 @@ class TestManageDownloadsRoute:
 
         response = client.get('/admin/manage-downloads')
         assert response.status_code == 200
-        assert b'admin_manage_downloads' in response.data or b'manage' in response.data
+        assert b'<title>Downloads admin' in response.data
+        assert b'id="admin-app-root"' in response.data
+        assert b'data-admin-render="spa"' in response.data
 
     def test_manage_downloads_displays_data(self, client, admin_user, sample_download_request):
         """Test that manage downloads displays download requests."""

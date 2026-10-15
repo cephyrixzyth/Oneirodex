@@ -75,6 +75,17 @@ describe('integrations deep links', () => {
 
     expect(orphans).toEqual([])
   })
+
+  test('Meta / Quest and Indexers use fragments supported by the legacy route', () => {
+    const destinations = INTEGRATION_SECTIONS.flatMap((group) => group.items)
+    const metaQuest = destinations.find((item) => item.title === 'Meta / Quest')
+    const indexers = destinations.find((item) => item.title === 'Indexers')
+
+    // The React integrations hub keeps these as direct anchors for the
+    // currently rendered Jinja page. React keeps matching row IDs for its hub.
+    expect(metaQuest?.to).toBe('/admin/integrations#meta_quest')
+    expect(indexers?.to).toBe('/admin/integrations#indexers')
+  })
 })
 
 /**
@@ -92,6 +103,8 @@ describe('section ownership', () => {
     ['/admin/art_studio', 'libraries'],
     ['/admin/edit_filters', 'libraries'],
     ['/scan_management', 'libraries'],
+    ['/admin/scan-jobs', 'libraries'],
+    ['/admin/unmatched', 'libraries'],
     ['/admin/whitelist', 'users'],
     ['/admin/smtp_settings', 'integrations'],
   ])('%s belongs to %s', (pathname, expected) => {
@@ -107,6 +120,10 @@ describe('section ownership', () => {
   test('library tools hub link points at the scan-management tools page', () => {
     const hrefs = HUB_LINKS.libraries.map((item) => item.href)
     expect(hrefs).toContain('/scan_management?active_tab=tools')
+    expect(hrefs).toContain('/admin/scan-jobs')
+    expect(hrefs.filter((href) => href === '/admin/edit_filters')).toHaveLength(1)
+    expect(hrefs).not.toContain('/scan_management?active_tab=scan_filters')
+    expect(HUB_LINKS.libraries.map((item) => item.label)).not.toContain('Release filters')
     expect(hrefs).not.toContain('/admin/library_tools')
   })
 
@@ -138,6 +155,7 @@ describe('rail destinations vs hub catalogue', () => {
     expect(hrefs).toContain('/libraries')
     expect(hrefs).toContain('/admin/extensions')
     expect(hrefs).toContain('/scan_management?active_tab=tools')
+    expect(hrefs).toContain('/admin/scan-jobs')
   })
 
   test('content / users / system still expose hub destinations on the rail', () => {

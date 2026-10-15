@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 THEME_SOURCE = REPO_ROOT / 'oneirodex' / 'setup' / 'default_theme'
 FORM_COMPONENTS_CSS = THEME_SOURCE / 'css' / 'form-components.css'
 OD_TOKENS_CSS = THEME_SOURCE / 'css' / 'od-tokens.css'
-TEMPLATES = REPO_ROOT / 'oneirodex' / 'templates'
+PREFERENCES = REPO_ROOT / 'frontend' / 'shared' / 'src' / 'PreferencesModal.tsx'
 
 
 def read(path: Path) -> str:
@@ -88,32 +88,28 @@ def test_swatch_colours_are_the_only_hex_literals_in_form_components():
 
 
 def test_preferences_modal_renders_selectable_swatches():
-    html = read(TEMPLATES / 'settings' / 'modal_preferences.html')
+    component = read(PREFERENCES)
 
-    assert 'id="themeSwatchGrid"' in html
-    assert 'data-theme="{{ item.slug }}"' in html
-    assert 'theme_picker_groups' in html
-    assert 'theme-card-preview' in html
-    # Dict groups: `group.items` is the bound method, not the list.
-    assert "group['items']" in html
-    assert 'for item in group.items' not in html
-    # Selection is server-rendered too, so the picker reads correctly even
-    # before any JavaScript touches it.
-    assert "form.theme.data == item.slug" in html
+    assert 'themeSwatchGrid' in component
+    assert 'data-theme-preview={theme.slug}' in component
+    assert 'data.choices.themes.map' in component
+    assert 'theme-card-preview' in component
+    assert 'group.items.map' in component
+    assert 'values.theme === theme.slug' in component
 
 
 def test_preferences_look_offers_admin_reset_themes():
     """Operators hit Reset Themes from Preferences → Look, not only Admin → Themes."""
-    html = read(TEMPLATES / 'settings' / 'modal_preferences.html')
+    component = read(PREFERENCES)
     js = read(
         REPO_ROOT / 'oneirodex' / 'setup' / 'default_theme' / 'js' / 'preferences_modal.js'
     )
 
-    assert "current_user.role == 'admin'" in html
-    assert 'id="odPrefsResetThemes"' in html
-    assert 'admin2.reset_default_themes' in html
+    assert 'data.is_admin' in component
+    assert 'Reset default themes' in component
+    assert 'resetThemes()' in component
     assert 'odPrefsResetThemes' in js
-    assert "/admin/themes/reset" in js or 'data-reset-url' in html
+    assert "/admin/themes/reset" in js or '/admin/themes/reset' in component
     assert 'Reset all default themes?' in js
 
 
@@ -122,8 +118,9 @@ def test_admin_manage_themes_sends_you_to_preferences_to_choose():
     duplicating Preferences and giving two answers to "which theme is selected".
     Retired — but the page must still say where choosing happens, or the
     affordance is simply missing rather than moved."""
-    html = read(TEMPLATES / 'admin' / 'admin_manage_themes.html')
+    page = read(REPO_ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ThemesPage.tsx')
 
-    assert 'adminThemeGrid' not in html
-    assert 'apply_theme' not in html
-    assert 'settings.settings_panel' in html
+    assert 'adminThemeGrid' not in page
+    assert 'apply_theme' not in page
+    assert 'Choose your theme in Preferences' in page
+    assert '/preferences#themes' in page

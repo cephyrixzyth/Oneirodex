@@ -1,7 +1,7 @@
 {
   "name": "member-app",
   "private": true,
-  "version": "1.1.8",
+  "version": "1.1.9",
   "type": "module",
   "engines": {
     "node": ">=22 <23"
@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.build.json && vite build",
+    "build:auth-pilot": "tsc --noEmit -p tsconfig.build.json && vite build --config vite.auth-pilot.config.js",
     "test": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "npm --prefix ../.. run lint",

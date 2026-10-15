@@ -16,6 +16,7 @@
  * twenty-three paths per theme.
  */
 import type { SVGProps } from 'react'
+import { sharedIconAliases, sharedIconPaths } from './generatedIconPaths.js'
 import { eraForGlyphs, eraGlyph } from './railIconsEra.js'
 
 /**
@@ -36,6 +37,7 @@ const base = {
 } as const
 
 export const railIconPaths: Record<string, React.ReactNode> = {
+  ...sharedIconPaths,
   acquire: (
     <>
       <path d="M5 8h14l-1.3 11.2a2 2 0 0 1-2 1.8H8.3a2 2 0 0 1-2-1.8L5 8z" />
@@ -97,23 +99,6 @@ export const railIconPaths: Record<string, React.ReactNode> = {
       <rect x="13.5" y="13" width="7.5" height="7" rx="2" />
     </>
   ),
-  discover: (
-    <>
-      <circle cx="12" cy="12" r="10" />
-      <polygon
-        points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"
-        fill="currentColor"
-        stroke="none"
-      />
-    </>
-  ),
-  downloads: (
-    <>
-      <path d="M12 3v9" />
-      <path d="M8 10.5 12 15l4-4.5z" fill="currentColor" stroke="none" />
-      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-    </>
-  ),
   favorites: (
     <>
       <path
@@ -136,12 +121,6 @@ export const railIconPaths: Record<string, React.ReactNode> = {
       <circle cx="12" cy="12" r="9" />
       <path d="M9.4 9.4a2.7 2.7 0 1 1 3.5 2.6c-.6.2-.9.8-.9 1.4v.3" />
       <circle cx="12" cy="17" r="1.2" fill="currentColor" stroke="none" />
-    </>
-  ),
-  integrations: (
-    <>
-      <path d="M6 8h12v3a6 6 0 0 1-12 0V8z" />
-      <path d="M9 8V2M15 8V2M12 17v5" />
     </>
   ),
   libraries: (
@@ -178,38 +157,11 @@ export const railIconPaths: Record<string, React.ReactNode> = {
       <circle cx="18" cy="5.5" r="2.6" fill="currentColor" stroke="none" />
     </>
   ),
-  // A key, not a shopping bag (W28). The bag was the `store` glyph doing double
-  // duty, and it said "buy something" on the one page that is about what you
-  // already have. Ownership here is licences held across Steam / GOG / Epic / Amazon —
-  // and a game licence has been called a key for as long as it has existed, so
-  // the metaphor needs no learning.
-  ownership: (
-    <>
-      <circle cx="8" cy="8" r="4.2" fill="currentColor" stroke="none" />
-      <path d="m11 11 9 9" />
-      <path d="m17.5 17.5 2-2M15 15l2-2" />
-    </>
-  ),
   playtime: (
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7.2V12l3.2 2.1" />
       <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-    </>
-  ),
-  // A flag, not a beetle. The bug glyph named one *kind* of report — and at
-  // 18px a six-legged silhouette is a smudge. Flagging is the conventional verb
-  // for raising an issue, and a filled pennant on a pole survives the size.
-  report: (
-    <>
-      <path d="M5 21V3" />
-      <path d="M5 4.2h11.5l-2 3.4 2 3.4H5z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  settings: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
     </>
   ),
   // --- Admin sub-section glyphs: same 24-grid, currentColor, 2px stroke. ---
@@ -443,8 +395,9 @@ export interface RailIconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 }
 
 export function RailIcon({ name, size = 18, era, ...rest }: RailIconProps) {
+  const canonicalName = sharedIconAliases[name] ?? name
   const activeEra = era === undefined ? eraForGlyphs() : era
-  const glyph = eraGlyph(name, activeEra) ?? railIconPaths[name]
+  const glyph = eraGlyph(canonicalName, activeEra) ?? railIconPaths[canonicalName]
   // An unknown id renders nothing rather than a dot: a missing glyph should be
   // invisible, not a mark the eye reads as a real category.
   if (!glyph) return null
@@ -455,8 +408,8 @@ export function RailIcon({ name, size = 18, era, ...rest }: RailIconProps) {
       height={size}
       aria-hidden="true"
       focusable="false"
-      data-icon={name}
-      data-era-hand={activeEra && eraGlyph(name, activeEra) ? activeEra : undefined}
+      data-icon={canonicalName}
+      data-era-hand={activeEra && eraGlyph(canonicalName, activeEra) ? activeEra : undefined}
       {...rest}
     >
       {glyph}

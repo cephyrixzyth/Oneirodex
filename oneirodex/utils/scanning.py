@@ -1,11 +1,10 @@
 import os
 import json
 from datetime import datetime, timezone
-from flask import current_app, flash, has_request_context
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import select, update
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     Game, 
     Image, 
@@ -17,9 +16,7 @@ from oneirodex.models import (
     ScanJob
 )
 from oneirodex.utils.global_settings import global_settings_row
-from oneirodex.utils.functions import read_first_nfo_content
-from oneirodex.utils.igdb_api import make_igdb_api_request
-from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.helpers.fs import read_first_nfo_content
 from oneirodex.utils.pc_extras import (
     classify_pc_extra_folder,
     is_pc_library_platform,
@@ -56,7 +53,7 @@ def bump_scan_job_progress(
     db.session.commit()
 
 
-def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exists=True, fetch_hltb=False, settings=None):
+def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exists=True, fetch_hltb=False, settings=None, app=None, database_scope=None):
     from oneirodex.utils.game_core import (
         retrieve_and_save_game
     )
@@ -66,6 +63,7 @@ def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exi
         should_block_result,
         should_block_heuristic_name,
     )
+    from oneirodex.utils.event_logging import log_system_event
 
     # Fetch the library details using the library_uuid, if necessary
     library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalar_one_or_none()
@@ -86,7 +84,8 @@ def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exi
                 mark_game_path_ok(existing_game)
             return False
 
-    if malware_scan_enabled():
+    runtime_config = getattr(app, 'config', None) if app is not None else None
+    if malware_scan_enabled(config=runtime_config):
         # Folder name heuristics; files also get ClamAV when reachable. Policy: skip/block on match.
         label = game_name or full_disk_path
         if should_block_heuristic_name(label):
@@ -108,11 +107,26 @@ def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exi
                 print(f"[MALWARE SCAN] Blocked add for {full_disk_path}: {result.to_dict()}")
                 return False
 
-    game = retrieve_and_save_game(game_name, full_disk_path, scan_job_id, library_uuid, fetch_hltb=fetch_hltb, settings=settings)
+    allowed_bases = None
+    if app is not None and hasattr(app, 'config'):
+        from oneirodex.utils.security import get_allowed_base_directories
+
+        allowed_bases = get_allowed_base_directories(app)
+    game = retrieve_and_save_game(
+        game_name, full_disk_path, scan_job_id, library_uuid,
+        fetch_hltb=fetch_hltb, settings=settings, app=app,
+        allowed_bases=allowed_bases,
+        database_scope=database_scope,
+    )
     return game is not None
 
 
-def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_uuid, existing_game_paths=None, existing_unmatched_paths=None, fetch_hltb=False, settings=None):
+def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_uuid, existing_game_paths=None, existing_unmatched_paths=None, fetch_hltb=False, settings=None, app=None, database_scope=None):
+    worker_scope_kwargs = {}
+    if app is not None:
+        worker_scope_kwargs['app'] = app
+    if database_scope is not None:
+        worker_scope_kwargs['database_scope'] = database_scope
     # Fast path - check cached sets first if provided
     if existing_game_paths and full_disk_path in existing_game_paths:
         print(f"Game already exists (fast path): {game_name} at {full_disk_path}")
@@ -160,7 +174,7 @@ def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_u
 
     print(f'Game does not exist in database: {game_name} at {full_disk_path}')
     # Try to add the game, now using library_uuid
-    if not try_add_game(game_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings):
+    if not try_add_game(game_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings, **worker_scope_kwargs):
         # Truncate name from the right — cap attempts so one bad title cannot
         # burn minutes of IGDB round-trips (legacy unbounded fallback loop).
         parts = game_name.split()
@@ -169,7 +183,7 @@ def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_u
             if i <= 0:
                 break
             fallback_name = ' '.join(parts[:i])
-            if try_add_game(fallback_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings):
+            if try_add_game(fallback_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings, **worker_scope_kwargs):
                 print(f"[GAME MATCH] Success with fallback name: '{fallback_name}'")
                 return True
     else:
@@ -510,7 +524,9 @@ def process_pc_dlc_and_extra_roots(
 
 
 def refresh_images_in_background(game_uuid):
+    from flask import current_app, flash, has_request_context
     from oneirodex import cache
+    from oneirodex.utils.igdb_api import make_igdb_api_request
     with current_app.app_context():
         from oneirodex.utils.game_core import (
             process_and_save_image
@@ -580,8 +596,16 @@ def refresh_images_in_background(game_uuid):
             else:
                 print(f"Failed to refresh game images: {str(e)}")
             
-def delete_game_images(game_uuid):
-    with current_app.app_context():
+def delete_game_images(game_uuid, *, config=None):
+    if config is None:
+        from flask import current_app
+
+        config = current_app.config
+        app = current_app._get_current_object()
+    else:
+        app = None
+
+    def delete_images():
         game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalar_one_or_none()
         if not game:
             print("Game not found for image deletion.")
@@ -592,7 +616,7 @@ def delete_game_images(game_uuid):
         for image in images_to_delete:
             try:
                 relative_image_path = image.url.replace('/static/library/images/', '').strip("/")
-                image_file_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], relative_image_path)
+                image_file_path = os.path.join(config['IMAGE_SAVE_PATH'], relative_image_path)
                 image_file_path = os.path.normpath(image_file_path)
 
                 if os.path.exists(image_file_path):
@@ -616,6 +640,11 @@ def delete_game_images(game_uuid):
         except Exception as e:
             db.session.rollback()
             print(f"Error committing image deletion changes to the database: {e}")
+    if app is None:
+        delete_images()
+    else:
+        with app.app_context():
+            delete_images()
             
 def is_scan_job_running():
     """

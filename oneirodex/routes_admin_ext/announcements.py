@@ -1,9 +1,9 @@
 """Admin announcements composer shell (React SPA page)."""
 
-from flask import render_template
 from flask_login import login_required
 
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 
 from . import admin2_bp
 
@@ -13,4 +13,4 @@ from . import admin2_bp
 @admin_required
 def announcements_page():
     """Shell for the React announcements composer."""
-    return render_template('admin/admin_announcements.html')
+    return render_admin_spa(title='Announcements · Oneirodex Admin')

@@ -2,7 +2,7 @@
 chat spaces / channels / messages / reactions."""
 from datetime import datetime, timezone
 
-from oneirodex import db
+from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
 class UserFriendship(db.Model):

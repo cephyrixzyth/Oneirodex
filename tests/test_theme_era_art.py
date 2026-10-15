@@ -68,9 +68,10 @@ def test_css_paints_each_era_from_its_own_theme_folder():
     assert "url('/static/library/themes" not in ERA_CSS
 
 
-def test_the_atmosphere_partial_has_the_scene_layer():
-    partial = (REPO_ROOT / 'oneirodex' / 'templates' / 'partials' / 'era_atmosphere.html').read_text(
-        encoding='utf-8',
+def test_python_shell_builders_include_the_atmosphere_scene_layer():
+    partial = '\n'.join(
+        (REPO_ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
+        for name in ('member_spa.py', 'admin_spa.py')
     )
     assert 'od-era-scene' in partial
     # Behind the window/posters/furniture, in front of the wall.

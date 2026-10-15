@@ -4,10 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BigPicturePage } from './BigPicturePage'
 import * as browseApi from '../api/browse'
+import * as downloadsApi from '../api/downloads'
 import { ShellHarness } from '../testShell'
 
 vi.mock('../api/browse', () => ({
   fetchBrowseGames: vi.fn(),
+}))
+
+vi.mock('../api/downloads', () => ({
+  initiateGameDownload: vi.fn(),
 }))
 
 vi.mock('../api/clientCommands', () => ({
@@ -20,6 +25,8 @@ function renderPage(ui: any) {
 
 beforeEach(() => {
   vi.mocked(browseApi.fetchBrowseGames).mockReset()
+  vi.mocked(downloadsApi.initiateGameDownload).mockReset()
+  vi.mocked(downloadsApi.initiateGameDownload).mockResolvedValue({})
 })
 
 const GAMES = [
@@ -67,10 +74,7 @@ test('shows loading then renders tiles and hero for the first game', async () =>
   expect(screen.getByText('An alpha adventure.')).toBeInTheDocument()
   expect(screen.getByText('OWNED · 4.2 GB')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/game_details/a1')
-  expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute(
-    'href',
-    '/download_game/a1',
-  )
+  expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
 })
 
 test('arrow keys move the selection and update the hero', async () => {
@@ -187,7 +191,7 @@ describe('TC-3 honesty on the ten-foot screen', () => {
     await screen.findByRole('heading', { name: 'Alpha Game' })
     // The buttons a thin token can never complete are simply absent, rather
     // than present and failing at the press.
-    expect(screen.queryByRole('link', { name: 'Download' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Download' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
     // What it can do is still there.
     expect(screen.getByRole('link', { name: 'Open' })).toBeTruthy()
@@ -204,7 +208,7 @@ describe('TC-3 honesty on the ten-foot screen', () => {
       </ShellHarness>,
     )
     await screen.findByRole('heading', { name: 'Alpha Game' })
-    expect(screen.getByRole('link', { name: 'Download' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Install' })).toBeTruthy()
   })
 

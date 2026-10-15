@@ -317,12 +317,16 @@ function browseFolders(items, extra = {}) {
         return arg;
     }
     $.ajax = (options) => { ajax = options; };
-    const sandbox = { $, console: { log() {} }, fileIcons: { default: 'fa-file' }, window: null };
+    const sandbox = {
+        $, console: { log() {} },
+        fileIcons: { directory: 'folder', exe: 'game', pdf: 'pdf', default: 'file' }, window: null,
+    };
     sandbox.window = sandbox;
     vm.createContext(sandbox);
     vm.runInContext(
         [
             extractTopLevelFunction(source, 'formatFileSize'),
+            extractTopLevelFunction(source, 'createFileTypeMark'),
             extractTopLevelFunction(source, 'fetchFolders'),
         ].join('\n'),
         sandbox,
@@ -352,12 +356,18 @@ for (const payload of PAYLOADS) {
     }
     const [warning, folder, file] = children;
     assert.ok(warning.textValue.includes(payload), 'the warning count is text');
-    assert.equal(folder.textValue, `📁 ${payload}`, 'folder name is text');
-    assert.equal(file.textValue, payload, 'file name is text');
+    assert.equal(folder.textValue, null, 'folder row uses child text nodes');
+    assert.equal(folder.children[0].textValue, '▰', 'directory mark renders');
+    assert.equal(folder.children[1].textValue, payload, 'folder name is text');
+    assert.equal(file.textValue, null, 'file row uses child text nodes');
+    assert.equal(file.children[0].textValue, '▣', 'executable mark renders');
+    assert.equal(file.children[1].textValue, payload, 'file name is text');
     assert.equal(file.attrs.title, `${payload} - 2 KB`);
-    assert.equal(file.children.length, 1, 'the size badge is appended as an element');
-    assert.equal(file.children[0].textValue, '(2 KB)');
-    assert.ok(file.children[0].classes.has('file-size'));
+    assert.equal(file.children.length, 3, 'mark, name and size are appended as elements');
+    assert.equal(file.children[2].textValue, '(2 KB)');
+    assert.ok(file.children[0].classes.has('scan-file-type-icon--game'));
+    assert.equal(file.children[0].attrs['aria-hidden'], 'true');
+    assert.ok(file.children[2].classes.has('file-size'));
 }
 
 // A normal folder and file list exactly as before.
@@ -370,11 +380,13 @@ for (const payload of PAYLOADS) {
         { hasErrors: true, skippedItems: 3 }
     );
     assert.equal(warning.textValue, '⚠ Some items (3) could not be accessed and were skipped.');
-    assert.deepEqual(describeEl(folder), { text: '📁 Half-Life 2', html: null, classes: ['folder-item'] });
+    assert.equal(folder.children[1].textValue, 'Half-Life 2');
+    assert.equal(folder.children[0].attrs['data-kind'], 'folder');
     assert.equal(folder.attrs['data-path'], '/games/Half-Life 2/');
-    assert.deepEqual(describeEl(file), { text: 'setup.exe', html: null, classes: ['file-item'] });
+    assert.equal(file.children[1].textValue, 'setup.exe');
+    assert.equal(file.children[0].attrs['data-kind'], 'game');
     assert.equal(file.attrs.title, 'setup.exe - 1.5 KB');
-    assert.equal(file.children[0].textValue, '(1.5 KB)');
+    assert.equal(file.children[2].textValue, '(1.5 KB)');
 }
 
 console.log('admin_html_injection: all assertions passed');

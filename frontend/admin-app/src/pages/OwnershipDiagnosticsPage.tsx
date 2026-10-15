@@ -177,6 +177,7 @@ export function OwnershipDiagnosticsPage() {
   }, [load])
 
   async function act(row: Row, action: 'sync' | 'cancel') {
+    if (busy !== null || loadingMore) return
     setBusy(row.key)
     try {
       const result = await postJson(
@@ -193,14 +194,14 @@ export function OwnershipDiagnosticsPage() {
       // The server sends catalogue sentences only; no provider text.
       showToast(errorText(err) || 'The repair action failed.', 'error')
     } finally {
+      await reloadShown()
       setBusy(null)
-      reloadShown()
     }
   }
 
   /** One page at a time: a double click must not list a page twice. */
   async function showMore() {
-    if (loadingMore || !data?.next_after_id) return
+    if (loadingMore || busy !== null || !data?.next_after_id) return
     setLoadingMore(true)
     try {
       await load(data.next_after_id, true)
@@ -222,9 +223,9 @@ export function OwnershipDiagnosticsPage() {
   }
   if (!data) {
     return (
-      <div className="od-admin-page">
+      <Page title="Store connections">
         <PageStatus loading loadingMessage="Loading store connections" />
-      </div>
+      </Page>
     )
   }
 
@@ -282,13 +283,13 @@ export function OwnershipDiagnosticsPage() {
           <Button
             size="sm"
             variant="danger"
-            disabled={busy === r.key}
+            disabled={busy !== null || loadingMore}
             onClick={() => act(r, 'cancel')}
           >
             Stop sync
           </Button>
         ) : r.actions.includes('sync') ? (
-          <Button size="sm" disabled={busy !== null} onClick={() => act(r, 'sync')}>
+          <Button size="sm" disabled={busy !== null || loadingMore} onClick={() => act(r, 'sync')}>
             {busy === r.key ? 'Syncing…' : 'Retry sync'}
           </Button>
         ) : (
@@ -343,6 +344,8 @@ export function OwnershipDiagnosticsPage() {
         </p>
       ) : null}
       <DataTable
+        caption="Member store connections"
+        scrollLabel="Store connections table"
         columns={columns}
         rows={rows}
         getRowKey={(r) => r.key}
@@ -350,7 +353,7 @@ export function OwnershipDiagnosticsPage() {
         initialSort={{ key: 'member', dir: 'asc' }}
       />
       {nextAfter ? (
-        <Button size="sm" disabled={loadingMore} onClick={showMore}>
+        <Button size="sm" disabled={loadingMore || busy !== null} onClick={showMore}>
           {loadingMore ? 'Loading…' : 'Show more members'}
         </Button>
       ) : null}

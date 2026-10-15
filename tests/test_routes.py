@@ -142,17 +142,6 @@ def test_image(db_session, test_game):
 class TestMainBlueprint:
     """Test cases for the routes folded out of the retired 'main' blueprint."""
 
-    @patch('oneirodex.context.get_global_settings')
-    def test_inject_settings_context_processor(self, mock_get_global_settings, app, db_session):
-        """Test the inject_settings context processor."""
-        mock_get_global_settings.return_value = {'test_setting': 'test_value'}
-
-        with app.app_context():
-            from oneirodex.context import inject_settings
-            result = inject_settings()
-            assert result == {'test_setting': 'test_value'}
-            mock_get_global_settings.assert_called_once()
-
     def test_browse_games_unauthenticated(self, client):
         """Test browse_games route requires authentication."""
         response = client.get('/browse_games')
@@ -1254,33 +1243,6 @@ class TestMainBlueprint:
         json_data = response.get_json()
         assert json_data['status'] == 'error'
         assert 'Library not found' in json_data['message']
-
-    def test_verify_file_exists(self, app):
-        """Test verify_file template global with existing file."""
-        with app.app_context():
-            verify_file = app.jinja_env.globals['verify_file']
-            with patch('oneirodex.routes_theme.os.path.exists', return_value=True):
-                result = verify_file('/test/path')
-                assert result == True
-
-    def test_verify_file_not_exists(self, app):
-        """Test verify_file template global with non-existing file."""
-        with app.app_context():
-            verify_file = app.jinja_env.globals['verify_file']
-            with patch('oneirodex.routes_theme.os.path.exists', return_value=False):
-                with patch('oneirodex.routes_theme.os.access', return_value=False):
-                    result = verify_file('/test/path')
-                    assert result == False
-
-    def test_verify_file_accessible(self, app):
-        """Test verify_file template global with accessible file."""
-        with app.app_context():
-            verify_file = app.jinja_env.globals['verify_file']
-            with patch('oneirodex.routes_theme.os.path.exists', return_value=False):
-                with patch('oneirodex.routes_theme.os.access', return_value=True):
-                    result = verify_file('/test/path')
-                    assert result == True
-
 
 class TestErrorHandling:
     """Test error handling scenarios."""

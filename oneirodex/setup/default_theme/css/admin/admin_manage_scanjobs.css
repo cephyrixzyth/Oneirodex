@@ -54,6 +54,12 @@
     backdrop-filter: blur(10px);
 }
 
+.jobs-table-wrapper:focus-visible,
+.unmatched-table-wrap:focus-visible {
+    outline: 2px solid var(--od-accent);
+    outline-offset: 2px;
+}
+
 /* Column sizing for jobs table: ID | When | Library | Path | Status | Progress | Actions */
 .simple-jobs-table th:nth-child(1), /* ID */
 .simple-jobs-table td:nth-child(1) {
@@ -1067,6 +1073,24 @@
 .file-item:hover {
     background-color: color-mix(in srgb, var(--od-accent) 15%, transparent);
     border-color: color-mix(in srgb, var(--od-accent) 30%, transparent);
+}
+
+/* The picker uses semantic marks rather than an icon-font dependency. Glyphs
+   inherit the selected theme's accent and remain hidden from assistive tech. */
+.scan-file-type-icon {
+    display: inline-flex;
+    width: 1.35em;
+    margin-right: 0.35rem;
+    align-items: center;
+    justify-content: center;
+    color: var(--od-accent);
+    font-size: var(--od-font-base);
+    line-height: 1;
+    vertical-align: -0.05em;
+}
+
+.scan-file-name {
+    overflow-wrap: anywhere;
 }
 
 /* File size styling */
@@ -2185,12 +2209,6 @@ a.unmatched-dupe-of__title:hover {
     white-space: normal;
 }
 
-.admin_manage_scanjobs-tab-header h3 {
-    color: var(--od-text);
-    text-align: center;
-    margin-bottom: 30px;
-}
-
 /* Resolve Unmatched — singular centered equal-pill bar */
 .unmatched-resolve-bar-wrap {
     display: flex;
@@ -2784,12 +2802,14 @@ a.unmatched-dupe-of__title:hover {
     gap: var(--od-space-3);
 }
 
-/* Keep the unmatched bulk controls optically centered in the thin top bar. */
-.od-contextbar:has(#clearUnmatchedBtn) .od-contextbar__actions {
-    flex: 1 1 auto;
-    justify-content: center;
-    margin-left: 0;
-    flex-wrap: wrap;
+/* Keep the unmatched bulk controls optically centered in the thin top bar.
+   The action group is portaled from its source context bar into the React shell,
+   so scope this to the destination group that actually contains the controls. */
+.od-contextbar__actions--center:has(#clearUnmatchedBtn) {
+  flex: 1 1 auto;
+  justify-content: center;
+  margin-left: 0;
+  flex-wrap: wrap;
 }
 
 /* Scan location picker — only rendered when ONEIRODEX_LIBRARY_ROOTS gives the admin
@@ -2826,6 +2846,49 @@ a.unmatched-dupe-of__title:hover {
   line-height: var(--od-line-base);
   color: var(--od-text-muted);
   max-width: 34ch;
+}
+
+/* Keep the auto-scan controls usable in the narrow shared admin shell. This
+   mobile rule follows the legacy config-grid declaration so it wins the
+   cascade; scan modes wrap instead of pushing into the library selector. */
+@media (max-width: 992px) {
+  .od-scan-workspace .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .od-scan-workspace .radio-group {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+}
+
+/* The unmatched action strip is portaled into the shared top bar. Keep it on
+   one row at phone widths: the shell reserves a fixed-height chrome gutter, so
+   wrapping several actions into extra rows would cover the filter controls. */
+@media (max-width: 900px) {
+  .od-topbar__page:has(#clearUnmatchedBtn) {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .od-contextbar__actions--center:has(#clearUnmatchedBtn) {
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start !important;
+    margin-inline: 0;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    width: 100%;
+  }
+
+  .od-contextbar__actions--center:has(#clearUnmatchedBtn) > * {
+    flex: 0 0 auto !important;
+  }
 }
 
 
@@ -2894,4 +2957,24 @@ a.unmatched-dupe-of__title:hover {
   .scan-jobs-card__modal-toolbar {
     width: 100%;
   }
+}
+
+/* Folder navigation is a native button, including keyboard and touch access. */
+.folder-contents button.folder-item {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    text-align: start;
+    font: inherit;
+    color: var(--od-text);
+    background: transparent;
+}
+
+.folder-contents button.folder-item:hover {
+    background: color-mix(in srgb, var(--od-accent) 15%, transparent);
+}
+
+.folder-contents button.folder-item:focus-visible {
+    outline: 2px solid var(--od-focus-ring, var(--od-accent));
+    outline-offset: 1px;
 }

@@ -129,4 +129,6 @@ def test_search_and_details_blocked(client, app, db_session, child, libs):
         assert details.status_code == 403
 
         download = client.get(f'/download_game/{blocked.uuid}')
-        assert download.status_code == 403
+        assert download.status_code == 405
+        blocked_download = client.post(f'/download_game/{blocked.uuid}')
+        assert blocked_download.status_code == 403

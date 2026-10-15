@@ -5,9 +5,10 @@ server-rendered page you navigated to and came back from. That is the wrong
 shape for "change my avatar" — a whole-page trip for a two-field form — so the
 member SPA opens them as modals instead, and modals need JSON.
 
-The Jinja pages stay. They are the fallback when the SPA is not running (Big
-Picture, the pop-out host, a browser with JS off) and they now share this
-module's helpers rather than reimplementing them.
+The member SPA owns the account UI. These handlers preserve the established
+browser-session API contract while the primary request runtime is migrated.
+The native FastAPI account summary/invite routes share framework-neutral
+projections from ``oneirodex.utils.account_invites``.
 """
 
 from __future__ import annotations
@@ -71,8 +72,8 @@ def _site_url() -> str:
     return public_origin()
 
 
-def _invite_url(token: str) -> str:
-    return build_invite_url(token)
+def _invite_url(token: str, *, origin: str | None = None) -> str:
+    return f'{origin.rstrip("/")}/register?token={token}' if origin else build_invite_url(token)
 
 
 def _invites_unlimited(user) -> bool:
@@ -102,7 +103,7 @@ def _unused_invite_count(user) -> int:
     ) or 0
 
 
-def _invite_row(invite) -> dict:
+def _invite_row(invite, *, origin: str | None = None) -> dict:
     created = getattr(invite, 'created_at', None)
     # `expires_at` is a real column with its own default — read it rather than
     # deriving it, or the modal and the redeem check can disagree about whether
@@ -111,7 +112,7 @@ def _invite_row(invite) -> dict:
     return {
         'token': invite.token,
         'email': invite.recipient_email or None,
-        'url': _invite_url(invite.token),
+        'url': _invite_url(invite.token, origin=origin),
         'created_at': created.isoformat() if created else None,
         'expires_at': expires.isoformat() if expires else None,
         'expired': _is_expired(expires),

@@ -84,6 +84,20 @@
   min-width: 0;
 }
 
+.library-filters__multi-select {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.library-filters__multi-select legend {
+  margin: 0 0 0.35rem;
+  padding: 0;
+  font-size: var(--od-font-xs);
+  color: var(--od-text-muted);
+}
+
 .library-filters__signals legend {
   padding: 0;
   margin: 0 0 0.35rem;

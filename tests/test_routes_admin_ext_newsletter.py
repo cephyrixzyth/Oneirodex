@@ -305,24 +305,24 @@ class TestViewNewsletterRoute:
         assert response.status_code == 302
 
     def test_view_newsletter_success(self, client, admin_user, sample_newsletter):
-        """Test successful viewing of a newsletter."""
+        """Newsletter detail shell loads the row through its React API."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
         response = client.get(f'/admin/newsletter/{sample_newsletter.id}')
         assert response.status_code == 200
-        assert b'Test Newsletter' in response.data
-        assert b'This is a test newsletter content' in response.data
+        assert b'id="admin-app-root"' in response.data
 
     def test_view_newsletter_not_found(self, client, admin_user, global_settings_smtp_enabled):
-        """Test viewing a non-existent newsletter returns 404."""
+        """The page shell loads even if the data API will return a missing row."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
         response = client.get('/admin/newsletter/99999')
-        assert response.status_code == 404
+        assert response.status_code == 200
+        assert b'id="admin-app-root"' in response.data
 
 
 class TestNewsletterIntegration:

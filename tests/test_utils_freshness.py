@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+from flask import Flask
+
 from oneirodex.utils.freshness.compare import compare_freshness, parse_version_tuple
 from oneirodex.utils.freshness.ids import resolve_steam_app_id
 from oneirodex.utils.freshness.local import detect_local_facts
@@ -38,6 +40,29 @@ def test_detect_local_from_nfo_when_name_clean():
     facts = detect_local_facts(game)
     assert facts['version'] == '1.9.23494.3'
     assert facts['source'] == 'nfo'
+
+
+def test_detect_local_facts_accepts_explicit_app_for_path_allowlisting(tmp_path):
+    allowed = tmp_path / 'games'
+    inside = allowed / 'Title'
+    outside = tmp_path / 'outside'
+    inside.mkdir(parents=True)
+    outside.mkdir()
+    (inside / 'version.txt').write_text('v1.2.3', encoding='utf-8')
+    (outside / 'version.txt').write_text('v9.9.9', encoding='utf-8')
+    app = Flask(__name__)
+    app.config.update(DATA_FOLDER_GAMES=str(allowed))
+    game = lambda path: SimpleNamespace(
+        name='Title', full_disk_path=str(path), nfo_content=None, updates=[], extras=[],
+    )
+
+    accepted = detect_local_facts(game(inside), app=app)
+    rejected = detect_local_facts(game(outside), app=app)
+
+    assert accepted['version'] == '1.2.3'
+    assert accepted['source'] == 'version_file'
+    assert rejected['version'] is None
+    assert rejected['source'] is None
 
 
 def test_resolve_steam_app_id_from_url():

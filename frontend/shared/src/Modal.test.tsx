@@ -121,3 +121,41 @@ test('focus returns to the opener on close', () => {
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(document.activeElement).toBe(opener)
 })
+
+test('draft rerenders retain focus and Escape uses the latest callback and busy guard', () => {
+  const firstClose = vi.fn()
+  const latestClose = vi.fn()
+  const fields = (
+    <>
+      <input aria-label="First field" />
+      <input aria-label="Draft field" />
+    </>
+  )
+  const { rerender } = render(
+    <Modal open label="Draft" onClose={firstClose}>
+      {fields}
+    </Modal>,
+  )
+  const draft = screen.getByLabelText('Draft field')
+  draft.focus()
+  fireEvent.change(draft, { target: { value: 'retained' } })
+  rerender(
+    <Modal open label="Draft" onClose={latestClose} closeOnEscape={false}>
+      {fields}
+    </Modal>,
+  )
+  expect(draft).toHaveFocus()
+  expect(draft).toHaveValue('retained')
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(firstClose).not.toHaveBeenCalled()
+  expect(latestClose).not.toHaveBeenCalled()
+  rerender(
+    <Modal open label="Draft" onClose={() => latestClose()}>
+      {fields}
+    </Modal>,
+  )
+  expect(draft).toHaveFocus()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(latestClose).toHaveBeenCalledTimes(1)
+  expect(firstClose).not.toHaveBeenCalled()
+})

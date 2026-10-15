@@ -23,7 +23,8 @@ def start_scan_scheduler(app):
         while True:
             try:
                 with app.app_context():
-                    _run_due_jobs(app)
+                    database_scope = lambda _app: app.app_context()
+                    _run_due_jobs(app, database_scope=database_scope)
             except Exception as exc:
                 print(f"[SCAN SCHEDULER] Error: {exc}")
             time.sleep(_POLL_SECONDS)
@@ -33,14 +34,14 @@ def start_scan_scheduler(app):
     print('[SCAN SCHEDULER] Started (poll every 60s)')
 
 
-def _run_due_jobs(app):
-    from oneirodex import db
+def _run_due_jobs(app, *, database_scope=None):
     from oneirodex.models import ScanJob
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.utils.scan_queue import drain_scan_queue, is_scan_busy
 
     # Prefer explicit FIFO Queued requests over recurring Scheduled jobs.
     # Also reclaim stale Stopping/Running so idle+Queued cannot stick forever.
-    promoted = drain_scan_queue(app)
+    promoted = drain_scan_queue(app, database_scope=database_scope)
     if promoted:
         return
 
@@ -77,4 +78,6 @@ def _run_due_jobs(app):
 
     from oneirodex.utils.scan_queue import restart_or_queue_scan
 
-    restart_or_queue_scan(job.id, app=app, scheduled=True)
+    restart_or_queue_scan(
+        job.id, app=app, scheduled=True, database_scope=database_scope,
+    )

@@ -69,8 +69,7 @@ test('invites table renders rows and can sort by name', async () => {
   mockFetch(INVITES)
   render(<InvitesPage />)
 
-  expect(await screen.findByText('Zoe')).toBeInTheDocument()
-  expect(screen.getByText('Adam')).toBeInTheDocument()
+  await waitFor(() => expect(bodyFirstCells()).toEqual(['Zoe', 'Adam']))
 
   fireEvent.click(screen.getByRole('button', { name: /Name/ }))
   expect(bodyFirstCells()).toEqual(['Adam', 'Zoe'])
@@ -79,7 +78,7 @@ test('invites table renders rows and can sort by name', async () => {
 test('invites table filters rows', async () => {
   mockFetch(INVITES)
   render(<InvitesPage />)
-  await screen.findByText('Zoe')
+  await waitFor(() => expect(bodyFirstCells()).toEqual(['Zoe', 'Adam']))
 
   fireEvent.change(screen.getByLabelText(/Filter table rows/i), { target: { value: 'adam' } })
   expect(bodyFirstCells()).toEqual(['Adam'])
@@ -101,7 +100,7 @@ test('support inbox keeps the Resolve action only on open tickets', async () => 
   await screen.findByText('Scan stalls')
 
   // One open ticket in the fixture, so exactly one Resolve button.
-  expect(screen.getAllByRole('button', { name: 'Resolve' })).toHaveLength(1)
+  expect(screen.getAllByRole('button', { name: 'Resolve Scan stalls' })).toHaveLength(1)
 })
 
 test('empty invites state is honest rather than a blank table', async () => {

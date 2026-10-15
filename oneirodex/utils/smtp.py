@@ -1,11 +1,11 @@
 import smtplib, socket, traceback
 from email.message import EmailMessage
-from flask import flash, url_for, render_template
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from sqlalchemy import select
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.global_settings import global_settings_row
+from oneirodex.utils.email_rendering import render_invite_email
 
 def get_smtp_settings():
     """Get SMTP settings from database."""
@@ -104,6 +104,8 @@ def send_email(to, subject, template):
     """
     Send an email with robust error logging and pre-send checks.
     """
+    from flask import flash
+
     print("\n=== Starting Email Send Process ===")
     smtp_settings = get_smtp_settings()
     
@@ -194,7 +196,7 @@ def send_email(to, subject, template):
     return False
 
 
-def send_email_quiet(to, subject, html_body):
+def send_email_quiet(to, subject, html_body, *, preflight=False, audit_user=None):
     """
     Send HTML email without Flask flash() — safe for chat / notification fan-out.
     Skips the pre-flight reachability probe used by interactive send_email.
@@ -209,12 +211,21 @@ def send_email_quiet(to, subject, html_body):
             f"Quiet email skipped (invalid SMTP): {error_message}",
             event_type='email',
             event_level='warning',
+            audit_user=audit_user,
         )
         return False
 
     mail_server = smtp_settings['MAIL_SERVER']
     mail_port = smtp_settings['MAIL_PORT']
     try:
+        if preflight and not is_server_reachable(mail_server, mail_port):
+            log_system_event(
+                f"Quiet email skipped (unreachable SMTP): {mail_server}:{mail_port}",
+                event_type='email',
+                event_level='error',
+                audit_user=audit_user,
+            )
+            return False
         msg = EmailMessage()
         msg.set_content(html_body, subtype='html')
         msg['Subject'] = subject
@@ -231,6 +242,7 @@ def send_email_quiet(to, subject, html_body):
             f"Quiet email sent to {to} with subject: {subject}",
             event_type='email',
             event_level='information',
+            audit_user=audit_user,
         )
         return True
     except Exception as exc:
@@ -238,6 +250,7 @@ def send_email_quiet(to, subject, html_body):
             f"Quiet email failed to {to}: {exc}",
             event_type='email',
             event_level='error',
+            audit_user=audit_user,
         )
         return False
 
@@ -251,6 +264,7 @@ def send_password_reset_email(user_email, token):
     # caller controls; `public_origin()` prefers Site URL and only falls back to
     # a *trusted* request host. See oneirodex/utils/trusted_host.py.
     from oneirodex.utils.public_origin import public_origin
+    from flask import url_for
 
     reset_path = url_for('login.reset_password', token=token)
     reset_url = f"{public_origin()}{reset_path}"
@@ -264,7 +278,7 @@ def send_password_reset_email(user_email, token):
 
 <p>Oneirodex</p>'''
 
-    from oneirodex import PRODUCT_NAME
+    from oneirodex.product import PRODUCT_NAME
 
     subject = f'{PRODUCT_NAME} password reset request'
     send_email(user_email, subject, html)
@@ -272,5 +286,14 @@ def send_password_reset_email(user_email, token):
     
 def send_invite_email(email, invite_url):
     subject = "You're Invited!"
-    html_content = render_template('login/invite_email.html', invite_url=invite_url)
+    html_content = render_invite_email(invite_url)
     send_email(email, subject, html_content)
+
+
+def send_invite_email_quiet(email, invite_url, *, audit_user=None):
+    """Send an invite from a non-Flask request path without flash state."""
+    subject = "You're Invited!"
+    html_content = render_invite_email(invite_url)
+    return send_email_quiet(
+        email, subject, html_content, preflight=True, audit_user=audit_user,
+    )

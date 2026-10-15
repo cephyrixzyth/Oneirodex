@@ -154,6 +154,34 @@ def test_stored_image_download_rejects_oversized_stream_without_writing(tmp_path
     assert response.closed is True
 
 
+def test_stored_image_download_does_not_expose_url_or_transport_error(monkeypatch, caplog):
+    from oneirodex.utils.clients import images
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    secret_url = 'https://cdn.example/private.png?token=do-not-log-this'
+    monkeypatch.setattr(images.requests, 'Session', Session)
+    monkeypatch.setattr(images, 'validate_user_outbound_http_url', lambda url: (True, url))
+
+    def failed_request(url, **_kwargs):
+        raise requests.ConnectionError(f'Connection failed for {url}')
+
+    monkeypatch.setattr(images, 'safe_get', failed_request)
+    with caplog.at_level('WARNING', logger='oneirodex.utils.clients.images'):
+        ok, error = images.download_image(secret_url, 'private-cache/cover.png')
+
+    assert not ok
+    assert error == 'Network error while downloading the image.'
+    assert 'do-not-log-this' not in error
+    assert 'do-not-log-this' not in caplog.text
+    assert 'private-cache' not in caplog.text
+
+
 PUBLIC = '93.184.216.34'
 
 

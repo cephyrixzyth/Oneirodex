@@ -10,14 +10,14 @@ import os
 import stat
 from uuid import uuid4
 
-from flask import current_app
 from sqlalchemy import func, select, text
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import ChatChannel, ChatMessageAttachment, User
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
+from oneirodex.utils.runtime_config import get_runtime_config
 
 # Max bytes per file (5 MiB). Keep small — household library volume, not a CDN.
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -42,8 +42,8 @@ ALLOWED_BY_EXT: dict[str, str] = {
 ALLOWED_MIME = frozenset(ALLOWED_BY_EXT.values())
 
 
-def attachments_dir() -> str:
-    root = current_app.config.get('UPLOAD_FOLDER') or ''
+def attachments_dir(upload_folder: str | None = None) -> str:
+    root = upload_folder if upload_folder is not None else get_runtime_config().get('UPLOAD_FOLDER') or ''
     path = os.path.join(root, 'chat-attachments')
     os.makedirs(path, exist_ok=True)
     return path
@@ -98,6 +98,9 @@ def upload_attachment(
     channel: ChatChannel,
     user: User,
     file: FileStorage,
+    upload_folder: str | None = None,
+    storage_max_bytes: int | None = None,
+    storage_max_files: int | None = None,
 ) -> ChatMessageAttachment:
     """Persist a pending attachment for ``channel``. Caller must enforce channel ACL."""
     if not user_can_upload_attachments(user):
@@ -146,15 +149,10 @@ def upload_attachment(
                 'send a message or wait'
             )
 
-        storage_limit = int(
-            current_app.config.get('CHAT_ATTACHMENT_STORAGE_MAX_BYTES')
-            or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_BYTES
-        )
-        file_limit = int(
-            current_app.config.get('CHAT_ATTACHMENT_STORAGE_MAX_FILES')
-            or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_FILES
-        )
-        if _stored_attachment_bytes(attachments_dir(), file_limit) + len(raw) > storage_limit:
+        storage_limit = int(storage_max_bytes or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_BYTES)
+        file_limit = int(storage_max_files or DEFAULT_CHAT_ATTACHMENT_STORAGE_MAX_FILES)
+        folder = attachments_dir(upload_folder)
+        if _stored_attachment_bytes(folder, file_limit) + len(raw) > storage_limit:
             raise ValueError(
                 'Chat attachment storage limit reached; contact an administrator'
             )
@@ -162,7 +160,7 @@ def upload_attachment(
         # Normalize jpeg extension for stable URLs.
         store_ext = 'jpg' if ext == 'jpeg' else ext
         out_name = f'{uuid4().hex}.{store_ext}'
-        out_path = os.path.join(attachments_dir(), out_name)
+        out_path = os.path.join(folder, out_name)
         with open(out_path, 'xb') as fh:
             file_created = True
             fh.write(raw)

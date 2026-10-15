@@ -3,10 +3,9 @@ import json
 import zipfile
 import shutil
 import tempfile
-from flask import flash
 from werkzeug.utils import secure_filename
 from oneirodex.models import UserPreference
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from sqlalchemy import update
 from oneirodex.utils.library_paths import library_dir
 
@@ -53,6 +52,8 @@ class ThemeManager:
         return themes
 
     def upload_theme(self, theme_zip):
+        from flask import flash
+
         if not os.path.exists(self.app.config['UPLOAD_FOLDER']):
             flash('Error: Library folder does not exist.', 'error')
             return None

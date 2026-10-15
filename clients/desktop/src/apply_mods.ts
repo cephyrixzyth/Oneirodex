@@ -37,7 +37,12 @@ export interface GameModsResponse {
   active_profile_name: string
 }
 
-const ZIP_EXTS = new Set(['.zip', '.7z'])
+const ZIP_EXTS = new Set(['.zip'])
+const UNSUPPORTED_ARCHIVE_EXTS = new Set(['.7z'])
+export const MAX_MOD_PACK_DOWNLOAD_BYTES = 1024 * 1024 * 1024
+export const MAX_MOD_PACK_EXPANDED_BYTES = 4 * 1024 * 1024 * 1024
+export const MAX_MOD_PACK_ENTRIES = 50_000
+const MAX_TAURI_CHUNK_BYTES = 1024 * 1024
 
 export function safeModFilename(filename: string): string {
   const trimmed = (filename || '').trim().replace(/\\/g, '/')
@@ -90,6 +95,12 @@ export function isModArchiveFilename(name: string): boolean {
     return false
   }
   return ZIP_EXTS.has(lower.slice(dot))
+}
+
+export function isUnsupportedModArchiveFilename(name: string): boolean {
+  const lower = name.toLowerCase()
+  const dot = lower.lastIndexOf('.')
+  return dot >= 0 && UNSUPPORTED_ARCHIVE_EXTS.has(lower.slice(dot))
 }
 
 export function pickModFilename(sourceUrl: string, mod: GameModRow): string {
@@ -174,7 +185,7 @@ export async function fetchGameMods(
   const fetchImpl = options.fetchImpl ?? fetch
   const response = await fetchImpl(
     `${baseUrl.replace(/\/$/, '')}/api/games/${encodeURIComponent(gameUuid)}/mods`,
-    { headers: { Authorization: formatBearerAuthorization(token) } },
+    { headers: { Authorization: formatBearerAuthorization(token) }, redirect: 'error' },
   )
   if (!response.ok) {
     throw new Error(`mods fetch ${response.status}`)
@@ -285,6 +296,7 @@ export async function fetchModsSummaryGameUuids(
   const fetchImpl = options.fetchImpl ?? fetch
   const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/api/mods/summary`, {
     headers: { Authorization: formatBearerAuthorization(token) },
+    redirect: 'error',
   })
   if (!response.ok) {
     return { gameUuids: new Set(), trackingEnabled: false }
@@ -338,13 +350,20 @@ export async function stageModFromUrl(opts: {
   gameUuid: string
   mod: GameModRow
   fetchImpl?: typeof fetch
-}): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  maxBytes?: number
+}): Promise<{ ok: true; path: string; bytes: number } | { ok: false; error: string }> {
   if (!isTauriRuntime()) {
     return { ok: false, error: 'Companion runtime required to stage mods' }
   }
   const url = opts.mod.source_url.trim()
   if (!url) {
     return { ok: false, error: `Mod ${opts.mod.name} has no source URL` }
+  }
+  if (isUnsupportedModArchiveFilename(opts.mod.name) || isUnsupportedModArchiveFilename(url)) {
+    return {
+      ok: false,
+      error: `${opts.mod.name}: 7z archives are not supported; use a ZIP archive or a direct mod file`,
+    }
   }
   // The archive is unpacked into a game folder: refuse a source that can be
   // rewritten in transit (plain http:// to a host outside the local network).
@@ -367,24 +386,56 @@ export async function stageModFromUrl(opts: {
     if (!response.ok) {
       return { ok: false, error: `mod download ${response.status} (${opts.mod.name})` }
     }
-    const buffer = await response.arrayBuffer()
-    const integrity = checkDownloadIntegrity(
-      buffer,
-      response.headers?.get?.('content-length') ?? null,
-      opts.mod.name,
+    const maxBytes = Math.max(
+      0,
+      Math.min(opts.maxBytes ?? MAX_MOD_PACK_DOWNLOAD_BYTES, MAX_MOD_PACK_DOWNLOAD_BYTES),
     )
-    if (integrity) {
-      return { ok: false, error: integrity }
+    const declaredLength = response.headers?.get?.('content-length') ?? null
+    const declared = declaredLength ? Number(declaredLength) : NaN
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      return {
+        ok: false,
+        error: `mod download for ${opts.mod.name} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MiB pack limit`,
+      }
+    }
+    if (!response.body) {
+      return { ok: false, error: `mod download for ${opts.mod.name} does not support bounded streaming` }
     }
     const modsDir = await getModsDir()
     const stageDir = resolveModStageDir(modsDir, opts.gameUuid, opts.mod.id)
     const filename = pickModFilename(url, opts.mod)
     const path = `${stageDir}/${filename}`
-    await invoke('write_file_bytes', {
-      path,
-      bytes: Array.from(new Uint8Array(buffer)),
-    })
-    return { ok: true, path }
+    await invoke('write_file_bytes', { path, bytes: [] })
+    let bytesReceived = 0
+    const reader = response.body.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!value?.byteLength) continue
+        for (let offset = 0; offset < value.byteLength; offset += MAX_TAURI_CHUNK_BYTES) {
+          const chunk = value.subarray(offset, Math.min(offset + MAX_TAURI_CHUNK_BYTES, value.byteLength))
+          bytesReceived += chunk.byteLength
+          if (bytesReceived > maxBytes) {
+            throw new Error(
+              `mod download for ${opts.mod.name} exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MiB pack limit`,
+            )
+          }
+          await invoke('append_file_bytes', { path, bytes: chunk })
+        }
+      }
+      if (bytesReceived === 0) {
+        throw new Error(`mod download for ${opts.mod.name} was empty`)
+      }
+      if (Number.isFinite(declared) && declared > 0 && bytesReceived < declared) {
+        throw new Error(`mod download for ${opts.mod.name} was short (${bytesReceived} of ${declared} bytes)`)
+      }
+      return { ok: true, path, bytes: bytesReceived }
+    } catch (error) {
+      await reader.cancel().catch(() => undefined)
+      await invoke('remove_path', { path }).catch(() => undefined)
+      throw error
+    }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -393,7 +444,10 @@ export async function stageModFromUrl(opts: {
 export async function applyStagedModToInstall(opts: {
   stagedPath: string
   installRoot: string
-}): Promise<{ ok: true; applied: number } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; applied: number; expandedBytes: number }
+  | { ok: false; error: string }
+> {
   if (!isTauriRuntime()) {
     return { ok: false, error: 'Companion runtime required to apply mods' }
   }
@@ -401,11 +455,11 @@ export async function applyStagedModToInstall(opts: {
     return { ok: false, error: 'Invalid install root' }
   }
   try {
-    const result = await invoke<{ applied: number }>('apply_staged_mod', {
+    const result = await invoke<{ applied: number; expandedBytes: number }>('apply_staged_mod', {
       sourcePath: opts.stagedPath,
       installRoot: opts.installRoot,
     })
-    return { ok: true, applied: result.applied }
+    return { ok: true, applied: result.applied, expandedBytes: result.expandedBytes }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -487,13 +541,48 @@ export async function kickoffApplyModPack(
     return { ok: false, error: 'Game is not installed locally — install first' }
   }
 
-  let appliedMods = 0
-  let filesApplied = 0
+  const stagedMods: Array<{ path: string }> = []
+  let downloadedBytes = 0
   for (const mod of enabled) {
-    const staged = await stageModFromUrl({ gameUuid, mod, fetchImpl: options.fetchImpl })
+    const staged = await stageModFromUrl({
+      gameUuid,
+      mod,
+      fetchImpl: options.fetchImpl,
+      maxBytes: MAX_MOD_PACK_DOWNLOAD_BYTES - downloadedBytes,
+    })
     if (!staged.ok) {
       return { ok: false, error: staged.error }
     }
+    downloadedBytes += staged.bytes
+    stagedMods.push({ path: staged.path })
+  }
+
+  let expandedBytes = 0
+  let entryCount = 0
+  for (const staged of stagedMods) {
+    const stats = await invoke<{ expandedBytes: number; entryCount: number }>(
+      'inspect_staged_mod',
+      { sourcePath: staged.path },
+    ).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }))
+    if ('error' in stats) {
+      return { ok: false, error: stats.error }
+    }
+    expandedBytes += stats.expandedBytes
+    entryCount += stats.entryCount
+    if (expandedBytes > MAX_MOD_PACK_EXPANDED_BYTES) {
+      return { ok: false, error: 'Mod pack exceeds the 4 GiB expanded-size limit; no files were applied' }
+    }
+    if (entryCount > MAX_MOD_PACK_ENTRIES) {
+      return {
+        ok: false,
+        error: `Mod pack exceeds the ${MAX_MOD_PACK_ENTRIES}-entry limit; no files were applied`,
+      }
+    }
+  }
+
+  let appliedMods = 0
+  let filesApplied = 0
+  for (const staged of stagedMods) {
     const applied = await applyStagedModToInstall({
       stagedPath: staged.path,
       installRoot: install.extractPath,

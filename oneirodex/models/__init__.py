@@ -4,10 +4,9 @@ Historically one ~2200-line ``oneirodex/models.py``; split by domain in
 wave A2.2. Every ``from oneirodex.models import X`` still resolves through
 the star re-exports below. Import order is for readability only -- all
 cross-domain relationships are string-form and resolve lazily at mapper
-configuration, and importing this package registers every table on
-``db.metadata`` exactly as the single module did.
+configuration. Model metadata is framework-independent so native routes can
+load mapped classes without importing Flask.
 """
-from oneirodex import db  # noqa: F401  -- re-export: `from oneirodex.models import db`
 from oneirodex.platform import LibraryPlatform  # noqa: F401  -- re-export (forms.py)
 
 from oneirodex.models._base import *  # noqa: F401,F403
@@ -28,4 +27,13 @@ from oneirodex.models.discover import __all__ as _discover_all
 from oneirodex.models.ownership import __all__ as _ownership_all
 from oneirodex.models.misc import __all__ as _misc_all
 
-__all__ = ["db", "LibraryPlatform"] + list(_base_all) + list(_catalog_all) + list(_users_all) + list(_library_all) + list(_social_all) + list(_discover_all) + list(_ownership_all) + list(_misc_all)
+__all__ = ["LibraryPlatform"] + list(_base_all) + list(_catalog_all) + list(_users_all) + list(_library_all) + list(_social_all) + list(_discover_all) + list(_ownership_all) + list(_misc_all)
+
+
+def __getattr__(name):
+    """Load the Flask extension only for legacy callers that request ``db``."""
+    if name == 'db':
+        from oneirodex import db
+
+        return db
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

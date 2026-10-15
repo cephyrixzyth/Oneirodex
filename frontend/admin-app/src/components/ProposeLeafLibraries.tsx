@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import { confirmAction, Button } from '@oneirodex/ui'
-import { PageStatus } from '@oneirodex/ui'
+import { confirmAction, Button, PageStatus } from '@oneirodex/ui'
 
 import { DataTable } from './DataTable'
 import {
@@ -170,9 +169,12 @@ export function ProposeLeafLibraries({
       </form>
 
       {unavailable ? (
-        <div className="od-propose-leaf__banner od-propose-leaf__banner--soft" role="status">
+        <PageStatus
+          announcement="status"
+          className={'od-propose-leaf__banner od-propose-leaf__banner--soft'}
+        >
           {error}
-        </div>
+        </PageStatus>
       ) : null}
 
       {/* The soft `unavailable` banner above and the live `status` line below
@@ -181,7 +183,7 @@ export function ProposeLeafLibraries({
       {!unavailable ? <PageStatus error={error} /> : null}
 
       {status ? (
-        <p className="od-propose-leaf__status" role="status" aria-live="polite">
+        <PageStatus announcement="status" className="od-propose-leaf__status">
           {status}
           {proposedRoot ? (
             <>
@@ -191,7 +193,7 @@ export function ProposeLeafLibraries({
               </span>
             </>
           ) : null}
-        </p>
+        </PageStatus>
       ) : null}
 
       {candidates.length > 0 ? (

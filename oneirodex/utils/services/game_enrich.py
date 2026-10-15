@@ -3,9 +3,8 @@
 Bodies moved verbatim from ``oneirodex/utils/game_core.py`` in wave A2.3.
 """
 import threading
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from sqlalchemy import select
-from flask import current_app
 from oneirodex.models import Game, Genre, GameMode, PlayerPerspective
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.metadata_enrichment import apply_enriched_metadata
@@ -276,6 +275,8 @@ def queue_post_identify_enrichment(
     cover_data=None,
     screenshots_data=None,
     app=None,
+    database_scope=None,
+    allowed_bases=None,
     run_inline=False,
     compute_folder_size=True,
 ):
@@ -285,74 +286,88 @@ def queue_post_identify_enrichment(
     Tests can pass run_inline=True.
     """
     if app is None:
+        from flask import current_app
+
         app = current_app._get_current_object()
 
     def _worker():
-        with app.app_context():
-            try:
-                game = db.session.execute(
-                    select(Game).filter_by(uuid=game_uuid)
-                ).scalar_one_or_none()
-                if not game:
-                    return
+        if database_scope:
+            # Native FastAPI scan workers own their SQLAlchemy session and do
+            # not need Flask's application context for enrichment persistence.
+            # Image processing below still has its own legacy context boundary.
+            with database_scope(app):
+                _run_enrichment()
+        else:
+            with app.app_context():
+                _run_enrichment()
 
-                if compute_folder_size and game.full_disk_path:
-                    try:
-                        size_bytes = get_folder_size_in_bytes_updates(game.full_disk_path)
-                        game.size = size_bytes
-                        db.session.commit()
-                        logger.info(
-                            f"Deferred folder size for {game.name}: {format_size(size_bytes)}"
-                        )
-                    except Exception as size_err:  # noqa: BLE001
-                        logger.info(f"Deferred folder size failed for {game_uuid}: {size_err}")
-                        try:
-                            db.session.rollback()
-                        except Exception:
-                            pass
-                        game = db.session.execute(
-                            select(Game).filter_by(uuid=game_uuid)
-                        ).scalar_one_or_none()
-                        if not game:
-                            return
+    def _run_enrichment():
+        try:
+            game = db.session.execute(
+                select(Game).filter_by(uuid=game_uuid)
+            ).scalar_one_or_none()
+            if not game:
+                return
 
+            if compute_folder_size and game.full_disk_path:
                 try:
-                    enrich_game_all_sources(game, lookup_name=game.name)
+                    size_bytes = get_folder_size_in_bytes_updates(
+                        game.full_disk_path, allowed_bases=allowed_bases,
+                    )
+                    game.size = size_bytes
                     db.session.commit()
-                except Exception as steam_err:  # noqa: BLE001
-                    logger.info(f"Deferred metadata enrichment failed for {game_uuid}: {steam_err}")
+                    logger.info(
+                        f"Deferred folder size for {game.name}: {format_size(size_bytes)}"
+                    )
+                except Exception as size_err:  # noqa: BLE001
+                    logger.info(f"Deferred folder size failed for {game_uuid}: {size_err}")
                     try:
                         db.session.rollback()
                     except Exception:
                         pass
+                    game = db.session.execute(
+                        select(Game).filter_by(uuid=game_uuid)
+                    ).scalar_one_or_none()
+                    if not game:
+                        return
 
-                try:
-                    smart_process_images_for_game(
-                        game_uuid,
-                        cover_data=cover_data,
-                        screenshots_data=screenshots_data,
-                        app=app,
-                        download_immediately=True,
-                    )
-                except Exception as img_err:  # noqa: BLE001
-                    logger.info(f"Deferred image processing failed for {game_uuid}: {img_err}")
-
-                if fetch_hltb:
-                    settings = global_settings_row()
-                    if settings and settings.enable_hltb_integration:
-                        try:
-                            from oneirodex.utils.hltb import update_game_hltb_sync
-
-                            update_game_hltb_sync(game_uuid, game.name)
-                        except Exception as hltb_err:  # noqa: BLE001
-                            logger.info(f"Deferred HLTB failed for {game_uuid}: {hltb_err}")
-            except Exception as enrich_err:  # noqa: BLE001
-                logger.info(f"Post-identify enrichment failed for {game_uuid}: {enrich_err}")
+            try:
+                enrich_game_all_sources(game, lookup_name=game.name)
+                db.session.commit()
+            except Exception as steam_err:  # noqa: BLE001
+                logger.info(f"Deferred metadata enrichment failed for {game_uuid}: {steam_err}")
                 try:
                     db.session.rollback()
                 except Exception:
                     pass
 
+            try:
+                smart_process_images_for_game(
+                    game_uuid,
+                    cover_data=cover_data,
+                    screenshots_data=screenshots_data,
+                    app=app,
+                    database_scope=database_scope,
+                    download_immediately=True,
+                )
+            except Exception as img_err:  # noqa: BLE001
+                logger.info(f"Deferred image processing failed for {game_uuid}: {img_err}")
+
+            if fetch_hltb:
+                settings = global_settings_row()
+                if settings and settings.enable_hltb_integration:
+                    try:
+                        from oneirodex.utils.hltb import update_game_hltb_sync
+
+                        update_game_hltb_sync(game_uuid, game.name)
+                    except Exception as hltb_err:  # noqa: BLE001
+                        logger.info(f"Deferred HLTB failed for {game_uuid}: {hltb_err}")
+        except Exception as enrich_err:  # noqa: BLE001
+            logger.info(f"Post-identify enrichment failed for {game_uuid}: {enrich_err}")
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
     if run_inline:
         _worker()
         return None

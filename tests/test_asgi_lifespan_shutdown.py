@@ -2,7 +2,7 @@
 
 import asyncio
 import signal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from asgi import LazyASGIApp
 from uvicorn.config import Config
@@ -12,6 +12,8 @@ from uvicorn.lifespan.on import LifespanOn
 def test_uvicorn_lifespan_stops_workers_on_shutdown_and_keeps_sigterm_handler():
     app = LazyASGIApp()
     app._ensure_flask = AsyncMock()
+    engine = Mock()
+    app._native_sqlalchemy_engine = engine
     original_sigterm = signal.getsignal(signal.SIGTERM)
 
     with (
@@ -29,4 +31,6 @@ def test_uvicorn_lifespan_stops_workers_on_shutdown_and_keeps_sigterm_handler():
 
     stop_workers.assert_called_once_with()
     request_shutdown.assert_called_once_with()
+    engine.dispose.assert_called_once_with()
+    assert app._native_sqlalchemy_engine is None
     assert signal.getsignal(signal.SIGTERM) == original_sigterm

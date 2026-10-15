@@ -73,6 +73,8 @@ For all three platforms in one go, use [`scripts/build-installers.sh`](../../scr
 
 Legacy plaintext `token` fields in `config.json` are migrated into the secure store on next load and scrubbed from the file. `KeychainAdapter` in `src/auth.ts` is wired via `src/keychain.ts` → Tauri `secure_store_*` commands.
 
+Both desktop build flavors apply a WebView Content Security Policy from their Tauri configuration. Scripts are limited to bundled app sources; objects and embedded frames are blocked. The policy allows the configured Oneirodex server connection and remote library images, so server URLs and cover art continue to work.
+
 ## Download & install pipeline
 
 The desktop client downloads **DRM-free library files from your Oneirodex server only** (no Steam/GOG acquisition).
@@ -93,7 +95,7 @@ Example (Windows):
 
 ### Server flow
 
-1. **Initiate:** `POST /api/downloads/games/<uuid>` (Bearer token) — mirrors web `/download_game/<uuid>` and returns `{ download_id, stream_url }`.
+1. **Initiate:** `POST /api/downloads/games/<uuid>` (Bearer token) returns `{ download_id, stream_url }`. Browser sessions use the same write endpoint with CSRF protection. The legacy `/download_game/<uuid>` and `/download_other/...` paths are POST-only; GET and HEAD return 405 without changing download state.
 2. **Stream:** `GET /download_zip/<download_id>` with the same Bearer token — same path the web UI uses after adding a game to the download basket.
 3. **Install:** extracts the local ZIP into `installs/<uuid>/` via a Rust `zip` command, shallow-searches for a likely `.exe`, and stores paths in `installs.json`.
 4. **Uninstall:** deletes the extract folder (and archive by default) and transitions lifecycle state.

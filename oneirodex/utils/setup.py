@@ -1,5 +1,5 @@
 # oneirodex/utils/setup.py
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import User
 from oneirodex.utils.global_settings import (
     global_settings_row,

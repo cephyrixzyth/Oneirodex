@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-Use before tagging a release (example: **v1.1.3**).
+Use before tagging a release; read the intended version from the root [`VERSION`](../../VERSION) file.
 
 ## Version bump
 
@@ -12,7 +12,7 @@ Use before tagging a release (example: **v1.1.3**).
 - [ ] `frontend/member-app`, `frontend/admin-app`, `frontend/ops-glance`, `frontend/api-client`, `frontend/shared` package versions (npm workspaces — the single root [`package-lock.json`](../../package-lock.json) is the only lockfile; there are no per-app lockfiles to bump)
 - [ ] Desktop `client_version` needs no edit — it is injected from `package.json` at build time (`__APP_VERSION__`)
 - [ ] Release installer set is still six verified bundles (full + thin × NSIS, macOS app/DMG, DEB and AppImage); `.msi` / `.rpm` remain disabled pending native-environment verification ([desktop-code-signing.md](desktop-code-signing.md))
-- [ ] `docker-compose.yml` image tag (`APP_IMAGE`, preferred Hub `cephyrixzyth/oneirodex:X.Y.Z`; local default `oneirodex:1.1.3`)
+- [ ] `docker-compose.yml` and `docker-compose.single.yml` image tags (`APP_IMAGE`, preferred Hub `cephyrixzyth/oneirodex:X.Y.Z`; local defaults must match root `VERSION`)
 - [ ] Root `README.md`, `docs/README.md`, active env examples, Unraid template/library path and project release snapshot
 
 ## CI (PR gate)
@@ -62,7 +62,8 @@ Alembic adoption, stamps pre-Alembic databases at the **baseline** revision
 (`b9ab856b09ff`, never `head`) then always runs `alembic upgrade head` so
 post-baseline revisions (for example scan-job schedule columns) apply without a
 manual operator step. Log lines: `Stamped existing schema at Alembic baseline`
-and `Alembic upgrade head complete`. `/readyz` green as before.
+and `Alembic upgrade head complete`. `/awake` returns readiness after database
+and startup initialization checks pass.
 
 ## Publish
 

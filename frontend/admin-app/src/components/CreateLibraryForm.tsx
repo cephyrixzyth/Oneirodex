@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
-import { getJson } from '../api/adminApi'
-import {
-  confirmCreateSelected,
-  type CandidateRow,
-  type LeafCreateResult,
-} from '../api/proposeLeafLibrariesApi'
+import { getJson, postForm } from '../api/adminApi'
+import { queueLeafScan } from '../api/proposeLeafLibrariesApi'
 import { errorText } from '../utils/errorText'
 import './CreateLibraryForm.css'
 
@@ -35,9 +31,11 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [platform, setPlatform] = useState('')
   const [scanMode, setScanMode] = useState<'folders' | 'files'>('folders')
   const [depth, setDepth] = useState<1 | 2>(1)
+  const [watch, setWatch] = useState('default')
+  const [image, setImage] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [result, setResult] = useState<LeafCreateResult | null>(null)
+  const [result, setResult] = useState<{ note?: string } | null>(null)
   const [browseOpen, setBrowseOpen] = useState(false)
   const [browseRoots, setBrowseRoots] = useState<BrowseRoot[]>([])
   const [browseRoot, setBrowseRoot] = useState('')
@@ -70,27 +68,38 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
     setBusy(true)
     setError('')
     setResult(null)
-    const candidate: CandidateRow = {
-      id: `manual:${path.trim()}`,
-      path: path.trim(),
-      suggested_name: name.trim(),
-      platform,
-      scan_mode: scanMode,
-      scan_depth: depth,
-      reason: 'Admin-created library',
-      source_index: 0,
-    }
+    let uuid = ''
     try {
-      const outcome = await confirmCreateSelected([candidate])
-      setResult(outcome.results[0] || null)
-      if (outcome.created > 0) {
-        setName('')
-        setPath('')
-        onCreated?.()
-      }
-      if (outcome.failed) setError(outcome.results[0]?.error || 'Library could not be created.')
+      const body = new FormData()
+      body.append('name', name.trim())
+      body.append('platform', platform)
+      body.append('scan_depth', String(depth))
+      body.append('watch_enabled', watch)
+      if (image) body.append('image', image, image.name)
+      const created = await postForm('/api/admin/libraries', body)
+      uuid = String(created.library_uuid || '')
+      if (!uuid) throw new Error('Library was created but its ID was not returned.')
     } catch (err) {
       setError(errorText(err) || 'Library could not be created.')
+      setBusy(false)
+      return
+    }
+
+    setName('')
+    setPath('')
+    setImage(null)
+    onCreated?.()
+    try {
+      const scan = await queueLeafScan({ uuid, path: path.trim(), scan_mode: scanMode })
+      if (!scan.ok) {
+        setError(`Library created, but the first scan could not be queued: ${scan.error}`)
+      } else {
+        setResult({ note: scan.data?.message || 'Library created and first scan queued.' })
+      }
+    } catch (err) {
+      setError(
+        `Library created, but first scan could not be queued: ${errorText(err) || 'request failed.'}`,
+      )
     } finally {
       setBusy(false)
     }
@@ -156,18 +165,20 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
         className="od-create-library__message od-create-library__message--error"
       />
       <form className="od-create-library__form" onSubmit={(event) => void submit(event)}>
-        <label>
+        <label className="od-admin-field">
           Library name
           <input
+            className="od-admin-input"
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
             autoComplete="off"
           />
         </label>
-        <label>
+        <label className="od-admin-field">
           Platform
           <select
+            className="od-admin-input"
             required
             value={platform}
             onChange={(event) => setPlatform(event.target.value)}
@@ -180,10 +191,11 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
             ))}
           </select>
         </label>
-        <label className="od-create-library__path">
+        <label className="od-admin-field od-create-library__path">
           Folder path inside the server
           <span className="od-create-library__path-row">
             <input
+              className="od-admin-input"
               required
               value={path}
               onChange={(event) => setPath(event.target.value)}
@@ -195,9 +207,10 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
             </Button>
           </span>
         </label>
-        <label>
+        <label className="od-admin-field">
           Folder layout
           <select
+            className="od-admin-input"
             value={scanMode}
             onChange={(event) => setScanMode(event.target.value as 'folders' | 'files')}
           >
@@ -205,12 +218,38 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
             <option value="files">Game files directly in this folder</option>
           </select>
         </label>
-        <label>
+        <label className="od-admin-field">
           Scan depth
-          <select value={depth} onChange={(event) => setDepth(Number(event.target.value) as 1 | 2)}>
+          <select
+            className="od-admin-input"
+            value={depth}
+            onChange={(event) => setDepth(Number(event.target.value) as 1 | 2)}
+          >
             <option value={1}>One folder deep</option>
             <option value={2}>Two folders deep</option>
           </select>
+        </label>
+        <label className="od-admin-field">
+          Update library when folders change
+          <select
+            className="od-admin-input"
+            value={watch}
+            onChange={(event) => setWatch(event.target.value)}
+          >
+            <option value="default">Follow global setting</option>
+            <option value="on">Prefer watch when the global switch is on</option>
+            <option value="off">Opt out</option>
+          </select>
+        </label>
+        <label className="od-admin-field">
+          Library image
+          <input
+            className="od-admin-input"
+            type="file"
+            accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"
+            onChange={(event) => setImage(event.currentTarget.files?.[0] || null)}
+          />
+          <span className="od-admin-hint">Optional; JPG, PNG, GIF, or WebP up to 10 MB.</span>
         </label>
         <div className="od-create-library__actions">
           <Button

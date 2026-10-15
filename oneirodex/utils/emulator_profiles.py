@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from flask import g, has_request_context
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.platform import (
     ARCADE_COMPANION_CORES,
@@ -13,6 +12,25 @@ from oneirodex.platform import (
     LibraryPlatform,
     platform_emulator_mapping,
 )
+
+
+def _request_cache(value=None, *, write=False, clear=False):
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        key = '_emulator_profiles_cache'
+        if clear:
+            if hasattr(g, key):
+                delattr(g, key)
+            return None
+        if write:
+            setattr(g, key, value)
+            return value
+        return getattr(g, key, None)
+    except ImportError:
+        return None
 
 
 def _allowed_cores(platform_key: str) -> set[str]:
@@ -35,8 +53,9 @@ def _global_settings() -> GlobalSettings | None:
 
 def get_emulator_profiles() -> dict[str, str]:
     """Return {platform_name: core_id} overrides from GlobalSettings."""
-    if has_request_context() and hasattr(g, '_emulator_profiles_cache'):
-        return g._emulator_profiles_cache
+    cached = _request_cache()
+    if cached is not None:
+        return cached
 
     settings = _global_settings()
     raw = getattr(settings, 'emulator_profiles', None) if settings else None
@@ -53,8 +72,7 @@ def get_emulator_profiles() -> dict[str, str]:
                 continue
             cleaned[platform] = core
 
-    if has_request_context():
-        g._emulator_profiles_cache = cleaned
+    _request_cache(cleaned, write=True)
     return cleaned
 
 
@@ -84,8 +102,7 @@ def set_emulator_profiles(profiles: dict[str, str | None]) -> dict[str, str]:
 
     settings.emulator_profiles = next_map
     db.session.commit()
-    if has_request_context() and hasattr(g, '_emulator_profiles_cache'):
-        delattr(g, '_emulator_profiles_cache')
+    _request_cache(clear=True)
     return next_map
 
 

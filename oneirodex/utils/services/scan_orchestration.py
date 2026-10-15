@@ -11,22 +11,11 @@ from threading import Thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
-from flask import current_app, flash, redirect, url_for, session, copy_current_request_context
-from oneirodex.utils.functions import (
-    load_scanning_filter_patterns,
-    load_skip_dir_patterns,
-    load_skip_dir_regex_patterns,
-)
 from oneirodex.models import (
     Game, Library, AllowedFileType, ScanJob, GlobalSettings, UnmatchedFolder
 )
 from oneirodex.utils.global_settings import global_settings_row
-from oneirodex import db
-from oneirodex.utils.game_core import remove_from_lib
-from oneirodex.utils.gamenames import get_game_names_from_folder, get_game_names_from_files
-from oneirodex.utils.scanning import process_game_with_fallback, process_game_updates, process_game_extras, process_pc_dlc_and_extra_roots, is_scan_job_running, bump_scan_job_progress
-from oneirodex.utils.igdb_api import IGDBRateLimiter
-from oneirodex.utils.security import is_safe_path, get_allowed_base_directories
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.utils.worker_caps import (
     clamp_scan_threads,
     cooperative_yield,
@@ -34,6 +23,7 @@ from oneirodex.utils.worker_caps import (
 )
 from oneirodex.utils.scan_match_settings import resolve_scan_match_policy
 import logging
+from contextlib import nullcontext
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +32,18 @@ SCHEDULE_HOURS = {
     '24_hours': 24,
     '48_hours': 48,
 }
+
+
+def _remove_scan_session():
+    """Clear whichever session implementation owns the active scan scope."""
+    scoped = db.session
+    remove = getattr(scoped, 'remove', None)
+    if callable(remove):
+        remove()
+    else:
+        # Native scopes expose a direct SQLAlchemy Session; close it to release
+        # its transaction/connection before the next scan operation.
+        scoped.close()
 
 
 def compute_next_run(
@@ -138,16 +140,20 @@ def resolve_scan_mode_for_path(folder_path, requested_mode='auto'):
     return 'folders'
 
 
-def _drain_scan_queue_safe():
+def _drain_scan_queue_safe(app=None, database_scope=None):
     """Best-effort FIFO promote after a scan leaves Running/Stopping."""
     try:
         from oneirodex.utils.scan_queue import drain_scan_queue
-        drain_scan_queue(current_app._get_current_object())
+        if app is None:
+            from flask import current_app
+
+            app = current_app._get_current_object()
+        drain_scan_queue(app, database_scope=database_scope)
     except Exception as drain_exc:
         logger.error(f"[SCAN QUEUE] Drain failed: {drain_exc}")
 
 
-def _fail_scan_job_and_drain(job_or_id, error_message):
+def _fail_scan_job_and_drain(job_or_id, error_message, app=None, database_scope=None):
     """Mark a job Failed (if still busy) and promote the next Queued scan."""
     try:
         job = job_or_id
@@ -165,19 +171,28 @@ def _fail_scan_job_and_drain(job_or_id, error_message):
                 db.session.rollback()
     except Exception as exc:
         logger.error(f"[SCAN QUEUE] fail-and-drain helper error: {exc}")
-    _drain_scan_queue_safe()
+    _drain_scan_queue_safe(app, database_scope)
 
 
-def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remove_missing=False, existing_job=None, download_missing_images=False, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, schedule=None, force_parallel=False):
+def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remove_missing=False, existing_job=None, download_missing_images=False, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, schedule=None, force_parallel=False, database_scope=None, app=None):
     # Only check for running jobs if we're not restarting/resuming an existing job
     # Prefer start_or_queue_scan() at call sites so second requests queue instead of dropping.
     # force_parallel=True (admin opt-in) allows overlapping jobs; still respects thread caps.
-    if not existing_job and is_scan_job_running() and not force_parallel:
+    running_scan = (
+        db.session.execute(select(ScanJob).filter_by(status='Running')).first()
+        if not existing_job and not force_parallel else None
+    )
+    if running_scan is not None:
         logger.info(
             "A scan is already in progress. Request dropped at worker entry — "
             "callers should use start_or_queue_scan() so the request is queued."
         )
         return
+
+    if app is None:
+        from flask import current_app
+
+        app = current_app._get_current_object()
 
     scan_job_id = getattr(existing_job, 'id', None)
     try:
@@ -193,6 +208,8 @@ def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remo
             force_hltb_refetch=force_hltb_refetch,
             schedule=schedule,
             force_parallel=force_parallel,
+            database_scope=database_scope,
+            app=app,
         )
         if body_job_id:
             scan_job_id = body_job_id
@@ -210,7 +227,7 @@ def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remo
             except Exception:
                 pass
         if scan_job_id:
-            _fail_scan_job_and_drain(scan_job_id, f'Scan crashed: {exc}')
+            _fail_scan_job_and_drain(scan_job_id, f'Scan crashed: {exc}', app, database_scope)
         raise
     finally:
         # Safety net: never leave *this* job Running/Stopping forever (blocks FIFO).
@@ -231,13 +248,26 @@ def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remo
                         f"[SCAN QUEUE] Safety-net Failed for stuck job {leftover.id} "
                         f"(was still {prior})"
                     )
-                    _drain_scan_queue_safe()
+                    _drain_scan_queue_safe(app, database_scope)
             except Exception as safety_exc:
                 logger.error(f"[SCAN QUEUE] Safety-net drain failed: {safety_exc}")
 
 
-def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None, remove_missing=False, existing_job=None, download_missing_images=False, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, schedule=None, force_parallel=False):
+def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None, remove_missing=False, existing_job=None, download_missing_images=False, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, schedule=None, force_parallel=False, database_scope=None, app=None):
     """Core scan worker. Returns ScanJob id when known."""
+    from oneirodex.utils.functions import (
+        load_scanning_filter_patterns,
+        load_skip_dir_patterns,
+        load_skip_dir_regex_patterns,
+    )
+    from oneirodex.utils.gamenames import get_game_names_from_folder, get_game_names_from_files
+    from oneirodex.utils.scanning import (
+        process_game_with_fallback, process_game_updates, process_game_extras,
+        process_pc_dlc_and_extra_roots, bump_scan_job_progress,
+    )
+    from oneirodex.utils.igdb_api import IGDBRateLimiter
+    from oneirodex.utils.security import is_safe_path
+    from oneirodex.utils.game_core import remove_from_lib
     scan_job_entry = None
     # Cache settings once at the start of scan
     settings_obj = global_settings_row()
@@ -367,7 +397,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             db.session.commit()
         except SQLAlchemyError as e:
             logger.error(f"Database error when updating ScanJob with error: {str(e)}")
-        _drain_scan_queue_safe()
+        _drain_scan_queue_safe(app, database_scope)
         return job_id
 
     allowed_extensions = [
@@ -386,7 +416,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             db.session.commit()
         except SQLAlchemyError as e:
             logger.error(f"Database error when updating ScanJob with error: {str(e)}")
-        _drain_scan_queue_safe()
+        _drain_scan_queue_safe(app, database_scope)
         return job_id
 
     logger.info(
@@ -404,7 +434,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             db.session.commit()
         except SQLAlchemyError as e:
             logger.error(f"Database error when updating ScanJob with error: {str(e)}")
-        _drain_scan_queue_safe()
+        _drain_scan_queue_safe(app, database_scope)
         return job_id
 
     # Load patterns before they are used
@@ -437,10 +467,10 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         scan_job_entry.error_message = str(e)
         db.session.commit()
         logger.error(f"Error during pattern loading or game name extraction: {str(e)}")
-        _drain_scan_queue_safe()
+        _drain_scan_queue_safe(app, database_scope)
         return job_id
 
-    def process_single_game(game_info, scan_job_id, library_uuid, update_folder_name, extras_folder_name, enable_game_updates, enable_game_extras, existing_game_paths, existing_unmatched_paths, igdb_rate_limiter, app, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, settings=None):
+    def process_single_game(game_info, scan_job_id, library_uuid, update_folder_name, extras_folder_name, enable_game_updates, enable_game_extras, existing_game_paths, existing_unmatched_paths, igdb_rate_limiter, app, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, settings=None, database_scope=None):
         """Process a single game with rate limiting and thread-safe database operations."""
         game_name = game_info['name']
         full_disk_path = game_info['full_path']
@@ -462,7 +492,8 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 logger.info(f"Force HLTB refetch enabled, will update HLTB data for existing game: {game_name}")
 
             if not should_process_existing:
-                with app.app_context():
+                app_scope = app.app_context() if database_scope is None else nullcontext()
+                with app_scope, (database_scope(app) if database_scope else nullcontext()):
                     from oneirodex.utils.library_health import (
                         clear_restored_missing_path_status,
                     )
@@ -482,8 +513,10 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             logger.info(f"Folder already logged as unmatched (cached): {full_disk_path}")
             return {'game_name': game_name, 'success': False, 'already_unmatched': True}
         
-        # Ensure we have a Flask app context for database operations
-        with app.app_context():
+        # Native ASGI workers receive explicit app/config and a scoped native
+        # session. Preserve Flask context setup for legacy worker entry points.
+        app_scope = app.app_context() if database_scope is None else nullcontext()
+        with app_scope, (database_scope(app) if database_scope else nullcontext()):
             try:
                 # Use rate limiter for IGDB API calls
                 igdb_rate_limiter.acquire()
@@ -493,7 +526,12 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                         success = True
                         logger.warning(f"Skipping game processing for existing game in force mode: {game_name}")
                     else:
-                        success = process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_uuid, fetch_hltb=fetch_hltb, settings=settings)
+                        success = process_game_with_fallback(
+                            game_name, full_disk_path, scan_job_id, library_uuid,
+                            fetch_hltb=fetch_hltb, settings=settings,
+                            app=app if database_scope is not None else None,
+                            database_scope=database_scope,
+                        )
                     
                     result['success'] = success
                     
@@ -570,7 +608,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                     pass
             finally:
                 # Drop worker-bound session state so threads do not share a dirty Session.
-                db.session.remove()
+                _remove_scan_session()
                 
         return result
     
@@ -582,7 +620,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         # Multithreaded processing — bounded queue (chunked submit) + hard thread cap.
         logger.info(f"Using multithreaded scanning with {scan_thread_count} threads (capped)")
         processed_count = 0
-        app_obj = current_app._get_current_object()
+        app_obj = app
         chunk_size = max(scan_thread_count * 2, scan_thread_count)
         with ThreadPoolExecutor(max_workers=scan_thread_count) as executor:
             for chunk in iter_chunks(game_names_with_paths, chunk_size):
@@ -606,6 +644,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                         fetch_hltb,
                         force_hltb_refetch,
                         settings_dict,
+                        database_scope,
                     ): game_info
                     for game_info in chunk
                 }
@@ -614,7 +653,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 # cancelling pending work and draining in-flight results (do not return early).
                 for future in as_completed(future_to_game):
                     # Discard any worker-touched session state on the coordinator thread.
-                    db.session.remove()
+                    _remove_scan_session()
 
                     if future.cancelled():
                         continue
@@ -700,7 +739,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                         # Keep draining as_completed so in-flight results still bump counters
 
             # Finalize cancel after all futures settled (executor context waits on exit too)
-            db.session.remove()
+            _remove_scan_session()
             scan_job_entry = db.session.get(ScanJob, scan_job_id)
             if scan_was_cancelled and scan_job_entry:
                 scan_job_entry.status = 'Cancelled'
@@ -712,9 +751,9 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
     else:
         # Use the same processor as the pool: thread count must not change
         # force-refresh behavior. Each call owns its app context/session too.
-        app_obj = current_app._get_current_object()
+        app_obj = app
         for processed_count, game_info in enumerate(game_names_with_paths, start=1):
-            db.session.remove()
+            _remove_scan_session()
             scan_job_entry = db.session.get(ScanJob, scan_job_id)
             from oneirodex.utils.shutdown import should_continue_processing
             if not scan_job_entry or not scan_job_entry.is_enabled or not should_continue_processing():
@@ -731,7 +770,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 extras_folder_name, enable_game_updates, enable_game_extras,
                 existing_game_paths, existing_unmatched_paths, igdb_rate_limiter,
                 app_obj, force_updates_extras_scan, fetch_hltb, force_hltb_refetch,
-                settings_dict,
+                settings_dict, database_scope,
             )
             bump_scan_job_progress(
                 scan_job_id, success=bool(result.get('success')),
@@ -744,7 +783,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 db.session.commit()
             cooperative_yield()
 
-    db.session.remove()
+    _remove_scan_session()
     scan_job_entry = db.session.get(ScanJob, scan_job_id)
     if not scan_job_entry:
         return scan_job_id
@@ -765,7 +804,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
     if scan_was_cancelled:
         # Counters already finalized; skip Completed / remove_missing / image pass
         logger.warning(f"Scan cancelled for folder: {folder_path} with ScanJob ID: {scan_job_id}")
-        _drain_scan_queue_safe()
+        _drain_scan_queue_safe(app, database_scope)
         return scan_job_id
 
     if scan_job_entry.status != 'Failed':
@@ -827,7 +866,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         logger.info("🔍 Download missing images option enabled - checking for missing images...")
         try:
             from oneirodex.utils.game_core import process_missing_images_for_scan
-            result = process_missing_images_for_scan(library_uuid, current_app._get_current_object())
+            result = process_missing_images_for_scan(library_uuid, app)
             
             if result.get('success'):
                 message = f"Missing images scan: {result['message']}"
@@ -860,11 +899,14 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         logger.error(f"Database error when finalizing ScanJob: {str(e)}")
 
     # FIFO: promote next Queued scan once this job is no longer Running/Stopping.
-    _drain_scan_queue_safe()
+    _drain_scan_queue_safe(app, database_scope)
     return scan_job_id
 
 
 def handle_auto_scan(auto_form):
+    from flask import current_app, flash, redirect, session, url_for
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+
     logger.info("handle_auto_scan: function running.")
     logger.info(f"Auto-scan form data: {auto_form.data}")
     library_uuid = auto_form.library_uuid.data
@@ -974,6 +1016,15 @@ def handle_auto_scan(auto_form):
 
 
 def handle_manual_scan(manual_form):
+    from flask import current_app, flash, redirect, session, url_for
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+    from oneirodex.utils.functions import (
+        load_scanning_filter_patterns,
+        load_skip_dir_patterns,
+        load_skip_dir_regex_patterns,
+    )
+    from oneirodex.utils.gamenames import get_game_names_from_folder, get_game_names_from_files
+
     session['active_tab'] = 'manual'
     library_uuid = manual_form.library_uuid.data
     if manual_form.validate_on_submit():

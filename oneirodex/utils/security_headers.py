@@ -9,20 +9,25 @@ Two callers, because Oneirodex serves responses from two places:
   never reaches Flask (see the comment there — the bridge breaks under
   concurrent asset loads).
 
-Flask pages enforce CSP by default (``CSP_ENFORCE=true``). Executable inline
-``<script>`` and inline event handlers (``onclick=``) are gone from Jinja
-(ratchets in ``tests/test_no_inline_scripts.py``). The WebRetro player is a
+Flask responses enforce CSP by default (``CSP_ENFORCE=true``). Executable inline
+``<script>`` and inline event handlers (``onclick=``) remain prohibited in
+application-authored HTML shells (ratchets in ``tests/test_no_inline_scripts.py``).
+The WebRetro player is a
 static document under ``/static/*`` and therefore gets the baseline only — no
 CSP — so Flask ``script-src`` does not need ``'unsafe-eval'`` / ``'wasm-unsafe-eval'``.
-``style-src`` still allows ``'unsafe-inline'`` for the many ``style=`` attributes
-on classic templates.
+``style-src`` still allows ``'unsafe-inline'`` for styles used by the shell and
+legacy standalone documents.
 
 Set ``CSP_ENFORCE=false`` to report without blocking.
 """
 
 from __future__ import annotations
 
-from flask import Flask, Response
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from flask import Flask, Response
 
 # Sent on every response, Flask and static alike. None of these have a
 # compatibility cost for this app.
@@ -97,33 +102,35 @@ def baseline_static_headers() -> list[tuple[bytes, bytes]]:
     ]
 
 
+def security_header_values(config: Mapping[str, object]) -> dict[str, str]:
+    """Return the shared security headers for a Flask or native ASGI response."""
+    values = dict(BASELINE_HEADERS)
+    values['Permissions-Policy'] = PERMISSIONS_POLICY
+    if config.get('CSP_ENABLED', True):
+        key = (
+            'Content-Security-Policy'
+            if config.get('CSP_ENFORCE', True)
+            else 'Content-Security-Policy-Report-Only'
+        )
+        values[key] = build_csp()
+
+    # HSTS is meaningless over plain HTTP and actively hostile on a LAN box
+    # reached by IP, so it follows the same signal the secure cookie does.
+    hsts_seconds = int(config.get('HSTS_SECONDS') or 0)
+    if config.get('SESSION_COOKIE_SECURE') and hsts_seconds > 0:
+        values['Strict-Transport-Security'] = (
+            f'max-age={hsts_seconds}; includeSubDomains'
+        )
+    return values
+
+
 def apply_security_headers(app: Flask) -> None:
     """Register the ``after_request`` that stamps every Flask response."""
 
-    csp_enforce = bool(app.config.get('CSP_ENFORCE', True))
-    csp_enabled = bool(app.config.get('CSP_ENABLED', True))
-    # HSTS is meaningless over plain HTTP and actively hostile on a LAN box
-    # reached by IP, so it follows the same signal the secure cookie does.
-    hsts_seconds = int(app.config.get('HSTS_SECONDS') or 0)
-    hsts_enabled = bool(app.config.get('SESSION_COOKIE_SECURE')) and hsts_seconds > 0
-
-    csp_header = (
-        'Content-Security-Policy'
-        if csp_enforce
-        else 'Content-Security-Policy-Report-Only'
-    )
-    csp_value = build_csp() if csp_enabled else None
+    header_values = security_header_values(app.config)
 
     @app.after_request
     def _set_security_headers(response: Response) -> Response:
-        for key, value in BASELINE_HEADERS.items():
+        for key, value in header_values.items():
             response.headers.setdefault(key, value)
-        response.headers.setdefault('Permissions-Policy', PERMISSIONS_POLICY)
-        if csp_value:
-            response.headers.setdefault(csp_header, csp_value)
-        if hsts_enabled:
-            response.headers.setdefault(
-                'Strict-Transport-Security',
-                f'max-age={hsts_seconds}; includeSubDomains',
-            )
         return response

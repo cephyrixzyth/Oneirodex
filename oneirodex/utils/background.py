@@ -58,9 +58,10 @@ def run_in_background(
     func: Callable[..., Any],
     *args: Any,
     name: str | None = None,
+    database_scope=None,
     **kwargs: Any,
 ) -> Thread:
-    """Run ``func(*args, **kwargs)`` on a daemon thread in its own app context.
+    """Run a daemon task with an isolated native DB scope or legacy app context.
 
     :param app: the real application object — ``current_app._get_current_object()``
         from inside a request. The proxy itself is bound to the calling
@@ -72,12 +73,7 @@ def run_in_background(
     """
 
     def _worker() -> None:
-        # Imported here rather than at module scope: this module is imported by
-        # route modules, and `oneirodex` imports those, so a top-level import
-        # would close a cycle.
-        from oneirodex import db
-
-        with app.app_context():
+        def invoke(*, legacy_database=None):
             try:
                 func(*args, **kwargs)
             except Exception:
@@ -89,10 +85,21 @@ def run_in_background(
                     name or getattr(func, '__name__', repr(func)),
                 )
             finally:
-                # The app context teardown does this too; doing it here states
-                # that the session was this worker's to dispose of, and keeps
-                # the guarantee if the context is ever pushed by a caller.
-                db.session.remove()
+                if legacy_database is not None:
+                    # Flask's app context teardown also removes this scoped
+                    # session; doing it here makes worker ownership explicit.
+                    legacy_database.session.remove()
+
+        if database_scope is None:
+            # Imported here rather than at module scope so the native worker
+            # path does not load Flask or Jinja.
+            from oneirodex.runtime_native.db_session import native_db as db
+
+            with app.app_context():
+                invoke(legacy_database=db)
+        else:
+            with database_scope(app):
+                invoke()
 
     thread = Thread(target=_worker, daemon=True, name=name)
     thread.start()

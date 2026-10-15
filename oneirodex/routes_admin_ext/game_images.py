@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime
 
 from flask import (
-    abort, current_app, flash, jsonify, redirect, render_template, request,
+    abort, current_app, flash, jsonify, redirect, request,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -39,6 +39,7 @@ from oneirodex import cache, db
 from oneirodex.models import Game, Image
 from oneirodex.schemas.admin_game_images import DeleteGameImageBody
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.background import run_in_background
 from oneirodex.utils.gamenames import get_game_name_by_uuid
@@ -62,23 +63,8 @@ logger = logging.getLogger(__name__)
 def edit_game_images(game_uuid):
     if is_scan_job_running():
         flash('A scan is running. Image editing is available again as soon as it finishes.', 'warning')
-    game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalar_one_or_none() or abort(404)
-    cover_image = db.session.execute(select(Image).filter_by(game_uuid=game_uuid, image_type='cover')).scalars().first()
-    screenshots = db.session.execute(select(Image).filter_by(game_uuid=game_uuid, image_type='screenshot')).scalars().all()
-    other_images = db.session.execute(
-        select(Image).filter(
-            Image.game_uuid == game_uuid,
-            Image.image_type.in_(['box', 'cart', 'disc', 'logo', 'hero', 'fanart']),
-        )
-    ).scalars().all()
-    return render_template(
-        'games/game_edit_images.html',
-        game=game,
-        cover_image=cover_image,
-        images=screenshots,
-        other_images=other_images,
-        allowed_kinds=list(IMAGE_KIND_ORDER),
-    )
+    db.session.execute(select(Game.id).filter_by(uuid=game_uuid)).scalar_one_or_none() or abort(404)
+    return render_admin_spa(title='Edit artwork - Oneirodex Admin')
 
 
 # Per-upload ceiling for game artwork. The global MAX_CONTENT_LENGTH in config

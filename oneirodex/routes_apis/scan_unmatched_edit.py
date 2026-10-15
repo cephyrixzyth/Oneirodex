@@ -25,7 +25,7 @@ from oneirodex.schemas.scan import PlaceUnmatchedUpdateBody
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.routes_apis.scan_unmatched import UNMATCHED_BATCH_ID_CAP, VALID_DUPLICATE_FIX_ACTIONS
-from oneirodex.routes_apis.scan_unmatched_rows import _effective_search_name, _soft_name
+from oneirodex.utils.scan_unmatched_rows import _effective_search_name, _soft_name
 from . import apis_bp
 
 

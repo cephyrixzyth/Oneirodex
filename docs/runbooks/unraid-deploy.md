@@ -91,7 +91,7 @@ To put the app on HTTPS:
 
 1. Pick a hostname (LAN DNS or public) and terminate TLS on a reverse proxy (npm / Swag / Caddy / Unraid extra nginx).
 2. Proxy to `http://127.0.0.1:5006` with `X-Forwarded-Proto: https` — [oidc-sso.md § reverse proxy](oidc-sso.md#6-reverse-proxy-and-https).
-3. Set `TRUSTED_PROXIES=1`, `SESSION_COOKIE_SECURE=true`, and Admin **Site URL** to the `https://…` base.
+3. Set `TRUSTED_PROXIES=1`, allowlist the proxy's source IP/CIDR in `TRUSTED_PROXY_CIDRS`, set `SESSION_COOKIE_SECURE=true`, and set Admin **Site URL** to the `https://…` base.
 
 The Compose default keeps both authentication cookies `Secure`. For direct
 HTTP on a trusted LAN, setting both cookie flags to `false` restores browser
@@ -151,7 +151,7 @@ Admin short form: [libraries-and-scans.md](../admin/libraries-and-scans.md#conso
 
 ## Image
 
-Local build tag `oneirodex:1.1.3` (Compose default). Hub image: `cephyrixzyth/oneirodex` — set `APP_IMAGE`. The image includes `bash` for `entrypoint.sh`. Live stacks still named `oneirodex-app` pin `APP_CONTAINER_NAME` until the scan FIFO is idle.
+Local build tag follows the root `VERSION` file (`oneirodex:1.1.9` at this revision). Hub image: `cephyrixzyth/oneirodex` — set `APP_IMAGE`. The image includes `bash` for `entrypoint.sh`. Live stacks still named `oneirodex-app` pin `APP_CONTAINER_NAME` until the scan FIFO is idle.
 
 ## Compose Manager paths
 

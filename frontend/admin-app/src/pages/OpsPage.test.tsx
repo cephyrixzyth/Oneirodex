@@ -1,7 +1,15 @@
 import { vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { formatScanJobCounters, OpsPage } from './OpsPage'
+import {
+  formatScanJobCounters,
+  livekitLabel,
+  livekitTone,
+  malwareLabel,
+  malwareTone,
+  OpsPage,
+} from './OpsPage'
+import { DetailPanel, formatDetailValue } from './ops/opsColumns'
 
 describe('formatScanJobCounters', () => {
   test('uses processed (success+failed) over success-only', () => {
@@ -195,6 +203,134 @@ function mockOpsSummary(overrides = {}) {
     ...overrides,
   }
 }
+
+test('Ops status stays neutral until its first summary loads', async () => {
+  let resolveSummary!: (response: any) => void
+  globalThis.fetch = vi.fn((url) => {
+    if (String(url).includes('/admin/api/ops/summary')) {
+      return new Promise((resolve) => {
+        resolveSummary = resolve
+      }) as any
+    }
+    const ancillary = ancillaryOpsResponse(url)
+    if (ancillary) return Promise.resolve(ancillary as any)
+    throw new Error(`unexpected fetch ${url}`)
+  }) as unknown as typeof globalThis.fetch
+
+  render(<OpsPage />)
+
+  const status = screen.getByLabelText('System status')
+  expect(status).toHaveTextContent('Checking health…')
+  expect(status).toHaveAttribute('aria-busy', 'true')
+  expect(status).not.toHaveTextContent('All systems healthy')
+
+  resolveSummary({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    text: async function () {
+      return JSON.stringify(await this.json())
+    },
+    json: async () => ({ ...mockOpsSummary(), issues: { overall: 'good', items: [] } }),
+  })
+  expect(await screen.findByText('All systems healthy')).toBeInTheDocument()
+})
+
+test('Ops status stays unavailable after the first summary fails', async () => {
+  globalThis.fetch = vi.fn((url) => {
+    if (String(url).includes('/admin/api/ops/summary')) {
+      return Promise.reject(new Error('summary offline')) as any
+    }
+    const ancillary = ancillaryOpsResponse(url)
+    if (ancillary) return Promise.resolve(ancillary as any)
+    throw new Error(`unexpected fetch ${url}`)
+  }) as unknown as typeof globalThis.fetch
+
+  render(<OpsPage />)
+
+  const status = screen.getByLabelText('System status')
+  expect(status).toHaveTextContent('Checking health…')
+  expect(await screen.findByText('Health status unavailable')).toBeInTheDocument()
+  expect(status).not.toHaveTextContent('All systems healthy')
+})
+
+test('Ops detail values format known records and avoid object or secret dumps', () => {
+  expect(
+    formatDetailValue('config_item', {
+      path: '/app/data',
+      exists: true,
+      read: true,
+      write: false,
+    }),
+  ).toBe('/app/data · exists · readable · read-only')
+  expect(
+    formatDetailValue('latest', {
+      id: 'private-id',
+      timestamp: '2026-10-15T00:00:00Z',
+      level: 'error',
+      type: 'scan',
+      text: 'Scan failed',
+      token: 'must-not-appear',
+    }),
+  ).toBe('2026-10-15T00:00:00Z · error · scan · Scan failed')
+  expect(formatDetailValue('other', { token: 'must-not-appear' })).toBe('Details available')
+  render(<DetailPanel title="Configuration" values={{ nested: { token: 'must-not-appear' } }} />)
+  expect(screen.getByRole('heading', { name: 'Configuration' })).toBeInTheDocument()
+  expect(screen.getByRole('table')).toHaveTextContent('Details available')
+  expect(screen.queryByText('[object Object]')).not.toBeInTheDocument()
+  expect(screen.queryByText('must-not-appear')).not.toBeInTheDocument()
+})
+
+test('OpsPage presents known service state and keeps missing service fields neutral', async () => {
+  const base = mockOpsSummary()
+  globalThis.fetch = vi.fn(async (url) => {
+    if (String(url).includes('/admin/api/ops/summary')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async function () {
+          return JSON.stringify(await this.json())
+        },
+        json: async () => ({
+          ...base,
+          services: {
+            ...base.services,
+            livekit: { enabled: true, configured: false },
+            malware: {},
+          },
+        }),
+      }
+    }
+    const ancillary = ancillaryOpsResponse(url)
+    if (ancillary) return ancillary
+    throw new Error(`unexpected fetch ${url}`)
+  }) as unknown as typeof globalThis.fetch
+
+  render(<OpsPage />)
+
+  expect(await screen.findByRole('heading', { name: 'Services' })).toBeInTheDocument()
+  const livekit = screen.getByText('enabled · incomplete configuration')
+  expect(livekit).toHaveClass('od-ops-service-status--warn')
+  const malware = screen.getByText('unavailable')
+  expect(malware).toHaveClass('od-ops-service-status--na')
+})
+
+test('service state labels distinguish explicit disabled, unavailable, and negative observations', () => {
+  expect(livekitLabel({ enabled: false })).toBe('off')
+  expect(livekitTone({ enabled: false })).toBe('na')
+  expect(livekitLabel({ enabled: true, configured: false })).toContain('incomplete configuration')
+  expect(livekitTone({ enabled: true, configured: false })).toBe('warn')
+  expect(livekitLabel({ enabled: true, configured: true, reachable: null })).toBe(
+    'reachability unavailable',
+  )
+  expect(livekitTone({ enabled: true, configured: true, reachable: null })).toBe('na')
+  expect(malwareLabel({})).toBe('unavailable')
+  expect(malwareTone({})).toBe('na')
+  expect(malwareLabel({ enabled: false })).toBe('off')
+  expect(malwareLabel({ enabled: true, clamav_reachable: null })).toContain('status unavailable')
+  expect(malwareTone({ enabled: true, clamav_reachable: null })).toBe('na')
+})
 
 test('OpsPage shows library health score and top factors when present', async () => {
   globalThis.fetch = vi.fn(async (url) => {

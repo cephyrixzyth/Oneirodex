@@ -1,8 +1,6 @@
 import logging
-from flask import flash, redirect, url_for, session, request
-from flask_login import current_user
 from sqlalchemy.exc import SQLAlchemyError
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import UnmatchedFolder
 from oneirodex.utils.event_logging import log_system_event
 from sqlalchemy import select, delete, func
@@ -16,6 +14,9 @@ def handle_delete_unmatched(all):
     Args:
         all (bool): If True, delete all unmatched folders. If False, delete only 'Unmatched' status folders.
     """
+    from flask import flash, redirect, request, session, url_for
+    from flask_login import current_user
+
     user_info = f"{current_user.name} ({current_user.role})" if current_user.is_authenticated else "Unknown"
     operation_type = "all unmatched folders" if all else "unmatched folders with status 'Unmatched'"
     

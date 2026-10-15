@@ -59,22 +59,12 @@ def safe_next_url(next_page, *, fallback_endpoint='discover.discover'):
         return fallback
     return candidate
 
-_BURN_HASH = None
-
-
 def burn_password_check(password) -> None:
     """Spend the same argon2 time on an unknown username as on a known one,
     so response time does not reveal which usernames exist."""
-    global _BURN_HASH
-    from argon2.exceptions import VerifyMismatchError
-    from oneirodex.models.users import ph
+    from oneirodex.utils.password_checks import burn_password_check as check
 
-    if _BURN_HASH is None:
-        _BURN_HASH = ph.hash('not-a-real-password')
-    try:
-        ph.verify(_BURN_HASH, password or '')
-    except VerifyMismatchError:
-        pass
+    check(password)
 
 
 def sign_in_and_redirect(user):

@@ -5,13 +5,12 @@ The implicit module-global ``settings`` written by ``create_game_instance``
 (``global settings``) lives here, exactly as it did in game_core.
 """
 from datetime import datetime, UTC
-from flask import flash, current_app, abort, has_request_context
 import os, uuid
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     Game, Image, Library, GlobalSettings,
     Developer, Publisher, Genre, Theme, GameMode, Platform,
@@ -26,13 +25,6 @@ from oneirodex.utils.helpers.fs import (
 from oneirodex.utils.helpers.counts import delete_associations_for_game
 from oneirodex.utils.helpers.urls import website_category_to_string
 from oneirodex.utils.helpers.platforms import igdb_platform_id_for
-from oneirodex.utils.clients.images import (
-    download_image, download_stored_image, cover_title_for_uuid,
-)
-from oneirodex.utils.clients.igdb import (
-    search_igdb_for_game, fetch_game_by_igdb_id, fetch_and_store_game_urls,
-)
-from oneirodex.utils.igdb_api import make_igdb_api_request
 from oneirodex.utils.gamenames import generate_goty_variants
 from oneirodex.utils.fandom_alias import (
     fandom_match_reason,
@@ -69,7 +61,6 @@ from oneirodex.utils.secondary_scrapers import (
     fetch_steam_data, game_indicates_vr, normalize_perspective_name, VR_PERSPECTIVE_NAME
 )
 from oneirodex.utils.metadata_enrichment import apply_enriched_metadata
-from oneirodex.utils.notifications import notify_admins_new_game
 from oneirodex.utils.scanning import log_unmatched_folder, delete_game_images
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.duplicate_check import (
@@ -104,6 +95,36 @@ from oneirodex.utils.services.image_pipeline import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def search_igdb_for_game(*args, **kwargs):
+    from oneirodex.utils.clients.igdb import search_igdb_for_game as search
+
+    return search(*args, **kwargs)
+
+
+def fetch_game_by_igdb_id(*args, **kwargs):
+    from oneirodex.utils.clients.igdb import fetch_game_by_igdb_id as fetch
+
+    return fetch(*args, **kwargs)
+
+
+def fetch_and_store_game_urls(*args, **kwargs):
+    from oneirodex.utils.clients.igdb import fetch_and_store_game_urls as store
+
+    return store(*args, **kwargs)
+
+
+def make_igdb_api_request(*args, **kwargs):
+    from oneirodex.utils.igdb_api import make_igdb_api_request as request
+
+    return request(*args, **kwargs)
+
+
+def notify_admins_new_game(*args, **kwargs):
+    from oneirodex.utils.notifications import notify_admins_new_game as notify
+
+    return notify(*args, **kwargs)
 
 __all__ = [
     "handle_existing_igdb_collision",
@@ -538,6 +559,9 @@ def retrieve_and_save_game(
     fetch_hltb=False,
     settings=None,
     defer_enrichment=None,
+    app=None,
+    database_scope=None,
+    allowed_bases=None,
 ):
     # print(f"retrieve_and_save_game Retrieving and saving game: {game_name} on {full_disk_path} to library with UUID {library_uuid}.")
     from oneirodex.utils.local_metadata import read_local_metadata
@@ -545,6 +569,13 @@ def retrieve_and_save_game(
     # Scan workers pass scan_job_id — defer Steam/images/HLTB so identify commits fast.
     if defer_enrichment is None:
         defer_enrichment = scan_job_id is not None
+    worker_scope_kwargs = {}
+    if app is not None:
+        worker_scope_kwargs['app'] = app
+    if database_scope is not None:
+        worker_scope_kwargs['database_scope'] = database_scope
+    if allowed_bases is not None:
+        worker_scope_kwargs['allowed_bases'] = allowed_bases
 
     library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalar_one_or_none()
     if not library:
@@ -590,7 +621,8 @@ def retrieve_and_save_game(
     if settings and settings.get('use_local_metadata'):
         logger.info(f"🔍 [LOCAL METADATA] Checking for existing metadata file in: {full_disk_path}")
         local_metadata = read_local_metadata(full_disk_path,
-                                             settings.get('local_metadata_filename', 'oneirodex.json'))
+                                             settings.get('local_metadata_filename', 'oneirodex.json'),
+                                             allowed_bases=allowed_bases)
         if local_metadata and 'igdb_id' in local_metadata:
             igdb_id = local_metadata['igdb_id']
             logger.info(f"✅ LOCAL METADATA: Found IGDB ID {igdb_id} in {full_disk_path}")
@@ -676,9 +708,13 @@ def retrieve_and_save_game(
                         fetch_hltb=fetch_hltb,
                         cover_data=cover_data,
                         screenshots_data=screenshots_data,
+                        **worker_scope_kwargs,
                     )
                 else:
-                    smart_process_images_for_game(new_game.uuid, cover_data, screenshots_data)
+                    smart_process_images_for_game(
+                        new_game.uuid, cover_data, screenshots_data,
+                        **worker_scope_kwargs,
+                    )
 
                     if fetch_hltb:
                         # Fetch HLTB data if requested
@@ -694,7 +730,8 @@ def retrieve_and_save_game(
                         igdb_id=igdb_id,
                         game_title=new_game.name,
                         manually_verified=True,
-                        filename=settings.get('local_metadata_filename', 'oneirodex.json')
+                        filename=settings.get('local_metadata_filename', 'oneirodex.json'),
+                        allowed_bases=allowed_bases,
                     )
                     if not write_success:
                         logger.warning("⚠️ [LOCAL METADATA] Failed to write metadata file (already exists or permission issue)")
@@ -1185,7 +1222,8 @@ def retrieve_and_save_game(
                     igdb_id=new_game.igdb_id,
                     game_title=new_game.name,
                     manually_verified=False,  # Auto-identified during scan
-                    filename=settings.get('local_metadata_filename', 'oneirodex.json')
+                    filename=settings.get('local_metadata_filename', 'oneirodex.json'),
+                    allowed_bases=allowed_bases,
                 )
                 if write_success:
                     logger.info(f"✅ [LOCAL METADATA] Successfully wrote metadata file for '{new_game.name}'")
@@ -1209,6 +1247,8 @@ def retrieve_and_save_game(
         except IntegrityError as e: 
             db.session.rollback()
             logger.error(f"Failed to save game due to a database error: {e}")
+            from flask import flash, has_request_context
+
             if has_request_context():
                 flash("Failed to save game due to a duplicate entry.")
             else:
@@ -1289,6 +1329,7 @@ def retrieve_and_save_game(
                                 filename=settings.get(
                                     'local_metadata_filename', 'oneirodex.json',
                                 ),
+                                allowed_bases=allowed_bases,
                             )
                         except Exception as meta_err:
                             logger.warning(f"⚠️ [Stage D] Local metadata write failed: {meta_err}")
@@ -1351,6 +1392,7 @@ def retrieve_and_save_game(
                                 filename=settings.get(
                                     'local_metadata_filename', 'oneirodex.json',
                                 ),
+                                allowed_bases=allowed_bases,
                             )
                         except Exception as meta_err:
                             logger.warning(f"⚠️ [DAT] Local metadata write failed: {meta_err}")
@@ -1428,6 +1470,8 @@ def retrieve_and_save_game(
                     pass
         except Exception as proposal_err:
             logger.warning(f"⚠️ Failed to write match proposal for {full_disk_path}: {proposal_err}")
+        from flask import flash, has_request_context
+
         if has_request_context():
             flash("No game data found for the given name.")
         else:

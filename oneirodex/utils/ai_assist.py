@@ -7,10 +7,10 @@ import re
 from typing import Any
 
 import requests
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GlobalSettings
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
@@ -37,7 +37,7 @@ def _operator_ollama_url(url: str) -> tuple[bool, str]:
     return validate_outbound_http_url(url, allow_http=True, allow_private_lan=True)
 
 
-def _ollama_url_validator():
+def _ollama_url_validator(*, config=None):
     """The policy the effective Ollama base URL must pass on every request.
 
     An admin-saved URL was validated with ``validate_connector_http_url`` at
@@ -58,8 +58,9 @@ def _ollama_failure_text(exc: BaseException) -> str:
     return _OLLAMA_BLOCKED if isinstance(exc, BlockedOutboundUrl) else _OLLAMA_UNREACHABLE
 
 
-def ai_enabled() -> bool:
-    if str(current_app.config.get('ENABLE_AI_ASSIST', '')).lower() in (
+def ai_enabled(*, config=None) -> bool:
+    app_config = config if config is not None else get_runtime_config()
+    if str(app_config.get('ENABLE_AI_ASSIST', '')).lower() in (
         '1', 'true', 'yes', 'on',
     ):
         return True
@@ -69,35 +70,37 @@ def ai_enabled() -> bool:
     return bool(getattr(settings, 'enable_ai_assist', False)) if settings else False
 
 
-def ai_auto_apply_enabled() -> bool:
+def ai_auto_apply_enabled(*, config=None) -> bool:
     """Requires AI assist + explicit ENABLE_AI_AUTO_APPLY (never silent)."""
-    if not ai_enabled():
+    if not ai_enabled(config=config):
         return False
-    return str(current_app.config.get('ENABLE_AI_AUTO_APPLY', '')).lower() in (
+    app_config = config if config is not None else get_runtime_config()
+    return str(app_config.get('ENABLE_AI_AUTO_APPLY', '')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
-def _ollama_config() -> tuple[str, str]:
+def _ollama_config(*, config=None) -> tuple[str, str]:
+    app_config = config if config is not None else get_runtime_config()
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
     base = (
         (getattr(settings, 'ollama_base_url', None) if settings else None)
-        or current_app.config.get('OLLAMA_BASE_URL')
+        or app_config.get('OLLAMA_BASE_URL')
         or 'http://127.0.0.1:11434'
     ).rstrip('/')
     model = (
         (getattr(settings, 'ollama_model', None) if settings else None)
-        or current_app.config.get('OLLAMA_MODEL')
+        or app_config.get('OLLAMA_MODEL')
         or 'llama3.2'
     )
     return base, model
 
 
-def ollama_status() -> dict[str, Any]:
-    enabled = ai_enabled()
-    base, model = _ollama_config()
+def ollama_status(*, config=None) -> dict[str, Any]:
+    enabled = ai_enabled(config=config)
+    base, model = _ollama_config(config=config)
     reachable = False
     error = None
     if enabled:
@@ -115,7 +118,7 @@ def ollama_status() -> dict[str, Any]:
             error = _ollama_failure_text(exc)
     return {
         'enabled': enabled,
-        'auto_apply_enabled': ai_auto_apply_enabled(),
+        'auto_apply_enabled': ai_auto_apply_enabled(config=config),
         'reachable': reachable,
         'base_url': base,
         'model': model,
@@ -123,24 +126,25 @@ def ollama_status() -> dict[str, Any]:
     }
 
 
-def get_ai_config() -> dict[str, Any]:
+def get_ai_config(*, config=None) -> dict[str, Any]:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
-    base, model = _ollama_config()
+    app_config = config if config is not None else get_runtime_config()
+    base, model = _ollama_config(config=app_config)
     return {
-        'enabled': ai_enabled(),
+        'enabled': ai_enabled(config=app_config),
         'db_enabled': bool(getattr(settings, 'enable_ai_assist', False)) if settings else False,
-        'env_enabled': str(current_app.config.get('ENABLE_AI_ASSIST', '')).lower() in (
+        'env_enabled': str(app_config.get('ENABLE_AI_ASSIST', '')).lower() in (
             '1', 'true', 'yes', 'on',
         ),
         'ollama_base_url': base,
         'ollama_model': model,
-        'auto_apply_enabled': ai_auto_apply_enabled(),
+        'auto_apply_enabled': ai_auto_apply_enabled(config=app_config),
     }
 
 
-def save_ai_config(payload: dict[str, Any]) -> dict[str, Any]:
+def save_ai_config(payload: dict[str, Any], *, config=None) -> dict[str, Any]:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
@@ -165,18 +169,18 @@ def save_ai_config(payload: dict[str, Any]) -> dict[str, Any]:
         model = str(payload['ollama_model']).strip()
         settings.ollama_model = model or None
     db.session.commit()
-    return get_ai_config()
+    return get_ai_config(config=config)
 
 
-def _chat(system: str, user: str) -> str:
-    if not ai_enabled():
+def _chat(system: str, user: str, *, config=None) -> str:
+    if not ai_enabled(config=config):
         raise PermissionError('AI assist is disabled')
-    base, model = _ollama_config()
+    base, model = _ollama_config(config=config)
     try:
         resp = safe_request(
             'POST',
             f'{base}/api/chat',
-            validator=_ollama_url_validator(),
+                validator=_ollama_url_validator(config=config),
             json={
                 'model': model,
                 'stream': False,
@@ -213,7 +217,7 @@ def _parse_ranked_titles(text: str) -> list[dict[str, Any]]:
     return suggestions
 
 
-def triage_folder(name: str, platform: str | None = None) -> dict[str, Any]:
+def triage_folder(name: str, platform: str | None = None, *, config=None) -> dict[str, Any]:
     folder = (name or '').strip()
     if not folder:
         raise ValueError('folder name is required')
@@ -222,17 +226,17 @@ def triage_folder(name: str, platform: str | None = None) -> dict[str, Any]:
         'Reply with a numbered list of up to 5 clean game titles only. No downloads.'
     )
     user = f'Folder name: {folder}\nPlatform: {platform or "unknown"}'
-    content = _chat(system, user)
+    content = _chat(system, user, config=config)
     return {
         'query': folder,
         'platform': platform,
         'raw': content,
         'suggestions': _parse_ranked_titles(content),
-        'auto_apply_enabled': ai_auto_apply_enabled(),
+        'auto_apply_enabled': ai_auto_apply_enabled(config=config),
     }
 
 
-def doctor_notes(context: dict[str, Any]) -> dict[str, Any]:
+def doctor_notes(context: dict[str, Any], *, config=None) -> dict[str, Any]:
     game_name = (context.get('game_name') or context.get('name') or 'Unknown').strip()
     issues = context.get('issues') or context.get('issue_codes') or []
     if isinstance(issues, str):
@@ -248,7 +252,7 @@ def doctor_notes(context: dict[str, Any]) -> dict[str, Any]:
         f'Issues: {issue_text}\n'
         f'Extra: {context.get("summary") or context.get("extra") or "n/a"}'
     )
-    content = _chat(system, user)
+    content = _chat(system, user, config=config)
     return {
         'game_name': game_name,
         'issues': list(issues),
@@ -256,9 +260,9 @@ def doctor_notes(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def apply_triage_title(game_uuid: str, title: str) -> dict[str, Any]:
+def apply_triage_title(game_uuid: str, title: str, *, config=None) -> dict[str, Any]:
     """Apply a triage suggestion by renaming an existing library game (admin action)."""
-    if not ai_auto_apply_enabled():
+    if not ai_auto_apply_enabled(config=config):
         raise PermissionError(
             'AI auto-apply is disabled. Set ENABLE_AI_AUTO_APPLY=true (and ENABLE_AI_ASSIST).',
         )

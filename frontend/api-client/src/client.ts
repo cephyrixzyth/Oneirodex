@@ -130,6 +130,9 @@ export function createRequester(config: OneirodexClientConfig) {
     const response = await fetchImpl(joinUrl(config.baseUrl, path), {
       ...init,
       headers,
+      // Bearer API calls must stay on the configured server origin. Redirects
+      // can otherwise move an authenticated request to an unintended endpoint.
+      redirect: 'error',
     })
 
     return unwrapResponse<T>(response)

@@ -222,6 +222,55 @@ body.od-shell-host .od-admin-main:has(.od-dash),
   color: color-mix(in srgb, var(--od-danger) 72%, var(--od-text));
 }
 
+.od-ops-status--loading,
+.od-ops-status--na {
+  border-color: var(--od-border);
+  color: var(--od-text-muted);
+}
+
+.od-ops-readiness ul {
+  display: grid;
+  gap: 0.2rem 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.od-ops-readiness li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+  min-width: 0;
+}
+
+.od-ops-readiness li strong {
+  color: var(--od-text-muted);
+  font-weight: 600;
+}
+
+.od-ops-readiness details {
+  margin-top: 0.35rem;
+}
+
+.od-ops-readiness summary {
+  color: var(--od-text-muted);
+  cursor: pointer;
+}
+
+.od-ops-readiness pre {
+  max-height: 14rem;
+  margin: 0.35rem 0 0;
+  overflow: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-bg);
+  color: var(--od-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .od-ops-issues-folds {
   display: grid;
   gap: 0.65rem;
@@ -503,6 +552,18 @@ body.od-shell-host .od-admin-main:has(.od-dash),
   -webkit-overflow-scrolling: touch;
 }
 
+.od-ops-panel__scroll:focus-visible {
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
+  outline-offset: 2px;
+}
+
+.od-ops-panel__scroll-hint {
+  display: none;
+  margin: 0 0 0.3rem;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+}
+
 .od-ops-table--services {
   table-layout: fixed;
 }
@@ -520,6 +581,48 @@ body.od-shell-host .od-admin-main:has(.od-dash),
 .od-ops-table--services td {
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 30rem) {
+  .od-ops-panel__scroll-hint {
+    display: block;
+  }
+
+  .od-ops-table--services {
+    min-width: 34rem;
+  }
+}
+
+.od-ops-service-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--od-control-h-sm, 1.75rem);
+  max-width: 100%;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-pill, 999px);
+  background: color-mix(in srgb, var(--od-surface-2) 82%, transparent);
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.od-ops-service-status--good {
+  border-color: color-mix(in srgb, var(--od-accent) 52%, var(--od-border));
+  color: color-mix(in srgb, var(--od-accent) 55%, var(--od-text));
+}
+
+.od-ops-service-status--warn {
+  border-color: color-mix(in srgb, var(--od-warning) 58%, var(--od-border));
+  color: color-mix(in srgb, var(--od-warning) 68%, var(--od-text));
+}
+
+.od-ops-service-status--bad {
+  border-color: color-mix(in srgb, var(--od-danger) 58%, var(--od-border));
+  color: color-mix(in srgb, var(--od-danger) 72%, var(--od-text));
 }
 
 .od-ops-panel h2 {
@@ -881,6 +984,18 @@ body.od-shell-host .od-admin-main:has(.od-dash),
   align-items: stretch;
 }
 
+/* Keep saved 12-column positions for desktop, but render a readable stack on
+   phone-sized screens. Resize and drag controls do not map to that stack. */
+.od-dash__board--stacked .od-dash__item {
+  cursor: default;
+  touch-action: auto;
+}
+
+.od-dash__board--stacked .od-dash__tools,
+.od-dash__board--stacked .od-dash__resize {
+  display: none;
+}
+
 .od-dash__item {
   position: relative;
   min-width: 0;
@@ -1064,11 +1179,11 @@ body.od-shell-host .od-admin-main:has(.od-dash),
 }
 
 .od-dash__add-menu {
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  left: 0;
-  z-index: 20;
+  position: fixed;
+  z-index: 60;
   min-width: 12rem;
+  max-height: min(18rem, calc(100dvh - 5.5rem));
+  overflow-y: auto;
   margin: 0;
   padding: 0.25rem;
   list-style: none;

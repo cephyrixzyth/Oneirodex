@@ -12,10 +12,12 @@ from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.auth import librarian_required
 from oneirodex.utils.validation import validate_body
 from oneirodex.schemas.vr import VrCompatBody, VrProfileBody
-from oneirodex.utils.cover_url import resolve_cover_url, resolve_game_cover_url
 from oneirodex.utils.functions import format_size
 from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_game
 from oneirodex.utils.secondary_scrapers import VR_PERSPECTIVE_NAME, game_indicates_vr, game_vr_compat
+from oneirodex.utils.vr_catalog import (
+    cover_url_for_game, game_in_vr_hub, vr_perspective_link, vr_profile_link,
+)
 
 from . import apis_bp
 
@@ -48,33 +50,19 @@ def _vr_games_query():
 
 
 def _vr_profile_link(kinds: tuple[str, ...]):
-    return (
-        select(GameVrProfile.id)
-        .where(GameVrProfile.game_uuid == Game.uuid, GameVrProfile.kind.in_(kinds))
-        .correlate(Game)
-    )
+    return vr_profile_link(Game, GameVrProfile, kinds)
 
 
 def _vr_perspective_link():
     """EXISTS body: this game has a Virtual Reality player perspective."""
-    assoc = game_player_perspective_association
-    return (
-        select(1)
-        .select_from(
-            assoc.join(
-                PlayerPerspective,
-                PlayerPerspective.id == assoc.c.player_perspective_id,
-            )
-        )
-        .where(
-            assoc.c.game_id == Game.id,
-            func.lower(PlayerPerspective.name).in_(_VR_PERSPECTIVE_NAMES),
-        )
+    return vr_perspective_link(
+        Game, PlayerPerspective, game_player_perspective_association,
+        _VR_PERSPECTIVE_NAMES,
     )
 
 
 def _game_in_vr_hub(game) -> bool:
-    return game_vr_compat(game) in ('native_vr', 'injector_profile')
+    return game_in_vr_hub(game, game_vr_compat)
 
 
 def _vr_enabled() -> bool:
@@ -84,33 +72,7 @@ def _vr_enabled() -> bool:
 
 
 def _cover_url_for_game(game: Game) -> str | None:
-    cover = db.session.execute(
-        select(Image).filter_by(game_uuid=game.uuid, image_type='cover').limit(1),
-    ).scalars().first()
-    if not cover:
-        cover = db.session.execute(
-            select(Image).filter(Image.game_uuid == game.uuid, Image.url.ilike('%cover%')).limit(1),
-        ).scalars().first()
-    image_urls = (
-        str(getattr(cover, 'url', '') or '').replace('\\', '/').lower(),
-        str(getattr(cover, 'download_url', '') or '').replace('\\', '/').lower(),
-    )
-    if any(url.endswith('default_cover.jpg') for url in image_urls):
-        # Old catalog rows can still point at the retired GameTheca placeholder.
-        # Ignore it so a real box scan, legacy Game.cover, or per-title fallback
-        # can be used instead.
-        cover = None
-    if not cover:
-        box_art = db.session.execute(
-            select(Image).filter_by(game_uuid=game.uuid, image_type='box').limit(1),
-        ).scalars().first()
-        box_url = str(getattr(box_art, 'url', '') or '').replace('\\', '/').lower()
-        if box_art and not box_url.endswith('default_cover.jpg'):
-            cover = box_art
-    resolved = resolve_game_cover_url(game, cover)
-    if str(resolved or '').replace('\\', '/').lower().endswith('default_cover.jpg'):
-        resolved = resolve_cover_url(None, title=game.name)
-    return resolved
+    return cover_url_for_game(game, db.session, Game, Image)
 
 
 @apis_bp.route('/vr/catalog', methods=['GET'])

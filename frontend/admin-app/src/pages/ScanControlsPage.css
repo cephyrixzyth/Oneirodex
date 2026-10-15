@@ -1,0 +1,80 @@
+.od-scan-controls {
+  display: grid;
+  gap: var(--od-space-4);
+  max-width: 58rem;
+}
+
+.od-scan-controls__links,
+.od-scan-controls__path,
+.od-scan-controls__interval,
+.od-scan-controls__schedule {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--od-space-3);
+}
+
+.od-scan-controls__path > .od-admin-field,
+.od-scan-controls__schedule > .od-admin-field,
+.od-scan-controls__interval > .od-admin-field {
+  flex: 1 1 14rem;
+}
+
+.od-scan-controls__options {
+  display: grid;
+  gap: var(--od-space-2);
+  margin: 0;
+  padding: var(--od-space-4);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-card-bg);
+}
+
+.od-scan-controls__options legend {
+  padding-inline: var(--od-space-2);
+  color: var(--od-text);
+  font-weight: 650;
+}
+
+.od-scan-controls__options label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--od-space-2);
+  color: var(--od-text);
+}
+
+.od-scan-controls__options input {
+  accent-color: var(--od-accent);
+  margin-block-start: 0.2em;
+}
+
+.od-scan-controls__browser-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--od-space-4);
+}
+
+.od-scan-controls__browser-head h2 {
+  margin: 0;
+  color: var(--od-text);
+}
+
+.od-scan-controls__browser-list {
+  display: grid;
+  gap: var(--od-space-2);
+  max-height: min(55vh, 32rem);
+  overflow: auto;
+  padding-block: var(--od-space-3);
+}
+
+@media (max-width: 40rem) {
+  .od-scan-controls__links > * {
+    flex: 1 1 auto;
+  }
+  .od-scan-controls__path > *,
+  .od-scan-controls__schedule > *,
+  .od-scan-controls__interval > * {
+    width: 100%;
+  }
+}

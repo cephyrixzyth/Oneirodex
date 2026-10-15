@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import requests
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, request
 from flask_login import login_required
 
 from oneirodex import db
@@ -12,16 +12,20 @@ from oneirodex.utils.arr_connectors import (
     client_error_message,
     connector_status,
     get_arr_config,
+    public_arr_config,
     qbittorrent_add_url,
     save_arr_config,
     search_indexers,
 )
 from oneirodex.utils.arr_hardlink_pipeline import (
     apply_proposals,
+    hardlink_apply_allowed,
+    hardlink_helpers_enabled,
     pipeline_enabled,
     propose_hardlinks,
 )
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.indexer_registry import (
     add_indexer,
     bulk_import_indexers,
@@ -56,6 +60,11 @@ def _arr_disabled():
     return api_error('Arr module is disabled', code='forbidden')
 
 
+def _public_arr_config(cfg):
+    """Expose connector addresses and usernames without returning credentials."""
+    return public_arr_config(cfg)
+
+
 @arr_bp.route('/api/arr/status', methods=['GET'])
 @login_required
 @admin_required
@@ -79,6 +88,9 @@ def arr_status():
             else 'Arr module is disabled. Set ENABLE_ARR_MODULE=true or enable in Admin.'
         ),
         'connectors': connectors,
+        'hardlink_pipeline_enabled': pipeline_enabled(),
+        'hardlink_helpers_enabled': hardlink_helpers_enabled(),
+        'hardlink_apply_allowed': hardlink_apply_allowed(),
         'indexer_warnings': next(
             (c.get('warnings') or [] for c in connectors if c.get('id') == 'native_indexers'),
             [],
@@ -120,30 +132,13 @@ def arr_config():
     if not arr_module_enabled():
         return _arr_disabled()
     if request.method == 'GET':
-        cfg = get_arr_config()
-        return jsonify({
-            'prowlarr_url': cfg.get('prowlarr_url') or '',
-            'prowlarr_api_key_set': bool(cfg.get('prowlarr_api_key')),
-            'jackett_url': cfg.get('jackett_url') or '',
-            'jackett_api_key_set': bool(cfg.get('jackett_api_key')),
-            'qbittorrent_url': cfg.get('qbittorrent_url') or '',
-            'qbittorrent_username': cfg.get('qbittorrent_username') or 'admin',
-            'qbittorrent_password_set': bool(cfg.get('qbittorrent_password')),
-            'transmission_url': cfg.get('transmission_url') or '',
-            'transmission_username': cfg.get('transmission_username') or '',
-            'transmission_password_set': bool(cfg.get('transmission_password')),
-            'sabnzbd_url': cfg.get('sabnzbd_url') or '',
-            'sabnzbd_api_key_set': bool(cfg.get('sabnzbd_api_key')),
-            'nzbget_url': cfg.get('nzbget_url') or '',
-            'nzbget_username': cfg.get('nzbget_username') or '',
-            'nzbget_password_set': bool(cfg.get('nzbget_password')),
-        })
+        return jsonify(_public_arr_config(get_arr_config()))
     data = request.get_json(silent=True) or {}
     try:
-        saved = save_arr_config(data)
+        save_arr_config(data)
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
-    return api_ok({'status': 'saved', 'config': saved})
+    return api_ok({'status': 'saved', 'config': _public_arr_config(get_arr_config())})
 
 
 @arr_bp.route('/api/arr/indexers', methods=['GET', 'POST'])
@@ -369,12 +364,4 @@ def arr_hardlink_apply():
 @admin_required
 def arr_admin_page():
     """Admin page for the optional *arr module."""
-    enabled = arr_module_enabled()
-    return render_template(
-        'admin/arr_module.html',
-        enabled=enabled,
-        db_enabled=arr_db_enabled(),
-        env_enabled=env_flag('ENABLE_ARR_MODULE'),
-        connectors=connector_status() if enabled else [],
-        hardlink_pipeline=pipeline_enabled(),
-    )
+    return render_admin_spa(title='Arr module · Oneirodex Admin')

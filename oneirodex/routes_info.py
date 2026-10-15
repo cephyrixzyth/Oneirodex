@@ -1,16 +1,15 @@
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, jsonify, redirect, request, url_for
 from flask_login import login_required
 from sqlalchemy import select
 
 from oneirodex import db
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.auth import admin_required
-from oneirodex.utils.processors import get_global_settings
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.system_stats import format_bytes
 from oneirodex.utils.uptime import get_formatted_system_uptime, get_formatted_app_uptime
 from oneirodex.utils.status import get_system_info, get_config_values, get_active_users, get_log_info, get_database_info
 from oneirodex import app_version, app_start_time
-from oneirodex import cache
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.ops_summary import build_ops_summary, list_client_devices
 from oneirodex.utils.health_probes import build_liveness, build_readiness
@@ -42,66 +41,23 @@ def awake():
     payload, status = build_readiness()
     return jsonify(payload), status
 
-@info_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Context processor to inject global settings into templates"""
-    return get_global_settings()
 
+def _theme_asset_panel(root_path=None) -> dict:
+    """Theme freshness as flat key/value data for the Ops detail panel."""
+    if root_path is None:
+        from flask import current_app
 
-def _theme_asset_panel() -> dict:
-    """Theme freshness as flat key/value, for the Ops detail panels."""
-    from flask import current_app
+        root_path = current_app.root_path
+    from oneirodex.utils.ops_projections import theme_asset_panel
 
-    from oneirodex.utils.theme_freshness import theme_freshness
-
-    data = theme_freshness(current_app.root_path)
-    # `reason` means the comparison could not be made at all — reporting "Up to
-    # date" for a theme we never managed to read would be the confident-wrong
-    # answer the rest of this console avoids.
-    if data.get('reason'):
-        return {
-            'Status': data['reason'],
-            'Tracked files': data['checked'],
-        }
-    panel = {
-        'Status': 'Up to date' if not data['stale'] else 'Behind source — run Reset Themes',
-        'Tracked files': data['checked'],
-        'Outdated': data['outdated_count'],
-        'Missing': data['missing_count'],
-    }
-    # Naming the first few makes the difference between "something drifted" and
-    # "the shell stylesheet was never deployed", which are very different
-    # problems wearing the same number.
-    if data['missing']:
-        panel['Never deployed'] = ', '.join(data['missing'][:5])
-    if data['outdated']:
-        panel['Behind (sample)'] = ', '.join(data['outdated'][:5])
-    return panel
+    return theme_asset_panel(root_path)
 
 
 def _log_summary():
-    """``get_log_info()`` with its newest event as plain JSON.
+    """Project the newest ORM event to plain JSON for the Ops API."""
+    from oneirodex.utils.ops_projections import log_summary
 
-    The helper returns the ORM row (its own tests read attributes off it), and
-    handing that to ``jsonify`` raised ``Object of type SystemEvents is not JSON
-    serializable`` as soon as one event existed -- so the whole system snapshot
-    answered 503 on every install that had logged anything, and only a brand-new
-    database (no events) looked healthy.
-    """
-    info = get_log_info()
-    latest = info.get('latest')
-    return {
-        'count': info.get('count'),
-        'latest': None if latest is None else {
-            'id': latest.id,
-            'timestamp': latest.timestamp.isoformat() if latest.timestamp else None,
-            'level': latest.event_level,
-            'type': latest.event_type,
-            'text': latest.event_text,
-        },
-    }
-
+    return log_summary(get_log_info())
 
 @info_bp.route('/admin/api/ops/system', methods=['GET'])
 @login_required
@@ -227,11 +183,7 @@ def admin_ops():
         event_type='audit',
         event_level='information',
     )
-    settings = get_global_settings()
-    return render_template(
-        'admin/admin_ops.html',
-        enable_server_status=bool(settings.get('enable_server_status', False)),
-    )
+    return render_admin_spa(title='Ops · Oneirodex Admin')
 
 
 @info_bp.route('/admin/system/danger')
@@ -244,7 +196,7 @@ def admin_system_danger():
         event_type='audit',
         event_level='information',
     )
-    return render_template('admin/admin_system_danger.html')
+    return render_admin_spa(title='Danger zone · Oneirodex Admin')
 
 
 @info_bp.route('/admin/api/ops/summary')

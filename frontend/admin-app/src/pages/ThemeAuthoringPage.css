@@ -1,0 +1,5 @@
+.od-theme-guide .od-admin-output {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

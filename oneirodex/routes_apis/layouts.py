@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from oneirodex.schemas.layouts import CreateLayoutPresetBody
 from oneirodex.utils.api_response import api_error
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.detail_layouts import (
     clear_user_detail_layout,
@@ -66,6 +67,7 @@ def layouts_detail_mine_get():
 
 @apis_bp.route('/layouts/detail/mine', methods=['PUT'])
 @login_required
+@require_api_token_scope('write:library')
 def layouts_detail_mine_put():
     data = request.get_json(silent=True) or {}
     try:
@@ -77,6 +79,7 @@ def layouts_detail_mine_put():
 
 @apis_bp.route('/layouts/detail/mine', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def layouts_detail_mine_delete():
     """Stop overriding and follow the install default again."""
     return jsonify({
@@ -93,6 +96,7 @@ def layouts_detail_presets_get():
 
 @apis_bp.route('/layouts/detail/presets', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(CreateLayoutPresetBody)
 def layouts_detail_presets_post(body: CreateLayoutPresetBody):
     try:
@@ -108,6 +112,7 @@ def layouts_detail_presets_post(body: CreateLayoutPresetBody):
 
 @apis_bp.route('/layouts/detail/presets/<int:preset_id>', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def layouts_detail_presets_delete(preset_id: int):
     # 404 rather than 403 for someone else's preset: confirming a preset exists
     # but belongs to another member is a fact this endpoint has no reason to

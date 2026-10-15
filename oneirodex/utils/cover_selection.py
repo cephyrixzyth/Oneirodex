@@ -10,14 +10,14 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from flask import current_app
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Image, Library
 from oneirodex.utils.artwork_apply import apply_cover_from_url
 from oneirodex.utils.providers import ProviderDisabledError, get_provider
+from oneirodex.utils.runtime_config import get_runtime_config
 
 # Ordered default preference for auto-apply.
 DEFAULT_PROVIDER_ORDER: tuple[str, ...] = (
@@ -58,9 +58,11 @@ class CoverCandidate:
         }
 
 
-def image_save_path_status() -> dict[str, Any]:
+def image_save_path_status(config=None) -> dict[str, Any]:
     """Report whether IMAGE_SAVE_PATH exists and is writable (ops diagnostics)."""
-    path = current_app.config.get('IMAGE_SAVE_PATH')
+    if config is None:
+        config = get_runtime_config() or {}
+    path = config.get('IMAGE_SAVE_PATH')
     if not path:
         return {
             'path': None,
@@ -228,6 +230,7 @@ def apply_policy_to_game(
     policy: str | None = None,
     limit_per_provider: int = 5,
     generate_fn: Callable[[Game], dict] | None = None,
+    config=None,
 ) -> dict[str, Any]:
     """
     Apply cover selection policy to one game.
@@ -244,7 +247,7 @@ def apply_policy_to_game(
             'error': 'Game has no name to search',
         }
 
-    path_status = image_save_path_status()
+    path_status = image_save_path_status(config)
     if not path_status.get('writable'):
         return {
             'game_uuid': game.uuid,
@@ -292,6 +295,7 @@ def apply_policy_to_game(
                 top['url'],
                 provider_id=top['provider'],
                 image_type='cover',
+                config=config,
             )
             return {
                 'game_uuid': game.uuid,
@@ -323,6 +327,7 @@ def batch_search_covers(
     limit_games: int = 25,
     providers: list[str] | None = None,
     limit_per_provider: int = 5,
+    config=None,
 ) -> dict[str, Any]:
     games = list_games_for_cover_batch(
         library_uuid=library_uuid,
@@ -353,7 +358,7 @@ def batch_search_covers(
     return {
         'count': len(rows),
         'games': rows,
-        'image_save_path': image_save_path_status(),
+        'image_save_path': image_save_path_status(config),
         'filters': {
             'library_uuid': library_uuid,
             'platform': platform,
@@ -373,6 +378,7 @@ def batch_apply_covers(
     limit_games: int = 25,
     policy: str | None = None,
     generate_fn: Callable[[Game], dict] | None = None,
+    config=None,
 ) -> dict[str, Any]:
     if game_uuids:
         games = list(
@@ -395,7 +401,9 @@ def batch_apply_covers(
     applied = 0
     failed = 0
     for game in games:
-        row = apply_policy_to_game(game, policy=policy, generate_fn=generate_fn)
+        row = apply_policy_to_game(
+            game, policy=policy, generate_fn=generate_fn, config=config,
+        )
         results.append(row)
         if row.get('status') == 'applied':
             applied += 1
@@ -407,5 +415,5 @@ def batch_apply_covers(
         'failed': failed,
         'results': results,
         'policy': list(resolve_policy(policy)),
-        'image_save_path': image_save_path_status(),
+        'image_save_path': image_save_path_status(config),
     }

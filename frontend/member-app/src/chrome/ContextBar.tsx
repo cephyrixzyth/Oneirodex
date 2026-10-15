@@ -38,12 +38,16 @@ const HOST_ATTR = 'data-od-contextbar-host'
  * Jinja admin renders the identical bar (UIR-4) without duplicating anything.
  */
 
-function useDismiss(open: any, onClose: any, refs: any) {
+function useDismiss(open: any, onClose: any, refs: any, returnFocusRef: any = null) {
   useEffect(() => {
     if (!open) return undefined
 
     function onKey(event: any) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        returnFocusRef?.current?.focus()
+      }
     }
     function onPointer(event: any) {
       // Clicking the trigger toggles; the trigger handles that itself.
@@ -57,7 +61,7 @@ function useDismiss(open: any, onClose: any, refs: any) {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('mousedown', onPointer)
     }
-  }, [open, onClose, refs])
+  }, [open, onClose, refs, returnFocusRef])
 }
 
 /**
@@ -82,8 +86,10 @@ export function SegmentedViews({
 }: LooseProps) {
   const [unfurlOpen, setUnfurlOpen] = useState(false)
   const rootRef = useRef<any>(null)
+  const unfurlTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const unfurlId = useId()
   const closeUnfurl = useCallback(() => setUnfurlOpen(false), [])
-  useDismiss(unfurlOpen, closeUnfurl, [rootRef])
+  useDismiss(unfurlOpen, closeUnfurl, [rootRef], unfurlTriggerRef)
 
   const hasViews = Array.isArray(views) && views.length > 0
   const hasUnfurl = unfurl && Array.isArray(unfurl.views) && unfurl.views.length > 0
@@ -120,16 +126,22 @@ export function SegmentedViews({
         {hasUnfurl ? (
           <span className="od-seg__unfurl-anchor">
             <button
+              ref={unfurlTriggerRef}
               type="button"
               className={`od-seg__item${unfurlOpen ? ' is-active' : ''}`}
               aria-expanded={unfurlOpen}
-              aria-haspopup="true"
+              aria-controls={unfurlOpen ? unfurlId : undefined}
               onClick={() => setUnfurlOpen((value) => !value)}
             >
               {triggerLabel}
             </button>
             {unfurlOpen ? (
-              <div className="od-contextbar__views-unfurl" role="group" aria-label={menuLabel}>
+              <div
+                id={unfurlId}
+                className="od-contextbar__views-unfurl"
+                role="group"
+                aria-label={menuLabel}
+              >
                 {unfurl.views.map((view: any) => {
                   const selected = view.id === unfurl.active
                   return (
@@ -141,6 +153,7 @@ export function SegmentedViews({
                       onClick={() => {
                         unfurl.onSelect?.(view.id)
                         setUnfurlOpen(false)
+                        unfurlTriggerRef.current?.focus()
                       }}
                     >
                       {view.label}
@@ -183,8 +196,12 @@ export function Popover({
   const panelRef = useRef<any>(null)
   const panelId = useId()
   const close = useCallback(() => setOpen(false), [])
+  const closeAndRestore = useCallback(() => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }, [])
 
-  useDismiss(open, close, [triggerRef, panelRef])
+  useDismiss(open, close, [triggerRef, panelRef], triggerRef)
 
   const active = count > 0
   const triggerClass = ['od-cbtn', active ? 'is-on' : '', triggerClassName]
@@ -220,12 +237,12 @@ export function Popover({
           {chromeless ? null : (
             <div className="od-pop__head">
               <span className="od-pop__title">{label}</span>
-              <button type="button" className="od-cbtn" onClick={close}>
+              <button type="button" className="od-cbtn" onClick={closeAndRestore}>
                 Done
               </button>
             </div>
           )}
-          {typeof children === 'function' ? children({ close }) : children}
+          {typeof children === 'function' ? children({ close: closeAndRestore }) : children}
         </div>
       ) : null}
     </div>

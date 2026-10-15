@@ -268,13 +268,14 @@ describe('useRowScroll arrow hover', () => {
     expect(track.scrollLeft).toBe(10)
   })
 
-  test('a page click cancels the hover loop so the two do not fight', () => {
+  test('a click before the first hover frame pages and cancels the pending loop', () => {
     const { result } = renderHook(() => useRowScroll({ edgeSpeed: 10 }))
     result.current.ref.current = track
     result.current.startEdgeScroll(1)
     expect(queued).toBeTruthy()
-    result.current.scrollByPage(1)
+    act(() => result.current.scrollByPage(1))
     expect(queued).toBeNull()
+    expect(track.scrollLeft).toBeCloseTo(220)
   })
 
   test('a native scroll event turns the start arrow on', async () => {

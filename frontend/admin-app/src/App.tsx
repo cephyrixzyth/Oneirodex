@@ -10,6 +10,7 @@ import { useLibrariesContextbarUnfurl } from './hooks/useLibrariesContextbarUnfu
 import { useLibrariesPanelMount } from './hooks/useLibrariesPanelMount'
 import { useLibraryScanToasts } from './hooks/useLibraryScanToasts'
 import './ops.css'
+import './components/AdminTabs.css'
 
 /**
  * Legacy fallback only — see resolveRenderMode.
@@ -62,7 +63,7 @@ export function resolveRenderMode(root = document.getElementById('admin-app-root
 
 export function App() {
   const legacy = resolveRenderMode() === 'legacy'
-  const { railState, drawerOpen, toggle: toggleRail, closeDrawer } = useRailState()
+  const { railState, drawerOpen, isMobile, toggle: toggleRail, closeDrawer } = useRailState()
 
   useAdminShellFrame(railState)
   useLibraryScanToasts({ enabled: true })
@@ -89,16 +90,17 @@ export function App() {
 
   return (
     <div className="od-admin-shell">
-      <AdminSideRail railState={railState} onCloseDrawer={closeDrawer} />
+      <AdminSideRail railState={railState} isMobile={isMobile} onCloseDrawer={closeDrawer} />
       {drawerOpen ? (
         <button
           type="button"
           className="od-rail__scrim"
-          aria-label="Close navigation"
+          aria-hidden="true"
+          tabIndex={-1}
           onClick={closeDrawer}
         />
       ) : null}
-      <AdminTopNav onToggleRail={toggleRail} railState={railState} />
+      <AdminTopNav onToggleRail={toggleRail} railState={railState} isMobile={isMobile} />
       <SectionTopNav />
       {/* Legacy Jinja pages (resolveRenderMode() === 'legacy') render chrome
           only — no <main>, no <Routes>. The one intentional Jinja-DOM sniff

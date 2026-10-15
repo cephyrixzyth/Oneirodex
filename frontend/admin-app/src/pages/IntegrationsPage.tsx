@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
-import { PageStatus } from '@oneirodex/ui'
+import { useLocation } from 'react-router-dom'
+import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { INTEGRATION_SECTIONS } from '../components/navConfig'
 import { RailIcon } from '../components/railIcons'
 import { RetroAchievementsSettingsPanel } from '../components/RetroAchievementsSettingsPanel'
+import { MetadataProvidersSettingsPanel } from '../components/MetadataProvidersSettingsPanel'
+import { CommunityChatSettingsPanel } from '../components/CommunityChatSettingsPanel'
+import { OidcSettingsPanel } from './OidcSettingsPanel'
 
 const INVENTORY_CATEGORY_ORDER = [
   'metadata',
@@ -72,11 +76,15 @@ function inventoryHref(row: InventoryRow): string {
 }
 
 export function IntegrationsPage() {
+  const location = useLocation()
   const [inventory, setInventory] = useState<InventoryRow[] | null>(null)
   const [inventoryError, setInventoryError] = useState(false)
+  const [inventoryReload, setInventoryReload] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
+    setInventory(null)
+    setInventoryError(false)
     getJson('/api/admin/integrations/inventory')
       .then((data) => {
         if (!controller.signal.aborted) {
@@ -89,9 +97,19 @@ export function IntegrationsPage() {
         }
       })
     return () => controller.abort()
-  }, [])
+  }, [inventoryReload])
 
   const inventoryGroups = inventory ? groupInventoryByCategory(inventory) : []
+
+  useEffect(() => {
+    const targetId = location.hash.slice(1)
+    if (!targetId) return
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(targetId)
+      if (typeof target?.scrollIntoView === 'function') target.scrollIntoView({ block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [location.hash])
 
   return (
     <Page
@@ -110,7 +128,14 @@ export function IntegrationsPage() {
             </h2>
             <ul className="od-settings-list">
               {group.items.map((item) => (
-                <li key={item.to} id={item.to.split('#')[1]}>
+                <li
+                  key={item.to}
+                  id={
+                    ['oidc', 'community'].includes(item.to.split('#')[1] || '')
+                      ? undefined
+                      : item.to.split('#')[1]
+                  }
+                >
                   <a className="od-settings-row" href={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}
@@ -124,11 +149,15 @@ export function IntegrationsPage() {
               <div className="od-admin-inventory__group">
                 <h3 className="od-admin-inventory__category">Artwork &amp; secondary</h3>
                 <RetroAchievementsSettingsPanel />
+                <MetadataProvidersSettingsPanel />
               </div>
             ) : null}
           </section>
         ))}
       </div>
+
+      <CommunityChatSettingsPanel />
+      <OidcSettingsPanel />
 
       {!inventory && !inventoryError ? (
         <div className="od-admin-panel od-admin-inventory od-admin-panel--stacked">
@@ -171,6 +200,9 @@ export function IntegrationsPage() {
       {inventoryError ? (
         <div className="od-admin-panel od-admin-panel--stacked">
           <PageStatus emptyMessage="Provider inventory unavailable — use the list above." />
+          <Button onClick={() => setInventoryReload((value) => value + 1)}>
+            Retry provider inventory
+          </Button>
         </div>
       ) : null}
     </Page>

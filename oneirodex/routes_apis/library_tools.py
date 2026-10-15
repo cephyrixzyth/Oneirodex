@@ -6,17 +6,20 @@ import json
 import os
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import jsonify, request, current_app
-from flask_login import login_required
+from flask import jsonify, request, current_app, session
+from flask_login import current_user, login_required
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from oneirodex import db
-from oneirodex.models import Game, Library
+from oneirodex.models import AllowedFileType, Game, Library, UnmatchedFolder
 from oneirodex.schemas.library_tools import (
     ApplyRenamesBody,
     ApproveProposalBody,
     CheckFreshnessBody,
     DoctorDryRunBody,
+    LinkExistingGameBody,
+    ManualScanListBody,
     ScanRootsBody,
     WriteProposalsBody,
 )
@@ -31,13 +34,245 @@ from oneirodex.utils.match_proposal import (
 from oneirodex.utils.library_doctor import doctor_dry_run, doctor_write_proposals, iter_game_folders
 from oneirodex.utils.propose_leaf_libraries import propose_leaf_libraries
 from oneirodex.utils.import_leaf_libraries import preview_from_csv, preview_from_json
+from oneirodex.utils.functions import (
+    load_scanning_filter_patterns,
+    load_skip_dir_patterns,
+    load_skip_dir_regex_patterns,
+)
+from oneirodex.utils.gamenames import get_game_names_from_files, get_game_names_from_folder
+from oneirodex.utils.library_roots import resolve_scan_path
+from oneirodex.utils.services.scan_orchestration import resolve_scan_mode_for_path
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.event_logging import log_system_event
 
 from . import apis_bp
 
 
 def _allowed_bases():
     return get_allowed_base_directories(current_app)
+
+
+@apis_bp.route('/library_tools/manual_identify/preview', methods=['GET'])
+@login_required
+@admin_required
+def manual_identify_preview():
+    """List candidate games for the manual identify workflow without starting a scan.
+
+    This deliberately does not use the legacy ManualScan form handler: when a
+    scan is already running that handler queues a real scan. Results here are
+    read-only and are submitted to the existing add/identify form only after an
+    administrator chooses a row.
+    """
+    library_uuid = (request.args.get('library_uuid') or '').strip()
+    library = db.session.get(Library, library_uuid) if library_uuid else None
+    if not library:
+        return api_error('Choose a valid library', code='bad_request')
+
+    folder_path, root_error = resolve_scan_path(
+        request.args.get('folder') or '', request.args.get('root') or '', current_app,
+    )
+    if root_error:
+        return api_error('The selected scan location is unavailable', code='bad_request')
+    safe, err = is_safe_path(folder_path, _allowed_bases())
+    if not safe:
+        return api_error(err or 'Unsafe path', code='forbidden')
+    if not os.path.isdir(folder_path) or not os.access(folder_path, os.R_OK):
+        return api_error('The selected folder does not exist or cannot be read', code='bad_request')
+
+    mode = resolve_scan_mode_for_path(folder_path, request.args.get('scan_mode') or 'auto')
+    insensitive, sensitive = load_scanning_filter_patterns()
+    if mode == 'folders':
+        games = get_game_names_from_folder(
+            folder_path,
+            insensitive,
+            sensitive,
+            scan_depth=getattr(library, 'scan_depth', 1) or 1,
+            skip_dir_patterns=load_skip_dir_patterns(),
+            skip_dir_regexes=load_skip_dir_regex_patterns(),
+        )
+    else:
+        extensions = [
+            row.value for row in db.session.execute(
+                select(AllowedFileType).order_by(AllowedFileType.value.asc())
+            ).scalars().all()
+        ]
+        if not extensions:
+            return api_error('No supported game file types are configured', code='unprocessable')
+        games = get_game_names_from_files(folder_path, extensions, insensitive, sensitive)
+
+    response = api_ok({
+        'library_uuid': library.uuid,
+        'library_name': library.name,
+        'folder': os.path.normpath(folder_path),
+        'scan_mode': mode,
+        'games': games,
+        'count': len(games),
+        'read_only': True,
+    })
+    response[0].headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@apis_bp.route('/library_tools/manual_identify/list', methods=['POST'])
+@login_required
+@admin_required
+@validate_body(ManualScanListBody)
+def manual_identify_list_or_queue(body: ManualScanListBody):
+    """Preserve ManualScan's two modes and ask before busy-scan queue/force."""
+    library = db.session.get(Library, body.library_uuid)
+    if not library:
+        return api_error('Choose a valid library', code='bad_request')
+    folder_path, root_error = resolve_scan_path(body.folder or '', body.root or '', current_app)
+    if root_error:
+        return api_error('The selected scan location is unavailable', code='bad_request')
+    safe, _path_error = is_safe_path(folder_path, _allowed_bases())
+    if not safe:
+        return api_error('The selected folder is outside configured storage roots', code='forbidden')
+    if not os.path.isdir(folder_path) or not os.access(folder_path, os.R_OK):
+        return api_error('The selected folder does not exist or cannot be read', code='bad_request')
+
+    from oneirodex.utils.scan_queue import is_scan_busy, start_or_queue_scan
+    mode = resolve_scan_mode_for_path(folder_path, body.scan_mode)
+    if is_scan_busy():
+        if body.queue_policy == 'inspect':
+            response = api_ok({
+                'action': 'conflict',
+                'message': 'Another scan is already running.',
+                'read_only': True,
+            })
+            response[0].headers['Cache-Control'] = 'no-store'
+            return response
+        result = start_or_queue_scan(
+            folder_path=folder_path,
+            library_uuid=library.uuid,
+            scan_mode=mode,
+            remove_missing=False,
+            download_missing_images=False,
+            force_updates_extras_scan=body.force_updates_extras_scan,
+            fetch_hltb=body.fetch_hltb,
+            force_hltb_refetch=body.force_hltb_refetch,
+            schedule=None,
+            queue_policy=body.queue_policy,
+            allow_force=True,
+            app=current_app._get_current_object(),
+        )
+        if result.get('status') not in ('started', 'queued'):
+            return api_error(result.get('message') or 'Manual scan could not be queued', code='conflict', status=409)
+        response = api_ok({
+            'action': result['status'],
+            'message': result.get('message') or 'Manual scan queued.',
+            'job_id': result.get('job_id'),
+            'position': result.get('position'),
+            'read_only': False,
+        })
+        response[0].headers['Cache-Control'] = 'no-store'
+        return response
+
+    from oneirodex.utils.global_settings import global_settings_row
+    from oneirodex.utils.local_metadata import check_library_write_permissions
+    settings = global_settings_row()
+    if settings and settings.write_local_metadata:
+        all_ok, failed_paths = check_library_write_permissions(folder_path)
+        if not all_ok:
+            return api_error(
+                'Review local metadata write permissions before identifying this folder.',
+                code='unprocessable',
+                detail={'failed_count': len(failed_paths)},
+            )
+
+    insensitive, sensitive = load_scanning_filter_patterns()
+    if mode == 'folders':
+        games = get_game_names_from_folder(
+            folder_path,
+            insensitive,
+            sensitive,
+            scan_depth=getattr(library, 'scan_depth', 1) or 1,
+            skip_dir_patterns=load_skip_dir_patterns(),
+            skip_dir_regexes=load_skip_dir_regex_patterns(),
+        )
+    else:
+        extensions = [
+            row.value for row in db.session.execute(
+                select(AllowedFileType).order_by(AllowedFileType.value.asc())
+            ).scalars().all()
+        ]
+        if not extensions:
+            return api_error('No supported game file types are configured', code='unprocessable')
+        games = get_game_names_from_files(folder_path, extensions, insensitive, sensitive)
+    session['selected_library_uuid'] = library.uuid
+    session['game_paths'] = {row['name']: row['full_path'] for row in games}
+    session['force_updates_extras_scan'] = body.force_updates_extras_scan
+    session['fetch_hltb'] = body.fetch_hltb
+    session['force_hltb_refetch'] = body.force_hltb_refetch
+    response = api_ok({
+        'action': 'preview',
+        'library_uuid': library.uuid,
+        'library_name': library.name,
+        'folder': os.path.normpath(folder_path),
+        'scan_mode': mode,
+        'games': games,
+        'count': len(games),
+        'read_only': True,
+    })
+    response[0].headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@apis_bp.route('/library_tools/link_existing_game', methods=['POST'])
+@login_required
+@admin_required
+@validate_body(LinkExistingGameBody)
+def link_existing_game_api(body: LinkExistingGameBody):
+    """Link a scanned folder to an existing game with the classic route's semantics."""
+    safe, error = is_safe_path(body.full_disk_path, _allowed_bases())
+    if not safe:
+        return api_error(error or 'Unsafe path', code='forbidden')
+    if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
+        return api_error('The selected folder does not exist or cannot be read', code='bad_request')
+
+    game = db.session.get(Game, body.game_uuid)
+    if not game:
+        return api_error('Selected game could not be found', code='not_found')
+    try:
+        game.full_disk_path = body.full_disk_path
+        from oneirodex.utils.library_health import mark_game_path_ok
+
+        mark_game_path_ok(game)
+        try:
+            from oneirodex.utils.rom_language import apply_rom_language_fields
+
+            apply_rom_language_fields(game, body.full_disk_path)
+        except Exception:
+            pass
+        unmatched = db.session.execute(
+            select(UnmatchedFolder).filter_by(folder_path=body.full_disk_path)
+        ).scalars().first()
+        if unmatched:
+            db.session.delete(unmatched)
+        db.session.commit()
+        log_system_event(
+            f"Admin {current_user.name} linked existing game '{game.name}' (UUID: {game.uuid}) to folder" +
+            (' (removed from unmatched list)' if unmatched else ''),
+            event_type='game',
+            event_level='information',
+        )
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        log_system_event(
+            f"Database error linking game '{body.game_uuid}' by admin {current_user.name}: {str(exc)[:200]}",
+            event_type='error',
+            event_level='error',
+        )
+        return api_error('Unable to link this folder to the selected game', code='internal')
+
+    return api_ok({
+        'game_uuid': game.uuid,
+        'game_name': game.name,
+        'full_disk_path': game.full_disk_path,
+        'library_uuid': body.library_uuid,
+        'from_unmatched': body.from_unmatched,
+        'removed_from_unmatched': bool(unmatched),
+    })
 
 
 @apis_bp.route('/library_tools/propose_leaf_libraries', methods=['GET', 'POST'])
@@ -264,7 +499,8 @@ def approve_proposal(body: ApproveProposalBody):
     try:
         remove_proposal_files(path)
     except OSError as exc:
-        return api_error(str(exc), code='internal')
+        current_app.logger.warning('Proposal cleanup failed (%s)', type(exc).__name__)
+        return api_error('Could not clear proposal files', code='internal')
     return api_ok({
                 'message': 'Proposal cleared. Complete import via Add Game / Identify with this IGDB ID.',
         'path': path,

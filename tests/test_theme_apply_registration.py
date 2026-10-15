@@ -50,7 +50,7 @@ def test_the_page_that_drove_it_no_longer_posts_to_it(bare_app):
 
     page = (
         Path(__file__).resolve().parents[1]
-        / 'oneirodex' / 'templates' / 'admin' / 'admin_manage_themes.html'
+        / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ThemesPage.tsx'
     ).read_text(encoding='utf-8')
     assert 'apply_theme' not in page
     assert 'adminThemeGrid' not in page

@@ -616,8 +616,8 @@ class TestGameEditSuccessScenarios:
         response = client.get(f'/game_edit/{test_game.uuid}')
         
         assert response.status_code == 200
-        assert test_game.name.encode() in response.data
-        assert test_game.summary.encode() in response.data if test_game.summary else True
+        assert b'id="admin-app-root"' in response.data
+        assert b'/api/admin/manual-identify/' not in response.data
     
     def test_nonexistent_game_returns_404(self, client, admin_user):
         """Test that editing nonexistent game returns 404."""

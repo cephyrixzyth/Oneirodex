@@ -5,6 +5,7 @@ import { gameCountHeat } from './gameCountHeat'
 import { ScanConflictModal } from './ScanConflictModal'
 import { useLibraryScan } from '../hooks/useLibraryScan'
 import { showToast } from '../utils/toast'
+import { Button, PageStatus } from '@oneirodex/ui'
 import {
   BATCH_EDIT_URL,
   BATCH_SCAN_URL,
@@ -17,6 +18,10 @@ import type { LibraryRow, PlatformSummary } from './libraries/librariesModel'
 import { LibrariesTrailSummary, kickCatalogRefresh } from './libraries/LibrariesTrailSummary'
 import { GroupDialog } from './libraries/GroupDialog'
 import { CreateLibraryForm } from './CreateLibraryForm'
+import { BatchLibraryEditModal, type LibraryEditTarget } from './BatchLibraryEditModal'
+import { DeleteLibrariesModal } from './DeleteLibrariesModal'
+import { ProposeLeafLibraries } from './ProposeLeafLibraries'
+import { ImportLeafLibraries } from './ImportLeafLibraries'
 import './LibrariesPanel.css'
 
 export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element | null }) {
@@ -26,6 +31,9 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
   const [platformFilter, setPlatformFilter] = useState('')
   const [groupTargets, setGroupTargets] = useState<LibraryRow[] | null>(null)
   const [groupBusy, setGroupBusy] = useState(false)
+  const [editTargets, setEditTargets] = useState<LibraryEditTarget[] | null>(null)
+  const [deleteTargets, setDeleteTargets] = useState<LibraryEditTarget[] | null>(null)
+  const [addManyMode, setAddManyMode] = useState<'propose' | 'import' | null>(null)
   const { conflictOpen, busyKey, startScan, onConflictChoose, onConflictClose } = useLibraryScan()
 
   const reload = useCallback(() => {
@@ -34,7 +42,7 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
       .then((data) => setRows(Array.isArray(data) ? data : []))
       .catch((err) => {
         setError(err)
-        setRows([])
+        setRows(null)
       })
   }, [])
 
@@ -87,20 +95,18 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
   }, [rows, selected])
 
   const askDelete = useCallback((targets: { uuid: string; name: string }[]) => {
-    if (typeof window.odLibrariesAskDelete === 'function') {
-      window.odLibrariesAskDelete(targets)
-      return
-    }
-    showToast('Delete confirm is unavailable on this page.', 'error')
+    if (targets.length) setDeleteTargets(targets)
   }, [])
+
+  const onLibrariesDeleted = useCallback(() => {
+    setDeleteTargets(null)
+    setSelected(new Set())
+    void reload()
+  }, [reload])
 
   const openEdit = useCallback((targets: Array<{ uuid: string; name: string }>) => {
     if (!targets.length) return
-    if (typeof window.odLibrariesOpenBatchEdit === 'function') {
-      window.odLibrariesOpenBatchEdit(targets)
-      return
-    }
-    showToast('Edit is unavailable on this page.', 'error')
+    setEditTargets(targets)
   }, [])
 
   const openBatchEdit = useCallback(() => {
@@ -207,6 +213,7 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         <button
           type="button"
           className="od-cbtn"
+          aria-label={`Scan ${lib.name}`}
           disabled={busyKey === lib.uuid}
           title={
             lib.last_scan_folder
@@ -226,6 +233,7 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         <button
           type="button"
           className="od-cbtn"
+          aria-label={`Edit ${lib.name} library`}
           onClick={() => openEdit([{ uuid: lib.uuid, name: lib.name }])}
         >
           Edit
@@ -233,11 +241,17 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         <button
           type="button"
           className="od-cbtn od-cbtn--danger"
+          aria-label={`Delete ${lib.name} library`}
           onClick={() => askDelete([{ uuid: lib.uuid, name: lib.name }])}
         >
           Delete
         </button>
-        <button type="button" className="od-cbtn" onClick={() => setGroupTargets([lib])}>
+        <button
+          type="button"
+          className="od-cbtn"
+          aria-label={`Group ${lib.name} library`}
+          onClick={() => setGroupTargets([lib])}
+        >
           Group
         </button>
       </div>
@@ -345,7 +359,14 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
   }, [actionButtons, anyGrouped, rows, selected, toggleAll, toggleOne])
 
   if (error && !rows) {
-    return <p className="od-admin-lede od-error">Unable to load libraries.</p>
+    return (
+      <div className="od-libraries-react">
+        <PageStatus error={error} errorMessage="Unable to load libraries." />
+        <Button type="button" className="od-btn--secondary" onClick={() => void reload()}>
+          Retry loading libraries
+        </Button>
+      </div>
+    )
   }
 
   if (!rows) {
@@ -358,6 +379,46 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
   return (
     <div className="od-libraries-react">
       <CreateLibraryForm onCreated={() => void reload()} />
+      <section
+        className="od-admin-panel od-libraries-add-many"
+        aria-labelledby="od-libraries-add-many-title"
+      >
+        <div className="od-libraries-add-many__header">
+          <div>
+            <h2 id="od-libraries-add-many-title" className="od-admin-panel-title">
+              Add many libraries
+            </h2>
+            <p className="od-admin-lede">
+              Preview and review candidates first. Libraries are created only after explicit
+              confirmation.
+            </p>
+          </div>
+          <div
+            className="od-libraries-add-many__actions"
+            role="group"
+            aria-label="Add many workflows"
+          >
+            <Button
+              type="button"
+              className={addManyMode === 'propose' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'propose'}
+              onClick={() => setAddManyMode((mode) => (mode === 'propose' ? null : 'propose'))}
+            >
+              Propose from folder
+            </Button>
+            <Button
+              type="button"
+              className={addManyMode === 'import' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'import'}
+              onClick={() => setAddManyMode((mode) => (mode === 'import' ? null : 'import'))}
+            >
+              Import CSV/JSON
+            </Button>
+          </div>
+        </div>
+        {addManyMode === 'propose' ? <ProposeLeafLibraries /> : null}
+        {addManyMode === 'import' ? <ImportLeafLibraries /> : null}
+      </section>
       <LibrariesTrailSummary
         libraryCount={libraryCount}
         totalGames={totalGames}
@@ -402,6 +463,8 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
       ) : null}
 
       <DataTable
+        caption="Libraries"
+        scrollLabel="Libraries table"
         rows={visibleRows}
         getRowKey={(lib) => lib.uuid}
         columns={columns}
@@ -430,6 +493,19 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
           onSave={(name) => void saveGroup(name)}
         />
       ) : null}
+      <BatchLibraryEditModal
+        targets={editTargets}
+        onClose={() => setEditTargets(null)}
+        onApplied={() => {
+          setSelected(new Set())
+          void reload()
+        }}
+      />
+      <DeleteLibrariesModal
+        targets={deleteTargets}
+        onClose={() => setDeleteTargets(null)}
+        onDeleted={onLibrariesDeleted}
+      />
     </div>
   )
 }

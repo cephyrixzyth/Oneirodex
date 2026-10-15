@@ -1,4 +1,4 @@
-import { selectedValues } from './trailersHelpers'
+import { FilterChipGroup } from '@oneirodex/ui'
 
 /* FilterPanel moved out of TrailersPage (v11 cycle, H-D.2) — unchanged. */
 
@@ -84,43 +84,31 @@ export function FilterPanel({
           />
         </label>
 
-        <label htmlFor="od-trailers-genres">
-          Genres
-          <select
-            id="od-trailers-genres"
-            className="form-control"
-            multiple
-            size={8}
+        <fieldset className="library-filters__multi-select">
+          <legend>Genres</legend>
+          <FilterChipGroup
+            label="Genre options"
+            options={(options?.genres || []).map((genre: any) => ({
+              value: String(genre.id),
+              label: genre.name,
+            }))}
             value={filters.genres}
-            onChange={(event) => onChange({ genres: selectedValues(event.target) })}
-          >
-            {(options?.genres || []).map((genre: any) => (
-              <option key={genre.id} value={String(genre.id)}>
-                {genre.name}
-              </option>
-            ))}
-          </select>
-          <small>Hold Ctrl/Cmd to select multiple</small>
-        </label>
+            onChange={(genres) => onChange({ genres })}
+          />
+        </fieldset>
 
-        <label htmlFor="od-trailers-themes">
-          Themes
-          <select
-            id="od-trailers-themes"
-            className="form-control"
-            multiple
-            size={8}
+        <fieldset className="library-filters__multi-select">
+          <legend>Themes</legend>
+          <FilterChipGroup
+            label="Theme options"
+            options={(options?.themes || []).map((theme: any) => ({
+              value: String(theme.id),
+              label: theme.name,
+            }))}
             value={filters.themes}
-            onChange={(event) => onChange({ themes: selectedValues(event.target) })}
-          >
-            {(options?.themes || []).map((theme: any) => (
-              <option key={theme.id} value={String(theme.id)}>
-                {theme.name}
-              </option>
-            ))}
-          </select>
-          <small>Hold Ctrl/Cmd to select multiple</small>
-        </label>
+            onChange={(themes) => onChange({ themes })}
+          />
+        </fieldset>
       </div>
     </form>
   )

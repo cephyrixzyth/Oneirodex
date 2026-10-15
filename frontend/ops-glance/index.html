@@ -6,8 +6,12 @@
     <title>Oneirodex Ops Glance</title>
     <link rel="icon" href="/static/icons/favicon.ico?v=gt20260730" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v=gt20260730" />
+    <!-- The standalone entry has no Flask/Jinja shell to supply the active
+         theme foundation. Keep its public preview on the canonical dark
+         default theme; the embedded view inherits the signed-in user's theme. -->
+    <link rel="stylesheet" href="/static/library/themes/default/css/base.css" />
   </head>
-  <body>
+  <body class="ops-glance-standalone">
     <div id="ops-glance-root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

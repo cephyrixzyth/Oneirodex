@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { FilterChipGroup } from '@oneirodex/ui'
 import { fetchFilterOptions } from '../api/filters'
 import { PageStatus } from './PageStatus'
-import { BADGE_FILTER_CHIPS, toggleBadgeFilter } from './BadgeFilterChips'
+import { BADGE_FILTER_CHIPS } from './BadgeFilterChips'
 import {
+  formatItemKindFilter,
   ITEM_KIND_FILTER_CHIPS,
   parseItemKindFilter,
-  toggleItemKindFilter,
 } from './ItemKindFilterChips'
 import { SavedFilterPanel } from './filterBuilder/SavedFilterPanel'
 import { OwnershipFilterControls } from './OwnershipFilterControls'
@@ -251,6 +252,30 @@ export function FilterBar({
     onApply(next)
   }
 
+  const badgeSelection = BADGE_FILTER_CHIPS.filter(
+    (chip) => (filters[chip.param] ?? draft[chip.param]) === '1',
+  ).map((chip) => chip.param)
+
+  const applyBadgeSelection = (values: string[]) => {
+    const selected = new Set(values)
+    const next = { ...filters }
+    for (const chip of BADGE_FILTER_CHIPS) {
+      if (selected.has(chip.param)) next[chip.param] = '1'
+      else delete next[chip.param]
+    }
+    applyBadgeToggle(cleanFilters(next))
+  }
+
+  const kindSelection = parseItemKindFilter(filters.item_kind ?? draft.item_kind)
+  const applyKindSelection = (values: string[]) => {
+    const next = { ...filters }
+    const formatted = formatItemKindFilter(values)
+    if (formatted) next.item_kind = formatted
+    else delete next.item_kind
+    delete next.content_kind
+    applyBadgeToggle(cleanFilters(next))
+  }
+
   const selects = SELECTS.map(([name, label, emptyLabel, source, valueField, textField]) => [
     name,
     t(label),
@@ -282,29 +307,17 @@ export function FilterBar({
             control height so the commit cluster stays the loudest thing at the top. */}
         <fieldset className="library-filters__signals library-filters__signals--bar">
           <legend className="visually-hidden">{t('Signals')}</legend>
-          <div
-            className="od-cbtn-group od-cbtn-group--fill"
-            role="group"
-            aria-label={t('Badge filters')}
-          >
-            {BADGE_FILTER_CHIPS.map((chip) => {
-              const active = (filters[chip.param] ?? draft[chip.param]) === '1'
-              return (
-                <button
-                  key={chip.param}
-                  type="button"
-                  className={`od-cbtn${active ? ' is-on' : ''}`}
-                  aria-pressed={active}
-                  title={t(chip.title)}
-                  onClick={() =>
-                    toggleBadgeFilter(filters, chip.param, applyBadgeToggle, cleanFilters)
-                  }
-                >
-                  {t(chip.label)}
-                </button>
-              )
-            })}
-          </div>
+          <FilterChipGroup
+            label={t('Badge filters')}
+            options={BADGE_FILTER_CHIPS.map((chip) => ({
+              value: chip.param,
+              label: t(chip.label),
+              title: t(chip.title),
+            }))}
+            value={badgeSelection}
+            onChange={applyBadgeSelection}
+            size="compact"
+          />
         </fieldset>
 
         {/* INSP-3. The chip row above can only ever mean *and*; this is where a
@@ -408,27 +421,17 @@ export function FilterBar({
         {hideKind ? null : (
           <fieldset className="library-filters__signals">
             <legend>{t('Kind')}</legend>
-            <div className="od-badge-filter-chips" role="group" aria-label={t('Kind filters')}>
-              {ITEM_KIND_FILTER_CHIPS.map((chip) => {
-                const active = parseItemKindFilter(filters.item_kind ?? draft.item_kind).includes(
-                  chip.kind,
-                )
-                return (
-                  <button
-                    key={chip.kind}
-                    type="button"
-                    className={`od-badge-filter-chip${active ? ' is-active' : ''}`}
-                    aria-pressed={active}
-                    title={t(chip.title)}
-                    onClick={() =>
-                      toggleItemKindFilter(filters, chip.kind, applyBadgeToggle, cleanFilters)
-                    }
-                  >
-                    {t(chip.label)}
-                  </button>
-                )
-              })}
-            </div>
+            <FilterChipGroup
+              label={t('Kind filters')}
+              options={ITEM_KIND_FILTER_CHIPS.map((chip) => ({
+                value: chip.kind,
+                label: t(chip.label),
+                title: t(chip.title),
+              }))}
+              value={kindSelection}
+              onChange={applyKindSelection}
+              size="compact"
+            />
           </fieldset>
         )}
 

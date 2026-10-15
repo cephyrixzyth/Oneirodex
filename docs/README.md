@@ -1,6 +1,6 @@
 # Oneirodex documentation
 
-**Product version:** 1.1.8 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
+**Product version:** 1.1.9 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
 
@@ -23,6 +23,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Households / VR runtime | [runbooks/vr-byo-runtime.md](runbooks/vr-byo-runtime.md) — OpenXR runtime · OpenVR adapter · streamers · the wired USB-NCM link (0.7 ms / ~756 Mbps on a Quest 2) · tweaks as documentation, never distributed |
 | Operators / achievements | [runbooks/retroachievements.md](runbooks/retroachievements.md) — match ROMs to community achievement sets (opt-in key); nothing played in the browser unlocks |
 | Maintainers / theme art | [dev/theme-art-direction.md](dev/theme-art-direction.md) — what a theme is beyond a hue: room art, the accent sentinel, and how a generated backdrop lands |
+| Maintainers / UI foundations | [dev/ui-style-guide.md](dev/ui-style-guide.md) — working rules for shared web UI, icons, filters, forms, tables, actions, and responsive review |
 | Operators / WebRetro cores | [runbooks/webretro-cores.md](runbooks/webretro-cores.md) · [admin/webretro-core-clauses.md](admin/webretro-core-clauses.md) (non-commercial clauses — not counsel) |
 | Operators / emulator BIOS | [runbooks/emulator-bios.md](runbooks/emulator-bios.md) — operator-supplied firmware; Admin scan/install, filenames only |
 | Operators / ROM reference sets | [runbooks/reference-sets.md](runbooks/reference-sets.md) |
@@ -37,8 +38,9 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Maintainers / database evaluation | [adr/0012-evaluate-mariadb-before-engine-change.md](adr/0012-evaluate-mariadb-before-engine-change.md) — cost and compatibility gates; proposal only |
 | CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — current marker selection, explicit exclusions and coverage gate. Replaces `ci-wishlist.md` |
 | Support triage (maintainers) | [dev/ui-debt-log.md](dev/ui-debt-log.md) · [dev/api-envelope-keeps.md](dev/api-envelope-keeps.md) |
+| UI system (maintainers) | [dev/ui-style-guide.md](dev/ui-style-guide.md) — tokens, controls, icons, theme layers, contribution workflow, and private shared-package contract; the local catalog is `frontend/ui-catalog` (commands and limits in the guide) |
 | Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers. Older harness notes and the 2026-09-16 failure list are in [dev/archive/](dev/archive/README.md) |
-| Admin Jinja → React (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — which admin pages still render server-side, their handlers and APIs, and the port order (H-D.5) |
+| Template retirement and runtime migration (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — template/render census and runtime dependency boundary |
 | Writing an API route (maintainers) | [dev/pydantic-adoption.md](dev/pydantic-adoption.md) — `@validate_body` request models · which routes are migrated · adoption backlog |
 | Maintainers / browser engines | [dev/browser-play-engines.md](dev/browser-play-engines.md) — WebRetro · Nostalgist/koin · EmulatorJS · webЯcade sidecar · [runbooks/emulatorjs.md](runbooks/emulatorjs.md) (bundled engine B) |
 | OIDC / Authentik SSO | [runbooks/oidc-sso.md](runbooks/oidc-sso.md), [runbooks/oidc-authentik-unraid.md](runbooks/oidc-authentik-unraid.md) |
@@ -89,7 +91,7 @@ Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compos
 |---|---|
 | Product (shipped today) | Oneirodex (public string) |
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
-| Version | 1.1.8 |
+| Version | 1.1.9 |
 | GitHub | cephyrixzyth/oneirodex |
 | Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |

@@ -134,6 +134,11 @@ function DefaultLoadingStatus({ inline, className, loadingMessage }: RenderLoadi
 }
 
 export interface PageStatusProps {
+  announcement?: 'status' | 'alert'
+  busy?: boolean
+  id?: string
+  ariaLabelledBy?: string
+  dataState?: string
   loading?: boolean
   error?: unknown
   onRetry?: (() => void) | null
@@ -148,6 +153,11 @@ export interface PageStatusProps {
 }
 
 export function PageStatus({
+  announcement,
+  busy = false,
+  id,
+  ariaLabelledBy,
+  dataState,
   loading = false,
   error = null,
   onRetry = null,
@@ -205,6 +215,22 @@ export function PageStatus({
         <p className="od-page-status__message">{emptyMessage}</p>
         {children}
       </div>
+    )
+  }
+
+  if (announcement) {
+    const Announcement = inline ? 'span' : 'div'
+    return (
+      <Announcement
+        id={id}
+        aria-labelledby={ariaLabelledBy}
+        data-state={dataState}
+        className={`od-page-status od-page-status--${announcement === 'alert' ? 'error' : 'empty'}${className ? ` ${className}` : ''}`}
+        role={announcement}
+        aria-busy={busy || undefined}
+      >
+        {children}
+      </Announcement>
     )
   }
 

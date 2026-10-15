@@ -54,7 +54,8 @@ from typing import Any, Iterable
 
 from sqlalchemy import text
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
+from oneirodex.models.orm import ModelBase
 
 __all__ = [
     'RESET_SCOPES',
@@ -210,13 +211,13 @@ def _cascade_closure(tables: Iterable[str]) -> list[str]:
     way and reports the closure.
     """
     named = set(tables)
-    # `db.metadata` is only populated once the model module has been imported.
+    # Model metadata is populated once the model module has been imported.
     # Without this the closure silently comes back as "just what you asked for",
     # which would have the UI understate the blast radius — the one thing this
     # function exists to prevent.
     import oneirodex.models  # noqa: F401
 
-    metadata = db.metadata
+    metadata = ModelBase.metadata
 
     # Reverse dependency edges: child -> the parents it references.
     changed = True

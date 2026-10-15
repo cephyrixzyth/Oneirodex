@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { fetchCalendar } from '../api/calendar'
+import { initiateGameDownload } from '../api/downloads'
 import { ContextBar } from '../chrome/ContextBar'
 import { RailIcon } from '../chrome/railIcons'
 import { queueClientCommand } from '../api/clientCommands'
@@ -23,6 +24,7 @@ const INBOX_POLL_MS = 50000
 const CALENDAR_TEASER_LIMIT = 5
 
 export function UpdatesPage() {
+  const navigate = useNavigate()
   const shellConfig = useShellConfig()
   const useNewChrome = Boolean(shellConfig.enableNewChrome)
   const [items, setItems] = useState<any>(null)
@@ -385,9 +387,31 @@ export function UpdatesPage() {
                     </div>
                     <div className="od-updates__inbox-actions">
                       {pack?.download_url && seatCanUseCompanion() ? (
-                        <a className="od-btn" href={pack.download_url}>
+                        <Button
+                          type="button"
+                          disabled={busyKey === applyKey}
+                          onClick={() => {
+                            if (!pack || !pack.kind || !pack.uuid) return
+                            setBusyKey(applyKey)
+                            void initiateGameDownload(game.uuid, {
+                              kind: pack.kind,
+                              versionUuid: pack.uuid,
+                            })
+                              .then(() => {
+                                showToast(`${pack.kind} download added to Downloads.`, 'success')
+                                navigate('/downloads')
+                              })
+                              .catch((error: any) => {
+                                showToast(
+                                  error?.message || 'Unable to start this download.',
+                                  'error',
+                                )
+                              })
+                              .finally(() => setBusyKey(null))
+                          }}
+                        >
                           Download {pack.kind}
-                        </a>
+                        </Button>
                       ) : null}
                       {pack && game.client_connected && seatCanUseCompanion() ? (
                         <Button

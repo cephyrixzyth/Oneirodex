@@ -6,12 +6,14 @@ from flask_login import current_user, login_required
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.playnite_import import import_playnite_csv, import_playnite_json
 from oneirodex.utils.store_ownership_common import is_ownership_sync_enabled
+from oneirodex.utils.api_tokens import require_api_token_scope
 
 from . import apis_bp
 
 
 @apis_bp.route('/imports/playnite', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def import_playnite():
     """
     Import a Playnite library export.
@@ -65,6 +67,7 @@ def launcher_import_formats():
 
 @apis_bp.route('/imports/launcher', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def import_launcher():
     """Import a library export from Playnite, Heroic, Lutris, GOG Galaxy or a CSV.
 

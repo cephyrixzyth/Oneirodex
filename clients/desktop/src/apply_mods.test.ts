@@ -24,6 +24,7 @@ import {
   requiredLoaders,
   fetchModsSummaryGameUuids,
   isModArchiveFilename,
+  isUnsupportedModArchiveFilename,
   kickoffApplyModPack,
   modApplyBlockedReason,
   modApplyUiHint,
@@ -63,7 +64,8 @@ describe('apply_mods helpers', () => {
 
   it('detects mod archives', () => {
     expect(isModArchiveFilename('pack.zip')).toBe(true)
-    expect(isModArchiveFilename('pack.7Z')).toBe(true)
+    expect(isModArchiveFilename('pack.7Z')).toBe(false)
+    expect(isUnsupportedModArchiveFilename('pack.7Z')).toBe(true)
     expect(isModArchiveFilename('readme.txt')).toBe(false)
   })
 
@@ -249,6 +251,10 @@ describe('apply_mods helpers', () => {
     expect(result.mods[0].source_url).toBe('https://x/hd.zip')
     expect(result.mods[0].loader).toBe('')
     expect(result.default_loader).toBe('')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ redirect: 'error' }),
+    )
   })
 
   it('reads loader on rows and the pack default, and says which loaders are needed (INSP-36)', async () => {
@@ -322,19 +328,20 @@ describe('apply_mods helpers', () => {
     expect(uuids.gameUuids.has('g1')).toBe(true)
     expect(uuids.gameUuids.has('g2')).toBe(false)
     expect(uuids.trackingEnabled).toBe(true)
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ redirect: 'error' }),
+    )
   })
 
-  it('stageModFromUrl writes under app_data/mods via write_file_bytes', async () => {
+  it('stageModFromUrl streams bounded chunks under app_data/mods', async () => {
     vi.mocked(invoke).mockImplementation(async (command: string) => {
       if (command === 'get_app_subdir') {
         return '/appdata/mods'
       }
       return undefined
     })
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
-    })) as unknown as typeof fetch
+    const fetchImpl = vi.fn(async () => new Response(new TextEncoder().encode('PK')))
 
     const result = await stageModFromUrl({
       gameUuid: 'game-42',
@@ -349,10 +356,14 @@ describe('apply_mods helpers', () => {
       fetchImpl,
     })
 
-    expect(result).toEqual({ ok: true, path: '/appdata/mods/game-42/hd/hd.zip' })
+    expect(result).toEqual({ ok: true, path: '/appdata/mods/game-42/hd/hd.zip', bytes: 2 })
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/mods/game-42/hd/hd.zip',
-      bytes: expect.any(Array),
+      bytes: [],
+    })
+    expect(invoke).toHaveBeenCalledWith('append_file_bytes', {
+      path: '/appdata/mods/game-42/hd/hd.zip',
+      bytes: expect.any(Uint8Array),
     })
   })
 
@@ -368,10 +379,7 @@ describe('apply_mods helpers', () => {
       requires: [],
     })
     const okFetch = () =>
-      vi.fn(async () => ({
-        ok: true,
-        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
-      }))
+      vi.fn(async () => new Response(new TextEncoder().encode('PK')))
 
     beforeEach(() => {
       vi.mocked(invoke).mockImplementation(async (command: string) =>
@@ -390,6 +398,37 @@ describe('apply_mods helpers', () => {
       expect(result.ok === false && result.error).toMatch(/https:\/\//)
       expect(fetchImpl).not.toHaveBeenCalled()
       expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
+    })
+
+    it('refuses unsupported 7z archives before downloading', async () => {
+      const fetchImpl = okFetch()
+      const result = await stageModFromUrl({
+        gameUuid: 'game-42',
+        mod: modAt('https://cdn.example.com/hd.7z'),
+        fetchImpl,
+      })
+      expect(result).toEqual({
+        ok: false,
+        error: expect.stringContaining('7z archives are not supported'),
+      })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    })
+
+    it('stops a streaming download at the caller remaining-byte limit and deletes the partial file', async () => {
+      const limit = 4 * 1024 * 1024
+      const fetchImpl = vi.fn(async () => new Response(new Uint8Array(limit + 1)))
+      const result = await stageModFromUrl({
+        gameUuid: 'game-42',
+        mod: modAt('https://cdn.example.com/hd.zip'),
+        fetchImpl,
+        maxBytes: limit,
+      })
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.error).toContain('4 MiB pack limit')
+      expect(invoke).toHaveBeenCalledWith('remove_path', {
+        path: '/appdata/mods/game-42/hd/hd.zip',
+      })
+      expect(invoke).not.toHaveBeenCalledWith('inspect_staged_mod', expect.anything())
     })
 
     it('refuses non-http(s) schemes and junk', async () => {
@@ -433,7 +472,8 @@ describe('apply_mods helpers', () => {
         ok: true,
         redirected: true,
         url: 'http://evil.example.com/hd.zip',
-        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+        body: new Response(new TextEncoder().encode('PK')).body,
+        headers: new Headers(),
       }))
       const result = await stageModFromUrl({
         gameUuid: 'game-42',
@@ -449,7 +489,8 @@ describe('apply_mods helpers', () => {
         ok: true,
         redirected: true,
         url: 'https://objects.example.net/hd.zip',
-        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+        body: new Response(new TextEncoder().encode('PK')).body,
+        headers: new Headers(),
       }))
       const result = await stageModFromUrl({
         gameUuid: 'game-42',
@@ -466,7 +507,10 @@ describe('apply_mods helpers', () => {
         return '/appdata/mods'
       }
       if (command === 'apply_staged_mod') {
-        return { applied: 3 }
+        return { applied: 3, expandedBytes: 10 }
+      }
+      if (command === 'inspect_staged_mod') {
+        return { entryCount: 3, expandedBytes: 10 }
       }
       return undefined
     })
@@ -491,7 +535,8 @@ describe('apply_mods helpers', () => {
       }
       return {
         ok: true,
-        arrayBuffer: async () => new TextEncoder().encode('PK').buffer,
+        body: new Response(new TextEncoder().encode('PK')).body,
+        headers: new Headers(),
       }
     }) as unknown as typeof fetch
 
@@ -512,6 +557,49 @@ describe('apply_mods helpers', () => {
       sourcePath: '/appdata/mods/game-42/m1/one.zip',
       installRoot: 'C:\\Oneirodex\\installs\\game-42',
     })
+  })
+
+  it('rejects an oversized mod pack before applying any staged files', async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === 'get_app_subdir') return '/appdata/mods'
+      if (command === 'inspect_staged_mod') {
+        return { entryCount: 1, expandedBytes: 3 * 1024 * 1024 * 1024 }
+      }
+      if (command === 'apply_staged_mod') return { applied: 1, expandedBytes: 0 }
+      return undefined
+    })
+
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes('/mods')) {
+        return {
+          ok: true,
+          json: async () => ({
+            enabled: true,
+            mods: [
+              { id: 'm1', name: 'One', source_url: 'https://cdn.example/one.zip', enabled: true, load_order: 0 },
+              { id: 'm2', name: 'Two', source_url: 'https://cdn.example/two.zip', enabled: true, load_order: 1 },
+            ],
+          }),
+        }
+      }
+      return {
+        ok: true,
+        body: new Response(new TextEncoder().encode('PK')).body,
+        headers: new Headers(),
+      }
+    }) as unknown as typeof fetch
+
+    const result = await kickoffApplyModPack(
+      { getBaseUrl: () => 'https://gt.example', getToken: () => 'gt_x_y' } as never,
+      'game-42',
+      { fetchImpl },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Mod pack exceeds the 4 GiB expanded-size limit; no files were applied',
+    })
+    expect(invoke).not.toHaveBeenCalledWith('apply_staged_mod', expect.anything())
   })
 
   it('modApplyBlockedReason explains offline and install requirements', () => {

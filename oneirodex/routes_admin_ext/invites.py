@@ -1,11 +1,15 @@
-from flask import render_template, request, flash, redirect, url_for, jsonify
+from flask import request, flash, redirect, url_for, jsonify
 from flask_login import login_required
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.models import User, InviteToken
 from oneirodex import db
 from sqlalchemy import select, func, and_
 import uuid
 from . import admin2_bp
+from oneirodex.schemas.invites import AdjustInviteQuotaBody
+from oneirodex.utils.validation import validate_body
+from oneirodex.utils.api_response import api_ok, api_error
 
 @admin2_bp.route('/admin/api/invites', methods=['GET'])
 @login_required
@@ -44,11 +48,26 @@ def list_invites_api():
     })
 
 
+@admin2_bp.route('/admin/api/invites/quota', methods=['POST'])
+@login_required
+@admin_required
+@validate_body(AdjustInviteQuotaBody)
+def adjust_invite_quota(body: AdjustInviteQuotaBody):
+    user = db.session.execute(
+        select(User).filter_by(user_id=str(body.user_id)).with_for_update()
+    ).scalars().first()
+    if user is None:
+        return api_error('User not found.', code='not_found')
+    user.invite_quota = int(user.invite_quota or 0) + body.invites_number
+    db.session.commit()
+    return api_ok(user_id=user.user_id, invite_quota=user.invite_quota)
+
+
 @admin2_bp.route('/admin/invites', methods=['GET'])
 @login_required
 @admin_required
 def invites_spa():
-    return render_template('admin/admin_invites.html')
+    return render_admin_spa(title='Invites · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/manage_invites', methods=['GET', 'POST'])
@@ -98,35 +117,6 @@ def manage_invites():
             flash(f'Error updating invites: {str(e)}', 'error')
             return redirect(url_for('admin2.manage_invites'))
 
-    # Optimized database queries - fix N+1 problem with single JOIN query
-    try:
-        users = db.session.execute(select(User)).scalars().all()
-        
-        # Single query with LEFT JOIN to get unused invite counts for all users
-        user_invite_counts = db.session.execute(
-            select(
-                User.user_id, 
-                func.count(InviteToken.id).label('unused_count')
-            )
-            .select_from(User)
-            .outerjoin(
-                InviteToken, 
-                and_(
-                    InviteToken.creator_user_id == User.user_id,
-                    InviteToken.used == False
-                )
-            )
-            .group_by(User.user_id)
-        ).all()
-        
-        # Convert to dictionary for template use
-        user_unused_invites = {row.user_id: row.unused_count for row in user_invite_counts}
-        
-    except Exception as e:
-        flash(f'Error loading invite data: {str(e)}', 'error')
-        users = []
-        user_unused_invites = {}
+        return render_admin_spa(title='Invites · Oneirodex Admin')
 
-    return render_template('admin/admin_manage_invites.html', 
-                         users=users, 
-                         user_unused_invites=user_unused_invites)
+    return render_admin_spa(title='Invites · Oneirodex Admin')

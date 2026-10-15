@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.types import TypeDecorator, TEXT
 
-from oneirodex import db
+from oneirodex.models.orm import db
 
 logger = logging.getLogger(__name__)
 

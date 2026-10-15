@@ -7,7 +7,6 @@ from flask import (
     current_app,
     jsonify,
     redirect,
-    render_template,
     request,
     send_from_directory,
     url_for,
@@ -20,20 +19,10 @@ from oneirodex.utils.browse_payload import build_browse_payload
 from oneirodex.utils.browse_query import run_browse_query
 from oneirodex.utils.filter_tree import FilterTreeError
 from oneirodex.utils.member_spa import render_member_spa
+from oneirodex.utils.pwa_manifest import build_app_manifest
 from oneirodex.utils.processors import get_global_settings
 
 member_bp = Blueprint('member', __name__)
-
-
-@member_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Inject global settings into member-blueprint templates.
-
-    Matches every other member-facing blueprint. ``render_member_spa`` also
-    merges these flags, so a forgotten processor cannot hide Help / Trailers.
-    """
-    return get_global_settings()
 
 
 @member_bp.route('/browse_games')
@@ -234,39 +223,8 @@ def app_manifest():
     No login required — a manifest is fetched by the browser before the member
     is anywhere near signing in, and it contains nothing but branding.
     """
-    from oneirodex.product import PRODUCT_NAME
-
     settings = get_global_settings() or {}
-    site_name = str(settings.get('site_name') or '').strip() or PRODUCT_NAME
-    manifest = {
-        'id': '/library',
-        'name': site_name,
-        'short_name': site_name[:12] or PRODUCT_NAME[:12],
-        'description': f'{site_name} — your household game library',
-        # The library, not `/`: an installed window should open on the shelf.
-        'start_url': '/library',
-        # Site-wide so details, Discover, settings and browser play all stay
-        # inside the installed window instead of kicking out to the browser.
-        'scope': '/',
-        'display': 'standalone',
-        'display_override': ['window-controls-overlay', 'standalone', 'minimal-ui'],
-        'orientation': 'any',
-        'background_color': '#0b0f14',
-        'theme_color': '#0b0f14',
-        'categories': ['games', 'entertainment', 'utilities'],
-        'icons': [
-            {'src': '/static/icons/icon-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any'},
-            {'src': '/static/icons/gametheca-256.png', 'sizes': '256x256', 'type': 'image/png', 'purpose': 'any'},
-            {'src': '/static/icons/gametheca-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any'},
-            {'src': '/static/icons/gametheca-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
-        ],
-        'shortcuts': [
-            {'name': 'Library', 'url': '/library'},
-            {'name': 'Discover', 'url': '/discover'},
-            {'name': 'Big Picture', 'url': '/bigpicture'},
-        ],
-    }
-    resp = jsonify(manifest)
+    resp = jsonify(build_app_manifest(settings.get('site_name')))
     resp.mimetype = 'application/manifest+json'
     # Branding changes rarely; an hour keeps a rename from taking a day.
     resp.headers['Cache-Control'] = 'public, max-age=3600'
@@ -292,7 +250,18 @@ def offline_page():
     precached page that carried library data would be readable by whoever opens
     the browser next.
     """
-    resp = current_app.make_response(render_template('site/offline.html'))
+    from oneirodex.utils.offline_page import render_offline_page
+    from oneirodex.utils.asset_urls import asset_version
+
+    retry_script = Path(current_app.static_folder or '') / 'js' / 'od_offline_retry.js'
+    retry_url = url_for(
+        'static',
+        filename='js/od_offline_retry.js',
+        v=asset_version(retry_script),
+    )
+    resp = current_app.response_class(
+        render_offline_page(retry_url), mimetype='text/html',
+    )
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
 

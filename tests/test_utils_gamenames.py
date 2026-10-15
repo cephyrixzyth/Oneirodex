@@ -112,8 +112,9 @@ class TestGetGameNamesFromFolder:
         assert 'Nethack' in names
         assert 'Adventure Game' in names
     
+    @patch('oneirodex.utils.gamenames.has_request_context', return_value=True)
     @patch('oneirodex.utils.gamenames.flash')
-    def test_non_existent_folder(self, mock_flash, capsys):
+    def test_non_existent_folder(self, mock_flash, _mock_has_request_context, capsys):
         """Test behavior when folder doesn't exist."""
         result = get_game_names_from_folder('/non/existent/path', [], [])
         
@@ -123,8 +124,10 @@ class TestGetGameNamesFromFolder:
         mock_flash.assert_called_once()
     
     @patch('os.access')
+    @patch('oneirodex.utils.gamenames.has_request_context', return_value=True)
     @patch('oneirodex.utils.gamenames.flash')
-    def test_folder_without_read_permissions(self, mock_flash, mock_access, temp_directory, capsys):
+    def test_folder_without_read_permissions(self, mock_flash, _mock_has_request_context,
+                                             mock_access, temp_directory, capsys):
         """Test behavior when folder exists but is not readable."""
         mock_access.return_value = False
         
@@ -134,6 +137,13 @@ class TestGetGameNamesFromFolder:
         captured = capsys.readouterr()
         assert "does not exist or is not readable" in captured.out
         mock_flash.assert_called_once()
+
+    @patch('oneirodex.utils.gamenames.flash')
+    def test_missing_folder_without_request_context_does_not_flash(self, mock_flash, capsys):
+        result = get_game_names_from_folder('/non/existent/native-path', [], [])
+
+        assert result == []
+        mock_flash.assert_not_called()
     
     def test_empty_folder(self, temp_directory):
         """Test behavior with empty folder."""

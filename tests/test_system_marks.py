@@ -12,8 +12,10 @@ import pytest
 
 from oneirodex.utils.system_marks import (
     build_system_mark_prompt,
+    existing_mark_url,
     generate_system_marks,
     list_system_marks_catalog,
+    mark_exists,
     mark_path,
     platform_choices,
     platform_ids,
@@ -64,6 +66,42 @@ def test_catalog_lists_themes(tmp_path: Path):
     assert all('generated' in row and 'total' in row for row in rows)
 
 
+def test_canonical_theme_catalog_and_lab_reuse_legacy_alias_marks_without_generation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv('ENABLE_AI_ARTWORK', 'false')
+    legacy_dir = tmp_path / 'static' / 'library' / 'system-marks' / 'forest'
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / 'nes.webp').write_bytes(b'RIFF....WEBP')
+    (legacy_dir / 'manifest.json').write_text('{"theme":"forest","platforms":["nes"]}\n')
+
+    greenhouse = next(
+        row for row in list_system_marks_catalog(package_root=tmp_path)
+        if row['theme'] == 'greenhouse'
+    )
+    assert greenhouse['generated'] == 1
+    assert 'nes' in greenhouse['platforms']
+    assert greenhouse['manifest_platforms'] == ['nes']
+    assert mark_exists('greenhouse', 'nes', package_root=tmp_path)
+    assert existing_mark_url('greenhouse', 'nes', package_root=tmp_path) == (
+        '/static/library/system-marks/forest/nes.webp'
+    )
+    spec = system_mark_lab_spec(theme='greenhouse', platform='nes', package_root=tmp_path)
+    assert spec['exists'] is True
+    assert spec['url'] == '/static/library/system-marks/forest/nes.webp'
+
+    result = generate_system_marks(
+        themes=['greenhouse'],
+        platforms=['nes'],
+        package_root=tmp_path,
+        force=False,
+    )
+    assert result['generated'] == 0
+    assert result['skipped'] == 1
+    assert result['results'][0]['url'] == '/static/library/system-marks/forest/nes.webp'
+
+
 def test_generate_skips_without_ai_when_file_exists(tmp_path: Path, monkeypatch):
     monkeypatch.setenv('ENABLE_AI_ARTWORK', 'false')
     target = mark_path('default', 'nes', package_root=tmp_path)
@@ -80,6 +118,22 @@ def test_generate_skips_without_ai_when_file_exists(tmp_path: Path, monkeypatch)
     assert result['errors'] == []
     assert 'path' not in result['results'][0]
     assert result['results'][0]['url'] == '/static/library/system-marks/default/nes.webp'
+
+
+def test_system_mark_write_error_does_not_expose_local_path(tmp_path: Path, monkeypatch):
+    import oneirodex.utils.system_marks as system_marks
+
+    local_path = str(tmp_path / 'private-library' / 'mark.webp')
+
+    def fail_generation(**_kwargs):
+        raise OSError(f'Permission denied: {local_path}')
+
+    monkeypatch.setattr(system_marks, 'generate_system_mark', fail_generation)
+    result = system_marks.generate_system_marks(
+        themes=['default'], platforms=['nes'], package_root=tmp_path,
+    )
+    assert result['errors'][0]['error'] == 'Failed to write generated system mark'
+    assert local_path not in str(result)
 
 
 def test_cli_help_exits_zero():

@@ -1,7 +1,6 @@
 # oneirodex/routes_site.py
 from flask import (
     Blueprint,
-    render_template,
     redirect,
     url_for,
     current_app,
@@ -13,6 +12,8 @@ from flask_login import login_required, logout_user, current_user
 
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.member_spa import render_member_spa
+from oneirodex.utils.admin_spa import render_admin_spa
+from oneirodex.utils.styleguide_page import render_styleguide
 
 from sqlalchemy import func, select
 from oneirodex import db
@@ -21,18 +22,10 @@ import random
 import re
 from datetime import datetime
 from oneirodex.models import Game, Library, Genre, Theme
-from oneirodex.utils.processors import get_global_settings
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.library_acl import apply_game_access_filters
-from oneirodex import cache
 
 site_bp = Blueprint('site', __name__)
-
-@site_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Context processor to inject global settings into templates"""
-    return get_global_settings()
 
 @site_bp.route('/dev/styleguide')
 @login_required
@@ -52,14 +45,13 @@ def styleguide():
     their own install, with their own preset selected — not something only
     reachable in a dev checkout.
     """
-    return render_template('site/styleguide.html')
+    return render_styleguide()
 
 
 @site_bp.route('/restricted')
 @login_required
 def restricted():
-    print("Route: /restricted")
-    return render_template('site/restricted_area.html', title='Restricted Area')
+    return redirect(url_for('member.welcome_page'))
 
 
 @site_bp.route('/help')
@@ -96,14 +88,14 @@ def index():
 @admin_required
 def admin_dashboard():
     print(f"Route: /admin/dashboard - {current_user.name} - {current_user.role} method: {request.method}")
-    return render_template('admin/admin_dashboard.html')
+    return render_admin_spa(title='Dashboard · Oneirodex Admin')
 
 
 @site_bp.route('/admin/support')
 @login_required
 @admin_required
 def admin_support():
-    return render_template('admin/admin_support.html')
+    return render_admin_spa(title='Support inbox · Oneirodex Admin')
 
 
 @site_bp.route('/favorites')

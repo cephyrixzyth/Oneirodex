@@ -26,13 +26,41 @@ export type OpsSystemDetail = any
 
 export function livekitLabel(livekit: OpsSummary) {
   if (!livekit) return 'n/a'
-  if (livekit.configured) {
+  if (livekit.configured === true) {
     if (livekit.reachable === true) return 'reachable'
     if (livekit.reachable === false) return 'unreachable'
-    return 'configured'
+    return 'reachability unavailable'
   }
-  if (livekit.enabled) return 'enabled (missing secrets)'
-  return 'off'
+  if (livekit.enabled === true) return 'enabled · incomplete configuration'
+  if (livekit.enabled === false) return 'off'
+  return 'unavailable'
+}
+
+export function livekitTone(livekit: OpsSummary): 'good' | 'warn' | 'bad' | 'na' {
+  if (!livekit) return 'na'
+  if (livekit.configured === true) {
+    if (livekit.reachable === true) return 'good'
+    if (livekit.reachable === false) return 'bad'
+    return 'na'
+  }
+  if (livekit.enabled === true && livekit.configured === false) return 'warn'
+  return 'na'
+}
+
+export function malwareLabel(malware: OpsSummary) {
+  if (!malware || typeof malware.enabled !== 'boolean') return 'unavailable'
+  if (!malware.enabled) return 'off'
+  if (malware.clamav_reachable === true) return 'on · ClamAV up'
+  if (malware.clamav_reachable === false) return 'on · ClamAV down (heuristics only)'
+  return 'on · ClamAV status unavailable'
+}
+
+export function malwareTone(malware: OpsSummary): 'good' | 'warn' | 'bad' | 'na' {
+  if (!malware || typeof malware.enabled !== 'boolean') return 'na'
+  if (!malware.enabled) return 'na'
+  if (malware.clamav_reachable === true) return 'good'
+  if (malware.clamav_reachable === false) return 'warn'
+  return 'na'
 }
 
 /** Panel id → heading. The ids are the keys of the /admin/api/ops/system
@@ -191,13 +219,24 @@ export function OpsPage() {
     () =>
       buildOpsWidgets({
         snapshot,
+        loading: bootLoading && !snapshot,
+        unavailable: !snapshot && !bootLoading && Boolean(error),
         presentDetailIds,
         systemDetail,
         recentLogs,
         openFullLog,
         devices,
       }),
-    [snapshot, presentDetailIds, systemDetail, recentLogs, openFullLog, devices],
+    [
+      snapshot,
+      bootLoading,
+      error,
+      presentDetailIds,
+      systemDetail,
+      recentLogs,
+      openFullLog,
+      devices,
+    ],
   )
 
   const visibleKey = useMemo(

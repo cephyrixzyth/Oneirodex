@@ -3,7 +3,7 @@
 Bodies moved verbatim from ``oneirodex/utils/game_core.py`` in wave A2.3.
 """
 from sqlalchemy import select
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game
 from oneirodex.utils.event_logging import log_system_event
 import logging

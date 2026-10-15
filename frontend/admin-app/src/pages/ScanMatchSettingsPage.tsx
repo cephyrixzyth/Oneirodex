@@ -36,7 +36,9 @@ function FieldNumber({
       {label}
       <input
         id={id}
+        className="od-admin-input"
         type="number"
+        required
         min={min}
         max={max}
         step={step}
@@ -56,9 +58,13 @@ export function ScanMatchSettingsPage() {
   const [degradeReason, setDegradeReason] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
+    setError(null)
+    setMessage('')
     loadScanMatchConfig().then((result) => {
       if (cancelled) return
       setForm(result.form)
@@ -69,9 +75,10 @@ export function ScanMatchSettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   function updateField(key: string, value: unknown) {
+    if (busy || loading) return
     setForm((prev) => ({ ...prev, [key]: value }))
     setMessage('')
     setError(null)
@@ -79,7 +86,7 @@ export function ScanMatchSettingsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !exposed.length) return
+    if (busy || loading || degradeReason || !exposed.length) return
     setBusy(true)
     setMessage('')
     setError(null)
@@ -107,7 +114,7 @@ export function ScanMatchSettingsPage() {
     }
   }
 
-  const canSave = exposed.length > 0 && !busy
+  const canSave = exposed.length > 0 && !busy && !loading && !degradeReason
   const showPropose = exposed.includes('propose_only_scan')
   const showDupe = exposed.includes('dupe_title_threshold')
   const showHigh = exposed.includes('match_high_threshold')
@@ -130,36 +137,38 @@ export function ScanMatchSettingsPage() {
       }
     >
       <AdminPageActions label="Scan and matching actions">
-        <a className="od-cbtn" href="/admin/libraries">
+        <a className="od-cbtn" href="/libraries">
           Libraries
         </a>
         <a className="od-cbtn" href="/scan_management">
           Scan management
         </a>
       </AdminPageActions>
-      {/* The two `od-admin-banner` blocks below stay as banners: they disclose
-          rollout state (which policy fields Backend exposes), which is page
-          content rather than a transient loading/error state. */}
       <PageStatus loading={loading} loadingMessage="Loading scan/match settings…" />
 
       {!loading && degradeReason ? (
-        <div className="od-admin-banner od-admin-banner--warn" role="status">
-          {degradeReason} <a href="/admin/new_server_settings">Open Server Settings</a> for
-          propose-only until Backend exposes this API.
-        </div>
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--warn'}>
+          {degradeReason} <a href="/admin/new_server_settings">Open Server Settings</a> to configure
+          propose-only scanning.
+        </PageStatus>
+      ) : null}
+
+      {!loading && degradeReason ? (
+        <Button disabled={busy} onClick={() => setReloadKey((key) => key + 1)}>
+          Retry loading settings
+        </Button>
       ) : null}
 
       {!loading && !degradeReason && exposed.length > 0 ? (
-        <div className="od-admin-banner od-admin-banner--info" role="status">
-          Editing {exposed.length} policy field{exposed.length === 1 ? '' : 's'} from Backend.
-          Fields not yet rolled out stay hidden.
-        </div>
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--info'}>
+          Configure scan matching and search variants.
+        </PageStatus>
       ) : null}
 
       {!loading && exposed.length > 0 ? (
         <form className="od-admin-panel od-scan-match" onSubmit={save}>
           {showPropose ? (
-            <fieldset className="od-admin-fieldset">
+            <fieldset className="od-admin-fieldset" disabled={busy}>
               <legend>Propose-only (libraries)</legend>
               <label className="od-admin-field od-admin-field--check" htmlFor="propose_only_scan">
                 <input
@@ -181,7 +190,7 @@ export function ScanMatchSettingsPage() {
           ) : null}
 
           {showDupe || showHigh || showGap ? (
-            <fieldset className="od-admin-fieldset">
+            <fieldset className="od-admin-fieldset" disabled={busy}>
               <legend>Match confidence</legend>
               {showDupe ? (
                 <FieldNumber
@@ -214,12 +223,13 @@ export function ScanMatchSettingsPage() {
           ) : null}
 
           {showPeel ? (
-            <fieldset className="od-admin-fieldset">
+            <fieldset className="od-admin-fieldset" disabled={busy}>
               <legend>Peel profile</legend>
               <label className="od-admin-field" htmlFor="peel_profile">
                 Name peel aggressiveness
                 <select
                   id="peel_profile"
+                  className="od-admin-input"
                   value={form.peel_profile || PEEL_PROFILES.CONSERVATIVE}
                   onChange={(e) => updateField('peel_profile', e.target.value)}
                 >
@@ -239,10 +249,10 @@ export function ScanMatchSettingsPage() {
           ) : null}
 
           {variantKeys.length > 0 ? (
-            <fieldset className="od-admin-fieldset">
+            <fieldset className="od-admin-fieldset" disabled={busy}>
               <legend>Safe search variants</legend>
               <p className="od-admin-hint">
-                Optional Backend toggles for Stage C variants. Hidden when not shipped.
+                Choose additional name variants to use when searching for a match.
               </p>
               {variantKeys.map((key) => {
                 const meta = SAFE_VARIANT_LABELS[key as keyof typeof SAFE_VARIANT_LABELS] || {
@@ -279,9 +289,9 @@ export function ScanMatchSettingsPage() {
             </a>
           </div>
           {message ? (
-            <p role="status" className="od-admin-lede od-admin-lede--ok">
+            <PageStatus announcement="status" className="od-admin-lede od-admin-lede--ok">
               {message}
-            </p>
+            </PageStatus>
           ) : null}
           <PageStatus error={error} />
         </form>
@@ -290,9 +300,7 @@ export function ScanMatchSettingsPage() {
       {!loading && !exposed.length ? (
         <div className="od-admin-panel">
           <p className="od-admin-lede">
-            No scan/match policy fields are available from Backend yet. Defaults stay in code
-            (`high_threshold` {SCAN_MATCH_DEFAULTS.match_high_threshold}, `ambiguous_gap`{' '}
-            {SCAN_MATCH_DEFAULTS.match_ambiguous_gap}). Propose-only remains on{' '}
+            Scan/match settings are unavailable. Configure propose-only scanning in{' '}
             <a href="/admin/new_server_settings">Server Settings</a>.
           </p>
           <div className="od-admin-actions-row">

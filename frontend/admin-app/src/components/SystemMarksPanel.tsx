@@ -306,9 +306,9 @@ export function SystemMarksPanel() {
 
       <PageStatus error={error} />
       {status ? (
-        <p className="od-admin-lede" role="status">
+        <PageStatus announcement="status" className="od-admin-lede">
           {status}
-        </p>
+        </PageStatus>
       ) : null}
 
       {loading ? (

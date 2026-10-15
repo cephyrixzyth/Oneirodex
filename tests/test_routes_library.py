@@ -147,17 +147,12 @@ class TestLibraryBlueprint:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
         
-        with patch('oneirodex.routes_library.render_template') as mock_render:
-            mock_render.return_value = 'rendered template'
+        with patch('oneirodex.routes_library.render_admin_spa') as mock_render:
+            mock_render.return_value = 'rendered admin shell'
             response = client.get('/libraries')
             
         assert response.status_code == 200
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert args[0] == 'admin/admin_manage_libraries.html'
-        assert 'libraries' in kwargs
-        assert 'csrf_form' in kwargs
-        assert 'game_count' in kwargs
+        mock_render.assert_called_once_with(title='Libraries & scans - Oneirodex Admin')
 
     def test_library_route_requires_login(self, client):
         """Test that the library route requires authentication."""

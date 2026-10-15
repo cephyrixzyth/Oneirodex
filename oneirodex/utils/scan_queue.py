@@ -12,12 +12,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from threading import Thread
 
-from flask import current_app
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from oneirodex import db
 from oneirodex.models import ScanJob
+from oneirodex.runtime_native.db_session import native_db as db
 
 FORCE_PARALLEL_RISK = (
     'Force parallel starts a second library scan while another is still '
@@ -52,6 +51,14 @@ STALE_RUNNING_SECONDS = 6 * 60 * 60
 # pid-only check would then call an orphaned job healthy and keep the queue
 # wedged — the exact failure this column exists to end.
 PROCESS_TOKEN = f'{uuid.uuid4().hex}:{os.getpid()}'
+
+
+def _application_or_current(app):
+    if app is not None:
+        return app
+    from flask import current_app
+
+    return current_app._get_current_object()
 
 
 def owner_is_alive(token: str | None, started_at=None) -> bool:
@@ -330,7 +337,7 @@ def scan_run_values(*, now=None):
 
 
 def restart_or_queue_scan(job_id, *, queue_policy='queue', allow_force=False, app=None,
-                          scheduled=False):
+                          scheduled=False, database_scope=None):
     """Conditionally claim an existing terminal/due row, preserving its schedule.
 
     Queued and busy rows cannot be restarted: their worker or queue claim already
@@ -370,7 +377,10 @@ def restart_or_queue_scan(job_id, *, queue_policy='queue', allow_force=False, ap
     except Exception:
         pass
     try:
-        _start_job_thread(job, app or current_app._get_current_object(), force_parallel=force)
+        _start_job_thread(
+            job, _application_or_current(app), force_parallel=force,
+            database_scope=database_scope,
+        )
     except Exception:
         job.status = 'Failed'
         job.is_enabled = False
@@ -457,9 +467,10 @@ def _has_older_busy_scan(candidate: ScanJob) -> bool:
     return False
 
 
-def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False):
+def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
+                      database_scope=None):
     """Spawn daemon thread that runs ``scan_and_add_games`` for an existing job."""
-    from oneirodex.utilities import scan_and_add_games
+    from oneirodex.utils.services.scan_orchestration import scan_and_add_games
 
     job_id = job.id
     folder = job.scan_folder
@@ -471,7 +482,10 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False):
     schedule = job.schedule
 
     def _run():
-        with app.app_context():
+        from contextlib import nullcontext
+
+        app_scope = app.app_context() if database_scope is None else nullcontext()
+        with app_scope, (database_scope(app) if database_scope else nullcontext()):
             existing = db.session.get(ScanJob, job_id)
             if not existing:
                 return
@@ -485,6 +499,8 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False):
                 force_updates_extras_scan=force_updates_extras,
                 schedule=schedule,
                 force_parallel=force_parallel,
+                database_scope=database_scope,
+                app=app if database_scope is not None else None,
             )
 
     Thread(target=_run, daemon=True, name=f'oneirodex-scan-{job_id[:8]}').start()
@@ -524,7 +540,7 @@ def start_or_queue_scan(
             ),
         }
 
-    flask_app = app or current_app._get_current_object()
+    flask_app = _application_or_current(app)
     if schedule_fields is None:
         schedule_fields = normalize_schedule_fields(schedule)
 
@@ -741,7 +757,7 @@ def reclaim_stale_busy_jobs(
     return reclaimed
 
 
-def promote_next_queued_scan(app=None) -> ScanJob | None:
+def promote_next_queued_scan(app=None, *, database_scope=None) -> ScanJob | None:
     """If no scan is busy, promote the oldest Queued job to Running and start it.
 
     Safe to call after a job reaches a terminal state. Returns the promoted job
@@ -805,20 +821,22 @@ def promote_next_queued_scan(app=None) -> ScanJob | None:
     except Exception:
         pass
 
-    flask_app = app or current_app._get_current_object()
+    flask_app = _application_or_current(app)
     print(f'[SCAN QUEUE] Promoting queued job {promoted.id} for {promoted.scan_folder}')
-    _start_job_thread(promoted, flask_app, force_parallel=False)
+    _start_job_thread(
+        promoted, flask_app, force_parallel=False, database_scope=database_scope,
+    )
     return promoted
 
 
-def drain_scan_queue(app=None) -> ScanJob | None:
+def drain_scan_queue(app=None, *, database_scope=None) -> ScanJob | None:
     """Reclaim stale busy jobs then promote the next Queued scan (safety drain)."""
     try:
         reclaim_stale_busy_jobs()
     except Exception as exc:
         print(f'[SCAN QUEUE] Stale reclaim failed: {exc}')
     try:
-        return promote_next_queued_scan(app)
+        return promote_next_queued_scan(app, database_scope=database_scope)
     except Exception as exc:
         print(f'[SCAN QUEUE] Promote failed: {exc}')
         return None

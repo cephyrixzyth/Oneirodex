@@ -329,8 +329,8 @@ export async function pickDownloadVersion(
  * In-DOM version picker. Replaces `window.prompt()`: a synchronous prompt blocks
  * the Tauri webview event loop, cannot be styled or keyboard-driven, and reads
  * as a browser artefact in a native window. This renders a small modal overlay
- * in the same hand-built style as the rest of `app.ts` — a radiogroup of
- * versions, arrow-key navigation, Enter to confirm, Escape / backdrop to cancel.
+ * in the same hand-built style as the rest of `app.ts` — a named radiogroup of
+ * versions, arrow-key navigation, Tab containment, Escape / backdrop to cancel.
  *
  * Resolves with the chosen version, or `null` when dismissed or when there is no
  * DOM to render into (tests, non-webview runs). Callers must stop the download
@@ -345,6 +345,9 @@ export function promptForDownloadVersion(
   }
 
   return new Promise<GameVersionItem | null>((resolve) => {
+    const returnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
     const defaultIndex = Math.max(
       versions.findIndex((version) => version.is_default),
       0,
@@ -368,6 +371,7 @@ export function promptForDownloadVersion(
     const group = document.createElement('div')
     group.className = 'od-version-list'
     group.setAttribute('role', 'radiogroup')
+    group.setAttribute('aria-label', 'Available download versions')
 
     const options: HTMLButtonElement[] = versions.map((version, index) => {
       const option = document.createElement('button')
@@ -392,12 +396,12 @@ export function promptForDownloadVersion(
     actions.className = 'od-version-actions'
     const cancelButton = document.createElement('button')
     cancelButton.type = 'button'
-    cancelButton.className = 'od-version-cancel'
+    cancelButton.className = 'od-version-cancel secondary'
     cancelButton.textContent = 'Cancel'
     cancelButton.addEventListener('click', () => finish(null))
     const confirmButton = document.createElement('button')
     confirmButton.type = 'button'
-    confirmButton.className = 'od-version-confirm'
+    confirmButton.className = 'od-version-confirm primary'
     confirmButton.textContent = 'Download'
     confirmButton.addEventListener('click', () => finish(versions[selectedIndex] ?? null))
     actions.append(cancelButton, confirmButton)
@@ -414,10 +418,31 @@ export function promptForDownloadVersion(
       if (event.key === 'Escape') {
         event.preventDefault()
         finish(null)
-      } else if (event.key === 'Enter') {
-        event.preventDefault()
-        finish(versions[selectedIndex] ?? null)
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      } else if (event.key === 'Tab') {
+        const focusable = Array.from(
+          overlay.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        )
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (!first || !last) {
+          event.preventDefault()
+          return
+        }
+        const active = document.activeElement
+        if (event.shiftKey && (active === first || !overlay.contains(active))) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && (active === last || !overlay.contains(active))) {
+          event.preventDefault()
+          first.focus()
+        }
+      } else if (
+        (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+        event.target instanceof HTMLElement &&
+        event.target.getAttribute('role') === 'radio'
+      ) {
         event.preventDefault()
         const delta = event.key === 'ArrowDown' ? 1 : -1
         selectedIndex = (selectedIndex + delta + versions.length) % versions.length
@@ -442,6 +467,9 @@ export function promptForDownloadVersion(
       settled = true
       document.removeEventListener('keydown', onKeyDown, true)
       overlay.remove()
+      if (returnFocus?.isConnected) {
+        returnFocus.focus()
+      }
       resolve(result)
     }
 

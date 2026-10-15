@@ -13,10 +13,12 @@ from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.functions import get_path_size
 from oneirodex.utils.global_settings import global_settings_row
+from oneirodex.utils.api_tokens import require_api_scope
 from . import download_bp
 
-@download_bp.route('/download_game/<game_uuid>', methods=['GET'])
+@download_bp.route('/download_game/<game_uuid>', methods=['POST'])
 @login_required
+@require_api_scope('write:download')
 def download_game(game_uuid):
     # Validate UUID format
     if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', game_uuid, re.IGNORECASE):
@@ -116,8 +118,9 @@ def download_game(game_uuid):
         flash("An error occurred processing your request.", "error")
         return redirect(url_for('download.downloads'))
 
-@download_bp.route('/download_other/<file_type>/<game_uuid>/<file_id>', methods=['GET'])
+@download_bp.route('/download_other/<file_type>/<game_uuid>/<file_id>', methods=['POST'])
 @login_required
+@require_api_scope('write:download')
 def download_other(file_type, game_uuid, file_id):
     """Handle downloads for update and extra files"""
     

@@ -63,7 +63,7 @@ export const DASHBOARD_WIDGET_LABELS: Record<string, string> = {
 
 const METRIC_MIN = { w: 2, h: 2 }
 const PANEL_MIN = { w: 3, h: 3 }
-const STATUS_MIN = { w: 6, h: 3 }
+const STATUS_MIN = { w: 6, h: 1 }
 
 export function widgetMins(id: string): WidgetMins {
   if (id === 'status') return STATUS_MIN
@@ -79,8 +79,8 @@ export function widgetMins(id: string): WidgetMins {
 export function defaultDashboardLayout({
   hasErrors = false,
 }: { hasErrors?: boolean } = {}): WidgetItem[] {
-  const items: WidgetItem[] = [{ id: 'status', x: 0, y: 0, w: 12, h: 3 }]
-  let y = 3
+  const items: WidgetItem[] = [{ id: 'status', x: 0, y: 0, w: 12, h: 1 }]
+  let y = 1
   const perRow = 4
   const ids = DASHBOARD_METRIC_IDS
   for (let i = 0; i < ids.length; i += perRow) {
@@ -329,6 +329,14 @@ export function loadDashboardLayout(hasErrors: boolean): WidgetItem[] {
     const raw = window.localStorage.getItem(DASHBOARD_STORAGE_KEY)
     if (!raw) return fallback
     const parsed = JSON.parse(raw)
+    // Compact only the untouched old default. A customized board keeps every
+    // saved position and size; the old default's extra two status rows were
+    // empty space, not an intentional arrangement.
+    const storedHasErrors = Array.isArray(parsed) && parsed.some((item) => item?.id === 'errors')
+    const oldDefault = defaultDashboardLayout({ hasErrors: storedHasErrors }).map((item) =>
+      item.id === 'status' ? { ...item, h: 3 } : { ...item, y: item.y + 2 },
+    )
+    if (sameWidgetLayout(parsed, oldDefault)) return fallback
     let merged = mergeBoardLayout(parsed, fallback)
     if (!hasErrors) {
       return resolveOverlaps(merged.filter((item) => item.id !== 'errors'))
@@ -371,10 +379,32 @@ export function loadBoardLayout({
   try {
     const raw = window.localStorage.getItem(storageKey)
     if (!raw) return fallback
-    return mergeBoardLayout(JSON.parse(raw), fallback, minsFn)
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.some((item) => item?.id === 'status')) {
+      const oldDefault = fallback.map((item) =>
+        item.id === 'status' ? { ...item, h: 3 } : { ...item, y: item.y + 2 },
+      )
+      if (sameWidgetLayout(parsed, oldDefault)) return fallback
+    }
+    return mergeBoardLayout(parsed, fallback, minsFn)
   } catch {
     return fallback
   }
+}
+
+function sameWidgetLayout(stored: unknown, expected: WidgetItem[]): boolean {
+  if (!Array.isArray(stored) || stored.length !== expected.length) return false
+  const actualById = new Map(stored.map((item: any) => [item?.id, item]))
+  return expected.every((item) => {
+    const actual = actualById.get(item.id) as Partial<WidgetItem> | undefined
+    return (
+      !!actual &&
+      actual.x === item.x &&
+      actual.y === item.y &&
+      actual.w === item.w &&
+      actual.h === item.h
+    )
+  })
 }
 
 export function saveBoardLayout(

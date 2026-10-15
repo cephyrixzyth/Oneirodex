@@ -17,7 +17,6 @@ import pytest
 from oneirodex.utils.security import sanitize_path_for_logging
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATES = REPO_ROOT / 'oneirodex' / 'templates'
 
 
 # --- S9: path scrubbing ---------------------------------------------------
@@ -98,28 +97,15 @@ class TestSourceOffer:
             monkeypatch.delenv('ONEIRODEX_SOURCE_URL', raising=False)
             importlib.reload(config_module)
 
-    def test_templates_receive_the_offer(self, app, db_session):
-        """Injected for every template, so both surfaces can render it.
-
-        render_template_string, not jinja_env.from_string: only the former runs
-        the app's context processors, which is where source_url comes from.
-
-        `db_session` is what builds the schema, and one of those context
-        processors reads global_settings — without it this passed only when an
-        earlier test in the run happened to have built the tables first, and
-        failed against a freshly created database.
-        """
-        from flask import render_template_string
-
-        with app.test_request_context('/'):
-            rendered = render_template_string('{{ source_url }}|{{ app_version }}')
-        url, version = rendered.split('|')
-        assert url.startswith('http')
-        assert version
+    def test_python_shell_passes_the_offer_to_the_member_app(self):
+        """The source offer crosses the shell boundary through React config."""
+        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+        assert "'source-url': source_url" in shell
+        assert "'app-version': app_version" in shell
 
     def test_member_shell_hands_it_to_the_spa(self):
-        shell = (TEMPLATES / 'site' / 'member_spa.html').read_text(encoding='utf-8')
-        assert 'data-source-url' in shell
+        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+        assert "'source-url': source_url" in shell
 
     def _help_page_source(self) -> str:
         return (
@@ -145,8 +131,8 @@ class TestSourceOffer:
 
     def test_admin_carries_no_licence_footer(self):
         """Removed by request; asserted so it does not creep back unnoticed."""
-        base = (TEMPLATES / 'base_admin.html').read_text(encoding='utf-8')
-        assert 'od-admin-licence' not in base
+        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'admin_spa.py').read_text(encoding='utf-8')
+        assert 'od-admin-licence' not in shell
 
 
 # --- L5: provider attribution ---------------------------------------------

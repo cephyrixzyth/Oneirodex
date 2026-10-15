@@ -1,9 +1,10 @@
 import { queueClientCommand } from '../../api/clientCommands'
+import { initiateGameDownload } from '../../api/downloads'
 import { seatCanUseCompanion } from '../../utils/seatMode'
 import { attachPatchCatalogGuide, searchPatchCatalog } from '../../api/patchCatalog'
 import { showToast } from '../../utils/toast'
 import { Button } from '@oneirodex/ui'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { useState } from 'react'
 import type { CatalogHit, DetailsGame, VersionActions } from './detailsTypes'
@@ -22,6 +23,25 @@ export function DetailsTranslationsSection({
   const [catalogHits, setCatalogHits] = useState<CatalogHit[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogStatus, setCatalogStatus] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  async function downloadPatch(patch: any) {
+    const versionKey = `patch:${patch.uuid}`
+    setBusyVersionKey(versionKey)
+    setVersionActionStatus(null)
+    try {
+      await initiateGameDownload(game.uuid, { kind: 'extra', versionUuid: patch.uuid })
+      setVersionActionStatus(`${patch.label} added to Downloads`)
+      showToast(`${patch.label} added to Downloads`, 'success')
+      navigate('/downloads')
+    } catch (error: any) {
+      const message = error?.message || 'Unable to start this patch download.'
+      setVersionActionStatus(message)
+      showToast(message, 'error')
+    } finally {
+      setBusyVersionKey(null)
+    }
+  }
 
   return (
     <section className="od-details-page__section" id="translations">
@@ -56,9 +76,13 @@ export function DetailsTranslationsSection({
                     </span>
                   </div>
                   <div className="od-details-page__version-actions">
-                    <a className="od-btn" href={patch.download_url}>
-                      Download patch
-                    </a>
+                    <Button
+                      type="button"
+                      disabled={Boolean(busyVersionKey)}
+                      onClick={() => void downloadPatch(patch)}
+                    >
+                      {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
+                    </Button>
                     {patch.source_url ? (
                       <a
                         className="od-btn"

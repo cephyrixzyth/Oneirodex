@@ -21,18 +21,27 @@ def parse_trusted_proxy_count(raw: str | int | None) -> int:
 
 
 def apply_proxy_fix(app: Any) -> bool:
-    """Wrap the Flask WSGI app with Werkzeug ProxyFix when TRUSTED_PROXIES > 0."""
+    """Apply forwarded headers only for peers in configured proxy CIDRs."""
     count = parse_trusted_proxy_count(app.config.get('TRUSTED_PROXIES', 0))
     if count <= 0:
         return False
 
+    from oneirodex.utils.trusted_proxy import trusted_proxy_address
     from werkzeug.middleware.proxy_fix import ProxyFix
 
-    app.wsgi_app = ProxyFix(
-        app.wsgi_app,
+    original_app = app.wsgi_app
+    proxy_fixed_app = ProxyFix(
+        original_app,
         x_for=count,
         x_proto=count,
         x_host=count,
         x_prefix=count,
     )
+
+    def trusted_proxy_gate(environ, start_response):
+        if trusted_proxy_address(environ.get('REMOTE_ADDR'), app.config):
+            return proxy_fixed_app(environ, start_response)
+        return original_app(environ, start_response)
+
+    app.wsgi_app = trusted_proxy_gate
     return True

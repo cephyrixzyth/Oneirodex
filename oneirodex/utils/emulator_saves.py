@@ -6,11 +6,11 @@ import os
 from datetime import datetime, timezone
 from io import BytesIO
 
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import EmulatorSave, GlobalSettings
 from oneirodex.utils.save_crypto import maybe_decrypt, maybe_encrypt
 from oneirodex.utils.library_paths import library_dir
@@ -78,13 +78,13 @@ def save_sync_enabled() -> bool:
     ).scalars().first()
     if settings is not None and getattr(settings, 'enable_emulator_save_sync', None) is not None:
         return bool(settings.enable_emulator_save_sync)
-    return str(current_app.config.get('ENABLE_EMULATOR_SAVE_SYNC', 'true')).lower() in (
+    return str(get_runtime_config().get('ENABLE_EMULATOR_SAVE_SYNC', 'true')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
 def _saves_root() -> str:
-    root = current_app.config.get('EMULATOR_SAVES_PATH')
+    root = get_runtime_config().get('EMULATOR_SAVES_PATH')
     if root:
         return root
     return os.path.join(library_dir(), 'saves')

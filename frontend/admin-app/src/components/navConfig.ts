@@ -50,8 +50,7 @@ export const SETTINGS_GROUPS: SubSection[] = [
         to: '/admin/scan_match',
         icon: 'matching',
         title: 'Scan / match policy',
-        blurb:
-          'Propose-only, dupe/match thresholds, peel profile — soft-degrades if Backend mid-rollout.',
+        blurb: 'Configure propose-only scanning, match confidence thresholds, and search variants.',
       },
       {
         to: '/admin/reference_sets',
@@ -102,7 +101,7 @@ export const SETTINGS_GROUPS: SubSection[] = [
         to: '/admin/themes',
         icon: 'themes',
         title: 'Themes',
-        blurb: 'Reset default CSS after deploy. Pick a look in Preferences.',
+        blurb: 'Installed theme packs and loading motifs. Pick a look in Preferences.',
       },
       {
         to: '/admin/art_studio',
@@ -192,7 +191,10 @@ export const INTEGRATION_SECTIONS: SubSection[] = [
         blurb: 'Each member’s connection state, last sync result and repair.',
       },
       {
-        to: '/admin/integrations#ownership',
+        // The legacy Integrations route uses #meta_quest to select the
+        // Artwork & secondary tab. `#ownership` is only a React inventory row
+        // id and the Jinja tab controller aliases it to Artwork implicitly.
+        to: '/admin/integrations#meta_quest',
         icon: 'ownership',
         title: 'Meta / Quest',
         blurb: 'Register-only ownership links.',
@@ -211,7 +213,7 @@ export const INTEGRATION_SECTIONS: SubSection[] = [
         blurb: 'Outbound mail for invites, resets and notices.',
       },
       {
-        to: '/admin/integrations#oidc',
+        to: '/admin/integrations/oidc',
         icon: 'identity',
         title: 'OIDC / SSO',
         blurb: 'Optional SSO (Authentik). Leave off for home-only installs.',
@@ -244,7 +246,9 @@ export const INTEGRATION_SECTIONS: SubSection[] = [
         statusKey: 'arr',
       },
       {
-        to: '/admin/integrations#acquire',
+        // The legacy Integrations route recognizes #indexers and opens the
+        // Artwork & secondary tab; #acquire has no legacy mapping.
+        to: '/admin/integrations#indexers',
         icon: 'scan',
         title: 'Indexers',
         blurb: 'Native Torznab registry.',
@@ -388,10 +392,10 @@ export const HUB_LINKS = {
     { href: '/libraries', label: 'Libraries' },
     // Auto + Manual share one LHN row; mode switch lives in the THN.
     { href: '/scan_management?active_tab=auto', label: 'Scan' },
+    { href: '/admin/scan-jobs', label: 'Scan jobs' },
     { href: '/scan_management?active_tab=tools', label: 'Library tools' },
-    { href: '/scan_management?active_tab=unmatched', label: 'Unmatched' },
-    { href: '/scan_management?active_tab=scan_filters', label: 'Filters' },
-    { href: '/admin/edit_filters', label: 'Release filters' },
+    { href: '/admin/unmatched', label: 'Unmatched' },
+    { href: '/admin/edit_filters', label: 'Scan filters' },
     { href: '/admin/extensions', label: 'Extensions' },
     { href: '/admin/images', label: 'Image queue' },
     { href: '/admin/art_studio', label: 'Art & images' },
@@ -453,7 +457,7 @@ const HUB_ICONS: Record<string, string> = {
   'Library tools': 'tools',
   Unmatched: 'unmatched',
   Filters: 'filter',
-  'Release filters': 'filter',
+  'Scan filters': 'filter',
   Extensions: 'plugins',
   'Image queue': 'art',
   'Art & images': 'art',

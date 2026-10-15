@@ -2,10 +2,10 @@
 
 Bodies moved verbatim from ``oneirodex/utils/game_core.py`` in wave A2.3.
 """
-from flask import current_app
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GameURL
 from oneirodex.utils.igdb_api import make_igdb_api_request
+from oneirodex.utils.runtime_config import get_runtime_config
 from oneirodex.utils.helpers.urls import website_category_to_string
 import logging
 
@@ -148,7 +148,7 @@ def search_igdb_for_game(search_name, platform_id, limit=10):
     if platform_id is not None:
         query_filter += f' where platforms = ({platform_id});'
 
-    response_json = make_igdb_api_request(current_app.config['IGDB_API_ENDPOINT'], query_fields + query_filter)
+    response_json = make_igdb_api_request(get_runtime_config()['IGDB_API_ENDPOINT'], query_fields + query_filter)
 
     if 'error' not in response_json and response_json:
         return response_json
@@ -180,7 +180,7 @@ def fetch_game_by_igdb_id(igdb_id):
             limit 1;
         """
 
-        response = make_igdb_api_request(current_app.config['IGDB_API_ENDPOINT'], query)
+        response = make_igdb_api_request(get_runtime_config()['IGDB_API_ENDPOINT'], query)
 
         if response and 'error' not in response and len(response) > 0:
             logger.info(f"Fetched game by ID {igdb_id}: {response[0].get('name')}")

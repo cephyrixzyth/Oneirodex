@@ -315,7 +315,7 @@ def serve() -> None:
     os.environ["ONEIRODEX_MIGRATIONS_COMPLETE"] = "true"
     os.environ["ONEIRODEX_INITIALIZATION_COMPLETE"] = "true"
     print(f"serve: http://127.0.0.1:{PORT}  ({USER} / {PASSWORD})")
-    uvicorn.run("asgi:asgi_app", host="127.0.0.1", port=PORT, workers=1)
+    uvicorn.run("asgi:asgi_app", host="127.0.0.1", port=PORT, workers=1, proxy_headers=False)
 
 
 def main() -> None:

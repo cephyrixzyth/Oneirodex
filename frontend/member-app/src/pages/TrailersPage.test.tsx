@@ -152,8 +152,9 @@ test('applies selected filters when asking for another trailer', async () => {
 
   await user.click(screen.getByRole('button', { name: 'Filters' }))
   await user.selectOptions(await screen.findByLabelText('Library'), 'lib-1')
-  await user.selectOptions(screen.getByLabelText(/Genres/), '3')
-  await user.click(screen.getByRole('button', { name: 'Another one' }))
+  const genres = screen.getByRole('group', { name: 'Genre options' })
+  await user.click(within(genres).getByRole('button', { name: 'Shooter' }))
+  await user.click(screen.getByRole('button', { name: 'Apply' }))
 
   await waitFor(() => {
     expect(trailersApi.fetchRandomTrailer).toHaveBeenCalledTimes(2)
@@ -162,6 +163,43 @@ test('applies selected filters when asking for another trailer', async () => {
     expect.objectContaining({
       filters: expect.objectContaining({ library: 'lib-1', genres: ['3'] }),
     }),
+  )
+})
+
+test('trailer genre and theme chips stay as drafts until Apply', async () => {
+  const user = userEvent.setup()
+  vi.mocked(trailersApi.fetchRandomTrailer).mockResolvedValue({
+    has_videos: false,
+    message: 'No trailers match these filters',
+  })
+
+  render(
+    <ShellHarness>
+      <TrailersPage />
+    </ShellHarness>,
+  )
+
+  await screen.findByText('No trailers match these filters')
+  await user.click(screen.getByRole('button', { name: 'Filters' }))
+  const genres = screen.getByRole('group', { name: 'Genre options' })
+  const themes = screen.getByRole('group', { name: 'Theme options' })
+  await user.click(within(genres).getByRole('button', { name: 'Shooter' }))
+  await user.click(within(themes).getByRole('button', { name: 'Horror' }))
+
+  expect(trailersApi.fetchRandomTrailer).toHaveBeenCalledTimes(1)
+  expect(within(genres).getByRole('button', { name: 'Shooter' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(within(themes).getByRole('button', { name: 'Horror' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await user.click(screen.getByRole('button', { name: 'Apply' }))
+  await waitFor(() => expect(trailersApi.fetchRandomTrailer).toHaveBeenCalledTimes(2))
+  expect(trailersApi.fetchRandomTrailer).toHaveBeenLastCalledWith(
+    expect.objectContaining({ filters: expect.objectContaining({ genres: ['3'], themes: ['9'] }) }),
   )
 })
 

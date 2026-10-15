@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 from uuid import uuid4
 
@@ -16,15 +18,34 @@ _SAFE_UUID = re.compile(
     re.I,
 )
 
+_mod_config: ContextVar[Any | None] = ContextVar('oneirodex_mod_config', default=None)
+
+
+@contextmanager
+def mod_config_scope(config):
+    """Bind explicit application settings for framework-neutral mod services."""
+    token = _mod_config.set(config)
+    try:
+        yield
+    finally:
+        _mod_config.reset(token)
+
+
+def _setting(name: str, default=None):
+    config = _mod_config.get()
+    if config is not None:
+        return config.get(name, default)
+    return current_app.config.get(name, default)
+
 
 def mods_enabled() -> bool:
-    return str(current_app.config.get('ENABLE_MOD_TRACKING', 'true')).lower() in (
+    return str(_setting('ENABLE_MOD_TRACKING', 'true')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
 def mods_root() -> str:
-    root = current_app.config.get('GAME_MODS_PATH')
+    root = _setting('GAME_MODS_PATH')
     if root:
         return root
     return os.path.join(library_dir(), 'mods')

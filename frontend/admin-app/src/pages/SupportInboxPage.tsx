@@ -1,11 +1,12 @@
 // Toasts on every mutation (GT-B25).
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { DataTable } from '../components/DataTable'
 import { MetricStrip } from '../components/opsWidgets'
-import { csrfHeaders } from '../api/adminApi'
+import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
+import { Page } from '../components/Page'
 
 interface SupportTicket {
   id: string
@@ -21,124 +22,149 @@ interface SupportTicket {
 export function SupportInboxPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [error, setError] = useState<unknown>(null)
+  const [loading, setLoading] = useState(true)
+  const [resolving, setResolving] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<unknown>(null)
+  const resolveLock = useRef(false)
 
   // Derived rather than stored: a second piece of state would be one more thing
   // to keep in step with the list it counts.
   const openCount = tickets.filter((t) => t.status === 'open').length
   const syncedCount = tickets.filter((t) => t.github_issue_number).length
 
-  function load() {
-    return fetch('/api/support/tickets', { credentials: 'same-origin' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Support ${response.status}`)
-        return response.json()
-      })
-      .then((data) => setTickets(Array.isArray(data.tickets) ? data.tickets : []))
-      .catch((err) => setError(err))
-  }
-
-  useEffect(() => {
-    load()
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await getJson('/api/support/tickets', { signal })
+      if (!Array.isArray(data.tickets))
+        throw new Error('Support inbox returned an invalid response.')
+      if (!signal?.aborted) setTickets(data.tickets)
+    } catch (err) {
+      if (!signal?.aborted) setError(err)
+    } finally {
+      if (!signal?.aborted) setLoading(false)
+    }
   }, [])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
+
   async function resolve(id: string) {
+    if (resolveLock.current || loading) return
+    resolveLock.current = true
+    setResolving(id)
+    setActionError(null)
     // Resolving used to give no feedback at all — the row simply vanished on
     // reload, which is indistinguishable from the click not registering.
     try {
-      const response = await fetch(`/api/support/tickets/${id}/resolve`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: csrfHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`resolve failed (${response.status})`)
-      }
+      await postJson(`/api/support/tickets/${id}/resolve`)
       showToast('Ticket resolved.', 'success')
+      await load()
     } catch (err) {
-      showToast(errorText(err) || 'Could not resolve the ticket.', 'error')
+      const text = errorText(err) || 'Could not resolve the ticket.'
+      setActionError(text)
+      showToast(text, 'error')
+    } finally {
+      resolveLock.current = false
+      setResolving(null)
     }
-    await load()
-  }
-
-  if (error) {
-    return (
-      <div className="od-adminpage">
-        <PageStatus error errorMessage="Unable to load support tickets." />
-      </div>
-    )
   }
 
   return (
-    <div className="od-adminpage">
-      <h1>Support inbox</h1>
-      <p>Teammate reports from the member app. GitHub Issues when SUPPORT_GITHUB_TOKEN is set.</p>
-      {/* UID-014 — the strip exists so every admin page answers "how bad is it"
+    <Page
+      title="Support inbox"
+      lede="Member reports and their linked GitHub issues, when GitHub support is configured."
+    >
+      <PageStatus
+        loading={loading}
+        loadingMessage="Loading support tickets…"
+        error={error}
+        onRetry={() => void load()}
+      />
+      <PageStatus error={actionError} />
+      {!loading && !error ? (
+        <>
+          {/* UID-014 — the strip exists so every admin page answers "how bad is it"
           before you read the table. Open is the number that decides whether
           this page needs you, so it carries the tone; the totals are context
           and stay neutral. */}
-      <MetricStrip
-        label="Support"
-        items={[
-          {
-            id: 'open',
-            label: 'Open',
-            value: openCount,
-            hint: 'awaiting a reply',
-            tone: openCount === 0 ? 'good' : openCount >= 10 ? 'action' : 'warning',
-          },
-          {
-            id: 'resolved',
-            label: 'Resolved',
-            value: tickets.length - openCount,
-            hint: 'closed tickets',
-            tone: 'info',
-          },
-          {
-            id: 'synced',
-            label: 'On GitHub',
-            value: syncedCount,
-            hint: 'mirrored as issues',
-            tone: 'info',
-          },
-        ]}
-      />
-      <DataTable
-        columns={[
-          { key: 'id', label: 'ID', align: 'right' },
-          { key: 'severity', label: 'Sev' },
-          { key: 'area', label: 'Area' },
-          { key: 'title', label: 'Title' },
-          { key: 'status', label: 'Status' },
-          {
-            key: 'github',
-            label: 'GitHub',
-            // Sorts on the issue number, not the rendered link markup.
-            value: (t) => t.github_issue_number ?? t.github_sync,
-            render: (t) =>
-              t.github_issue_url ? (
-                <a href={t.github_issue_url} target="_blank" rel="noopener noreferrer">
-                  #{t.github_issue_number}
-                </a>
-              ) : (
-                t.github_sync
-              ),
-          },
-          {
-            key: 'actions',
-            label: '',
-            sortable: false,
-            filterable: false,
-            render: (t) =>
-              t.status === 'open' ? (
-                <Button onClick={() => void resolve(t.id)}>Resolve</Button>
-              ) : null,
-          },
-        ]}
-        rows={tickets}
-        getRowKey={(t) => t.id}
-        emptyMessage="No tickets yet."
-        dense
-      />
-    </div>
+          <MetricStrip
+            label="Support"
+            items={[
+              {
+                id: 'open',
+                label: 'Open',
+                value: openCount,
+                hint: 'awaiting a reply',
+                tone: openCount === 0 ? 'good' : openCount >= 10 ? 'action' : 'warning',
+              },
+              {
+                id: 'resolved',
+                label: 'Resolved',
+                value: tickets.length - openCount,
+                hint: 'closed tickets',
+                tone: 'info',
+              },
+              {
+                id: 'synced',
+                label: 'On GitHub',
+                value: syncedCount,
+                hint: 'mirrored as issues',
+                tone: 'info',
+              },
+            ]}
+          />
+          <DataTable
+            caption="Support tickets"
+            scrollLabel="Support tickets table"
+            columns={[
+              { key: 'id', label: 'ID', align: 'right' },
+              { key: 'severity', label: 'Sev' },
+              { key: 'area', label: 'Area' },
+              { key: 'title', label: 'Title' },
+              { key: 'status', label: 'Status' },
+              {
+                key: 'github',
+                label: 'GitHub',
+                // Sorts on the issue number, not the rendered link markup.
+                value: (t) => t.github_issue_number ?? t.github_sync,
+                render: (t) =>
+                  t.github_issue_url ? (
+                    <a href={t.github_issue_url} target="_blank" rel="noopener noreferrer">
+                      #{t.github_issue_number}
+                    </a>
+                  ) : (
+                    t.github_sync
+                  ),
+              },
+              {
+                key: 'actions',
+                label: '',
+                sortable: false,
+                filterable: false,
+                render: (t) =>
+                  t.status === 'open' ? (
+                    <Button
+                      disabled={resolving !== null}
+                      aria-label={`Resolve ${t.title || `ticket ${t.id}`}`}
+                      onClick={() => void resolve(t.id)}
+                    >
+                      {resolving === t.id ? 'Resolving…' : 'Resolve'}
+                    </Button>
+                  ) : null,
+              },
+            ]}
+            rows={tickets}
+            getRowKey={(t) => t.id}
+            emptyMessage="No tickets yet."
+            dense
+          />
+        </>
+      ) : null}
+    </Page>
   )
 }

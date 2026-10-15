@@ -1,6 +1,6 @@
 import os
 import shutil
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.init_manager import InitManager
 from oneirodex.models import DiscoverySection
 from oneirodex.utils.icon_themes import install_icon_themes
@@ -99,8 +99,15 @@ def initialize_default_settings():
         print(f"Error initializing default settings: {e}")
         db.session.rollback()
 
-def initialize_library_folders():
+def initialize_library_folders(*, config=None, app=None):
     """Initialize the required folders and theme files for the application."""
+    if config is None or app is None:
+        from flask import current_app
+
+        if config is None:
+            config = current_app.config
+        if app is None:
+            app = current_app._get_current_object()
     print("Initializing library folders...")
     library_path = library_dir(os.path.dirname(__file__))
     themes_path = os.path.join(library_path, 'themes')
@@ -159,12 +166,12 @@ def initialize_library_folders():
     # Fonts and firmware, so an install arrives with both rather than needing
     # two scripts run by hand. Both are best-effort and never block boot.
     os.makedirs(os.path.join(library_path, 'fonts'), exist_ok=True)
-    initialize_theme_fonts()
-    initialize_emulator_bios()
-    initialize_webretro_cores()
+    initialize_theme_fonts(config=config, app=app)
+    initialize_emulator_bios(config=config)
+    initialize_webretro_cores(config=config, app=app)
 
 
-def initialize_webretro_cores():
+def initialize_webretro_cores(*, config=None, app=None):
     """Provision the WebRetro cores, which are no longer vendored.
 
     Unlike the fonts, there is no bundled copy to fall back on: the cores carry
@@ -175,7 +182,13 @@ def initialize_webretro_cores():
     Best-effort and backgrounded, like every other boot asset — browser play is
     a feature, not a precondition for the app starting.
     """
-    from flask import current_app
+    if config is None or app is None:
+        from flask import current_app
+
+        if config is None:
+            config = current_app.config
+        if app is None:
+            app = current_app._get_current_object()
 
     from oneirodex.utils.webretro_core_install import (
         install_missing_cores,
@@ -194,7 +207,7 @@ def initialize_webretro_cores():
     if not missing:
         return
 
-    if not current_app.config.get('FETCH_WEBRETRO_CORES_ON_BOOT', True):
+    if not config.get('FETCH_WEBRETRO_CORES_ON_BOOT', True):
         # Said plainly rather than left to be discovered as "browser play is
         # broken": the platform layer still advertises these cores.
         log_system_event(
@@ -221,11 +234,11 @@ def initialize_webretro_cores():
 
     from oneirodex.utils.background import run_in_background
 
-    run_in_background(current_app._get_current_object(), _fetch, name='webretro-cores')
+    run_in_background(app, _fetch, name='webretro-cores')
     print(f"Fetching {len(missing)} WebRetro core(s) — browser play warms up shortly")
 
 
-def initialize_theme_fonts():
+def initialize_theme_fonts(*, config=None, app=None):
     """Install the built-in OFL faces the font picker offers.
 
     A local copy from ``oneirodex/setup/fonts``, inline — five small files, no
@@ -244,7 +257,13 @@ def initialize_theme_fonts():
     ``FETCH_FONTS_ON_BOOT=false`` disables *that* half for air-gapped installs.
     The bundled copy always runs; there is no reason to opt out of a file copy.
     """
-    from flask import current_app
+    if config is None or app is None:
+        from flask import current_app
+
+        if config is None:
+            config = current_app.config
+        if app is None:
+            app = current_app._get_current_object()
 
     from oneirodex.utils.font_install import (
         install_builtin_fonts,
@@ -253,7 +272,7 @@ def initialize_theme_fonts():
     )
     from oneirodex.utils.theme_fonts import fonts_dir
 
-    root = fonts_dir()
+    root = fonts_dir(config.get('FONT_PATH') or '')
     os.makedirs(root, exist_ok=True)
 
     try:
@@ -269,7 +288,7 @@ def initialize_theme_fonts():
         print(f"Installed {written} bundled theme font(s)")
 
     missing = missing_builtin_fonts(root)
-    if not missing or not current_app.config.get('FETCH_FONTS_ON_BOOT', True):
+    if not missing or not config.get('FETCH_FONTS_ON_BOOT', True):
         return
 
     # Only faces the bundle does not carry reach the network, and only in the
@@ -290,11 +309,11 @@ def initialize_theme_fonts():
 
     from oneirodex.utils.background import run_in_background
 
-    run_in_background(current_app._get_current_object(), _fetch, name='font-install')
+    run_in_background(app, _fetch, name='font-install')
     print(f"Fetching {len(missing)} theme font(s) not in the bundle")
 
 
-def initialize_emulator_bios():
+def initialize_emulator_bios(*, config=None):
     """Import firmware from an operator-supplied folder, if one is configured.
 
     `scripts/import_bios.py` already knew how to do this; nothing called it, so
@@ -305,9 +324,11 @@ def initialize_emulator_bios():
     overwritten, so this is safe to re-run on every boot: it tops up what is
     missing and leaves anything already installed alone.
     """
-    from flask import current_app
+    if config is None:
+        from flask import current_app
 
-    source = current_app.config.get('BIOS_IMPORT_SOURCE') or os.environ.get('BIOS_IMPORT_SOURCE')
+        config = current_app.config
+    source = config.get('BIOS_IMPORT_SOURCE') or os.environ.get('BIOS_IMPORT_SOURCE')
     if not source:
         return
     if not os.path.isdir(source):

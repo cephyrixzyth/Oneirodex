@@ -8,7 +8,6 @@ import logging
 import secrets
 import time
 from datetime import datetime, timezone
-from flask import current_app
 from oneirodex.utils.security import (
     get_allowed_base_directories,
     is_path_within,
@@ -16,7 +15,7 @@ from oneirodex.utils.security import (
     is_safe_path,
     open_plain_file_within,
 )
-from oneirodex.utils.functions import sanitize_string_input
+from oneirodex.utils.helpers.strings import sanitize_string_input
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +23,15 @@ DEFAULT_METADATA_FILENAME = 'oneirodex.json'
 LEGACY_METADATA_FILENAME = 'oneirodex.json'
 #: A real sidecar is a few hundred bytes; the folder is share-writable.
 _MAX_SIDECAR_BYTES = 256 * 1024
+
+
+def _current_app_or_none():
+    try:
+        from flask import current_app
+
+        return current_app._get_current_object()
+    except (ImportError, RuntimeError):
+        return None
 
 
 def _resolve_metadata_path(full_disk_path, filename):
@@ -42,7 +50,9 @@ def _resolve_metadata_path(full_disk_path, filename):
     return None
 
 
-def read_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
+def read_local_metadata(
+    full_disk_path, filename=DEFAULT_METADATA_FILENAME, *, allowed_bases=None,
+):
     """
     Read local metadata file from game folder.
 
@@ -66,13 +76,15 @@ def read_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
     metadata_path = None
     try:
         # Security check
-        if current_app:
-            allowed_bases = get_allowed_base_directories(current_app)
+        app = _current_app_or_none() if allowed_bases is None else None
+        if app is not None:
+            allowed_bases = get_allowed_base_directories(app)
+        if allowed_bases is not None:
             if not allowed_bases:
                 logger.warning(f"No allowed base directories configured for {full_disk_path}")
                 return None
 
-            is_safe, error_message = is_safe_path(full_disk_path, allowed_bases)
+            is_safe, error_message = is_safe_path(full_disk_path, allowed_bases, logger=logger)
             if not is_safe:
                 logger.warning(f"Security: Unsafe path {full_disk_path}: {error_message}")
                 return None
@@ -171,7 +183,7 @@ def _replace(temp, target, attempts=5):
 
 
 def write_local_metadata(full_disk_path, igdb_id, game_title=None, manually_verified=False,
-                         filename=DEFAULT_METADATA_FILENAME):
+                         filename=DEFAULT_METADATA_FILENAME, *, allowed_bases=None):
     """
     Write local metadata file to game folder.
 
@@ -191,8 +203,12 @@ def write_local_metadata(full_disk_path, igdb_id, game_title=None, manually_veri
         logger.info(f"💾 [LOCAL METADATA] Filename: {filename}")
 
         # Security check
-        if current_app:
-            allowed_bases = get_allowed_base_directories(current_app)
+        app = None
+        if allowed_bases is None:
+            app = _current_app_or_none()
+            if app is not None:
+                allowed_bases = get_allowed_base_directories(app)
+        if allowed_bases is not None:
             if not allowed_bases:
                 logger.error(f"🚫 [LOCAL METADATA] No allowed base directories configured for {full_disk_path}")
                 return False

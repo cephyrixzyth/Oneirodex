@@ -201,11 +201,17 @@ export function UsersPage() {
               label: 'Actions',
               sortable: false,
               filterable: false,
-              render: (u) => <Button onClick={() => setEditing(u)}>Edit</Button>,
+              render: (u) => (
+                <Button aria-label={`Edit ${u.name} account`} onClick={() => setEditing(u)}>
+                  Edit
+                </Button>
+              ),
             },
           ]}
           rows={users}
           getRowKey={(u) => u.id}
+          caption="Household accounts"
+          scrollLabel="Household accounts table"
           toolbar={false}
           columnFilters
           showCount={false}

@@ -1,0 +1,102 @@
+.od-edit-game-images__actions,
+.od-edit-game-images__panel {
+  display: grid;
+  gap: var(--od-space-3);
+}
+
+.od-edit-game-images__game-name {
+  margin: 0 0 var(--od-space-3);
+  color: var(--od-text-muted);
+}
+
+.od-edit-game-images__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block-end: var(--od-space-4);
+}
+
+.od-edit-game-images__cover {
+  display: grid;
+  place-items: center;
+  min-height: 16rem;
+  max-width: 22rem;
+  overflow: hidden;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+}
+
+.od-edit-game-images__cover-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--od-space-4);
+}
+
+.od-edit-game-images__cover-controls {
+  display: grid;
+  gap: var(--od-space-3);
+  min-width: 0;
+}
+
+.od-edit-game-images__cover img {
+  display: block;
+  width: 100%;
+  max-height: 30rem;
+  object-fit: contain;
+}
+
+.od-edit-game-images__empty {
+  display: grid;
+  gap: var(--od-space-2);
+  padding: var(--od-space-5);
+  color: var(--od-text);
+  text-align: center;
+}
+
+.od-edit-game-images__empty span,
+.od-edit-game-images__kind h3 {
+  color: var(--od-text-muted);
+}
+
+.od-edit-game-images__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  gap: var(--od-space-3);
+}
+
+.od-edit-game-images__grid figure {
+  display: grid;
+  align-content: start;
+  gap: var(--od-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--od-space-2);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+}
+
+.od-edit-game-images__grid img {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  object-fit: contain;
+}
+
+.od-edit-game-images__kind {
+  display: grid;
+  gap: var(--od-space-2);
+  margin-block-start: var(--od-space-4);
+}
+
+@media (max-width: 42rem) {
+  .od-edit-game-images__actions > * {
+    flex: 1 1 auto;
+  }
+
+  .od-edit-game-images__cover-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

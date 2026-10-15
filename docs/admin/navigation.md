@@ -23,6 +23,11 @@ sub-section is one rail row; the pages inside it are *not* in the rail.
 Each page has one home. The Support inbox is under Users; ES-DE / Pegasus export
 is part of Plugins & exports.
 
+The **System** rail section holds Ops glance, Statistics, Downloads admin, Danger
+zone, and Admin help. Statistics is read-only and summarizes library totals,
+download activity, invitations, and favourites. Downloads admin lists queued zip
+requests; deleting a request requires confirmation and removes the request record.
+
 ## Top bar
 
 On Settings pages and Integration destinations, the top bar shows that

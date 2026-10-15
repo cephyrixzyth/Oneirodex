@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
-from flask import current_app, url_for
-from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.library_paths import PACKAGE_ROOT, library_dir
 
 # Semantic keys mirrored from icons.html / icons.tsx (subset for image overrides).
 CORE_ICON_KEYS = (
@@ -40,6 +40,24 @@ PACK_DRAWING_KEYS = PACK_GLYPH_KEYS + (
     'more',
     'play',
 )
+def _pack_glyph_data_icons(key: str) -> tuple[str, ...]:
+    """data-icon values that use this pack SVG (rail aliases included)."""
+    if key == 'download':
+        return ('download', 'downloads')
+    return (key,)
+
+
+PACK_STYLED_DATA_ICONS = tuple(
+    data_icon
+    for key in PACK_DRAWING_KEYS
+    for data_icon in _pack_glyph_data_icons(key)
+)
+
+
+def _pack_base_selector(pack_id: str) -> str:
+    """Restrict a drawing pack's generic treatment to icons it actually draws."""
+    selectors = ', '.join(f'[data-icon="{key}"]' for key in PACK_STYLED_DATA_ICONS)
+    return f'html[data-icon-pack="{pack_id}"] .od-icon:is({selectors})'
 
 BUILTIN_PACKS: list[dict[str, Any]] = [
     {
@@ -88,7 +106,12 @@ def icon_themes_root(package_root: str | Path | None = None) -> Path:
 def setup_icon_themes_source(package_root: str | Path | None = None) -> Path:
     if package_root is not None:
         return Path(package_root) / 'setup' / 'icon_themes'
-    return Path(current_app.root_path) / 'setup' / 'icon_themes'
+    if 'flask' in sys.modules:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            return Path(current_app.root_path) / 'setup' / 'icon_themes'
+    return PACKAGE_ROOT / 'setup' / 'icon_themes'
 
 
 def list_icon_packs() -> list[dict[str, Any]]:
@@ -127,27 +150,51 @@ def get_icon_pack(pack_id: str | None) -> dict[str, Any]:
     return {'id': 'outline', 'name': 'Outline', 'installed': True}
 
 
-def icon_pack_css_url(pack_id: str | None) -> str:
+def icon_pack_css_url(
+    pack_id: str | None, *, static_url_path: str | None = None,
+    package_root: str | Path | None = None,
+) -> str:
     pack_id = (pack_id or 'outline').strip() or 'outline'
-    root = icon_themes_root()
+    root = icon_themes_root(package_root)
     css = root / pack_id / 'pack.css'
     if css.is_file():
-        return url_for('static', filename=f'library/icon-themes/{pack_id}/pack.css')
+        filename = f'library/icon-themes/{pack_id}/pack.css'
+        return _static_asset_url(filename, static_url_path)
     fallback = root / 'outline' / 'pack.css'
     if fallback.is_file():
-        return url_for('static', filename='library/icon-themes/outline/pack.css')
-    return url_for('static', filename='library/icon-themes/outline/pack.css')
+        return _static_asset_url('library/icon-themes/outline/pack.css', static_url_path)
+    return _static_asset_url('library/icon-themes/outline/pack.css', static_url_path)
 
 
-def icon_pack_previews_css_url() -> str | None:
+def _static_asset_url(filename: str, static_url_path: str | None = None) -> str:
+    if static_url_path is None:
+        if 'flask' in sys.modules:
+            from flask import has_app_context, url_for
+
+            if has_app_context():
+                return url_for('static', filename=filename)
+        static_url_path = '/static'
+    prefix = (static_url_path or '/static').rstrip('/')
+    asset = filename.lstrip('/')
+    return f'{prefix}/{asset}'
+
+
+def icon_pack_previews_css_url(
+    *, static_url_path: str | None = None,
+    package_root: str | Path | None = None,
+) -> str | None:
     """Always-on sheet so Preferences chips show each pack's drawing without swapping html[data-icon-pack]."""
-    path = icon_themes_root() / 'previews.css'
+    path = icon_themes_root(package_root) / 'previews.css'
     if path.is_file():
-        return url_for('static', filename='library/icon-themes/previews.css')
+        return _static_asset_url(
+            'library/icon-themes/previews.css', static_url_path,
+        )
     return None
 
 
-def icon_pack_image_url(pack_id: str | None, key: str) -> str | None:
+def icon_pack_image_url(
+    pack_id: str | None, key: str, *, static_url_path: str | None = None,
+) -> str | None:
     """Optional branded image override (logo, default_cover)."""
     pack = get_icon_pack(pack_id)
     images = pack.get('images') if isinstance(pack.get('images'), dict) else {}
@@ -156,15 +203,10 @@ def icon_pack_image_url(pack_id: str | None, key: str) -> str | None:
         return None
     path = icon_themes_root() / pack['id'] / rel
     if path.is_file():
-        return url_for('static', filename=f"library/icon-themes/{pack['id']}/{rel}")
+        return _static_asset_url(
+            f"library/icon-themes/{pack['id']}/{rel}", static_url_path,
+        )
     return None
-
-
-def _pack_glyph_data_icons(key: str) -> tuple[str, ...]:
-    """data-icon values that use this pack SVG (rail aliases included)."""
-    if key == 'download':
-        return ('download', 'downloads')
-    return (key,)
 
 
 def pack_glyph_override_css(pack_id: str, *, url_prefix: str | None = None) -> str:
@@ -261,7 +303,7 @@ html[data-icon-pack="outline"] .od-icon {
 }
 """,
     'filled': """
-html[data-icon-pack="filled"] .od-icon {
+__PACK_BASE_SELECTOR__ {
   stroke-width: 1.25;
   fill: currentColor;
   fill-opacity: 0.92;
@@ -272,7 +314,7 @@ html[data-icon-pack="filled"] .od-icon [fill="currentColor"] {
 }
 """,
     'duotone': """
-html[data-icon-pack="duotone"] .od-icon {
+__PACK_BASE_SELECTOR__ {
   stroke-width: 1.75;
   fill: currentColor;
   fill-opacity: 0.22;
@@ -282,7 +324,7 @@ html[data-icon-pack="duotone"] .od-icon [fill="currentColor"] {
 }
 """,
     'pixel': """
-html[data-icon-pack="pixel"] .od-icon {
+__PACK_BASE_SELECTOR__ {
   stroke-width: 2.75;
   stroke-linecap: square;
   stroke-linejoin: miter;
@@ -291,7 +333,7 @@ html[data-icon-pack="pixel"] .od-icon {
 }
 """,
     'soft': """
-html[data-icon-pack="soft"] .od-icon {
+__PACK_BASE_SELECTOR__ {
   stroke-width: 1.35;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -300,7 +342,7 @@ html[data-icon-pack="soft"] .od-icon {
 }
 """,
     'mono': """
-html[data-icon-pack="mono"] .od-icon {
+__PACK_BASE_SELECTOR__ {
   stroke-width: 0.5;
   fill: currentColor;
   fill-opacity: 1;
@@ -315,7 +357,7 @@ html[data-icon-pack="mono"] .od-icon [fill="none"] {
 
 PACK_CSS = {
     pack_id: (
-        css.strip()
+        css.strip().replace('__PACK_BASE_SELECTOR__', _pack_base_selector(pack_id))
         + ('\n' + pack_glyph_override_css(pack_id) if pack_id in DRAWING_PACKS else '')
         + '\n'
     )

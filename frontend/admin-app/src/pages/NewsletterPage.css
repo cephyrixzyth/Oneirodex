@@ -1,0 +1,14 @@
+.od-newsletter-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.od-newsletter-heading {
+  font-size: var(--od-font-xl);
+}
+
+.od-newsletter-compose {
+  overflow-wrap: anywhere;
+}
+.od-newsletter-compose legend {
+  font-size: var(--od-font-lg);
+}

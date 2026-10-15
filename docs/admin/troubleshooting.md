@@ -28,7 +28,7 @@ docker compose build --no-cache && docker compose up -d
 
 ## SPA navigates but pages/admin hang (Discover stuck on Loading)
 
-Default Docker uses **`UVICORN_WORKERS=1`**. A long-lived sync SSE on `/api/activity/stream` used to run through WsgiToAsgi and **starve** Discover, Library APIs, and Jinja admin on that same worker. Symptoms: shell/nav works, CSS/JS 200, `/api/activity/stream` 200, then **no** `/api/discover/sections` (or admin never finishes).
+Default Docker uses **`UVICORN_WORKERS=1`**. A long-lived sync SSE on `/api/activity/stream` used to run through WsgiToAsgi and **starve** Discover, Library APIs, and admin pages on that same worker. Symptoms: shell/nav works, CSS/JS 200, `/api/activity/stream` 200, then **no** `/api/discover/sections` (or admin never finishes).
 
 **Fix (current code):** ASGI serves `/api/activity/stream` and `/api/events/stream` natively (non-blocking); Flask WSGI handlers return **503** if reached. The Friends companion only opens activity SSE when the dock is open. Rebuild/restart the app container after pull:
 
@@ -49,7 +49,7 @@ Product toggles live under **Admin → Features** (and setup → Features). Env 
 | ClamAV unreachable | Start `docker compose --profile clamav up -d` or set `CLAMAV_SOCKET` for host clamd — heuristics still apply when scan module is on |
 | LiveKit “on” but no voice | Flag alone is not enough — need `LIVEKIT_*` + compose `--profile livekit` |
 | OIDC button missing | `OIDC_ENABLED` stays **off** until env + Integrations toggle |
-| Help / Trailers missing on Systems (or Chat / Collections) after a full reload | Older build: `member_bp` never injected Server Settings into the SPA shell, so Jinja treated the flags as off. Current tree bakes `showHelpButton` / `showTrailers` into every `render_member_spa()` page. Restart the app after the Python hotfix. |
+| Help / Trailers missing on Systems (or Chat / Collections) after a full reload | Older build: `member_bp` never injected Server Settings into the SPA shell, so the member shell lacked the flags. Current tree bakes `showHelpButton` / `showTrailers` into every `render_member_spa()` page. Restart the app after the Python hotfix. |
 
 ## Security headers / uploads
 
@@ -146,4 +146,4 @@ Expected if `SUPPORT_GITHUB_TOKEN` unset (`github_sync=skipped`). Ticket + admin
 | Password reset email never arrives (SMTP is configured and other mail works) | **Fixed 2026-09-02.** Not an SMTP fault: the reset link was built against `main.reset_password`, an endpoint that does not exist, so `url_for` raised `BuildError` and the send aborted after the token had already been written. Nothing was queued and nothing bounced, which is why SMTP logs looked clean. Invite mail was unaffected — it builds its URL differently. Rebuild/restart; no Reset Themes needed. |
 | Reset / invite link in an email points at the wrong host | The origin comes from **Admin → Settings → Site URL** when that is set to a real non-loopback address — set it, and every emailed link is stable. With Site URL unset, Oneirodex falls back to the host the browser actually used, but only when that host is private (loopback, `192.168.x.x`, `.local`, `.lan`, a dotless LAN name). A public hostname is refused unless you list it in `TRUSTED_LINK_HOSTS`, because an unauthenticated caller can put anything in a `Host` header and a poisoned reset link leaks a working token. Published on a real domain? Set `TRUSTED_LINK_HOSTS=games.example.com` (comma separated, port optional) — or just set Site URL. |
 
-Deep ops still use Jinja admin pages behind the React top bar.
+Deep ops pages now use the shared React admin shell.

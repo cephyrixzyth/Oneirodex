@@ -19,7 +19,7 @@
  *
  * Load order
  *   Must come after vendor/bootstrap/*/css/bootstrap.min.css. Linked from
- *   base.html, base_admin.html and base_empty.html.
+ *   base.html, base_admin.html and the member SPA renderer.
  *
  * This is a theme asset — presets are regenerated from this tree, so an edit
  * here reaches every preset on the next sync.

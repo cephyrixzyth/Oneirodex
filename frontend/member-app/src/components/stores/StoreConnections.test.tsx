@@ -612,8 +612,13 @@ test('a card the member left never takes focus back from the card they moved to'
   const gog = card('GOG')
   within(steam).getByRole('button', { name: 'Sync now' }).focus()
   await user.keyboard('{Enter}')
-  expect(chromeBlursDisabledFocus()).toBe(true)
-  // From <body>, the member moves on to GOG and syncs it too.
+  // Steam cannot cancel a sync, so recovery parks on its heading while the
+  // Sync control is unavailable. The first card must not reclaim focus later.
+  await waitFor(
+    () => expect(within(steam).getByRole('heading', { name: 'Steam' })).toHaveFocus(),
+    FOCUS_WAIT,
+  )
+  // The member can move on to GOG and sync it too.
   within(gog).getByRole('button', { name: 'Sync now' }).focus()
   await user.keyboard('{Enter}')
   // (GOG's Sync may already have given way to Stop; either way focus falls

@@ -67,6 +67,12 @@ curl -X POST -b cookies.txt \
   "$BASE/api/reference-sets"
 ```
 
+## Optional native admin form
+
+With the default-off native admin migration enabled, the existing page URL serves the shared static form and named tables. Uploads retain the 32 MiB limit and parser formats. Replacing an installed platform/region pair requires confirmation; cancelling preserves it. Native uploads also enforce replacement permission inside the persistence helper, before deleting existing entries. Invalid DAT content leaves the current set intact. Deletion requires a separate confirmation and never deletes library files.
+
+Failed loading offers Retry and blocks actions; failed uploads retain the selected file and form values. Rehash, repair preview and catalog refresh remain separate explicit actions. Repair buckets preserve counts and truncation notices. Rehash reads library files; catalog refresh contacts IGDB. Legacy page/API behavior remains available during transition.
+
 ## Member UX
 
 - **Systems** tiles show `owned / total · percent (REGION)` when a set exists.

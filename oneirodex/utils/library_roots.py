@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import os
 import re
-
-from flask import current_app
+import sys
 
 ROOT_SEPARATOR = '|'
 LABEL_SEPARATOR = '='
@@ -117,6 +116,15 @@ def _slugify(label: str) -> str:
     return slug or 'root'
 
 
+def _runtime_config(app=None):
+    if app is not None:
+        return app.config
+    flask_module = sys.modules.get('flask')
+    if flask_module is not None and flask_module.has_app_context():
+        return flask_module.current_app.config
+    raise RuntimeError('Library-root configuration requires an app or active Flask context')
+
+
 def library_roots(app=None) -> list[dict]:
     """Every scan location this install exposes, in picker order.
 
@@ -125,7 +133,7 @@ def library_roots(app=None) -> list[dict]:
     declared roots follow in the order they were written. Paths that repeat are
     folded into the first entry that claimed them.
     """
-    config = (app or current_app).config
+    config = _runtime_config(app)
     base_key = 'BASE_FOLDER_WINDOWS' if os.name == 'nt' else 'BASE_FOLDER_POSIX'
 
     candidates = [
@@ -179,7 +187,7 @@ def resolve_library_root(root_id: str | None, app=None) -> dict | None:
 
 def library_root_paths(app=None) -> list[str]:
     """Just the declared extra paths — what the path allowlist needs to add."""
-    config = (app or current_app).config
+    config = _runtime_config(app)
     paths = []
     for root in config.get('LIBRARY_ROOTS') or []:
         path = _normalize_path(root.get('path') or '')

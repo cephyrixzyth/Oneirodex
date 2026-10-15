@@ -207,7 +207,7 @@ def sync_unmatched_kind_hint(folder_path: str, proposal: dict | None = None) -> 
         return False
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import UnmatchedFolder
 
     hint = (
@@ -247,7 +247,7 @@ def backfill_unmatched_suggested_kind(
     """
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import UnmatchedFolder
 
     query = (

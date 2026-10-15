@@ -106,7 +106,7 @@ class LocalYamlPatchCatalogProvider(PatchCatalogProvider):
             )
             path = (current_app.config.get('PATCH_CATALOG_PATH') or '').strip()
             return enabled and bool(path) and os.path.isfile(path)
-        except RuntimeError:
+        except (ImportError, RuntimeError):
             enabled = os.getenv('ENABLE_PATCH_CATALOG', 'true').lower() in (
                 '1',
                 'true',
@@ -121,7 +121,7 @@ class LocalYamlPatchCatalogProvider(PatchCatalogProvider):
             from flask import current_app
 
             return (current_app.config.get('PATCH_CATALOG_PATH') or '').strip()
-        except RuntimeError:
+        except (ImportError, RuntimeError):
             return (os.getenv('PATCH_CATALOG_PATH') or '').strip()
 
     def search(

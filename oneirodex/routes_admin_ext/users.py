@@ -1,6 +1,6 @@
 # /oneirodex/routes_admin_ext/users.py
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import render_template, request, jsonify
+from flask import request, jsonify
 from flask_login import login_required, current_user, login_user
 from oneirodex.models import Library, User, Genre, Theme
 from oneirodex import db
@@ -10,20 +10,20 @@ from uuid import uuid4
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.accounts import display_email, is_placeholder_email, placeholder_email
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.admin_invariant import lock_admin_mutation
-from oneirodex.utils.rbac import VALID_ROLES as RBAC_VALID_ROLES
+from oneirodex.utils.admin_user_validation import (
+    RESERVED_USERNAMES, VALID_ROLES, validate_about, validate_email,
+    validate_role, validate_username,
+)
 from oneirodex.utils.library_acl import (
     get_user_content_filters,
     get_user_library_allowlist,
     set_user_content_filters,
     set_user_library_allowlist,
 )
-import re
 from sqlalchemy.exc import IntegrityError
 
-# Validation constants and functions
-VALID_ROLES = list(RBAC_VALID_ROLES)
-RESERVED_USERNAMES = ['system']
 def _lock_admin_user_mutation():
     """Serialize admin role/state/deletion decisions through their commit."""
     lock_admin_mutation(db.session)
@@ -36,63 +36,12 @@ def _lock_admin_user_mutation():
         return False
     return actor.role == 'admin' and actor.state is not False
 
-def validate_username(username):
-    """Validate username according to business rules"""
-    if not username or not isinstance(username, str):
-        return False, "Username is required"
-    
-    if username.lower() in RESERVED_USERNAMES:
-        return False, f"'{username}' is a reserved username and cannot be used"
-    
-    if not re.match(r'^[\w.]+$', username):
-        return False, "Username can only contain letters, numbers, dots and underscores"
-    
-    if len(username) < 3 or len(username) > 64:
-        return False, "Username must be between 3 and 64 characters long"
-    
-    return True, ""
-
-def validate_email(email):
-    """Validate email format and requirements"""
-    if not email or not isinstance(email, str):
-        return False, "Email is required"
-    
-    # Basic email regex validation
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_pattern, email):
-        return False, "Invalid email format"
-    
-    if len(email) > 120:
-        return False, "Email address too long"
-    
-    return True, ""
-
-def validate_role(role):
-    """Validate role is allowed"""
-    if not role or not isinstance(role, str):
-        return False, "Role is required"
-    
-    if role not in VALID_ROLES:
-        return False, f"Role must be one of: {', '.join(VALID_ROLES)}"
-    
-    return True, ""
-
-def validate_about(about):
-    """Validate about field constraints"""
-    if about is not None:
-        if not isinstance(about, str):
-            return False, "About field must be a string"
-        if len(about) > 256:
-            return False, "About field cannot exceed 256 characters"
-    
-    return True, ""
-
 def check_email_unique(email, exclude_user_id=None):
     """Check if email is unique in the system"""
     query = db.session.execute(
         select(User).where(func.lower(User.email) == email.lower())
     ).scalars()
-    
+
     existing_user = query.first()
     if existing_user and existing_user.id != exclude_user_id:
         return False, "Email address is already in use"
@@ -103,7 +52,7 @@ def check_username_unique(username, exclude_user_id=None):
     query = db.session.execute(
         select(User).where(func.lower(User.name) == username.lower())
     ).scalars()
-    
+
     existing_user = query.first()
     if existing_user and existing_user.id != exclude_user_id:
         return False, "Username is already taken"
@@ -118,16 +67,16 @@ def check_admin_protection(user_id, new_role=None, new_state=None):
             User.state.is_not(False),
         )
     ).scalar()
-    
+
     user = db.session.get(User, user_id)
     if not user:
         return False, "User not found"
-    
+
     # If this is the only active admin and we're trying to demote or deactivate
     if (user.role == 'admin' and user.state is not False and current_admin_count <= 1):
         if (new_role and new_role != 'admin') or (new_state is not None and not new_state):
             return False, "Cannot modify the last active admin account"
-    
+
     return True, ""
 
 def _first_refusal(*checks):
@@ -149,7 +98,7 @@ def _first_refusal(*checks):
 @login_required
 @admin_required
 def users_spa():
-    return render_template('admin/admin_users.html')
+    return render_admin_spa(title='Users · Oneirodex Admin')
 
 
 # /admin/manage_users retired (GT-B18).
@@ -194,7 +143,7 @@ def manage_user_api(user_id):
         data = request.json
         if not data:
             return api_error('No data provided', code='bad_request')
-        
+
         # Validate required fields
         username = data.get('username', '').strip()
         email = data.get('email', '').strip().lower()
@@ -223,17 +172,17 @@ def manage_user_api(user_id):
         )
         if refusal is not None:
             return refusal
-        
+
         if not password:
             return api_error('Password is required', code='bad_request')
-        
+
         # Type validation
         if not isinstance(state, bool):
             return api_error('State must be true or false', code='bad_request')
-            
+
         if not isinstance(is_email_verified, bool):
             return api_error('Email verification status must be true or false', code='bad_request')
-        
+
         # Uniqueness checks
         refusal = _first_refusal(
             lambda: check_username_unique(username),
@@ -241,7 +190,7 @@ def manage_user_api(user_id):
         )
         if refusal is not None:
             return refusal
-        
+
         try:
             new_user = User(
                 name=username,
@@ -287,7 +236,7 @@ def manage_user_api(user_id):
     ).scalars().first() if request.method in ('PUT', 'DELETE') else db.session.get(User, user_id)
     if not user:
         return api_error('User not found', code='not_found')
-    
+
     if request.method == 'GET':
         content_filters = get_user_content_filters(user.id)
         return jsonify({
@@ -301,26 +250,26 @@ def manage_user_api(user_id):
             'denied_genres': content_filters['denied_genres'],
             'denied_themes': content_filters['denied_themes'],
         })
-    
+
     elif request.method == 'PUT':
         # Enhanced permission checks
         if user_id == 1 and current_user.id != 1:
             return api_error('Cannot modify primary admin account', code='forbidden')
-        
+
         # Prevent users from modifying their own role
         if current_user.id == user_id:
             data = request.json or {}
             if data.get('role') and data['role'] != user.role:
                 return api_error('Cannot modify your own role', code='forbidden')
-        
+
         data = request.json
         if not data:
             return api_error('No data provided', code='bad_request')
-        
+
         # Track changes for audit logging
         changes = []
         old_values = {'email': user.email, 'role': user.role, 'state': user.state, 'is_email_verified': user.is_email_verified, 'about': user.about}
-        
+
         # Validate and update email if provided
         if 'email' in data:
             new_email = (data['email'] or '').strip().lower()
@@ -347,7 +296,7 @@ def manage_user_api(user_id):
                 previous = display_email(user.email) or 'none — local account'
                 changes.append(f"email from '{previous}' to '{new_email}'")
                 user.email = new_email
-        
+
         # Validate and update role if provided
         if 'role' in data:
             new_role = data['role']
@@ -355,53 +304,53 @@ def manage_user_api(user_id):
                 valid, error = validate_role(new_role)
                 if not valid:
                     return api_error(error, code='bad_request')
-                
+
                 # Check admin protection before role change
                 valid, error = check_admin_protection(user_id, new_role=new_role)
                 if not valid:
                     return api_error(error, code='forbidden')
-                
+
                 changes.append(f"role from '{user.role}' to '{new_role}'")
                 user.role = new_role
-        
+
         # Validate and update state if provided
         if 'state' in data:
             new_state = data['state']
             if not isinstance(new_state, bool):
                 return api_error('State must be true or false', code='bad_request')
-            
+
             if new_state != user.state:
                 # Check admin protection before state change
                 valid, error = check_admin_protection(user_id, new_state=new_state)
                 if not valid:
                     return api_error(error, code='forbidden')
-                
+
                 status = "active" if new_state else "inactive"
                 changes.append(f"state to {status}")
                 user.state = new_state
-        
+
         # Validate and update email verification status if provided
         if 'is_email_verified' in data:
             new_verification = data['is_email_verified']
             if not isinstance(new_verification, bool):
                 return api_error('Email verification status must be true or false', code='bad_request')
-            
+
             if new_verification != user.is_email_verified:
                 status = "verified" if new_verification else "unverified"
                 changes.append(f"email verification to {status}")
                 user.is_email_verified = new_verification
-        
+
         # Validate and update about field if provided
         if 'about' in data:
             new_about = data['about']
             valid, error = validate_about(new_about)
             if not valid:
                 return api_error(error, code='bad_request')
-            
+
             if new_about != user.about:
                 changes.append("about field")
                 user.about = new_about
-        
+
         # Handle password change
         if data.get('password'):
             password = data['password']
@@ -432,7 +381,7 @@ def manage_user_api(user_id):
                 denied_themes if denied_themes is not None else existing['denied_themes'],
             )
             changes.append('content deny-list')
-        
+
         try:
             db.session.commit()
             if 'password' in changes and user.id == current_user.id:
@@ -443,7 +392,7 @@ def manage_user_api(user_id):
             if changes:
                 changes_str = ", ".join(changes)
                 log_system_event(f"Admin {current_user.name} modified user {user.name}: {changes_str}", event_type='audit', event_level='information')
-            
+
             return api_ok()
         except IntegrityError as e:
             db.session.rollback()
@@ -453,22 +402,22 @@ def manage_user_api(user_id):
             db.session.rollback()
             log_system_event(f"Admin {current_user.name} failed to modify user {user.name}: {str(e)}", event_type='audit', event_level='error')
             return api_error('Failed to update user', code='internal')
-    
+
     elif request.method == 'DELETE':
         # Enhanced admin protection
         if user_id == 1:
             return api_error('Cannot delete primary admin account', code='forbidden')
-        
+
         # Deleting an active admin has the same effect as deactivating them.
         # Without new_state=False, the guard sees no requested change and lets
         # the last active admin delete their own account.
         valid, error = check_admin_protection(user_id, new_state=False)
         if not valid:
             return api_error(error, code='forbidden')
-        
+
         # Store user info for logging before deletion
         user_info = f"{user.name} (email: {user.email}, role: {user.role})"
-        
+
         try:
             db.session.delete(user)
             db.session.commit()

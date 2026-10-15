@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import or_, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Library, ReferenceSet, ReferenceSetEntry
 from oneirodex.platform import LibraryPlatform, NATIVE_PC_PLATFORMS
 from oneirodex.utils.library_acl import apply_game_access_filters
@@ -310,6 +310,10 @@ def delete_reference_set(set_id: int) -> bool:
     return True
 
 
+class ReferenceSetReplacementConflict(ValueError):
+    """Replacing an installed platform/region requires explicit permission."""
+
+
 def upsert_reference_set(
     *,
     library_platform: str,
@@ -318,6 +322,7 @@ def upsert_reference_set(
     dat_bytes: bytes,
     name: str | None = None,
     uploader_id: int | None = None,
+    allow_replace: bool = True,
 ) -> ReferenceSet:
     platform = validate_library_platform(library_platform)
     region_n = normalize_region(region)
@@ -330,6 +335,8 @@ def upsert_reference_set(
         select(ReferenceSet).filter_by(library_platform=platform, region=region_n)
     ).scalars().first()
     if existing:
+        if not allow_replace:
+            raise ReferenceSetReplacementConflict('Reference set replacement requires confirmation')
         db.session.delete(existing)
         db.session.flush()
 

@@ -26,6 +26,7 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
   const hbarRef = useRef<any>(null)
   const frameRef = useRef(0)
   const directionRef = useRef(0)
+  const edgeMovedRef = useRef(false)
   const [overflow, setOverflow] = useState({ start: false, end: false })
 
   /** Whether there is anything left to scroll to, in each direction. */
@@ -63,6 +64,7 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
 
   const stopEdgeScroll = useCallback(() => {
     directionRef.current = 0
+    edgeMovedRef.current = false
     if (frameRef.current) {
       cancelAnimationFrame(frameRef.current)
       frameRef.current = 0
@@ -76,6 +78,7 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
     (direction: any) => {
       if (directionRef.current === direction) return
       directionRef.current = direction
+      edgeMovedRef.current = false
       if (frameRef.current) return
 
       const tick = () => {
@@ -85,10 +88,12 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
           return
         }
         const max = node.scrollWidth - node.clientWidth
+        const previousLeft = node.scrollLeft
         node.scrollLeft = Math.max(
           0,
           Math.min(max, node.scrollLeft + directionRef.current * edgeSpeed),
         )
+        if (node.scrollLeft !== previousLeft) edgeMovedRef.current = true
         measure()
         if (node.scrollLeft <= 0 || node.scrollLeft >= max - 1) {
           directionRef.current = 0
@@ -107,7 +112,8 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
    *  that was the bumper that skipped instead of easing. */
   const scrollByPage = useCallback(
     (direction: any) => {
-      const wasHovering = directionRef.current !== 0
+      // A quick click/tap can arrive before the first hover frame has moved.
+      const wasHovering = directionRef.current !== 0 && edgeMovedRef.current
       stopEdgeScroll()
       if (wasHovering) return
       const node = ref.current

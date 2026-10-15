@@ -115,7 +115,9 @@ from oneirodex.utils.preset_themes_geometry import _system_geometry
 # presets are byte-identical, the bump is what makes Reset Themes install them.
 # 41 = admin_metadata_providers.js learns the hash_identify switch (INSP-31);
 # the theme JS lives on the volume, so the handler change needs a Reset.
-GENERATOR_VERSION = 42
+# 43 = preferences_modal.js restores the paired icon pack after an unsaved
+# theme preview is dismissed; existing theme volumes need Reset.
+GENERATOR_VERSION = 44
 
 # Play-room id used when a theme does not name one (default + uploaded packs).
 DEFAULT_ERA = 'wood_den_80s'

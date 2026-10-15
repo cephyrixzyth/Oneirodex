@@ -130,39 +130,43 @@ async function openLibraryWindow(baseUrl: string): Promise<'opened' | 'focused' 
  */
 export async function mountThinApp(root: HTMLElement): Promise<void> {
   root.innerHTML = `
-    <header class="header">
-      <h1>Oneirodex Thin</h1>
-      <p class="tagline">Browse, social &amp; browser play — no local install pipeline</p>
-    </header>
-    <section class="connect panel">
-      <label>Server URL <input id="baseUrl" type="url" placeholder="https://games.example.com" autocomplete="url" /></label>
-      <p class="hint">Sign in with your site account inside the library / friends windows. API token optional for presence only.</p>
-      <label>Thin API token (optional) <input id="token" type="password" placeholder="gt_… thin preset" autocomplete="off" /></label>
-      <div class="actions">
-        <button type="button" id="saveBtn">Save</button>
-        <button type="button" id="validateBtn">Validate token</button>
-        <button type="button" id="openLibraryBtn" class="primary">Open library</button>
-        <button type="button" id="openFriendsBtn">Open friends</button>
-      </div>
-      <p id="status" class="status" data-tone="info">Enter your Oneirodex URL to begin.</p>
-    </section>
-    <section class="panel honesty">
-      <h2>What this client does</h2>
-      <ul>
-        <li>Opens your household library in a dedicated window</li>
-        <li>Friends popup (bottom-right, always-on-top)</li>
-        <li>Uses thin device capabilities (no download / install / native play)</li>
-        <li>With a token, reports presence as a <strong>thin</strong> seat so it shows up in Ops</li>
-      </ul>
-      <p class="hint">Need Install / Update / Play for PC titles? Use the full <strong>Oneirodex</strong> desktop companion.</p>
-    </section>
+    <main class="shell">
+      <header>
+        <h1>Oneirodex Thin</h1>
+        <p class="muted">Browse, social &amp; browser play — no local install pipeline</p>
+      </header>
+      <section class="connect panel">
+        <label>Server URL <input id="baseUrl" type="url" placeholder="https://games.example.com" autocomplete="url" /></label>
+        <p class="hint">Sign in with your site account inside the library / friends windows. API token optional for presence only.</p>
+        <label>Thin API token (optional) <input id="token" type="password" placeholder="gt_… thin preset" autocomplete="off" /></label>
+        <div class="actions">
+          <button type="button" id="saveBtn" class="secondary">Save</button>
+          <button type="button" id="validateBtn" class="secondary">Validate token</button>
+          <button type="button" id="openLibraryBtn" class="primary">Open library</button>
+          <button type="button" id="openFriendsBtn" class="secondary">Open friends</button>
+        </div>
+        <p id="status" class="status" data-tone="info" role="status" aria-live="polite" aria-atomic="true">Enter your Oneirodex URL to begin.</p>
+      </section>
+      <section class="panel honesty">
+        <h2>What this client does</h2>
+        <ul>
+          <li>Opens your household library in a dedicated window</li>
+          <li>Friends popup (bottom-right, always-on-top)</li>
+          <li>Uses thin device capabilities (no download / install / native play)</li>
+          <li>With a token, reports presence as a <strong>thin</strong> seat so it shows up in Ops</li>
+        </ul>
+        <p class="hint">Need Install / Update / Play for PC titles? Use the full <strong>Oneirodex</strong> desktop companion.</p>
+      </section>
+    </main>
   `
 
   const baseUrlEl = root.querySelector<HTMLInputElement>('#baseUrl')!
   const tokenEl = root.querySelector<HTMLInputElement>('#token')!
   const statusEl = root.querySelector<HTMLParagraphElement>('#status')!
   const setStatus = (message: string, tone: 'info' | 'error' | 'success' = 'info') => {
-    statusEl.textContent = message
+    if (statusEl.textContent !== message) {
+      statusEl.textContent = message
+    }
     statusEl.dataset.tone = tone
   }
 

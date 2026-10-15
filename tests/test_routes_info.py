@@ -42,38 +42,6 @@ def regular_user(db_session):
     return user
 
 
-class TestContextProcessor:
-    """Test the context processor functionality."""
-
-    @patch('oneirodex.routes_info.get_global_settings')
-    def test_inject_settings_context_processor(self, mock_get_global_settings, app):
-        """Test that the context processor injects global settings correctly."""
-        mock_settings = {'theme': 'default', 'site_name': 'Oneirodex', 'maintenance_mode': False}
-        mock_get_global_settings.return_value = mock_settings
-        
-        with app.app_context():
-            from oneirodex.routes_info import inject_settings
-            result = inject_settings()
-            
-        assert result == mock_settings
-        mock_get_global_settings.assert_called_once()
-
-    @patch('oneirodex.routes_info.get_global_settings')
-    def test_inject_settings_cached(self, mock_get_global_settings, app):
-        """Test that the context processor is cached."""
-        mock_settings = {'theme': 'dark', 'site_name': 'Test Site'}
-        mock_get_global_settings.return_value = mock_settings
-        
-        with app.app_context():
-            from oneirodex.routes_info import inject_settings
-            
-            # Call multiple times
-            result1 = inject_settings()
-            result2 = inject_settings()
-            
-            assert result1 == result2 == mock_settings
-
-
 class TestAdminServerStatusRoute:
     """The standalone page is retired; Ops is the one health surface (W27-D1)."""
 
@@ -115,13 +83,16 @@ class TestRouteIntegration:
             rules = [rule.rule for rule in app.url_map.iter_rules()]
             assert '/admin/server_status_page' in rules
 
-    def test_info_blueprint_context_processor(self, app):
-        """Test that the info blueprint context processor is registered."""
+    def test_info_blueprint_has_no_template_context_processor(self, app):
+        """The JSON-only info blueprint no longer injects settings into templates."""
         with app.app_context():
             from oneirodex.routes_info import info_bp
-            
-            # Check that context processor is registered
-            assert hasattr(info_bp, 'context_processor')
+
+            processors = info_bp.template_context_processors.get(None, [])
+            assert all(
+                processor.__name__ == '_default_template_ctx_processor'
+                for processor in processors
+            )
 
 
 class TestUtilityFunctionIntegration:

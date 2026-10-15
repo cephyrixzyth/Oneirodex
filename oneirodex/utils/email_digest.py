@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import current_app, has_request_context, render_template, request
-from markupsafe import escape
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import User, UserNotification, UserPreference
+from oneirodex.utils.email_rendering import render_daily_digest
 from oneirodex.utils.notifications import _pref_allows
 from oneirodex.utils.smtp import send_email_quiet
+from oneirodex.utils.runtime_config import get_runtime_config
 
 _DIGEST_KINDS = frozenset({'mention', 'dm', 'free_game'})
 _KIND_PREF = {
@@ -24,7 +24,7 @@ _KIND_PREF = {
 
 def _interval_hours() -> float:
     try:
-        hours = float(current_app.config.get('EMAIL_DIGEST_INTERVAL_HOURS') or 24)
+        hours = float((get_runtime_config() or {}).get('EMAIL_DIGEST_INTERVAL_HOURS') or 24)
     except (TypeError, ValueError):
         hours = 24.0
     return max(1.0, min(hours, 168.0))
@@ -35,8 +35,14 @@ def _absolute_link(path: str | None) -> str:
         return ''
     if path.startswith('http://') or path.startswith('https://'):
         return path
-    if has_request_context():
-        root = (request.url_root or '').rstrip('/')
+    try:
+        from flask import has_request_context, request
+
+        request_root = request.url_root if has_request_context() else None
+    except ImportError:
+        request_root = None
+    if request_root:
+        root = request_root.rstrip('/')
         if root:
             return f'{root}{path if path.startswith("/") else "/" + path}'
     return path
@@ -98,27 +104,7 @@ def send_digest_for_user(user: User, prefs: UserPreference, *, now: datetime | N
             'link': _absolute_link(row.link or '/notifications'),
         })
 
-    try:
-        html = render_template(
-            'email/daily_digest.html',
-            items=items,
-            count=len(items),
-            inbox_link=_absolute_link('/notifications'),
-        )
-    except Exception:
-        # Titles/bodies carry user-authored chat text — escape like the Jinja path does.
-        lines = []
-        for item in items:
-            snippet = escape((item['body'] or '')[:120])
-            link = item.get('link') or ''
-            open_bit = f' — <a href="{escape(link)}">Open</a>' if link else ''
-            lines.append(f'<li><strong>{escape(item["title"])}</strong> — {snippet}{open_bit}</li>')
-        html = (
-            f'<p>You have {len(items)} unread notification'
-            f'{"s" if len(items) != 1 else ""}.</p>'
-            f'<ul>{"".join(lines)}</ul>'
-            f'<p><a href="{_absolute_link("/notifications")}">Open notifications</a></p>'
-        )
+    html = render_daily_digest(items, _absolute_link('/notifications'))
 
     subject = f'Oneirodex — {len(items)} unread notification{"s" if len(items) != 1 else ""}'
     if not send_email_quiet(email, subject, html):

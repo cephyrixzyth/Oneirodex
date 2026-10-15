@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 
-import { AccountModal, openPreferencesModal, type AccountPanelId } from '@oneirodex/ui'
+import {
+  useTopBarReserve,
+  AccountModal,
+  PreferencesModalHost,
+  openPreferencesModal,
+  type AccountPanelId,
+} from '@oneirodex/ui'
 import AdminCommandPalette from './AdminCommandPalette'
 import { resolveAdminPage } from './adminSection'
 import './AdminTopNav.css'
@@ -65,9 +71,11 @@ function readAdminIdentity() {
 export function AdminTopNav({
   onToggleRail,
   railState = 'expanded',
+  isMobile = false,
 }: {
   onToggleRail?: () => void
   railState?: string
+  isMobile?: boolean
 }) {
   const { pathname } = useLocation()
   const section = resolveAdminPage(pathname)
@@ -78,6 +86,8 @@ export function AdminTopNav({
   const [accountModal, setAccountModal] = useState<AccountPanelId | null>(null)
   const accountId = useId()
   const rootRef = useRef<HTMLElement | null>(null)
+  useTopBarReserve(rootRef)
+  const accountButtonRef = useRef<HTMLButtonElement | null>(null)
   const paletteHint = commandPaletteHint()
 
   useEffect(() => {
@@ -86,7 +96,11 @@ export function AdminTopNav({
       if (!rootRef.current?.contains(event.target as Node | null)) setAccountOpen(false)
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setAccountOpen(false)
+      if (event.key === 'Escape' && rootRef.current?.contains(document.activeElement)) {
+        event.preventDefault()
+        setAccountOpen(false)
+        accountButtonRef.current?.focus()
+      }
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKey)
@@ -99,11 +113,7 @@ export function AdminTopNav({
   async function handlePreferencesClick(event: ReactMouseEvent) {
     event.preventDefault()
     setAccountOpen(false)
-    try {
-      await openPreferencesModal()
-    } catch {
-      window.location.href = '/settings_panel'
-    }
+    await openPreferencesModal()
   }
 
   function openAccountModal(panel: AccountPanelId) {
@@ -122,8 +132,10 @@ export function AdminTopNav({
             <button
               type="button"
               className="od-cbtn od-topbar__rail-toggle"
+              id="od-rail-toggle"
               aria-label="Toggle navigation"
-              aria-expanded={railState !== 'collapsed'}
+              aria-controls="od-primary-navigation"
+              aria-expanded={isMobile ? railState === 'open' : railState !== 'collapsed'}
               onClick={onToggleRail}
             >
               <span aria-hidden="true">☰</span>
@@ -146,10 +158,11 @@ export function AdminTopNav({
           <div id="od-admin-topbar-trail" className="od-topbar__trail" />
           <div className="od-topnav__dropdown">
             <button
+              ref={accountButtonRef}
               type="button"
               className="od-cbtn od-topbar__account"
               aria-expanded={accountOpen}
-              aria-controls={accountId}
+              aria-controls={accountOpen ? accountId : undefined}
               aria-label="Account menu"
               onClick={() => setAccountOpen((open) => !open)}
             >
@@ -169,13 +182,17 @@ export function AdminTopNav({
               )}
             </button>
             {accountOpen ? (
-              <div className="od-topnav__dropdown-panel od-menu-surface" id={accountId} role="menu">
+              <div
+                className="od-topnav__dropdown-panel od-menu-surface"
+                id={accountId}
+                role="group"
+                aria-label="Account actions"
+              >
                 {identity.username ? (
                   <div className="od-topnav__username">{identity.username}</div>
                 ) : null}
                 <button
                   type="button"
-                  role="menuitem"
                   className="od-topnav__palette-hint"
                   onClick={() => {
                     setAccountOpen(false)
@@ -187,35 +204,20 @@ export function AdminTopNav({
                 {ACCOUNT_LINKS.map((link) => {
                   if (link.modal) {
                     return (
-                      <a
-                        key={link.id}
-                        href={link.href}
-                        role="menuitem"
-                        onClick={openAccountModal(link.modal)}
-                      >
+                      <a key={link.id} href={link.href} onClick={openAccountModal(link.modal)}>
                         {link.label}
                       </a>
                     )
                   }
                   if (link.preferences) {
                     return (
-                      <a
-                        key={link.id}
-                        href={link.href}
-                        role="menuitem"
-                        onClick={handlePreferencesClick}
-                      >
+                      <a key={link.id} href={link.href} onClick={handlePreferencesClick}>
                         {link.label}
                       </a>
                     )
                   }
                   return (
-                    <a
-                      key={link.id}
-                      href={link.href}
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                    >
+                    <a key={link.id} href={link.href} onClick={() => setAccountOpen(false)}>
                       {link.label}
                     </a>
                   )
@@ -228,7 +230,12 @@ export function AdminTopNav({
         <AdminCommandPalette />
       </header>
 
-      <AccountModal panel={accountModal} onClose={() => setAccountModal(null)} />
+      <AccountModal
+        panel={accountModal}
+        onClose={() => setAccountModal(null)}
+        returnFocusRef={accountButtonRef}
+      />
+      <PreferencesModalHost />
     </>
   )
 }

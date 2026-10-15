@@ -15,6 +15,7 @@ from oneirodex.utils.game_name_parse import (
     strip_unbracketed_scene_suffix,
 )
 from oneirodex.utils.rom_archive import ARCHIVE_EXTENSIONS, PLATFORM_DUMP_SUFFIXES
+from oneirodex.utils.rom_language_patterns import LANG_LIST_PAREN_RE, REGION_CAPTURE_RE
 
 # --- Shared peel regex (single source — imported by set_completion + rom_language) ---
 
@@ -38,11 +39,6 @@ REV_PAREN_RE = re.compile(
     r'GB Compatibility|SGB Enhanced|NTSC|PAL|NTSC-J)[^)]*\)',
     re.IGNORECASE,
 )
-LANG_LIST_PAREN_RE = re.compile(
-    r'\s*\(((?:En|Fr|De|Es|It|Nl|Pt|Ru|Ja|Zh|Ko|Pl|Sv|No|Da|Fi|Hu|Cs|Tr|Ar)'
-    r'(?:\s*,\s*(?:En|Fr|De|Es|It|Nl|Pt|Ru|Ja|Zh|Ko|Pl|Sv|No|Da|Fi|Hu|Cs|Tr|Ar))*)\)',
-    re.IGNORECASE,
-)
 # BE-DET-5 — Redump / scene disc tokens: (Disc 1), (Disk 2), (CD1), (CD 2).
 DISC_PAREN_RE = re.compile(
     r'\s*\(\s*(?:Disc|Disk|CD)\s*(\d+)\s*\)',
@@ -50,14 +46,6 @@ DISC_PAREN_RE = re.compile(
 )
 REMAINING_SIMPLE_PAREN_RE = re.compile(r'\s*\([^)]{1,40}\)')
 MULTI_SPACE_RE = re.compile(r'\s+')
-
-# First region-like parenthetical for rom_language capture (subset of REGION_PAREN tokens).
-REGION_CAPTURE_RE = re.compile(
-    r'\((USA|Europe|Japan|World|UE|JU|EU|JP|U|J|E|Asia|Brazil|Korea|'
-    r'Australia|France|Germany|Spain|Italy|Netherlands|Sweden|China|'
-    r'Hong Kong|Taiwan|Russia)(?:[^)]*)\)',
-    re.IGNORECASE,
-)
 
 # GoodTools / status flags that force propose-only (checked on raw basename).
 _PROPOSE_BRACKET_FLAGS_RE = re.compile(r'\[(?:h|T|tr)\]', re.IGNORECASE)
@@ -424,7 +412,7 @@ def arcade_library_is_large(library, full_disk_path: str | None = None) -> bool:
     try:
         from sqlalchemy import func, select
 
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
 
         n = db.session.execute(

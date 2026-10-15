@@ -109,14 +109,14 @@ class TestSmtpSettings:
         response = client.get('/admin/smtp_settings')
         assert response.status_code == 302  # Redirected by admin_required
     
-    @patch('oneirodex.routes_smtp.render_template')
+    @patch('oneirodex.routes_smtp.render_admin_spa')
     def test_get_success_no_settings(self, mock_render, client, admin_user, db_session):
         """Test GET request with no existing settings."""
         # Delete any existing settings first
         db_session.execute(delete(GlobalSettings))
         db_session.commit()
         
-        mock_render.return_value = 'rendered template'
+        mock_render.return_value = 'rendered admin shell'
         
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -125,15 +125,11 @@ class TestSmtpSettings:
         response = client.get('/admin/smtp_settings')
         assert response.status_code == 200
         
-        # Verify template was rendered with correct arguments
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert args[0] == 'admin/admin_manage_smtp_settings.html'
-        # Settings will be auto-created if they don't exist, so check it exists
-        assert kwargs['settings'] is not None
-        assert isinstance(kwargs['settings'], GlobalSettings)
+        mock_render.assert_called_once_with(title='SMTP - Oneirodex Admin')
+        assert b'rendered admin shell' in response.data
+        assert db_session.execute(select(GlobalSettings)).scalars().all() == []
     
-    @patch('oneirodex.routes_smtp.render_template')
+    @patch('oneirodex.routes_smtp.render_admin_spa')
     def test_get_success_with_settings(self, mock_render, client, admin_user, db_session):
         """Test GET request with existing settings."""
         # Delete any default settings first, then use our test settings
@@ -141,7 +137,7 @@ class TestSmtpSettings:
         db_session.commit()
         test_settings = create_test_settings(db_session)
         
-        mock_render.return_value = 'rendered template'
+        mock_render.return_value = 'rendered admin shell'
         
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -150,11 +146,9 @@ class TestSmtpSettings:
         response = client.get('/admin/smtp_settings')
         assert response.status_code == 200
         
-        # Verify template was rendered with settings
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert args[0] == 'admin/admin_manage_smtp_settings.html'
-        assert kwargs['settings'].smtp_server == test_settings.smtp_server
+        mock_render.assert_called_once_with(title='SMTP - Oneirodex Admin')
+        assert b'rendered admin shell' in response.data
+        assert db_session.get(GlobalSettings, test_settings.id).smtp_server == test_settings.smtp_server
     
     def test_post_requires_login(self, client, configured_install):
         """Test that POST request requires login."""

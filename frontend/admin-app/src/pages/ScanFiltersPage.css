@@ -1,0 +1,42 @@
+.od-scan-filter-help ul {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  color: var(--od-text-muted);
+}
+
+.od-scan-filter-help li + li {
+  margin-block-start: 0.5rem;
+}
+
+.od-scan-filter-presets,
+.od-scan-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--od-space-3, 0.75rem);
+}
+
+.od-scan-filter-presets {
+  margin-block-end: 1rem;
+}
+
+.od-scan-filter-form .od-admin-field {
+  min-width: min(100%, 14rem);
+  flex: 1 1 14rem;
+}
+
+.od-scan-filter-form > button {
+  flex: 0 0 auto;
+}
+
+.od-scan-filter-check {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--od-text);
+}
+
+.od-scan-filter-check input {
+  accent-color: var(--od-accent);
+}

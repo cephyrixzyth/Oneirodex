@@ -210,8 +210,8 @@ def test_boot_calls_both_installers():
     """Source guard: the whole point is that these stopped being scripts nobody
     ran. Importable helpers that boot never calls would be the same bug."""
     source = (ROOT / 'oneirodex' / 'init_data.py').read_text(encoding='utf-8')
-    assert 'initialize_theme_fonts()' in source
-    assert 'initialize_emulator_bios()' in source
+    assert 'initialize_theme_fonts(config=config, app=app)' in source
+    assert 'initialize_emulator_bios(config=config)' in source
 
 
 def test_font_install_is_configurable_and_off_the_boot_path():

@@ -30,11 +30,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import delete, event, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import StoreSyncJob
 from oneirodex.utils.store_sync_errors import (
     StoreSyncError, SyncOutcomeError, classify_sync_exception, reason_payload,
@@ -337,7 +337,7 @@ def request_cancel(user_id: int, store: str) -> StoreSyncJob:
 
 def latest_jobs(user_ids=None) -> dict[tuple[int, str], StoreSyncJob]:
     """Newest job per (member, store); optionally limited to some members."""
-    newest = select(StoreSyncJob.user_id, StoreSyncJob.store, db.func.max(StoreSyncJob.id).label('id'))
+    newest = select(StoreSyncJob.user_id, StoreSyncJob.store, func.max(StoreSyncJob.id).label('id'))
     if user_ids is not None:
         newest = newest.where(StoreSyncJob.user_id.in_(list(user_ids)))
     newest = newest.group_by(StoreSyncJob.user_id, StoreSyncJob.store).subquery()

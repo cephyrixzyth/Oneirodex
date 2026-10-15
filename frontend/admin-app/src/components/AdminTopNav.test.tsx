@@ -125,7 +125,7 @@ test('the palette hint moved into the account menu, and still opens it', () => {
   // not wrapped in act(), so the panel never renders before the next query.
   fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
 
-  const hint = screen.getByRole('menuitem', { name: /search everything/i })
+  const hint = screen.getByRole('button', { name: /search everything/i })
   expect(hint).toBeInTheDocument()
   fireEvent.click(hint)
   expect(onOpen).toHaveBeenCalledTimes(1)
@@ -308,11 +308,12 @@ test('collapsed rail keeps accessible names', () => {
   expect(screen.getByRole('link', { name: 'System' })).toBeInTheDocument()
 })
 
-test('account menu is a dropdown panel, not a horizontal strip', () => {
+test('account disclosure is a dropdown group, not a horizontal strip', () => {
   const { container } = renderTopBar()
   fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
   const panel = container.querySelector('.od-topnav__dropdown-panel')
   expect(panel).toBeTruthy()
-  expect(panel!.getAttribute('role')).toBe('menu')
-  expect(panel!.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(1)
+  expect(panel!.getAttribute('role')).toBe('group')
+  expect(panel!.querySelectorAll('[role="menuitem"]').length).toBe(0)
+  expect(panel!.querySelectorAll('a, button').length).toBeGreaterThan(1)
 })
