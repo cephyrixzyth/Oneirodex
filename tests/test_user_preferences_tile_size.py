@@ -176,34 +176,31 @@ def test_partial_save_keeps_the_fields_it_did_not_send(client, member, db_sessio
     assert prefs.show_tile_titles is False
 
 
-def test_engine_picker_only_renders_when_the_admin_allows_choice(client, member, db_session, monkeypatch):
-    from oneirodex.utils import browser_player
+def test_engine_picker_choice_is_exposed_only_when_admin_allows_it(client, member, monkeypatch):
+    from oneirodex.routes_apis import preferences as preferences_api
 
     with client.session_transaction() as sess:
         sess['_user_id'] = str(member.id)
         sess['_fresh'] = True
 
-    monkeypatch.setattr(browser_player, 'available_engines', lambda: ('webretro',))
-    html = client.get('/settings_panel').get_data(as_text=True)
-    assert 'id="browserPlayerEngine"' not in html
-    # Hidden carrier so a whole-form save round-trips the stored value.
-    assert 'name="browser_player_engine"' in html
-
-    monkeypatch.setattr(browser_player, 'available_engines', lambda: ('webretro', 'emulatorjs'))
     monkeypatch.setattr(
-        browser_player, 'get_browser_player_settings',
-        lambda: {**browser_player.DEFAULTS, 'browser_player_allow_member_choice': True},
+        preferences_api,
+        'play_engine_fields',
+        lambda: {'browser_player_member_choice': False},
     )
-    html = client.get('/settings_panel').get_data(as_text=True)
-    assert 'id="browserPlayerEngine"' in html
-    assert 'Server default (WebRetro)' in html
-    assert 'EmulatorJS' in html
+    hidden = client.get('/api/account/preferences')
+    assert hidden.status_code == 200
+    hidden_body = hidden.get_json()
+    assert hidden_body['member_engine_choice'] is False
+    assert {choice['value'] for choice in hidden_body['choices']['browser_player_engines']} >= {
+        '', 'webretro', 'emulatorjs'
+    }
 
-    saved = client.post('/settings_panel', data={'browser_player_engine': 'emulatorjs'})
-    assert saved.status_code == 200, saved.get_json()
-    from oneirodex.models import UserPreference
-
-    prefs = db_session.execute(
-        db_session.query(UserPreference).filter_by(user_id=member.id).statement
-    ).scalars().first()
-    assert prefs.browser_player_engine == 'emulatorjs'
+    monkeypatch.setattr(
+        preferences_api,
+        'play_engine_fields',
+        lambda: {'browser_player_member_choice': True},
+    )
+    visible = client.get('/api/account/preferences')
+    assert visible.status_code == 200
+    assert visible.get_json()['member_engine_choice'] is True

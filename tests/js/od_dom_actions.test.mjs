@@ -60,11 +60,9 @@ const sandbox = {
     open(...args) { opened.push(args); return null; },
     confirm() { return true; },
     // Handlers that exist on the page. Only some of them are on the allowlist.
-    deleteImage(...args) { calls.push(['deleteImage', ...args]); },
-    plusSlides(...args) { calls.push(['plusSlides', ...args]); },
-    downloadBatch(...args) { calls.push(['downloadBatch', ...args]); },
-    applyFilters(...args) { calls.push(['applyFilters', ...args]); },
-    onLibraryChange(...args) { calls.push(['onLibraryChange', ...args]); },
+    deleteSingle(...args) { calls.push(['deleteSingle', ...args]); },
+    downloadSingle(...args) { calls.push(['downloadSingle', ...args]); },
+    changePage(...args) { calls.push(['changePage', ...args]); },
     evilHandler(...args) { calls.push(['evilHandler', ...args]); },
     eval: (...args) => { calls.push(['eval', ...args]); },
     alert: (...args) => { calls.push(['alert', ...args]); },
@@ -101,16 +99,16 @@ function change(attributes, value = 'v') {
 
 // --- data-od-click: allowlisted handlers still work ------------------------
 
-let event = click({ 'data-od-click': 'deleteImage', 'data-od-arg': '42' });
+let event = click({ 'data-od-click': 'downloadSingle', 'data-od-arg': '42' });
 assert.equal(calls.length, 1, 'an allowlisted handler runs');
-assert.deepEqual(calls[0].slice(0, 2), ['deleteImage', 42], 'numeric data-od-arg is parsed');
+assert.deepEqual(calls[0].slice(0, 2), ['downloadSingle', 42], 'numeric data-od-arg is parsed');
 assert.ok(event.defaultPrevented, 'a handled click is cancelled');
 
-click({ 'data-od-click': 'plusSlides', 'data-od-arg': '-1' });
-assert.deepEqual(calls[0].slice(0, 2), ['plusSlides', -1], 'negative numeric arg is parsed');
+click({ 'data-od-click': 'deleteSingle', 'data-od-arg': '-1' });
+assert.deepEqual(calls[0].slice(0, 2), ['deleteSingle', -1], 'negative numeric arg is parsed');
 
-click({ 'data-od-click': 'downloadBatch', 'data-od-arg': '10' });
-assert.deepEqual(calls[0].slice(0, 2), ['downloadBatch', 10]);
+click({ 'data-od-click': 'changePage', 'data-od-arg': '10' });
+assert.deepEqual(calls[0].slice(0, 2), ['changePage', 10]);
 
 click({ 'data-od-click': 'reload' });
 assert.equal(reloads, 1, 'reload is still a built-in action');
@@ -130,9 +128,9 @@ for (const name of [
     'window',
     'location.assign',
     'document.write',
-    ' deleteImage',
-    'deleteImage ',
-    'DeleteImage',
+    ' downloadSingle',
+    'downloadSingle ',
+    'DownloadSingle',
 ]) {
     event = click({ 'data-od-click': name, 'data-od-arg': 'alert(document.domain)' });
     assert.equal(calls.length, 0, `data-od-click="${name}" must not run anything`);
@@ -140,13 +138,10 @@ for (const name of [
     assert.equal(opened.length, 0, `data-od-click="${name}" must not open anything`);
 }
 
-// --- data-od-change --------------------------------------------------------
+// --- data-od-change: no shipped handlers are currently allowlisted --------
 
-change({ 'data-od-change': 'onLibraryChange', 'data-od-arg2': 'auto' }, 'lib-1');
-assert.deepEqual(calls, [['onLibraryChange', 'lib-1', 'auto']], 'allowlisted change handler runs');
-
-change({ 'data-od-change': 'applyFilters' }, 'x');
-assert.deepEqual(calls, [['applyFilters', 'x']]);
+event = change({ 'data-od-change': 'evilHandler', 'data-od-arg2': 'auto' }, 'lib-1');
+assert.deepEqual(calls, [], 'unallowlisted change handlers are ignored');
 
 for (const name of ['evilHandler', 'eval', 'alert', 'plusSlides', 'constructor', '__proto__']) {
     change({ 'data-od-change': name });

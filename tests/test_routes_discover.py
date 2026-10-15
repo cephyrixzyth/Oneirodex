@@ -382,22 +382,6 @@ class TestGameDetails:
         assert isinstance(game.size, int)
 
 
-class TestContextProcessor:
-    """Test the context processor functionality."""
-
-    @patch('oneirodex.routes_discover.get_global_settings')
-    def test_inject_settings_context_processor(self, mock_get_global_settings, app):
-        """Test that the context processor injects global settings."""
-        mock_settings = {'theme': 'default', 'site_name': 'Oneirodex'}
-        mock_get_global_settings.return_value = mock_settings
-        
-        with app.app_context():
-            from oneirodex.routes_discover import inject_settings
-            result = inject_settings()
-            
-        assert result == mock_settings
-
-
 class TestErrorHandling:
     """Test error handling scenarios."""
 

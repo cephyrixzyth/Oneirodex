@@ -9,8 +9,6 @@ React rail hid Help and Trailers on a full load of those routes — while
 """
 
 from uuid import uuid4
-from unittest.mock import patch
-
 import pytest
 
 from oneirodex.models import User
@@ -38,17 +36,6 @@ def _login(client, user):
 
 
 class TestMemberBlueprintSettings:
-    def test_inject_settings_context_processor(self, app):
-        with app.app_context():
-            from oneirodex.routes_member import inject_settings
-
-            with patch(
-                'oneirodex.routes_member.get_global_settings',
-                return_value={'show_trailers': True},
-            ) as mocked:
-                assert inject_settings() == {'show_trailers': True}
-            mocked.assert_called_once()
-
     def test_systems_shell_defaults_help_and_trailers_on(
         self, client, test_user, configured_install,
     ):
