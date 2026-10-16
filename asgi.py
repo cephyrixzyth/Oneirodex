@@ -2996,6 +2996,55 @@ class LazyASGIApp:
                 return
 
             await self._ensure_flask()
+            from oneirodex.runtime_native.admin_csrf_preflight import (
+                admin_request_wants_json,
+                empty_admin_mutation_csrf_error,
+                inspect_urlencoded_csrf_body,
+            )
+
+            csrf_error = empty_admin_mutation_csrf_error(
+                scope, self._flask_app.config,
+            )
+            if (
+                csrf_error is None
+                and (path == '/admin' or path.startswith('/admin/'))
+                and scope.get('method', '').upper() in {'POST', 'PUT', 'PATCH', 'DELETE'}
+            ):
+                form_token, replay_receive, form_inspected = await inspect_urlencoded_csrf_body(
+                    scope, receive, self._flask_app.config,
+                )
+                if form_inspected:
+                    receive = replay_receive
+                    csrf_error = empty_admin_mutation_csrf_error(
+                        scope,
+                        self._flask_app.config,
+                        form_token=form_token,
+                        form_inspected=True,
+                    )
+            if csrf_error is not None:
+                from starlette.responses import HTMLResponse, JSONResponse
+                from oneirodex.utils.security_headers import security_header_values
+
+                response_headers = security_header_values(self._flask_app.config)
+                if admin_request_wants_json(scope):
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    payload, status = api_error_payload(csrf_error, code='bad_request')
+                    response = JSONResponse(
+                        payload, status_code=status, headers=response_headers,
+                    )
+                else:
+                    response = HTMLResponse(
+                        '<!doctype html>\n<html lang=en>\n'
+                        '<title>400 Bad Request</title>\n<h1>Bad Request</h1>\n'
+                        f'<p>{csrf_error}</p>\n',
+                        status_code=400,
+                        headers=response_headers,
+                    )
+                response.headers.setdefault('Vary', 'Cookie')
+                await response(scope, receive, send)
+                return
+
             from oneirodex.runtime_native.member_shell import member_shell_route
 
             if (

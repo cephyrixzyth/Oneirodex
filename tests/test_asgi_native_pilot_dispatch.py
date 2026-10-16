@@ -1680,6 +1680,7 @@ def test_native_shell_switch_preserves_invite_form_post_dispatch(monkeypatch):
     runtime = asgi.LazyASGIApp()
     runtime._flask_app = Flask(__name__)
     seen = []
+    runtime._flask_app.config['WTF_CSRF_ENABLED'] = False
 
     async def native(scope, receive, send):
         seen.append((scope['path'], scope['method']))
