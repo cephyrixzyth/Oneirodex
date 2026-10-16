@@ -544,7 +544,7 @@ class TestRefreshImagesInBackground:
         
         refresh_images_in_background(sample_game.uuid, app=app)
         
-        mock_delete_images.assert_called_once_with(sample_game.uuid)
+        mock_delete_images.assert_called_once_with(sample_game.uuid, config=app.config)
         mock_api.assert_called_once()
         
         # Should process cover and screenshots

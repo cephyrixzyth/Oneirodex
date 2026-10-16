@@ -567,7 +567,7 @@ def refresh_images_in_background(game_uuid, *, app=None):
             if 'error' not in response_json and response_json:
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 40}, timeout=300)
 
-                delete_game_images(game_uuid)
+                delete_game_images(game_uuid, config=app.config)
 
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 60}, timeout=300)
 
