@@ -786,6 +786,8 @@ async def _single_scan(request, app, data, user):
         payload.get('folder') or form.get('folder') or request.query_params.get('folder')
         or getattr(library, 'last_scan_folder', None)
     )
+    if folder is None:
+        folder = ''
     if not isinstance(folder, str):
         return _error('folder must be a string', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)

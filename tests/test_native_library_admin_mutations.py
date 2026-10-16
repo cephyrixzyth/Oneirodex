@@ -283,6 +283,25 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['fetch_hltb'] is True
 
 
+def test_single_scan_missing_folder_matches_legacy_rejection(native_client):
+    runtime, data = native_client
+    data.items['lib-no-folder'] = SimpleNamespace(
+        uuid='lib-no-folder', name='Library Without Folder', last_scan_folder=None,
+    )
+
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/scan',
+        json={'library_uuid': 'lib-no-folder'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == (
+        'No folder provided and library has no last_scan_folder. '
+        'Run one Auto Scan first or pass folder.'
+    )
+    assert not any(call[0] in {'resolve', 'scan'} for call in data.calls)
+
+
 def test_refresh_all_enqueues_and_promotes_fifo_job(native_client):
     runtime, data = native_client
     response = _request(runtime, 'POST', '/api/admin/libraries/refresh_all', json={})
