@@ -58,6 +58,9 @@ SCRIPT_GLOB = "scripts/*.py"
 EXEMPT = {
     "oneirodex/updateschema.py",  # operator-run migration; progress print is UX
     "scripts/get_json_lint.py",  # CLI ratchet; stdout is the report
+    # These tools are CLI reports consumed directly by operators and scripts.
+    "scripts/generate_icon_adapters.py",
+    "scripts/p17_route_parity.py",
     # The docs-capture tools. Each is operator-run against a throwaway
     # instance, and its stdout *is* the deliverable: which surface was shot,
     # which was skipped and why, which clip was written, which affordance the

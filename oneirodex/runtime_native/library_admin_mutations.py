@@ -6,6 +6,7 @@ All durable writes, scans, and deletion scheduling live behind
 from __future__ import annotations
 
 import json
+import logging
 import os
 import base64
 from contextlib import nullcontext
@@ -18,6 +19,8 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+
+logger = logging.getLogger(__name__)
 
 
 class LibraryAdminMutationData:
@@ -190,8 +193,8 @@ class LibraryAdminMutationData:
                             database_scope=database_scope,
                             app=app,
                         )
-                    except Exception as exc:  # noqa: BLE001
-                        print(f"[REFRESH ALL] Failed for {item['name']}: {exc}")
+                    except Exception:  # noqa: BLE001
+                        logger.exception("Refresh all failed for library %s", item['name'])
 
         Thread(target=run_queue, daemon=True, name='oneirodex-refresh-all').start()
 
