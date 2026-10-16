@@ -441,11 +441,11 @@ def _db_ping_ms():
         return None
 
 
-def _awake_pulse():
+def _awake_pulse(config=None):
     """Reuse readiness probe payload + wall-clock check_ms (no HTTP hop)."""
     try:
         started = perf_counter()
-        payload, status = build_readiness()
+        payload, status = build_readiness(config=config)
         check_ms = round((perf_counter() - started) * 1000, 2)
         return {
             'status': payload.get('status'),
@@ -530,7 +530,7 @@ def _library_watch_pulse():
         }
 
 
-def _services_snapshot():
+def _services_snapshot(*, config=None):
     """Sidecar / companion / queue pulse for Admin Ops."""
     return {
         'livekit': _livekit_pulse(),
@@ -538,7 +538,7 @@ def _services_snapshot():
         'companions': _companion_pulse(),
         'queues': _queue_pulse(),
         'game_servers': _game_servers_pulse(),
-        'awake': _awake_pulse(),
+        'awake': _awake_pulse(config=config),
         'malware_module_enabled': malware_scan_enabled(),
         'library_watch': _library_watch_pulse(),
     }
@@ -581,7 +581,9 @@ def build_ops_summary(app_start_time, *, app=None, config=None):
     scans, scans_error = _section('scans', lambda: _scan_snapshot(app=app))
     library, library_error = _section('library', _library_pulse)
     recent_errors_data, recent_errors_error = _section('recent errors', _recent_errors)
-    services, services_error = _section('services', _services_snapshot)
+    services, services_error = _section(
+        'services', lambda: _services_snapshot(config=config),
+    )
     build, build_error = _section('build', build_identity)
 
     host = host_data['host'] if host_data else None

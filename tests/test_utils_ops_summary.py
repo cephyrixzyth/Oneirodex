@@ -159,6 +159,21 @@ def test_build_ops_summary_includes_required_keys():
     get_cpu_usage.assert_called_once_with()
 
 
+def test_awake_pulse_passes_native_config_to_readiness():
+    from oneirodex.utils.ops_summary import _awake_pulse
+
+    config = {'TESTING': False, 'ONEIRODEX_INIT_COMPLETE': True}
+    with patch(
+        'oneirodex.utils.ops_summary.build_readiness',
+        return_value=({'status': 'ok', 'checks': {'database': {'ok': True}}}, 200),
+    ) as readiness:
+        result = _awake_pulse(config=config)
+
+    readiness.assert_called_once_with(config=config)
+    assert result['status'] == 'ok'
+    assert result['http_status'] == 200
+
+
 def test_build_ops_summary_host_enrichment_none_when_unavailable():
     values = _host_patches(
         get_load_average=None,
