@@ -8,6 +8,7 @@ reaches a network.
 import contextvars
 import json
 import os
+import sqlite3
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,24 +49,27 @@ test_database_url.__test__ = False
 
 
 def _use_explicit_sqlite_transactions(engine):
-    """Give SQLite the same transaction boundaries this suite expects.
+    """Use real transactions for SQLite across Python's driver modes.
 
-    Python 3.12+ exposes sqlite3's legacy transaction mode by default, where
-    SELECT does not begin a transaction. These tests exercise independent
-    Flask/native sessions against the same test database; force SQLAlchemy
-    to issue BEGIN so rollbacks and sync fencing have consistent semantics on
-    every supported Python/SQLite combination.
+    Python 3.12 added sqlite3.Connection.autocommit, defaulting to legacy
+    transaction control. Disable that legacy mode where the property exists;
+    on older Python versions use SQLAlchemy's explicit-BEGIN recipe.
     """
     if engine.dialect.name != 'sqlite':
         return
 
-    @event.listens_for(engine, 'connect')
-    def disable_driver_transaction_control(dbapi_connection, _record):
-        dbapi_connection.isolation_level = None
+    if hasattr(sqlite3.Connection, 'autocommit'):
+        @event.listens_for(engine, 'connect')
+        def disable_legacy_transaction_control(dbapi_connection, _record):
+            dbapi_connection.autocommit = False
+    else:
+        @event.listens_for(engine, 'connect')
+        def disable_driver_transaction_control(dbapi_connection, _record):
+            dbapi_connection.isolation_level = None
 
-    @event.listens_for(engine, 'begin')
-    def begin_sqlite_transaction(connection):
-        connection.exec_driver_sql('BEGIN')
+        @event.listens_for(engine, 'begin')
+        def begin_sqlite_transaction(connection):
+            connection.exec_driver_sql('BEGIN')
 
 
 class Person(UserMixin):
