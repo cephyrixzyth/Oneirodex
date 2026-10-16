@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import current_app, g, has_app_context, has_request_context
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 
 STORAGE_KEY = 'browser_player'
@@ -21,6 +20,49 @@ KNOWN_ENGINES = ('webretro', 'emulatorjs')
 # Both browser engines ship in the image; admins can disable EmulatorJS in the
 # browser play settings without removing the bundled release.
 SHIPPED_ENGINES = ('webretro',)
+
+
+def _request_cache(key: str):
+    try:
+        from flask import g, has_request_context
+
+        return getattr(g, key, None) if has_request_context() else None
+    except ImportError:
+        return None
+
+
+def _set_request_cache(key: str, value) -> None:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            setattr(g, key, value)
+    except ImportError:
+        return
+
+
+def _clear_request_cache(*keys: str) -> None:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            for key in keys:
+                if hasattr(g, key):
+                    delattr(g, key)
+    except ImportError:
+        return
+
+
+def _has_sqlalchemy_app_context() -> bool:
+    try:
+        from flask import current_app, has_app_context
+
+        return bool(
+            has_app_context()
+            and current_app.extensions.get('sqlalchemy') is not None
+        )
+    except ImportError:
+        return False
 
 
 def available_engines() -> tuple[str, ...]:
@@ -33,22 +75,22 @@ def available_engines() -> tuple[str, ...]:
     not app-context scope: an operator who drops a release in mid-session sees
     it on the next page rather than after a restart.
     """
-    if has_request_context() and hasattr(g, '_browser_player_available'):
-        return g._browser_player_available
+    cached = _request_cache('_browser_player_available')
+    if cached is not None:
+        return cached
 
     from oneirodex.utils.emulatorjs import emulatorjs_installed
 
     engines = list(SHIPPED_ENGINES)
     enabled = True
-    if has_app_context() and current_app.extensions.get('sqlalchemy') is not None:
+    if _has_sqlalchemy_app_context():
         enabled = _blob(_settings_row()).get('browser_player_emulatorjs_enabled', True)
     if isinstance(enabled, str):
         enabled = enabled.strip().lower() in {'1', 'true', 'yes', 'on'}
     if enabled and emulatorjs_installed():
         engines.append('emulatorjs')
     resolved = tuple(engines)
-    if has_request_context():
-        g._browser_player_available = resolved
+    _set_request_cache('_browser_player_available', resolved)
     return resolved
 
 DEFAULTS: dict[str, Any] = {
@@ -156,15 +198,15 @@ def get_browser_player_settings() -> dict[str, Any]:
     # first answer forever — `set_browser_player_settings` can only clear the
     # context it runs in, which is a different process. A request is short
     # enough that "once per request" is both cheap and always fresh.
-    if has_request_context() and hasattr(g, '_browser_player_settings'):
-        return g._browser_player_settings
+    cached = _request_cache('_browser_player_settings')
+    if cached is not None:
+        return cached
     try:
         merged = {**DEFAULTS, **_blob(_settings_row())}
         cleaned = normalize_browser_player_settings(merged)
     except Exception:
         cleaned = normalize_browser_player_settings(DEFAULTS)
-    if has_request_context():
-        g._browser_player_settings = cleaned
+    _set_request_cache('_browser_player_settings', cleaned)
     return cleaned
 
 
@@ -188,10 +230,7 @@ def set_browser_player_settings(payload: dict[str, Any] | None) -> dict[str, Any
     db.session.commit()
     # Drop both caches: a default that just changed must not be read from a
     # stale blob, and an engine that just became (un)installed must re-probe.
-    if has_request_context():
-        for key in ('_browser_player_settings', '_browser_player_available'):
-            if hasattr(g, key):
-                delattr(g, key)
+    _clear_request_cache('_browser_player_settings', '_browser_player_available')
     return cleaned
 
 
@@ -208,6 +247,7 @@ def engine_label(engine: str) -> str:
 def member_engine_preference() -> str | None:
     """The signed-in member's stored engine choice, or None. Never raises."""
     try:
+        from flask import has_request_context
         from flask_login import current_user
 
         if not has_request_context() or not getattr(current_user, 'is_authenticated', False):

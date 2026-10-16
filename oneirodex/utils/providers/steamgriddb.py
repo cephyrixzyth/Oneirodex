@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.providers.base import (
     ImageSearchResult,

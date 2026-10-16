@@ -16,9 +16,9 @@ from oneirodex.utils.freshness.local import detect_local_facts
 from oneirodex.utils.freshness.steam import fetch_steam_remote
 
 
-def check_game_freshness(game, *, include_gog=True, include_epic=True) -> dict:
+def check_game_freshness(game, *, include_gog=True, include_epic=True, app=None) -> dict:
     """Run sensors + remotes and return comparison payload (does not commit)."""
-    local = detect_local_facts(game)
+    local = detect_local_facts(game, app=app)
     remotes = []
 
     steam_id = resolve_steam_app_id(game)
@@ -85,8 +85,8 @@ def apply_freshness_to_game(game, payload: dict) -> dict:
     return freshness_public_view(game)
 
 
-def check_and_store_freshness(game, *, commit=False, db_session=None) -> dict:
-    payload = check_game_freshness(game)
+def check_and_store_freshness(game, *, commit=False, db_session=None, app=None) -> dict:
+    payload = check_game_freshness(game, app=app)
     public = apply_freshness_to_game(game, payload)
     if commit and db_session is not None:
         db_session.commit()
@@ -133,7 +133,7 @@ def scan_freshness_enabled(settings=None) -> bool:
             from flask import current_app
 
             return bool(current_app.config.get('SCAN_CHECK_FRESHNESS', False))
-        except RuntimeError:
+        except (ImportError, RuntimeError):
             return False
     if isinstance(settings, dict):
         return bool(settings.get('scan_check_freshness'))
@@ -145,6 +145,7 @@ def check_library_freshness(
     *,
     limit: int = DEFAULT_SCAN_FRESHNESS_LIMIT,
     only_missing: bool = True,
+    app=None,
 ) -> dict:
     """Check version/updates/DLC across a library, newest titles first.
 
@@ -157,7 +158,7 @@ def check_library_freshness(
     """
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import Game
 
     query = select(Game).filter(Game.library_uuid == library_uuid)
@@ -170,7 +171,7 @@ def check_library_freshness(
     checked, behind, failed = 0, 0, 0
     for game in games:
         try:
-            public = check_and_store_freshness(game)
+            public = check_and_store_freshness(game, app=app)
             checked += 1
             if (public or {}).get('status') == 'behind':
                 behind += 1

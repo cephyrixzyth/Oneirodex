@@ -1,0 +1,41 @@
+.od-ai-assist__panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.od-ai-assist__panel h2,
+.od-ai-assist__output h2 {
+  margin: 0;
+  color: var(--od-text);
+  font-size: var(--od-font-lg);
+}
+
+.od-ai-assist__panel .od-admin-fieldset {
+  display: grid;
+  gap: 1rem;
+}
+
+.od-ai-assist__suggestions {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.od-ai-assist__suggestion {
+  color: var(--od-accent);
+  text-align: left;
+  text-decoration: underline;
+}
+
+.od-ai-assist__error {
+  color: var(--od-danger);
+}
+
+.od-ai-assist__output pre {
+  margin: 0;
+  overflow: auto;
+  color: var(--od-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

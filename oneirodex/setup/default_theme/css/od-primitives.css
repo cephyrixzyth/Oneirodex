@@ -16,7 +16,7 @@
  *     than inventing a local one.
  *   - Do not restyle `button` as a bare element selector in page CSS. Apply
  *     .od-btn (or a modifier) instead, so themes can restyle every control.
- *   - Loaded from base.html / base_admin.html / base_empty.html, so this is
+ *   - Loaded from base.html / base_admin.html and the member SPA renderer, so this is
  *     available to Jinja pages and to both React SPAs.
  *   - This is a theme asset: after editing, run Admin → Themes → Reset Default
  *     Themes or the library theme copies will keep serving the old file.
@@ -472,12 +472,11 @@
 }
 
 /* The rotating-cog rule that used to sit here has been removed rather than
-   rewritten. It keyed off `[data-icon='settings']` and `[data-icon='admin']`,
-   and there is no `data-icon` attribute anywhere in the product — the templates
-   set `data-icon-pack` on <html>, which is a different thing. Its third arm,
-   `.od-icon--spin`, is applied by nothing. All three selectors matched no
-   element, so the "a cog should turn" behaviour never ran once. Re-adding it
-   means giving the macro in partials/icons.html a real `data-icon` hook first. */
+   rewritten. The Jinja icon macro and React rail/app-bar glyphs expose semantic
+   `data-icon` keys, but the old `settings` / `admin` selectors did not cover a
+   consistently rotating control across those surfaces. Its third arm,
+   `.od-icon--spin`, is applied by nothing. Reintroduce rotation only with a
+   documented semantic key and a shared interaction contract. */
 
 /* Refresh / retry controls: the glyph completes a turn when the action starts,
    so the icon reports the work rather than only labelling it. Driven by the
@@ -656,4 +655,76 @@
   margin: var(--od-space-1) 0 0;
   color: var(--od-text-muted);
   font-size: var(--od-font-xs);
+}
+
+/* Shared multi-select filters; option meaning and applied/draft state remain
+   owned by the consuming feature. */
+.od-filter-chip-group {
+  display: grid;
+  gap: var(--od-space-3);
+  min-width: 0;
+}
+
+.od-filter-chip-group__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--od-space-2);
+  min-width: 0;
+}
+
+.od-filter-chip {
+  appearance: none;
+  min-height: 2.75rem;
+  max-width: 100%;
+  padding: var(--od-space-2) var(--od-space-4);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  color: var(--od-text-muted);
+  background: var(--od-surface-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.od-filter-chip:hover:not(:disabled) {
+  border-color: var(--od-accent);
+  color: var(--od-text);
+}
+
+.od-filter-chip[aria-pressed='true'] {
+  border-color: var(--od-accent);
+  color: var(--od-accent);
+  background: color-mix(in srgb, var(--od-accent) 18%, var(--od-surface));
+}
+
+.od-filter-chip:focus-visible {
+  outline: 2px solid var(--od-focus-ring);
+  outline-offset: 2px;
+}
+
+.od-filter-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.od-filter-chip-group--compact .od-filter-chip {
+  min-height: 2rem;
+  padding: var(--od-space-1) var(--od-space-3);
+  border-radius: var(--od-radius-sm);
+  font-size: var(--od-font-xs);
+  font-weight: 650;
+}
+
+.od-filter-chip-group__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--od-space-2) var(--od-space-4);
+  min-width: 0;
+}
+
+.od-filter-chip-group__count {
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
 }

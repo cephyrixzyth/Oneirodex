@@ -9,7 +9,13 @@ from flask_login import login_user
 
 from oneirodex.models import Game, Library, User
 from oneirodex.platform import LibraryPlatform
-from oneirodex.routes_apis.assists import default_overlay_links, overlay_links_for
+from oneirodex.routes_apis.assists import (
+    _pack_path,
+    assists_enabled,
+    default_overlay_links,
+    load_assist_pack,
+    overlay_links_for,
+)
 
 
 @pytest.fixture
@@ -48,6 +54,17 @@ def _game(db_session, tmp_path, platform=LibraryPlatform.PCWIN, name='Hollow Kni
     db_session.add(row)
     db_session.commit()
     return row
+
+
+def test_assist_configuration_helpers_accept_explicit_config_without_flask_context(tmp_path):
+    root = tmp_path / 'configured-assists'
+    config = {'ENABLE_GAME_ASSISTS': 'false', 'GAME_ASSISTS_PATH': str(root)}
+
+    assert not assists_enabled(config=config)
+    assert _pack_path('12345678-1234-1234-1234-123456789abc', config=config) == str(
+        root / '12345678-1234-1234-1234-123456789abc' / 'pack.json'
+    )
+    assert load_assist_pack('12345678-1234-1234-1234-123456789abc', config=config) is None
 
 
 def test_default_overlay_is_a_wiki_search_for_pc_titles_only(db_session, tmp_path):

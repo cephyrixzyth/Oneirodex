@@ -1,12 +1,9 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, current_app
+from flask import Blueprint, redirect, url_for, request, flash, current_app
 from flask_login import login_required, current_user, login_user
 from oneirodex.forms import ChangePasswordForm, EditProfileForm, UserPreferencesForm
-from oneirodex.models import User, InviteToken, UserPreference
-from sqlalchemy import select, func
+from oneirodex.models import User, UserPreference
 from oneirodex.utils.api_response import api_error, api_ok
-from oneirodex.utils.avatar import DEFAULT_AVATAR, save_avatar, thumbnail_for
-from oneirodex.utils.processors import get_global_settings
-from oneirodex import cache
+from oneirodex.utils.avatar import DEFAULT_AVATAR, save_avatar
 from oneirodex import db
 
 settings_bp = Blueprint('settings', __name__)
@@ -25,15 +22,11 @@ def _normalize_tile_percent(raw) -> str:
     return str(max(0, min(100, value)))
 
 
-@settings_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Context processor to inject global settings into templates"""
-    return get_global_settings()
-
 @settings_bp.route('/settings_profile_edit', methods=['GET', 'POST'])
 @login_required
 def settings_profile_edit():
+    if request.method == 'GET':
+        return redirect(url_for('library.library', account='avatar'))
     print("Route: Settings profile edit")
     form = EditProfileForm()
 
@@ -45,7 +38,7 @@ def settings_profile_edit():
             _path, error = save_avatar(file, current_user, current_app)
             if error:
                 flash(error, 'error')
-                return redirect(url_for('settings.settings_profile_edit'))
+                return redirect(url_for('library.library', account='avatar'))
         elif not current_user.avatarpath:
             current_user.avatarpath = DEFAULT_AVATAR
 
@@ -57,7 +50,7 @@ def settings_profile_edit():
             print(f"Error updating profile: {e}")
             flash('Failed to update profile. Please try again.', 'error')
 
-        return redirect(url_for('settings.settings_profile_edit'))
+        return redirect(url_for('library.library', account='avatar'))
 
     print("Form validation failed" if request.method == 'POST' else "Settings profile Form rendering")
 
@@ -66,36 +59,18 @@ def settings_profile_edit():
             print(f"Error in field '{getattr(form, field).label.text}': {error}")
             flash(f"Error in field '{getattr(form, field).label.text}': {error}", 'error')
 
-    # The thumbnail name is a rule about how avatars are stored, so the route
-    # answers it rather than the template deriving it with a string replace —
-    # which produced a request for a `_thumbnail` file the shipped avatars never
-    # had.
-    return render_template(
-        'settings/settings_profile_edit.html',
-        form=form,
-        avatarpath=current_user.avatarpath,
-        thumbnailpath=thumbnail_for(current_user.avatarpath),
-    )
+    return redirect(url_for('library.library', account='avatar'))
 
 @settings_bp.route('/settings_profile_view', methods=['GET'])
 @login_required
 def settings_profile_view():
-    print("Route: Settings profile view")
-    unused_invites = db.session.execute(
-        select(func.count(InviteToken.id)).filter_by(
-            creator_user_id=current_user.user_id, 
-            used=False
-        )
-    ).scalar()
-    remaining_invites = max(0, current_user.invite_quota - unused_invites)
-    
-    return render_template('settings/settings_profile_view.html', 
-                         remaining_invites=remaining_invites,
-                         total_invites=current_user.invite_quota)
+    return redirect(url_for('library.library', account='profile'))
 
 @settings_bp.route('/settings_password', methods=['GET', 'POST'])
 @login_required
 def account_pw():
+    if request.method == 'GET':
+        return redirect(url_for('library.library', account='password'))
     form = ChangePasswordForm()
     user = db.session.get(User, current_user.id)
 
@@ -103,7 +78,7 @@ def account_pw():
         if not user.check_password(form.current_password.data):
             form.current_password.errors.append('Current password is incorrect.')
             flash('Current password is incorrect.', 'error')
-            return render_template('settings/settings_password.html', title='Change Password', form=form, user=user)
+            return redirect(url_for('library.library', account='password'))
         try:
             user.set_password(form.password.data)
             db.session.commit()
@@ -117,7 +92,10 @@ def account_pw():
             print('An error occurred while changing the password:', str(e))
             flash('An error occurred. Please try again.', 'error')
 
-    return render_template('settings/settings_password.html', title='Change Password', form=form, user=user)
+    for field, errors in form.errors.items():
+        for error in errors:
+            flash(f'{getattr(form, field).label.text}: {error}', 'error')
+    return redirect(url_for('library.library', account='password'))
 
 def _stored_preference_formdata(prefs) -> dict:
     """The current preferences as the form would post them.
@@ -140,16 +118,6 @@ def _stored_preference_formdata(prefs) -> dict:
         'browser_player_engine': getattr(prefs, 'browser_player_engine', None) or '',
         'preferred_game_locale': getattr(prefs, 'preferred_game_locale', None) or 'en-US',
     }
-
-
-def _member_engine_choice_open() -> bool:
-    """Whether the Preferences modal shows the engine picker at all."""
-    try:
-        from oneirodex.utils.browser_player import play_engine_fields
-
-        return bool(play_engine_fields().get('browser_player_member_choice'))
-    except Exception:
-        return False
 
 
 @settings_bp.route('/settings_panel', methods=['GET', 'POST'])
@@ -205,27 +173,7 @@ def settings_panel():
             return api_error(str(e), code='internal')
     
     if request.method == 'GET':
-        prefs = current_user.preferences
-        if prefs:
-            form.items_per_page.data = prefs.items_per_page or 50
-            form.default_sort.data = prefs.default_sort or 'name'
-            form.default_sort_order.data = prefs.default_sort_order or 'asc'
-            form.theme.data = prefs.theme or 'default'
-            form.icon_pack.data = getattr(prefs, 'icon_pack', None) or 'outline'
-            form.font.data = getattr(prefs, 'font', None) or 'system-ui'
-            form.tile_size.data = _normalize_tile_percent(getattr(prefs, 'tile_size', None))
-            form.show_tile_titles.data = bool(getattr(prefs, 'show_tile_titles', True))
-            form.browser_player_engine.data = (
-                getattr(prefs, 'browser_player_engine', None) or ''
-            )
-            form.preferred_game_locale.data = (
-                getattr(prefs, 'preferred_game_locale', None) or 'en-US'
-            )
-        return render_template(
-            'settings/modal_preferences.html',
-            form=form,
-            member_engine_choice=_member_engine_choice_open(),
-        )
+        return redirect(url_for('library.library', preferences='1'))
     
     return api_error(
         'Form validation failed',

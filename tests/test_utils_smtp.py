@@ -694,7 +694,7 @@ class TestSendPasswordResetEmail:
         args, kwargs = mock_send_email.call_args
 
         assert args[0] == 'user@example.com'
-        from oneirodex import PRODUCT_NAME
+        from oneirodex.product import PRODUCT_NAME
         assert args[1] == f'{PRODUCT_NAME} password reset request'
 
         html_content = args[2]
@@ -708,24 +708,16 @@ class TestSendInviteEmail:
     """Test send_invite_email function."""
     
     @patch('oneirodex.utils.smtp.send_email')
-    @patch('oneirodex.utils.smtp.render_template')
-    def test_send_invite_email(self, mock_render_template, mock_send_email):
-        """Test sending invite email."""
-        # Setup mocks
-        mock_render_template.return_value = '<h1>You are invited!</h1>'
+    def test_send_invite_email(self, mock_send_email):
+        """Build and send the escaped invite email without a template engine."""
         mock_send_email.return_value = True
         
-        invite_url = 'https://example.com/invite/xyz789'
-        
-        # Test
+        invite_url = 'https://example.com/invite/xyz789?next=a&other="b"'
         send_invite_email('newuser@example.com', invite_url)
         
-        # Verify template rendering
-        mock_render_template.assert_called_once_with('login/invite_email.html', invite_url=invite_url)
-        
-        # Verify send_email was called
-        mock_send_email.assert_called_once_with(
-            'newuser@example.com',
-            "You're Invited!",
-            '<h1>You are invited!</h1>'
-        )
+        mock_send_email.assert_called_once()
+        address, subject, html = mock_send_email.call_args.args
+        assert address == 'newuser@example.com'
+        assert subject == "You're Invited!"
+        assert 'href="https://example.com/invite/xyz789?next=a&amp;other=&quot;b&quot;"' in html
+        assert 'Complete Your Registration' in html

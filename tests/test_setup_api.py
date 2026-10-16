@@ -1,0 +1,96 @@
+"""JSON setup state transitions preserve first-run admin/session gates."""
+
+
+def test_first_run_setup_advances_with_existing_session_without_returning_secrets(client, db_session):
+    state = client.get('/api/setup/state')
+    assert state.status_code == 200
+    assert state.headers['cache-control'] == 'no-store'
+    assert state.get_json()['step'] == 1
+    assert state.get_json()['required'] is True
+
+    created = client.post('/api/setup/step', json={
+        'step': 1,
+        'username': 'setup_admin',
+        'email': 'setup_admin@example.com',
+        'password': 'correct horse battery',
+        'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert created.get_json()['step'] == 2
+    assert created.get_json()['next_url'] == '/setup/smtp'
+    assert client.get('/api/account/summary').status_code == 200
+
+    saved = client.post('/api/setup/step', json={
+        'step': 2,
+        'smtp_server': 'mail.example.com',
+        'smtp_port': 587,
+        'smtp_username': 'setup@example.com',
+        'smtp_password': 'smtp-secret-never-return',
+        'smtp_default_sender': 'setup@example.com',
+        'smtp_use_tls': True,
+        'smtp_enabled': True,
+    })
+    assert saved.status_code == 200
+    assert saved.get_json()['step'] == 3
+    next_state = client.get('/api/setup/state').get_json()
+    assert next_state['settings']['smtp_password_configured'] is True
+    assert 'smtp-secret-never-return' not in str(next_state)
+    assert next_state['settings']['smtp_server'] == 'mail.example.com'
+
+
+def test_setup_api_rejects_out_of_order_and_invalid_admin_transitions(client):
+    out_of_order = client.post('/api/setup/step', json={'step': 2, 'skip': True})
+    assert out_of_order.status_code == 409
+    assert out_of_order.get_json()['error_code'] == 'conflict'
+
+    invalid_admin = client.post('/api/setup/step', json={
+        'step': 1,
+        'username': 'bad name',
+        'email': 'invalid',
+        'password': 'short',
+        'confirm_password': 'different',
+    })
+    assert invalid_admin.status_code == 422
+    assert invalid_admin.get_json()['error_code'] == 'unprocessable'
+
+
+def test_setup_skip_path_resumes_and_completes_each_ordered_step(client, db_session, monkeypatch):
+    import oneirodex.init_data as init_data
+
+    for name in (
+        'initialize_library_folders', 'initialize_discovery_sections',
+        'insert_default_scanning_filters', 'initialize_default_settings',
+        'initialize_allowed_file_types',
+    ):
+        monkeypatch.setattr(init_data, name, lambda **_kwargs: None)
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'skip_admin', 'email': 'skip@example.com',
+        'password': 'correct horse battery', 'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).get_json()['step'] == 3
+    assert client.post('/api/setup/step', json={'step': 3}).get_json()['step'] == 4
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).get_json()['step'] == 5
+    assert client.post('/api/setup/step', json={'step': 5, 'skip': True}).get_json()['step'] == 6
+    finished = client.post('/api/setup/step', json={'step': 6, 'skip': True})
+    assert finished.status_code == 200
+    assert finished.get_json()['complete'] is True
+    assert client.get('/api/setup/state').get_json()['complete'] is True
+
+
+def test_setup_api_requires_admin_for_wizard_state(client, db_session):
+    from oneirodex.models import User
+    from oneirodex.utils.setup import set_setup_step
+
+    user = User(
+        name='existing_admin', email='existing@example.com', role='admin',
+        password_hash='placeholder', user_id='existing-admin', is_email_verified=True,
+    )
+    user.set_password('correct horse battery')
+    db_session.add(user)
+    db_session.commit()
+    set_setup_step(2)
+    response = client.get('/api/setup/state')
+    assert response.status_code == 401
+    assert response.get_json()['error_code'] == 'unauthorized'

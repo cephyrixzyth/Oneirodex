@@ -78,11 +78,10 @@ def test_serialize_discover_game_includes_lifecycle_fields(app):
         player_perspectives=[],
     )
 
-    # `resolve_game_cover_url`, not `resolve_cover_url`: routes_discover imports
-    # the game-aware wrapper, and patching the name it does not hold raises
-    # AttributeError before the assertions below ever run.
+    # Patch the helper where the serializer resolves it, not on the legacy
+    # route module that no longer owns discover serialization.
     with app.app_context(), patch(
-        'oneirodex.routes_discover.resolve_game_cover_url',
+        'oneirodex.utils.discover_projections.resolve_game_cover_url',
         return_value='/static/newstyle/default_cover.jpg',
     ):
         result = serialize_discover_game(

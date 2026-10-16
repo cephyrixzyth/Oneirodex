@@ -1,6 +1,7 @@
 /* Shared sortable/filterable admin table (UX-C8). */
 
 .od-table-wrap {
+  --od-table-touch-target: 2.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -70,6 +71,11 @@
   overflow-x: auto;
   border-radius: var(--od-radius-md);
   border: 1px solid var(--od-border);
+}
+
+.od-table-scroll:focus-visible {
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
+  outline-offset: 2px;
 }
 
 /* One table look for the whole admin, not three (W27-C1).
@@ -272,5 +278,20 @@
 @media (prefers-reduced-motion: reduce) {
   .od-table__col-filter {
     transition: none;
+  }
+}
+
+/* Phone and touch controls keep the shared table's compact desktop density. */
+@media (max-width: 760px), (pointer: coarse) {
+  .od-table-filter input,
+  .od-table__col-filter {
+    height: var(--od-table-touch-target);
+    min-height: var(--od-table-touch-target);
+  }
+
+  .od-table__sort,
+  .od-table__head.has-filter > .od-table__sort {
+    min-height: var(--od-table-touch-target);
+    min-width: var(--od-table-touch-target);
   }
 }

@@ -10,10 +10,19 @@ Oneirodex already rate-limits `/login` and password-reset in-process when `ENABL
 |---|---|
 | `ENABLE_LOGIN_RATE_LIMIT` | Default `true` — see `.env.example` |
 | Keys | Per IP + username and per IP alone |
-| Client IP | The connection's address. A client-sent `X-Forwarded-For` is ignored, because anyone can set it. Behind a reverse proxy, set `TRUSTED_PROXIES` to the number of proxies in front of Oneirodex; the app then takes the client address from the hops those proxies added. Without it, every visitor shares the proxy's address and one bucket. |
+| Client IP | Direct callers use their connection address. To use `X-Forwarded-For`, configure both `TRUSTED_PROXIES` (the number of proxy hops) and `TRUSTED_PROXY_CIDRS` (the immediate proxy peer address or CIDR as seen by the app container). Forwarded identity from other peers is ignored for rate-limit keys, session fingerprints, and trusted public-origin links. Without the CIDR allowlist, proxy visitors share the proxy address and one bucket. |
 | Scope | In-memory per process — not shared across replicas |
 
 Disable only for local debugging. Keep it on in production even with proxy limits.
+
+`TRUSTED_PROXIES` alone does not authenticate a proxy. Configure the narrowest
+possible `TRUSTED_PROXY_CIDRS` value for the reverse proxy's source address on
+the container network. Do not list client networks or all private address
+space. If the proxy's address changes, use a stable address or a narrow
+dedicated subnet and verify the source address from the Oneirodex container
+before enabling forwarded headers. Supported launchers disable Uvicorn's
+implicit proxy rewriting; Oneirodex applies forwarded values only after this
+peer check.
 
 ## Proxy (recommended for O8)
 

@@ -123,6 +123,15 @@ fn resolve_subdir(app: &tauri::AppHandle, subdir: &str) -> Result<PathBuf, Strin
     Ok(dir)
 }
 
+fn validate_app_subdir(subdir: &str) -> Result<(), String> {
+    const ALLOWED: &[&str] = &["downloads", "installs", "mods", "patches", "cheats"];
+    if ALLOWED.contains(&subdir) {
+        Ok(())
+    } else {
+        Err("Unsupported application directory".into())
+    }
+}
+
 fn installs_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     resolve_subdir(app, "installs")
 }
@@ -654,6 +663,7 @@ fn user_facing_path(path: &str) -> String {
 
 #[tauri::command]
 fn get_app_subdir(app: tauri::AppHandle, subdir: String) -> Result<String, String> {
+    validate_app_subdir(&subdir)?;
     resolve_subdir(&app, &subdir).map(|path| path.to_string_lossy().into_owned())
 }
 
@@ -678,8 +688,9 @@ fn append_file_bytes(app: tauri::AppHandle, path: String, bytes: Vec<u8>) -> Res
     use std::fs::OpenOptions;
 
     let downloads = resolve_subdir(&app, "downloads")?;
+    let mods = resolve_subdir(&app, "mods")?;
     let file_path = PathBuf::from(&path);
-    ensure_path_under_root(&file_path, &downloads)?;
+    ensure_path_under_any_root(&file_path, &[&downloads, &mods])?;
     if let Some(parent) = file_path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
@@ -891,9 +902,21 @@ pub struct FlipsApplyResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ApplyStagedModResult {
     pub applied: u32,
+    pub expanded_bytes: u64,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedModStats {
+    pub entry_count: u64,
+    pub expanded_bytes: u64,
+}
+
+const MAX_MOD_ARCHIVE_ENTRIES: u64 = 50_000;
+const MAX_MOD_ARCHIVE_EXPANDED_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 fn sanitize_mod_filename(name: &str) -> String {
     let trimmed = name.trim().replace('\\', "/");
@@ -922,6 +945,183 @@ fn is_mod_zip_path(path: &Path) -> bool {
         .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
 }
 
+fn staged_mod_stats_with_limits(
+    path: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+) -> Result<StagedModStats, String> {
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("7z"))
+    {
+        return Err(
+            "7z mod archives are not supported; use a ZIP archive or a direct mod file".into(),
+        );
+    }
+    if is_mod_zip_path(path) {
+        let file = File::open(path).map_err(|error| error.to_string())?;
+        let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
+        if zip.len() as u64 > max_entries {
+            return Err(format!("Mod archive exceeds the {max_entries}-entry limit"));
+        }
+        let mut expanded_bytes = 0_u64;
+        for index in 0..zip.len() {
+            let entry = zip.by_index(index).map_err(|error| error.to_string())?;
+            expanded_bytes = expanded_bytes
+                .checked_add(entry.size())
+                .ok_or_else(|| "Mod archive expanded size overflow".to_string())?;
+            if expanded_bytes > max_expanded_bytes {
+                return Err(format!(
+                    "Mod archive exceeds the {} GiB expanded-size limit",
+                    max_expanded_bytes / (1024 * 1024 * 1024)
+                ));
+            }
+        }
+        Ok(StagedModStats {
+            entry_count: zip.len() as u64,
+            expanded_bytes,
+        })
+    } else {
+        let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+        if metadata.len() > max_expanded_bytes {
+            return Err(format!(
+                "Mod file exceeds the {} GiB size limit",
+                max_expanded_bytes / (1024 * 1024 * 1024)
+            ));
+        }
+        Ok(StagedModStats {
+            entry_count: 1,
+            expanded_bytes: metadata.len(),
+        })
+    }
+}
+
+fn staged_mod_stats(path: &Path) -> Result<StagedModStats, String> {
+    staged_mod_stats_with_limits(
+        path,
+        MAX_MOD_ARCHIVE_ENTRIES,
+        MAX_MOD_ARCHIVE_EXPANDED_BYTES,
+    )
+}
+
+/// Resolve a ZIP member beneath an existing install root without following a
+/// symlink that escapes that root. Mods are extracted into an existing game
+/// tree, so lexical `enclosed_name()` checks alone do not prevent writes
+/// through a pre-existing symlink.
+fn safe_mod_entry_path(
+    root: &Path,
+    relative: &Path,
+    create_directory: bool,
+) -> Result<PathBuf, String> {
+    let canonical_root = root.canonicalize().map_err(|error| error.to_string())?;
+    let components: Vec<_> = relative.components().collect();
+    if components.is_empty()
+        || components
+            .iter()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err("Invalid mod archive entry path".into());
+    }
+
+    let mut current = canonical_root.clone();
+    for (index, component) in components.iter().enumerate() {
+        current.push(component);
+        let leaf = index + 1 == components.len();
+        if !leaf || create_directory {
+            if !current.exists() {
+                fs::create_dir(&current).map_err(|error| error.to_string())?;
+            }
+            let resolved = current.canonicalize().map_err(|error| error.to_string())?;
+            if !resolved.starts_with(&canonical_root) || !resolved.is_dir() {
+                return Err("Mod archive entry escapes the install directory".into());
+            }
+            current = resolved;
+        } else if fs::symlink_metadata(&current).is_ok() {
+            let resolved = current.canonicalize().map_err(|error| error.to_string())?;
+            if !resolved.starts_with(&canonical_root) {
+                return Err("Mod archive entry escapes the install directory".into());
+            }
+            current = resolved;
+        }
+    }
+    Ok(current)
+}
+
+fn extract_staged_mod_zip(
+    zip: &mut ZipArchive<File>,
+    destination_root: &Path,
+) -> Result<(u32, u64), String> {
+    if zip.len() as u64 > MAX_MOD_ARCHIVE_ENTRIES {
+        return Err(format!(
+            "Mod archive exceeds the {MAX_MOD_ARCHIVE_ENTRIES}-entry limit"
+        ));
+    }
+    let mut declared_bytes = 0_u64;
+    for index in 0..zip.len() {
+        let entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        declared_bytes = declared_bytes
+            .checked_add(entry.size())
+            .ok_or_else(|| "Mod archive expanded size overflow".to_string())?;
+        if declared_bytes > MAX_MOD_ARCHIVE_EXPANDED_BYTES {
+            return Err(format!(
+                "Mod archive exceeds the {} GiB expanded-size limit",
+                MAX_MOD_ARCHIVE_EXPANDED_BYTES / (1024 * 1024 * 1024)
+            ));
+        }
+    }
+    let mut applied = 0;
+    let mut expanded_bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    for index in 0..zip.len() {
+        let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        let relative = match entry.enclosed_name() {
+            Some(path) => path,
+            None => continue,
+        };
+        let is_directory = entry.name().ends_with('/');
+        let entry_path = safe_mod_entry_path(destination_root, &relative, is_directory)?;
+        if is_directory {
+            continue;
+        }
+        let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
+        loop {
+            use std::io::Read;
+            let read = entry.read(&mut buffer).map_err(|error| error.to_string())?;
+            if read == 0 {
+                break;
+            }
+            expanded_bytes = expanded_bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "Mod archive expanded size overflow".to_string())?;
+            if expanded_bytes > MAX_MOD_ARCHIVE_EXPANDED_BYTES {
+                return Err(format!(
+                    "Mod archive exceeds the {} GiB expanded-size limit",
+                    MAX_MOD_ARCHIVE_EXPANDED_BYTES / (1024 * 1024 * 1024)
+                ));
+            }
+            out.write_all(&buffer[..read])
+                .map_err(|error| error.to_string())?;
+        }
+        applied += 1;
+    }
+    Ok((applied, expanded_bytes))
+}
+
+#[tauri::command]
+fn inspect_staged_mod(
+    app: tauri::AppHandle,
+    source_path: String,
+) -> Result<StagedModStats, String> {
+    let mods = resolve_subdir(&app, "mods")?;
+    let source = PathBuf::from(&source_path);
+    ensure_path_under_root(&source, &mods)?;
+    if !source.is_file() {
+        return Err("Staged mod file not found".into());
+    }
+    staged_mod_stats(&source)
+}
+
 /// Copy a staged mod file or extract a zip into the game install directory (path-safe).
 #[tauri::command]
 fn apply_staged_mod(
@@ -940,30 +1140,11 @@ fn apply_staged_mod(
         return Err(format!("Staged mod not found: {source_path}"));
     }
 
-    let mut applied: u32 = 0;
-    if is_mod_zip_path(&source) {
+    let stats = staged_mod_stats(&source)?;
+    let (applied, expanded_bytes) = if is_mod_zip_path(&source) {
         let file = File::open(&source).map_err(|error| error.to_string())?;
         let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
-        for index in 0..zip.len() {
-            let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
-            let entry_path = match entry.enclosed_name() {
-                Some(path) => destination_root.join(path),
-                None => continue,
-            };
-            if !entry_path.starts_with(&destination_root) {
-                continue;
-            }
-            if entry.name().ends_with('/') {
-                fs::create_dir_all(&entry_path).map_err(|error| error.to_string())?;
-                continue;
-            }
-            if let Some(parent) = entry_path.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
-            copy(&mut entry, &mut out).map_err(|error| error.to_string())?;
-            applied += 1;
-        }
+        extract_staged_mod_zip(&mut zip, &destination_root)?
     } else {
         let file_name = source
             .file_name()
@@ -976,10 +1157,13 @@ fn apply_staged_mod(
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
         fs::copy(&source, &target).map_err(|error| error.to_string())?;
-        applied = 1;
-    }
+        (1, stats.expanded_bytes)
+    };
 
-    Ok(ApplyStagedModResult { applied })
+    Ok(ApplyStagedModResult {
+        applied,
+        expanded_bytes,
+    })
 }
 
 #[tauri::command]
@@ -1420,6 +1604,7 @@ pub fn run() {
             rename_path,
             get_flips_path,
             run_flips_apply,
+            inspect_staged_mod,
             apply_staged_mod,
         ])
         .run(tauri::generate_context!())
@@ -1434,6 +1619,28 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
     use zip::write::{SimpleFileOptions, ZipWriter};
+
+    #[test]
+    fn app_subdir_allows_only_managed_directory_names() {
+        for name in ["downloads", "installs", "mods", "patches", "cheats"] {
+            assert!(
+                validate_app_subdir(name).is_ok(),
+                "expected {name} to be allowed"
+            );
+        }
+        for name in [
+            "../escape",
+            "..\\escape",
+            "/tmp/escape",
+            "C:\\escape",
+            "unknown",
+        ] {
+            assert!(
+                validate_app_subdir(name).is_err(),
+                "expected {name} to be rejected"
+            );
+        }
+    }
 
     /// The reveal tests below run with an empty trust list (nothing on the
     /// network is trusted); the trusted-share cases have their own section.
@@ -1775,6 +1982,95 @@ mod tests {
         extract_zip_to_dir(&archive, &dest).unwrap();
         assert!(dest.join("fresh.txt").is_file());
         assert!(!dest.join("stale.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staged_mod_zip_refuses_to_write_through_a_symlink_outside_install_root() {
+        use std::os::unix::fs::symlink;
+
+        let work = tempdir().unwrap();
+        let install = work.path().join("installs/game");
+        let outside = work.path().join("outside");
+        fs::create_dir_all(&install).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, install.join("linked")).unwrap();
+
+        let archive = work.path().join("mod.zip");
+        write_zip(&archive, &[("linked/pwned.txt", b"outside")]);
+        let file = fs::File::open(&archive).unwrap();
+        let mut zip = ZipArchive::new(file).unwrap();
+
+        let err = extract_staged_mod_zip(&mut zip, &install).unwrap_err();
+
+        assert!(err.contains("escapes the install directory"), "got: {err}");
+        assert!(!outside.join("pwned.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staged_mod_zip_refuses_to_create_a_dangling_symlink_target_outside_install_root() {
+        use std::os::unix::fs::symlink;
+
+        let work = tempdir().unwrap();
+        let install = work.path().join("installs/game");
+        let outside_target = work.path().join("outside/pwned.txt");
+        fs::create_dir_all(&install).unwrap();
+        fs::create_dir_all(outside_target.parent().unwrap()).unwrap();
+        symlink(&outside_target, install.join("dangling.txt")).unwrap();
+
+        let archive = work.path().join("mod.zip");
+        write_zip(&archive, &[("dangling.txt", b"outside")]);
+        let file = fs::File::open(&archive).unwrap();
+        let mut zip = ZipArchive::new(file).unwrap();
+
+        assert!(extract_staged_mod_zip(&mut zip, &install).is_err());
+        assert!(!outside_target.exists());
+    }
+
+    #[test]
+    fn staged_mod_zip_writes_nested_entries_inside_install_root() {
+        let work = tempdir().unwrap();
+        let install = work.path().join("installs/game");
+        fs::create_dir_all(&install).unwrap();
+        let archive = work.path().join("mod.zip");
+        write_zip(&archive, &[("nested/mod.bin", b"payload")]);
+        let file = fs::File::open(&archive).unwrap();
+        let mut zip = ZipArchive::new(file).unwrap();
+
+        assert_eq!(extract_staged_mod_zip(&mut zip, &install).unwrap(), (1, 7));
+        assert_eq!(
+            fs::read(install.join("nested/mod.bin")).unwrap(),
+            b"payload"
+        );
+    }
+
+    #[test]
+    fn staged_mod_stats_enforces_entry_and_expanded_size_limits() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("mod.zip");
+        write_zip(&archive, &[("one.bin", b"1234"), ("two.bin", b"5678")]);
+
+        let entry_error = staged_mod_stats_with_limits(&archive, 1, 8).unwrap_err();
+        assert!(entry_error.contains("1-entry limit"), "got: {entry_error}");
+        let size_error = staged_mod_stats_with_limits(&archive, 2, 7).unwrap_err();
+        assert!(
+            size_error.contains("expanded-size limit"),
+            "got: {size_error}"
+        );
+
+        let stats = staged_mod_stats_with_limits(&archive, 2, 8).unwrap();
+        assert_eq!(stats.entry_count, 2);
+        assert_eq!(stats.expanded_bytes, 8);
+    }
+
+    #[test]
+    fn staged_mod_stats_refuses_unsupported_7z_archives() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("mod.7z");
+        fs::write(&archive, b"not extracted").unwrap();
+        let error = staged_mod_stats(&archive).unwrap_err();
+        assert!(error.contains("7z mod archives are not supported"));
     }
 
     // ---------------------------------------------------------------

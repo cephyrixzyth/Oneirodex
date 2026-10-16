@@ -86,4 +86,20 @@ describe('createRequester error parsing', () => {
     expect(body.collections).toEqual(['a', 'b'])
     expect(body.ok).toBe(true)
   })
+
+  it('refuses redirects for bearer API requests', async () => {
+    let requestInit: RequestInit | undefined
+    const request = createRequester({
+      baseUrl: 'https://host.example',
+      getToken: () => 'gt_secret',
+      fetchImpl: async (_input, init) => {
+        requestInit = init
+        return jsonResponse(200, { ok: true, error: null, error_code: null })
+      },
+    })
+
+    await request('/api/thing')
+
+    expect(requestInit?.redirect).toBe('error')
+  })
 })

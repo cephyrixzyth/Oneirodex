@@ -7,12 +7,10 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import has_request_context, render_template, request
-from markupsafe import escape
 from sqlalchemy import func, select
 
 from product_env import getenv_product
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     Game,
     GlobalSettings,
@@ -22,7 +20,8 @@ from oneirodex.models import (
     UserNotification,
     UserPreference,
 )
-from oneirodex.utils.rbac import role_at_least
+from oneirodex.utils.email_rendering import render_social_notification
+from oneirodex.utils.role_catalog import role_at_least
 from oneirodex.utils.smtp import send_email_quiet
 from oneirodex.utils.global_settings import global_settings_row
 
@@ -49,8 +48,15 @@ def _absolute_member_link(path: str | None) -> str:
         return ''
     if path.startswith('http://') or path.startswith('https://'):
         return path
-    if has_request_context():
-        root = (request.url_root or '').rstrip('/')
+    try:
+        from flask import has_request_context, request
+
+        in_request = has_request_context()
+        request_root = request.url_root if in_request else None
+    except ImportError:
+        request_root = None
+    if request_root:
+        root = request_root.rstrip('/')
         if root:
             return f'{root}{path if path.startswith("/") else "/" + path}'
     return path
@@ -77,22 +83,7 @@ def maybe_email_social_notify(
         return False
 
     href = _absolute_member_link(link or '/chat')
-    try:
-        html = render_template(
-            'email/social_notification.html',
-            title=title,
-            body=body or '',
-            link=href,
-            kind=kind,
-        )
-    except Exception:
-        # Title/body carry user-authored chat text — escape like the Jinja path does.
-        snippet = escape((body or '')[:200])
-        html = (
-            f'<p><strong>{escape(title)}</strong></p>'
-            f'<p>{snippet}</p>'
-            f'<p><a href="{escape(href)}">Open in Oneirodex</a></p>'
-        )
+    html = render_social_notification(title=title, body=body or '', link=href)
 
     subject = title[:180] or 'Oneirodex notification'
     return bool(send_email_quiet(user.email.strip(), subject, html))

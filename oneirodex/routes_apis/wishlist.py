@@ -15,6 +15,7 @@ from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.notifications import notify_admins
 from oneirodex.utils.rbac import can_request_games, is_librarian
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.api_tokens import require_api_token_scope
 
 from . import apis_bp
 
@@ -44,6 +45,7 @@ def list_requests():
 
 @apis_bp.route('/requests', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(CreateWishlistRequestBody)
 def create_request(body: CreateWishlistRequestBody):
     if not can_request_games(current_user):
@@ -78,6 +80,7 @@ def create_request(body: CreateWishlistRequestBody):
 
 @apis_bp.route('/requests/<int:request_id>', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def cancel_request(request_id: int):
     """Owner may cancel their own pending request."""
     row = db.session.get(GameRequest, request_id)

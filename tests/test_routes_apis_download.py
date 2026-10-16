@@ -114,7 +114,8 @@ class TestDeleteDownloadRequest:
         """Test that delete_download requires user login."""
         response = client.delete('/api/delete_download/1')
         assert response.status_code == 302  # Redirect to login
-    
+
+
     def test_delete_requires_admin(self, client, regular_user):
         """Test that delete_download requires admin privileges."""
         with client.session_transaction() as sess:
@@ -143,8 +144,8 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 400
         
         data = response.get_json()
-        assert data['status'] == 'error'
-        assert 'Invalid request ID' in data['message']
+        assert data['ok'] is False
+        assert 'Invalid request ID' in data['error']
     
     def test_delete_nonexistent_request(self, client, admin_user):
         """Test deletion of non-existent download request."""
@@ -165,7 +166,7 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 200
 
         data = response.get_json()
-        assert data['status'] == 'success'
+        assert data['ok'] is True
         assert 'deleted successfully' in data['message']
     
     def test_delete_request_with_zip_file_success(self, client, admin_user, sample_download_request):
@@ -181,7 +182,7 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 200
 
         data = response.get_json()
-        assert data['status'] == 'success'
+        assert data['ok'] is True
         assert 'deleted successfully' in data['message']
     
     def test_delete_request_zip_outside_save_path(self, client, admin_user, sample_download_request):
@@ -197,7 +198,7 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 200
 
         data = response.get_json()
-        assert data['status'] == 'success'
+        assert data['ok'] is True
         assert 'deleted successfully' in data['message']
     
     def test_delete_request_zip_deletion_error(self, client, admin_user, sample_download_request):
@@ -212,7 +213,7 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 200
 
         data = response.get_json()
-        assert data['status'] == 'success'
+        assert data['ok'] is True
         assert 'deleted successfully' in data['message']
     
     @patch('oneirodex.routes_apis.download.db')
@@ -228,8 +229,8 @@ class TestDeleteDownloadRequest:
         assert response.status_code == 500
         
         data = response.get_json()
-        assert data['status'] == 'error'
-        assert 'Error deleting download request' in data['message']
+        assert data['ok'] is False
+        assert 'Could not delete the download request' in data['error']
     
     @patch('oneirodex.routes_apis.download.log_system_event')
     def test_delete_request_logging(self, mock_log, client, admin_user, sample_download_request):
@@ -255,4 +256,32 @@ class TestDeleteDownloadRequest:
         
         assert deletion_logged
         assert success_logged
+
+
+class TestAdminDownloadRequestList:
+    def test_list_requires_login(self, client):
+        response = client.get('/api/admin/download-requests')
+        assert response.status_code == 302
+
+    def test_list_requires_admin(self, client, regular_user):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(regular_user.id)
+            sess['_fresh'] = True
+        response = client.get('/api/admin/download-requests')
+        assert response.status_code == 302
+
+    def test_list_redacts_full_paths_and_keeps_job_details(self, client, admin_user, regular_user, sample_download_request):
+        sample_download_request.zip_file_path = r'C:\private\archives\game.zip'
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+        response = client.get('/api/admin/download-requests')
+        assert response.status_code == 200
+        body = response.get_json()
+        row = body['requests'][0]
+        assert row['id'] == sample_download_request.id
+        assert row['file_name'] == 'game.zip'
+        assert row['username'] == regular_user.name
+        assert row['game_uuid'] == sample_download_request.game_uuid[:8]
+        assert r'C:\private\archives' not in response.get_data(as_text=True)
     

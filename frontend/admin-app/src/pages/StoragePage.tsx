@@ -3,6 +3,7 @@ import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { MetricStrip } from '../components/opsWidgets'
 import { PageStatus, Button } from '@oneirodex/ui'
+import { Page } from '../components/Page'
 
 interface StorageStatus {
   helpers_enabled: boolean
@@ -47,6 +48,7 @@ function formatBytes(n: unknown) {
 export function StoragePage() {
   const [status, setStatus] = useState<StorageStatus>(EMPTY_STATUS)
   const [statusLoaded, setStatusLoaded] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [source, setSource] = useState('')
   const [dest, setDest] = useState('')
@@ -57,6 +59,8 @@ export function StoragePage() {
 
   useEffect(() => {
     let cancelled = false
+    setStatusLoaded(false)
+    setStatusError(null)
     getJson('/api/storage/status')
       .then((data) => {
         if (cancelled) return
@@ -73,7 +77,7 @@ export function StoragePage() {
       })
       .catch((err) => {
         if (cancelled) return
-        // Soft-fail: keep form usable; banners degrade to unknown/off.
+        // Retain the draft, but status is unknown until a successful retry.
         setStatus(EMPTY_STATUS)
         setStatusError(errorText(err) || 'Could not load storage status')
       })
@@ -83,11 +87,18 @@ export function StoragePage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   async function runAction(kind: string) {
     const path = kind === 'apply' ? '/api/storage/hardlink/apply' : '/api/storage/hardlink/preview'
-    if (busy) return
+    if (
+      busy ||
+      !statusLoaded ||
+      statusError ||
+      !status.helpers_enabled ||
+      (kind === 'apply' && !status.allow_apply)
+    )
+      return
     setBusy(true)
     setActionError(null)
     setResult(null)
@@ -109,17 +120,20 @@ export function StoragePage() {
   const helpersOn = status.helpers_enabled
   const allowApply = status.allow_apply
   const gamesRo = status.games_exists && !status.games_writable
-  const previewDisabled = busy || !helpersOn
-  const applyDisabled = busy || !allowApply
+  const statusKnown = statusLoaded && !statusError
+  const previewDisabled = busy || !statusKnown || !helpersOn
+  const applyDisabled = busy || !statusKnown || !helpersOn || !allowApply
 
   return (
-    <div className="od-admin-page">
-      <h1>Storage / hardlinks</h1>
-      <p className="od-admin-lede">
-        Preview same-volume hardlinks. Apply requires <code>ALLOW_HARDLINK_APPLY=true</code>. Docker
-        read-only games mounts fail writability checks — preview still explains why.
-      </p>
-
+    <Page
+      title="Storage / hardlinks"
+      lede={
+        <>
+          Preview same-volume hardlinks. Apply requires <code>ALLOW_HARDLINK_APPLY=true</code>.
+          Docker read-only games mounts fail writability checks — preview still explains why.
+        </>
+      }
+    >
       {/* UID-014. This page's metrics are readiness states, not counts, so the
           strip answers "can I actually do anything here" before the banners
           explain why not.
@@ -168,35 +182,36 @@ export function StoragePage() {
       <PageStatus loading={!statusLoaded} loadingMessage="Loading storage status…" />
 
       {statusError ? (
-        <div className="od-admin-banner od-admin-banner--warn" role="status">
-          Status API unavailable ({statusError}). Preview/Apply may still work if helpers are on;
-          banners below assume helpers off until status loads.
-        </div>
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--warn'}>
+          Status API unavailable ({statusError}). Helper and mount status are unknown. Retry before
+          preview or apply.
+          <Button onClick={() => setReloadKey((key) => key + 1)}>Retry storage status</Button>
+        </PageStatus>
       ) : null}
 
-      {statusLoaded && !helpersOn ? (
-        <div className="od-admin-banner od-admin-banner--warn" role="status">
+      {statusKnown && !helpersOn ? (
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--warn'}>
           Hardlink helpers are <strong>off</strong>. Set <code>ENABLE_HARDLINK_HELPERS=true</code>{' '}
           (and restart) before preview or apply will work. Apply also needs{' '}
           <code>ALLOW_HARDLINK_APPLY=true</code> — both stay env-only safety gates.
-        </div>
+        </PageStatus>
       ) : null}
 
-      {statusLoaded && helpersOn && !allowApply ? (
-        <div className="od-admin-banner od-admin-banner--info" role="status">
+      {statusKnown && helpersOn && !allowApply ? (
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--info'}>
           Helpers are <strong>on</strong>, but Apply is disabled until{' '}
           <code>ALLOW_HARDLINK_APPLY=true</code> is set (safety default). Preview still works.
-        </div>
+        </PageStatus>
       ) : null}
 
-      {statusLoaded && helpersOn && allowApply ? (
-        <div className="od-admin-banner od-admin-banner--ok" role="status">
+      {statusKnown && helpersOn && allowApply ? (
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--ok'}>
           Helpers and Apply are both <strong>enabled</strong> via environment flags.
-        </div>
+        </PageStatus>
       ) : null}
 
-      {statusLoaded && gamesRo ? (
-        <div className="od-admin-banner od-admin-banner--warn" role="status">
+      {statusKnown && gamesRo ? (
+        <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--warn'}>
           Games mount is <strong>read-only</strong>
           {status.games_path ? (
             <>
@@ -206,10 +221,10 @@ export function StoragePage() {
           ) : null}
           . Hardlink apply into that tree will fail writability checks; preview can still show
           reasons.
-        </div>
+        </PageStatus>
       ) : null}
 
-      {statusLoaded && status.degrade_reason ? (
+      {statusKnown && status.degrade_reason ? (
         <p className="od-admin-lede od-admin-lede--warn" aria-live="polite">
           {status.degrade_reason}
         </p>
@@ -241,7 +256,13 @@ export function StoragePage() {
             type="button"
             onClick={() => runAction('preview')}
             disabled={previewDisabled}
-            title={!helpersOn ? 'ENABLE_HARDLINK_HELPERS is off' : undefined}
+            title={
+              !statusKnown
+                ? 'Storage status is unknown'
+                : !helpersOn
+                  ? 'ENABLE_HARDLINK_HELPERS is off'
+                  : undefined
+            }
           >
             Preview
           </Button>
@@ -249,7 +270,15 @@ export function StoragePage() {
             type="button"
             onClick={() => runAction('apply')}
             disabled={applyDisabled}
-            title={!allowApply ? 'ALLOW_HARDLINK_APPLY is off' : undefined}
+            title={
+              !statusKnown
+                ? 'Storage status is unknown'
+                : !helpersOn
+                  ? 'ENABLE_HARDLINK_HELPERS is off'
+                  : !allowApply
+                    ? 'ALLOW_HARDLINK_APPLY is off'
+                    : undefined
+            }
           >
             Apply
           </Button>
@@ -311,6 +340,6 @@ export function StoragePage() {
           </details>
         </div>
       ) : null}
-    </div>
+    </Page>
   )
 }

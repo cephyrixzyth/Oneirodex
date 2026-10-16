@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameSimilarity, UserGameProgress
 
 from .profile import game_facets

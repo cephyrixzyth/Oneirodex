@@ -19,6 +19,26 @@ A theme is not a hue. It is six things that have to agree:
 | **Motifs** — loading animations | shared, tinted | `css/od-loading-motifs.css`, `currentColor` throughout |
 | **Glyphs** — rail and chrome icons | the icon pack the preset names | `icon_pack` on the preset |
 
+### Glyph source boundaries
+
+React member and admin rails use the shared catalog in
+`frontend/shared/src/railIcons.tsx`; the era-specific drawings in
+`railIconsEra.tsx` replace only the named rail destinations. The member app-bar
+has a small local set in `frontend/member-app/src/chrome/icons.tsx`. Classic
+server-side SVG markup has been retired. The framework-neutral source for shared
+glyph geometry and aliases is `frontend/shared/icons/manifest.json`, with a
+generated React adapter. Keep semantic `data-icon` names stable so CSS packs and
+accessibility reviews can identify glyphs reliably.
+
+Shipped drawing packs mask only the keys listed by
+`oneirodex/utils/icon_themes.py`; other rail glyphs keep their shared drawing
+and receive the pack's stroke/fill treatment. Platform system marks, file-type
+icons, avatars, cover art, and room illustrations are separate asset families,
+not general-purpose UI glyphs. A future cross-app catalog should make those
+families discoverable while retaining their different rendering and ownership
+rules. Do not treat the React rail map, shared SVG manifest, platform marks, and
+theme-pack SVGs as interchangeable copies of one complete icon set.
+
 The shipped catalogue now has six redesigned presets: Mosslight, Afterglow
 Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Each has
 its own palette, geometry, type, glyph treatment, room, avatar treatment, and

@@ -49,14 +49,42 @@ function activeThemeSlug() {
   return document.documentElement.getAttribute('data-theme') || 'default'
 }
 
-/** AI mark when present for the active theme; otherwise the SVG motif. */
+const RETIRED_THEME_MARK_CANONICAL: Record<string, string> = {
+  aurora: 'afterglow',
+  ember: 'afterglow',
+  forest: 'greenhouse',
+  violet: 'tape-deck',
+}
+
+const THEME_MARK_FALLBACKS: Record<string, string[]> = {
+  afterglow: ['aurora', 'ember'],
+  greenhouse: ['forest'],
+  'tape-deck': ['violet'],
+}
+
+function themeMarkCandidates(activeTheme: string) {
+  const canonical = RETIRED_THEME_MARK_CANONICAL[activeTheme] || activeTheme
+  const aliases = THEME_MARK_FALLBACKS[canonical] || []
+  return [...new Set([activeTheme, canonical, ...aliases])]
+}
+
+/** Prefer canonical art, reuse compatible legacy art, then draw the SVG motif. */
 function SystemMark({ platformValue, family }: LooseProps) {
   const platformId = String(platformValue || '').toLowerCase()
   const theme = activeThemeSlug()
+  const themes = themeMarkCandidates(theme)
+  const themeKey = themes.join('|')
+  const [sourceIndex, setSourceIndex] = useState(0)
   const [failed, setFailed] = useState(false)
-  const src = platformId
-    ? `/static/library/system-marks/${encodeURIComponent(theme)}/${encodeURIComponent(platformId)}.webp`
-    : null
+  useEffect(() => {
+    setSourceIndex(0)
+    setFailed(false)
+  }, [platformId, themeKey])
+  const sourceTheme = encodeURIComponent(themes[sourceIndex] || theme)
+  const src =
+    platformId && !failed
+      ? `/static/library/system-marks/${sourceTheme}/${encodeURIComponent(platformId)}.webp`
+      : null
 
   if (!src || failed) {
     return <SystemGlyph platformValue={platformValue} family={family} />
@@ -70,7 +98,10 @@ function SystemMark({ platformValue, family }: LooseProps) {
       width={88}
       height={88}
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (sourceIndex < themes.length - 1) setSourceIndex((index) => index + 1)
+        else setFailed(true)
+      }}
     />
   )
 }

@@ -47,7 +47,7 @@ def rom_patch_apply_enabled() -> bool:
             'yes',
             'on',
         )
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         return os.getenv('ENABLE_ROM_PATCH_APPLY', 'true').lower() in (
             '1',
             'true',
@@ -67,7 +67,7 @@ def mod_tracking_enabled() -> bool:
             'yes',
             'on',
         )
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         return os.getenv('ENABLE_MOD_TRACKING', 'true').lower() in (
             '1',
             'true',
@@ -83,7 +83,7 @@ def _library_root() -> str:
         upload = current_app.config.get('UPLOAD_FOLDER')
         if upload:
             return upload
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         pass
     return library_dir(os.path.dirname(os.path.dirname(__file__)))
 
@@ -91,32 +91,46 @@ def _library_root() -> str:
 def _open_path_allowed_bases() -> list[str]:
     """Configured library / scan roots that may be revealed via open_path."""
     bases: list[str] = []
+    app_config = None
     try:
         from flask import current_app, has_app_context
 
         if has_app_context():
-            from oneirodex.utils.security import get_allowed_base_directories
-
-            for base in get_allowed_base_directories(current_app):
-                if base and base not in bases:
-                    bases.append(base)
-            # Include last successful scan roots (UnmatchedFolder paths live under these).
-            try:
-                from sqlalchemy import select
-
-                from oneirodex import db
-                from oneirodex.models import Library
-
-                for folder in db.session.execute(
-                    select(Library.last_scan_folder).where(Library.last_scan_folder.isnot(None))
-                ).scalars():
-                    cleaned = str(folder or '').strip()
-                    if cleaned and cleaned not in bases:
-                        bases.append(cleaned)
-            except Exception:
-                pass
-    except RuntimeError:
+            app_config = current_app
+    except (ImportError, RuntimeError):
         pass
+    if app_config is None:
+        try:
+            from types import SimpleNamespace
+
+            from oneirodex.runtime_native.runtime_context import get_runtime_config
+
+            runtime_config = get_runtime_config()
+            if runtime_config is not None:
+                app_config = SimpleNamespace(config=runtime_config)
+        except (ImportError, RuntimeError):
+            pass
+    if app_config is not None:
+        from oneirodex.utils.security import get_allowed_base_directories
+
+        for base in get_allowed_base_directories(app_config):
+            if base and base not in bases:
+                bases.append(base)
+        # Include last successful scan roots (UnmatchedFolder paths live under these).
+        try:
+            from sqlalchemy import select
+
+            from oneirodex.runtime_native.db_session import native_db as db
+            from oneirodex.models import Library
+
+            for folder in db.session.execute(
+                select(Library.last_scan_folder).where(Library.last_scan_folder.isnot(None))
+            ).scalars():
+                cleaned = str(folder or '').strip()
+                if cleaned and cleaned not in bases:
+                    bases.append(cleaned)
+        except Exception:
+            pass
     return bases
 
 
@@ -144,7 +158,7 @@ def _validate_open_path(path: str | None) -> str:
 
     try:
         ok, err = is_safe_path(cleaned, bases)
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         # is_safe_path may log via Flask; fall back to relative_to checks.
         ok, err = False, 'Access denied - path outside allowed directories'
         try:
@@ -164,6 +178,34 @@ def _validate_open_path(path: str | None) -> str:
     if not ok:
         raise ValueError(err or 'path outside allowed library roots')
     return cleaned
+
+
+def open_path_target_authorized(user, game, path: str | None, *, admin: bool = False) -> bool:
+    """Bind member path reveals to an accessible game's recorded folder.
+
+    Admins can use the additional paths shown by admin game details and the
+    unmatched / scan-job tools. The enqueue validator still constrains every
+    target to a configured library or scan root.
+    """
+    if admin:
+        return True
+    if not game or not getattr(user, 'is_authenticated', True):
+        return False
+    requested = str(path or '').strip()
+    game_folder = str(getattr(game, 'full_disk_path', '') or '').strip()
+    if not requested or not game_folder:
+        return False
+    try:
+        requested_path = Path(requested)
+        game_path = Path(game_folder)
+        if not requested_path.is_absolute() or not game_path.is_absolute():
+            return False
+        requested_resolved = requested_path.resolve(strict=False)
+        game_resolved = game_path.resolve(strict=False)
+        requested_resolved.relative_to(game_resolved)
+        return True
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return False
 
 
 def _store_path(user_id: int) -> str:

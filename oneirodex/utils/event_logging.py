@@ -1,8 +1,7 @@
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import SystemEvents
 from datetime import datetime, timezone
 from typing import Optional, Union
-from flask_login import current_user
 
 def log_system_event(
     event_text: str,
@@ -32,7 +31,12 @@ def log_system_event(
         # Handle audit_user logic
         if audit_user is None:
             # Try to get current user ID, fall back to 'system'
-            audit_user = getattr(current_user, 'id', None)
+            try:
+                from flask_login import current_user
+
+                audit_user = getattr(current_user, 'id', None)
+            except (ImportError, RuntimeError):
+                audit_user = None
         
         # Create new system event
         new_event = SystemEvents(

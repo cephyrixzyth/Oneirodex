@@ -2,15 +2,19 @@
 
 > **Doc status:** Active
 
-Admin settings use **grouped rows** at `/admin/settings` (one sheet, section headings, whole row → destination; `?section=` redirects). In the rail, Settings unfolds into four icon sub-sections whose pages are buttons in the top bar — see [navigation.md](navigation.md). Chrome is the React admin top bar (`frontend/admin-app`); many forms remain Jinja until migrated. Live React bodies include Dashboard, Libraries/Scans hubs, Themes, Plugins, Announcements, **Support inbox**, and the **Integrations hub** (the same grouped rows as Settings: Metadata & art · Stores & ownership · Messaging & identity · Acquisition, with deep links into classic forms).
+Admin settings use **grouped rows** at `/admin/settings` (one sheet, section headings, whole row → destination; `?section=` redirects). In the rail, Settings unfolds into four icon sub-sections whose pages are buttons in the top bar — see [navigation.md](navigation.md). Chrome is the React admin top bar (`frontend/admin-app`); settings pages use the shared React shell and guarded APIs. Live React bodies include Dashboard, Libraries/Scans hubs, Themes, Plugins, Announcements, **Support inbox**, and the **Integrations hub** (the same grouped rows as Settings: Metadata & art · Stores & ownership · Messaging & identity · Acquisition, with deep links into service settings). The `/admin/integrations` route serves the React overview; Flask owns the route, session and compatibility APIs.
 
-**Integrations inventory API:** `GET /api/admin/integrations/inventory` (admin) returns `{integrations[{id,name,category,status,configured,enabled,admin_href,settings_href,notes}], count, hub_href}` covering IGDB, SteamGridDB, Giant Bomb, HLTB, RetroAchievements, Meta/Quest, SMTP, OIDC, Support, community chat, LiveKit, Arr connectors, and ownership register links — so the hub is not IGDB-only. The React Integrations page renders a **Provider inventory** grouped by category (with status + notes) under the grouped rows. RetroAchievements connects under **Integrations → Metadata & art → Artwork & secondary**; the inventory deep-link uses the supported `#artwork` tab. Classic `/admin/integrations` artwork tab anchors (`#steamgriddb`, `#giantbomb`, `#hltb`, `#retroachievements`, `#meta_quest`, `#ownership`, `#livekit`, `#support`, `#indexers`, `#community`, `#email`, `#igdb`) deep-link the same surfaces.
+**Integrations inventory API:** `GET /api/admin/integrations/inventory` (admin) returns `{integrations[{id,name,category,status,configured,enabled,admin_href,settings_href,notes}], count, hub_href}` covering IGDB, SteamGridDB, Giant Bomb, HLTB, RetroAchievements, Meta/Quest, SMTP, OIDC, Support, community chat, LiveKit, Arr connectors, and ownership register links — so the hub is not IGDB-only. The React Integrations page renders a **Provider inventory** grouped by category (with status + notes) under the grouped rows. RetroAchievements connects under **Integrations → Metadata & art → Artwork & secondary**; the inventory deep-link uses the supported `#artwork` tab. The React overview preserves the owned `#artwork`, `#meta_quest`, `#community`, and `#indexers` fragment destinations; React fragment links route to the matching integration panel, including provider inventory, ownership, community, email and IGDB settings.
 
 **Fresh-install setup:** The six-step wizard creates the admin, optionally configures SMTP and feature preferences, optionally collects IGDB plus Steam Web API, SteamGridDB, Giant Bomb, MobyGames, and TheGamesDB credentials, and can save OIDC issuer/client details without enabling SSO. It then offers to create a first library and queue its initial scan. The API-key fields are opt-in; empty values preserve existing credentials and secrets are never rendered back into the form. HowLongToBeat can be toggled without a key. OIDC remains disabled during setup so the new admin can verify its issuer and callback before enabling an authentication provider. Keyless catalogue sources continue to work without setup. Integrations that require container environment values (for example LiveKit and *arr endpoints) remain visible in the Integrations inventory and require deployment configuration. Every step can be skipped; setup can finish without a library.
 
 The flow follows the optional, ordered setup used by Plex and Jellyfin: establish the administrator first, let the operator skip optional services, and offer initial library creation before entering normal use. See [Plex Basic Setup Wizard](https://support.plex.tv/articles/200288896-basic-setup-wizard/) and [Jellyfin Setup Wizard Walkthrough](https://jellyfin.org/docs/general/post-install/setup-wizard/).
 
 **Newsletter:** `/admin/newsletter` stays available when SMTP or the newsletter feature is off. The page explains which prerequisite is missing and keeps sent history readable; sending is disabled until both the feature and a working SMTP sender are configured.
+
+**OIDC / SSO:** The legacy `/admin/integrations/oidc` URL redirects to the React OIDC panel at `/admin/integrations#oidc`. It saves issuer, client, callback, scopes and role mapping through the admin settings API. The API returns only whether a client secret is configured; submitting a blank secret preserves the stored value. Saving settings does not contact an identity provider. The `/admin/integrations#oidc` fragment opens the OIDC panel; other integration settings remain on the same React page or their dedicated React routes. See [OIDC / SSO](../runbooks/oidc-sso.md) before enabling sign-in.
+
+**Download requests:** `/admin/manage-downloads` lists each member's zip job and only the ZIP basename; the API does not return the stored full path. Deleting a request record requires a confirmation and does not delete a ZIP file. The React page uses the Flask route and guarded API.
 
 **Browser play engine (BP-0 / BP-1):** `GET`/`PUT /api/browser-player-settings` stores admin defaults under `GlobalSettings.settings.browser_player`. The only selectable default today is `webretro`; `emulatorjs` is reserved until that shell ships. Optional bool `nostalgist_nes_pilot` (default off) points **NES only** at `/static/vendor/nostalgist/play.html` (vendored Nostalgist + WebRetro `nestopia` WASM). Toggle it on **Admin → Emulators**. Browse payloads include `browser_player` / `browser_players_available` / `nostalgist_nes_pilot`. See [browser-play.md](../user/browser-play.md) and [browser-play-engines.md](../dev/browser-play-engines.md).
 
@@ -22,7 +26,7 @@ The flow follows the optional, ordered setup used by Plex and Jellyfin: establis
 
 ## Scan / match policy (W20-4)
 
-- **Done (uncommitted):** Admin → Settings → **Scan / match policy** (`/admin/scan_match`) — React `ScanMatchSettingsPage` (Jinja SPA shell) + Settings hub card · admin vitest **7/7** claimed · BE `GET`/`PUT` `/api/admin/scan-match/config` live (scoring / dupe / peel wired · pytest claimed **13+21**).
+- **Done (uncommitted):** Admin → Settings → **Scan / match policy** (`/admin/scan_match`) — React `ScanMatchSettingsPage` (shared React shell) + Settings hub card · admin vitest **7/7** claimed · BE `GET`/`PUT` `/api/admin/scan-match/config` live (scoring / dupe / peel wired · pytest claimed **13+21**).
 - **Persist:** `GlobalSettings` (`settings.scan_match` JSON + `propose_only_scan`). Unset keys use defaults below.
 - **Defaults:** `match_high_threshold` **0.92** · `match_ambiguous_gap` **0.08** · `dupe_title_threshold` **0.85** · `peel_profile` `conservative` · Stage C safe variant toggles **on** (`enable_year_drop_variant` · `enable_pack_peel_variant` · `enable_edition_peel_variant` · `enable_sequel_numeral_variant`).
 - **Honesty:** propose-only never auto-imports (even high-confidence). API refuses mega-library / depth-3 family walk keys. `scanThreadCount` stays on Server Settings / worker caps.
@@ -39,8 +43,8 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 
 **Member chrome (Server Settings):** `showHelpButton` and `showTrailers` default **on**. They are baked into every member SPA shell on load (`data-show-help` / `data-show-trailers`), including Systems / Chat / Collections — not only Discover and Favorites. A missing JSON key must not hide those More destinations.
 
-**Stays off by default:** `OIDC_ENABLED` (SSO/auth).  
-**Safety locks (also off):** `ENABLE_AI_AUTO_APPLY`, `ALLOW_HARDLINK_APPLY`.  
+**Stays off by default:** `OIDC_ENABLED` (SSO/auth).
+**Safety locks (also off):** `ENABLE_AI_AUTO_APPLY`, `ALLOW_HARDLINK_APPLY`.
 **Patch catalog:** operator YAML/JSON at `PATCH_CATALOG_PATH` — Oneirodex does not scrape romhacking.net or similar sites.
 
 | Env / module | Default | Notes |
@@ -81,20 +85,26 @@ Product modules default **on**. Disable during **setup → Features**, under **A
   - Longest remote prefix wins, so a specific mapping beats a general one. A prefix only matches at a path separator, so `/downloads` never matches `/downloads-old`.
   - Leave empty when client and app share a filesystem view — unmapped paths pass through untouched.
   - When no mapping is set and a lookup fails, the preview reason now names the path it tried and points at this setting instead of just saying "not found".
-- **Quality / release profiles (P1-12):** `GlobalSettings.quality_profiles` (multi-profile JSON). Admin → **Quality profiles** SPA at `/admin/quality_profiles` (`QualityProfilesPage`: list · set active · new · delete · edit · score probe; Jinja is an SPA shell). APIs: `GET/POST /api/quality-profiles`, `PUT /api/quality-profiles/active`, `GET/PUT/DELETE /api/quality-profiles/<id>`. Active profile scores Arr search and extends scan name-clean with blocked/excluded terms.
+- **Quality / release profiles (P1-12):** `GlobalSettings.quality_profiles` (multi-profile JSON). Admin → **Quality profiles** SPA at `/admin/quality_profiles` (`QualityProfilesPage`: list · set active · new · delete · edit · score probe; the Flask route serves the shared React shell). APIs: `GET/POST /api/quality-profiles`, `PUT /api/quality-profiles/active`, `GET/PUT/DELETE /api/quality-profiles/<id>`. Active profile scores Arr search and extends scan name-clean with blocked/excluded terms.
 
 ## AI
 
 - Env: `ENABLE_AI_ASSIST`, `ENABLE_AI_AUTO_APPLY`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`.
-- Admin AI page: enable + Ollama URL/model (`PUT /api/ai/config`) and Test.
+- Admin AI page (`/admin/ai`): React page; enable + Ollama URL/model (`PUT /api/ai/config`), explicit local connection test, match suggestions and doctor notes. Applying a title to an existing game requires explicit confirmation and is disabled unless `ENABLE_AI_AUTO_APPLY=true`; suggestions never change titles by themselves. Flask retains the route and API compatibility boundary.
 - Ollama-only by default; never required for core library use.
+
+## Arr module
+
+`/admin/arr` now has a native React page in the optional admin pilot, with indexer add/toggle/delete, bulk import, presets, connector settings, search results, and hardlink preview. Saved connector keys and passwords stay write-only; blank secret fields preserve existing values. Search is explicit, and sending a result to qBittorrent requires confirmation. Hardlink preview is read-only; Apply stays disabled unless the pipeline, helper, and apply environment gates are enabled, and applying previewed rows requires a second confirmation. The Flask route serves the shared React page.
 
 ## Storage / hardlinks
 
 - `ENABLE_HARDLINK_HELPERS` and `ALLOW_HARDLINK_APPLY` are **env-only** safety gates (no DB toggle). `ALLOW_HARDLINK_APPLY` stays **off** by product default.
-- Admin page: **Settings → Storage** (`/admin/storage`) — React `StoragePage` (Jinja emptied to SPA shell).
+- Admin page: **Settings → Storage** (`/admin/storage`) — React `StoragePage` (shared React shell).
+- If status cannot be read, helpers and mount readiness remain unknown; Preview and Apply stay disabled until **Retry storage status** succeeds. A rejected preview preserves the source and destination draft.
 - Status API: `GET /api/storage/status` — `helpers_enabled` · `allow_apply` · `games_path` · `games_exists` / `games_readable` / `games_writable` · `degrade_reason` (RO / apply-off honesty).
 - Preview / apply: `POST /api/storage/hardlink/preview` · `POST /api/storage/hardlink/apply` (apply gated by helpers **and** `ALLOW_HARDLINK_APPLY`). Preview surfaces readable reasons, including **destination parent not writable (read-only mount?)**.
+- Hardlink and proposal-cleanup failures return fixed wording; raw OS exceptions and local filesystem paths stay in server logs as exception classes only.
 - Hub / page banners explain why Apply is disabled when helpers/apply are off or the games mount is RO.
 
 ## LiveKit voice
@@ -106,7 +116,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 ## Remote play (Moonlight / BYO host)
 
 - Env: `ENABLE_REMOTE_PLAY` (**off** by default), optional `SUNSHINE_BASE_URL` / `WOLF_BASE_URL`, hint vars — see `.env.example`.
-- Admin: **Settings → Remote play** (`/admin/remote_play`) or `PUT /api/admin/remote-play/config`.
+- Admin: **Settings → Remote play** (`/admin/remote_play`) or `PUT /api/admin/remote-play/config`. The form loads saved settings before enabling Save; failed loading offers Retry and prevents saving defaults. Save errors retain the draft and display the server message.
 - Members: `GET /api/remote-play/status`; game details **Play via Moonlight** copies host + hints.
 - **No Wolf/GOW in Oneirodex image** — operator runs Sunshine/Wolf on a GPU host; LAN URLs need `ALLOW_PRIVATE_LAN_URLS=true`.
 - Plugin registry: `remote_play.moonlight`.
@@ -133,6 +143,8 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 - Admin → Features: enable, solver URL, provider, max tier, **Test solver**; status `GET /api/admin/challenge-solver/status?probe=1`.
 - Opt-in only — not bulk-enabled with OIDC/AI apply locks. Solver URL validated via `validate_connector_http_url` + `ALLOW_PRIVATE_LAN_URLS`.
 - Acquire (*arr search / debrid HTTP) retries **once** through the solver when a challenge page is detected and the module is on.
+- Solver failure diagnostics retain only the exception class; request URLs, query parameters, and raw exception text stay out of logs and status responses.
+- Artwork application and search failures use fixed wording; upstream exception text, URLs and credentials are not included in API responses.
 
 ## Ambient lighting (Hyperion.ng / Home Assistant)
 
@@ -140,7 +152,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 - Hyperion: `HYPERION_URL`, optional `HYPERION_TOKEN`, `HYPERION_PRIORITY` (default 50), `AMBIENT_ACCENT_COLOR`.
 - Home Assistant: `HA_URL`, `HA_TOKEN`, `HA_LIGHT_ENTITIES`, optional `HA_PLAY_SCENE` / `HA_STOP_SCENE`.
 - Play session start/stop hooks fire-and-forget — never block play launch. Child accounts never trigger lighting.
-- Admin → Features: enable, provider, connector fields, **Test**; status `GET /api/admin/ambient-lighting/status?probe=1`.
+- Configure in the native **Admin → Features → Ambient lighting** panel or through the environment settings above. The panel stores provider settings through the admin-only config API and never returns saved tokens; blank token inputs preserve the saved credentials. **Test connection** asks for confirmation because it may briefly turn on lights or a Home Assistant scene, and the test does not restore the previous scene. Status: `GET /api/admin/ambient-lighting/status`; `probe=1` contacts the configured connector. The Flask route serves the shared React page.
 - URLs validated via `validate_connector_http_url` + `ALLOW_PRIVATE_LAN_URLS`.
 
 ## Support → GitHub
@@ -151,10 +163,10 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 ## Art studio (cover placeholders)
 
 - **Admin → Settings → Art studio** or `/admin/art_studio` (React; admin/ops only). Tabs: **Studio** · **Backup & stock** (`#stock`) · **System marks** (`#marks`) · **Pick & queue** (`#images`).
-- Local Pillow renderer — aurora tokens (`--gt-*`), no paid cloud AI. Preview/generate use **artistic** compositions by default (`artistic: true` on `POST /admin/api/art-studio/preview`; optional `artistic: false` for legacy flat A/B). Idle **title scale is 1.3×** (floor 0.85×); the slider always posts `title_scale`.
+- Local Pillow renderer — aurora tokens (`--od-*`), no paid cloud AI. Preview/generate use **artistic** compositions by default (`artistic: true` on `POST /admin/api/art-studio/preview`; optional `artistic: false` for legacy flat A/B). Idle **title scale is 1.3×** (floor 0.85×); the slider always posts `title_scale`.
 - **Title-first studio:** large live preview stage; typing a title debounces preview. System / platform selector + preview size toggles (200×300 · 400×600 · 960×540 wide). Soft-fails preview lag with toast.
 - **Actions:** Preview · Generate pack · Download ZIP · Set as fallback · Apply to game UUID.
-- **Backup & stock** (`#stock`): thumbnail grid of platform packs + stock motifs from `GET /admin/api/art-studio/stock`; ungenerated packs auto-call `POST …/stock/generate` on apply. Select → preview → **Use as library default** / **Set fallback** via `POST /admin/api/art-studio/apply` (`mode=fallback|library`). Soft empty state if catalog 404. Library create/edit Jinja **Choose image** links here.
+- **Backup & stock** (`#stock`): thumbnail grid of platform packs + stock motifs from `GET /admin/api/art-studio/stock`; ungenerated packs auto-call `POST …/stock/generate` on apply. Select → preview → **Use as library default** / **Set fallback** via `POST /admin/api/art-studio/apply` (`mode=fallback|library`). Soft empty state if catalog 404. The library create/edit React form links here.
 - **Library default covers** panel shows current `default_cover.jpg` / `default_library.jpg` with **Regenerate defaults** CTA.
 - **Batch placeholders** (collapsed) for no-cover titles via `POST /admin/api/art-studio/batch-generate` (alias: `apply-batch`) first, then `POST /admin/api/covers/batch/apply` (`generate_only`) fallback.
 - **Auto-pick (ImagesPage):** `POST /admin/api/covers/batch/apply` with `policy=sgdb_then_igdb_then_generate` (library / platform / service filters). Mass search: `POST /admin/api/covers/batch/search`.
@@ -162,11 +174,12 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 - Remote artwork downloads are streamed and capped at **25 MiB**; a larger provider response is refused before it is written to the library.
 - Queue rows show `failure_reason` (and `last_error` fallback); list responses surface `image_save_path.error` when the images volume is not writable.
 - API: `POST /admin/api/art-studio/preview|generate|apply|apply-batch`, `GET /admin/api/art-studio/download/<pack_id>`, `POST /admin/api/art-studio/batch-generate`, `GET /admin/api/art-studio/stock`, `POST /admin/api/art-studio/stock/generate`, `GET /admin/api/art-studio/system-marks`, `GET /admin/api/art-studio/system-marks/lab`, `POST /admin/api/art-studio/system-marks/generate`; covers mass tools under `/admin/api/covers/*`.
-- **Systems hub marks** (AI): Art Studio tab **System marks** (`#marks`) lists per-theme progress and can generate missing / force-redo via `GET/POST /admin/api/art-studio/system-marks`. The **Lab** on that tab generates **one** theme×platform pair (editable prompt, preview, attempt log) via `GET …/system-marks/lab` and `POST …/generate` with `platforms` + optional `prompt`. Square WebPs land under `static/library/system-marks/<theme>/<platform>.webp`. Requires `ENABLE_AI_ARTWORK` + `AI_ARTWORK_URL`. CLI: `python scripts/generate_system_marks.py --all`. Full batch regen is ops-gated (quality hold).
+- **Systems hub marks** (AI): Art Studio tab **System marks** (`#marks`) lists per-theme progress and can generate missing / force-redo via `GET/POST /admin/api/art-studio/system-marks`. The **Lab** on that tab generates **one** theme×platform pair (editable prompt, preview, attempt log) via `GET …/system-marks/lab` and `POST …/generate` with `platforms` + optional `prompt`. Square WebPs land under `static/library/system-marks/<theme>/<platform>.webp`. Existing art in retired theme folders remains available as a compatibility fallback and is included in progress; the member Systems page tries canonical art, compatible legacy art, then the per-system SVG glyph. Generating new art still requires `ENABLE_AI_ARTWORK` + `AI_ARTWORK_URL`; no automatic generation occurs when a mark is missing. CLI: `python scripts/generate_system_marks.py --all`. Full batch regen is ops-gated (quality hold).
 - **System templates:** generated covers use per-system palette + glyph (NES/SNES/PS1/Switch/PC/…) so 200×300 tiles stay readable — not a generic subtitle-only placeholder.
 - **Meta Quest Store:** identify `GET /api/search_metadata?source=meta_quest|meta|quest` · ownership CSV `POST /api/ownership/meta_quest/csv` · `META_QUEST_API_MODE` / `META_QUEST_UNOFFICIAL_GRAPHQL` (off by default) (local strategy notes).
 - **Store connections (admin):** `/admin/ownership` (Integrations → Ownership registers) lists each member's store links with one state per store (Linked, Syncing, Partly synced, Reconnect needed, Sync failed, …), the last sync's redacted reason ("Admin can fix" marks operator-side causes such as a refused household token or a missing server key), record counts and which sign-in a sync uses (member / household / **unknown** — a GOG, Amazon or Xbox sign-in saved before LIB-04 on a server that has a household token for that store; older versions stored the household token on member accounts unmarked, so ask those members to reconnect after upgrading). It never shows tokens, store account IDs or title lists. **Retry sync** runs a member's sync with their own saved sign-in (not offered when only the member can fix it); **Stop sync** is offered only for GOG / Epic / Amazon, which stop between pages. Household configuration appears as presence flags. API: `GET /api/admin/ownership/connections`, `POST …/<user_id>/<store>/sync|cancel`.
 - **Ownership register:** members link Steam / GOG / Epic / Amazon under **More → Ownership**. Steam Web API, unofficial GOG Galaxy refresh token, unofficial Epic device auth, unofficial Amazon Nile/Heroic token — IDs and names only, never a download. Household env: `STEAM_WEB_API_KEY`, `GOG_REFRESH_TOKEN`, `EPIC_DEVICE_AUTH`, `AMAZON_REFRESH_TOKEN` / `AMAZON_DEVICE_SERIAL` / `AMAZON_NILE_JSON`. **Xbox and PlayStation (INSP-42) are register-only, unofficial and opt-in:** CSV import always works; live sync runs only when `ENABLE_UNOFFICIAL_STORE_SYNC` names the store (`xbox,psn` or `all`; unset = off, decision G5) *and* the optional client is installed (`requirements-optional.txt`: `xbox-webapi`, `psnawp`) *and* a member saved a token on the Ownership page (`xbox-webapi` tokens JSON; PSN `npsso`). Without any of the three the sync button says which is missing in one sentence; the Integrations rows and plugins `store.xbox` / `store.psn` read *disabled* until opted in, *available* until the client exists. Household fallbacks `XBOX_TOKENS_JSON`, `XBOX_CLIENT_ID` / `XBOX_CLIENT_SECRET`, `PSN_NPSSO`. IDs and names only; a 401 fails closed; nothing is ever downloaded. Nintendo stays CSV.
+- **Xbox optional-client security limitation:** `xbox-webapi` currently depends on `ecdsa`, which has no patched release for the [Minerva timing advisory](https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp). The Oneirodex Xbox refresh/title-history path uses a regular `httpx` client and does not create the package's signed session; its `xbox-authenticate` utility does use the affected signer. Prefer CSV import and leave Xbox live sync disabled until an upstream fix or reviewed replacement is available.
 - Disk failures (read-only `IMAGE_SAVE_PATH` / generated-pack folder, out of space) surface as a JSON `error` and show in the red alert banner instead of a bare 500 — check the message for the exact path/permission problem. If applying a pack to a game fails partway (DB error after the file was written), the orphaned file is cleaned up automatically.
 - Artwork picker: [steamgriddb-artwork.md](../runbooks/steamgriddb-artwork.md) · [libraries-and-scans.md](libraries-and-scans.md#image-queue).
 
@@ -284,5 +297,62 @@ Related: [libraries-and-scans.md](libraries-and-scans.md) · [docker-compose-dep
 
 - **API:** `GET/POST /api/tokens`, `DELETE /api/tokens/{id}` — any logged-in member.
 - **Presets:** `POST` body `"preset": "companion"` (`read:library` + `write:download`) or `"preset": "thin"` (`read:library` + `read:social` + `write:presence`; **no** download). List response includes `scope_presets`.
+- **Library writes:** Bearer tokens need `write:library` to change favorites or play status, save Discover pins or filters, create or cancel wishlist requests, manage wanted-update entries, update member preferences or detail layouts, edit personal collections, start/update playtime sessions, run on-demand freshness checks or bounded update scans, manage store ownership links/imports/syncs, import launcher libraries, match owned titles, or start a free-game ownership assist. The companion and thin presets do not include this scope; API clients that need these writes must create a custom token through `POST /api/tokens` with `scopes: ["read:library", "write:library"]`. `read:library` alone remains read-only for these routes; browser sessions keep their existing CSRF-protected behavior.
 - **Thin protocol:** heartbeat accepts `device_kind` (`companion` | `thin` | `browser`); `GET /api/client/capabilities` advertises allows/denies. Install/update command queue delivers only to `companion` + download/lifecycle scopes.
 - **UI:** member SPA **Account → API tokens** (`/tokens`) — create with companion/thin presets, copy one-time secret, revoke. API / `@oneirodex/api-client` / OpenAPI still work. See [desktop-companion.md](../user/desktop-companion.md) · [thin-client.md](../user/thin-client.md).
+
+## Newsletter
+
+`/admin/newsletter` uses the shared React page, and numeric `/admin/newsletter/<id>` links open message history details directly. Sending requires both `enableNewsletterFeature` in Server Settings and an enabled SMTP server with a sender. History remains readable while either prerequisite is off. Recipients are existing member email addresses; send requests are confirmed, validate recipients and content, persist a pending record before delivery, and record a truthful sent or failed result. Message content is displayed as escaped plain text. Delivery errors in historical detail are summarized without exposing raw transport text. Flask retains the validated legacy POST contract for compatibility.
+
+## React admin page behavior
+
+These behaviors are available through the React admin pages. Flask continues to own route and session compatibility; Jinja templates have been retired.
+
+### SMTP
+
+The React admin page provides the SMTP form at the existing URL. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Save settings before using Test connection. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
+
+### Scan / match policy recovery
+
+The React admin page serves the existing Scan / match policy page. Numeric controls require a value within their displayed bounds. Loading and saving prevent concurrent edits; a failed save retains the draft. If policy loading fails or fields are unavailable, Retry loading settings requests fresh state. Saving policy does not start a library scan.
+
+### Settings hub and plugin registry
+
+The React admin page now serves Settings and Plugins at their existing URLs. Settings sections support arrow keys, Home and End while retaining the existing destination links. The registry table supports sorting and a named keyboard scroll region; a failed registry load offers Retry without retaining the loading indicator. This page reports registered connectors and does not install plugins.
+
+### Detail layout and emulator preferences
+
+The React admin page serves both pages at their existing URLs. Detail layout rows wrap on narrow screens and visibility controls are named for their section. Layout Save and Reset defaults prevent concurrent edits; failed saves keep the draft. Preferred emulator cores use shared controls and preserve the selected values when saving fails. Browser player, Achievements and Firmware panels remain available through the existing keyboard-accessible tabs.
+
+The React admin page also serves Store connections at `/admin/ownership`. Its loading state uses the shared page shell and its table has a named scroll region. Repair controls remain busy until their follow-up diagnostics reload finishes.
+
+### Additional static admin pages
+
+The React admin page now serves Dashboard (including `/admin`), Ops, Art Studio, Art & images and Danger zone at their existing URLs. Art Studio sections support arrow keys, Home and End with tab/panel associations. Artwork pages share the common Page layout. Image target query parameters and Art Studio section fragments remain supported. Existing preview/confirmation gates on Danger zone remain required.
+
+### Attract mode
+
+The React admin page provides the complete Attract mode form even while the feature is disabled. It preserves idle timeout, library/genre/theme/year filters, autoplay and skip settings, and configuration preview. Save validates numeric bounds and year ordering. Failed loading offers Retry and blocks saving; a failed save keeps the draft. Member trailer/autoplay overrides continue using their existing endpoints.
+
+### IGDB metadata
+
+The React admin page preserves the IGDB settings URL. Saved secrets are never returned; a blank secret field keeps the stored value. Show entered secret reveals only a new draft and resets after a successful save. Test connection requires saved credentials and no unsaved changes, then contacts IGDB explicitly. Failed loading offers Retry and blocks saving; failed saving keeps the draft. Provider setup instructions link to the official developer console.
+
+### Household chat emoji
+
+The React admin page preserves the custom emoji URL and upload constraints. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
+
+### Features
+
+The React admin page preserves seven household preferences and reports process flags as read-only. Authentication, automatic AI apply, hardlink apply and other opt-in process settings cannot be enabled by this form. Challenge solver settings save separately; saving no longer automatically probes the connection. Test solver explicitly checks the saved enabled connection and is blocked while the draft differs from it. Failed saves keep the draft and failed loading offers Retry. Scanner status retains readiness diagnostics, with generic connection errors and no local socket path in browser state.
+
+### Shared page identity
+
+Admin React pages retain a compact visible heading. Settings and Integration section strips bring the active destination into view on entry or resize without moving keyboard focus or scrolling the page vertically. Features and Chat Emoji use their Integration navigation context.
+
+## Server Settings
+
+`/admin/new_server_settings` uses a shared React form with all 28 server, scanning, local metadata and interface controls. Save submits only edited fields through `GET`/`PUT /api/admin/server-settings`, preserving unrelated settings. The API returns only this form's public values and scrubs historical URL credentials.
+
+Updates and extras folders may use relative nested paths; absolute paths and parent traversal are rejected. The metadata filename remains a single `.json` filename. Configured scan/image limits remain subject to runtime worker caps. Saving preferences does not start scans, contact metadata providers, write metadata files or delete game files. Failed saves preserve the draft; failed loads offer Retry. Flask retains the form POST compatibility handler.

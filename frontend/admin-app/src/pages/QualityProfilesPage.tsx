@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Button, confirmAction } from '@oneirodex/ui'
-import { PageStatus } from '@oneirodex/ui'
+import { Button, confirmAction, PageStatus } from '@oneirodex/ui'
 import { deleteJson, getJson, postJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'

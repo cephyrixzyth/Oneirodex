@@ -4,7 +4,7 @@ requests, free-game offers, and small operator lookup tables."""
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from oneirodex import db
+from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
 class ReleaseGroup(db.Model):

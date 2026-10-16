@@ -5,6 +5,11 @@
 # Each is used only when ENABLE_UNOFFICIAL_STORE_SYNC names its store; without
 # the package the plugin reads "available" and the sync button says which
 # package to install. CSV import needs neither.
+# Security: xbox-webapi currently pulls ecdsa, which has no patched release for
+# GHSA-wj6h-64fc-37mp / CVE-2024-23342. Oneirodex's refresh/history path uses a
+# regular httpx client and does not create SignedSession; the package's
+# xbox-authenticate utility does use the affected signer. Prefer CSV until an
+# upstream fix or a reviewed replacement is available.
 xbox-webapi>=2.1.0
 psnawp>=3.0.3
 

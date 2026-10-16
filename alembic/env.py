@@ -56,12 +56,14 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Importing the models module registers every table on db.metadata.
-from oneirodex import db  # noqa: E402
+# Importing the framework-independent models module registers every table on
+# the shared declarative metadata. Alembic runs in the production image, where
+# the legacy Flask compatibility runtime (and its Jinja dependency) is absent.
 from oneirodex import models  # noqa: E402,F401  (import for side effect)
+from oneirodex.models.orm import ModelBase  # noqa: E402
 from config import Config  # noqa: E402
 
-target_metadata = db.metadata
+target_metadata = ModelBase.metadata
 
 # Indexes the pre-Alembic raw-DDL pass (oneirodex/updateschema.py) created that
 # are NOT re-declared on models.py metadata. The baseline revision builds them

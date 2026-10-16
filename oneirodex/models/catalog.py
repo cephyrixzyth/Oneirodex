@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.models.orm import db
 
 game_genre_association = db.Table('game_genre_association',
     db.Column('game_id', db.Integer, db.ForeignKey('games.id'), primary_key=True),

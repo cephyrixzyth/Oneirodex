@@ -49,7 +49,7 @@ export function ImagesSingleTitlePanel({
         {gameUuid ? <Button onClick={() => syncGameParam('', '')}>Clear target</Button> : null}
         {gameUuid ? (
           <a className="od-btn" href={`/edit_game_images/${encodeURIComponent(gameUuid)}`}>
-            Classic edit images
+            Edit all artwork
           </a>
         ) : null}
       </div>

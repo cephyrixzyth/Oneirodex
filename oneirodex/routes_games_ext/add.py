@@ -1,5 +1,5 @@
 import os
-from flask import render_template, redirect, url_for, flash, session, request, current_app
+from flask import redirect, url_for, flash, session, request, current_app
 from flask_login import login_required, current_user
 from oneirodex.forms import AddGameForm
 from oneirodex.models import Game, Library, UnmatchedFolder, Category, Developer, Publisher
@@ -19,6 +19,8 @@ from oneirodex.utils.background import run_in_background
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 
+from oneirodex.utils.admin_spa import render_admin_spa
+
 from . import games_bp
 
 
@@ -26,6 +28,9 @@ from . import games_bp
 @login_required
 @admin_required
 def add_game_manual():
+    if request.method == 'GET':
+        title = 'Identify unmatched folder' if request.args.get('from_unmatched') == 'true' else 'Identify game'
+        return render_admin_spa(title=f'{title} · Oneirodex Admin')
     # Allow manual add / identify while a library scan is running (single-game update).
     full_disk_path = request.args.get('full_disk_path', None)
     library_uuid = request.args.get('library_uuid') or session.get('selected_library_uuid')
@@ -100,7 +105,7 @@ def add_game_manual():
         allowed_bases = get_allowed_base_directories(current_app)
         if not allowed_bases:
             flash('Service configuration error: No allowed base directories configured.', 'error')
-            return render_template('admin/admin_game_identify.html', form=form, library_uuid=library_uuid, library_name=library_name, platform_name=platform_name, platform_id=platform_id)
+            return render_admin_spa(title=('Identify unmatched folder' if request.args.get('from_unmatched') == 'true' else 'Identify game') + ' · Oneirodex Admin')
 
         is_safe, error_message = is_safe_path(form.full_disk_path.data, allowed_bases)
         if not is_safe:
@@ -111,7 +116,7 @@ def add_game_manual():
                 event_level='warning'
             )
             flash(f"Access denied: {error_message}", 'error')
-            return render_template('admin/admin_game_identify.html', form=form, library_uuid=library_uuid, library_name=library_name, platform_name=platform_name, platform_id=platform_id)
+            return render_admin_spa(title=('Identify unmatched folder' if request.args.get('from_unmatched') == 'true' else 'Identify game') + ' · Oneirodex Admin')
 
         # Check if this is a custom IGDB ID (above 2,000,000,420)
         is_custom_game = int(form.igdb_id.data) >= 2000000420
@@ -119,7 +124,7 @@ def add_game_manual():
         # For custom games, skip IGDB ID check
         if not is_custom_game and check_existing_game_by_igdb_id(form.igdb_id.data):
             flash('A game with this IGDB ID already exists.', 'error')
-            return render_template('admin/admin_game_identify.html', form=form, library_uuid=library_uuid, library_name=library_name, platform_name=platform_name, platform_id=platform_id)
+            return render_admin_spa(title=('Identify unmatched folder' if request.args.get('from_unmatched') == 'true' else 'Identify game') + ' · Oneirodex Admin')
         
         new_game = Game(
             igdb_id=form.igdb_id.data,
@@ -273,16 +278,7 @@ def add_game_manual():
                 event_type='form',
                 event_level='warning'
             )
-    return render_template(
-        'admin/admin_game_identify.html',
-        form=form,
-        from_unmatched=from_unmatched,
-        action="add",
-        library_uuid=library_uuid,
-        library_name=library_name,
-        platform_name=platform_name,
-        platform_id=platform_id
-    )
+    return render_admin_spa(title=('Identify unmatched folder' if request.args.get('from_unmatched') == 'true' else 'Identify game') + ' · Oneirodex Admin')
 
 
 @games_bp.route('/link_existing_game', methods=['POST'])

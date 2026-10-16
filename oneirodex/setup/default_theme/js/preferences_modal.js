@@ -41,6 +41,8 @@
     // exactly what was there before (null = no preview active).
     var displacedTokens = null;
     var displacedEra = undefined;
+    var displacedIconPack = undefined;
+    var displacedIconPackHref = undefined;
 
     function notify(message, level) {
         if (window.jQuery && typeof window.jQuery.notify === 'function') {
@@ -113,7 +115,7 @@
     }
 
     function clearPreview() {
-        if (displacedTokens === null && displacedEra === undefined) {
+        if (displacedTokens === null && displacedEra === undefined && displacedIconPack === undefined) {
             return;
         }
         var root = document.documentElement;
@@ -135,6 +137,24 @@
                 root.removeAttribute('data-era');
             }
             displacedEra = undefined;
+        }
+        if (displacedIconPack !== undefined) {
+            if (displacedIconPack) {
+                root.setAttribute('data-icon-pack', displacedIconPack);
+            } else {
+                root.removeAttribute('data-icon-pack');
+            }
+            syncIconPackChips(displacedIconPack || '');
+            var link = document.getElementById('od-icon-pack-css');
+            if (link && displacedIconPackHref !== undefined) {
+                if (displacedIconPackHref) {
+                    link.setAttribute('href', displacedIconPackHref);
+                } else {
+                    link.removeAttribute('href');
+                }
+            }
+            displacedIconPack = undefined;
+            displacedIconPackHref = undefined;
         }
     }
 
@@ -185,6 +205,11 @@
 
     function previewIconPack(packId) {
         if (!packId) return;
+        if (displacedIconPack === undefined) {
+            displacedIconPack = document.documentElement.getAttribute('data-icon-pack');
+            var currentLink = document.getElementById('od-icon-pack-css');
+            displacedIconPackHref = currentLink ? currentLink.getAttribute('href') : null;
+        }
         document.documentElement.setAttribute('data-icon-pack', packId);
         syncIconPackChips(packId);
         // Swap pack stylesheet so preview matches saved look (not only data-icon-pack).
@@ -263,6 +288,8 @@
             // reload swaps in the real stylesheet.
             displacedTokens = null;
             displacedEra = undefined;
+            displacedIconPack = undefined;
+            displacedIconPackHref = undefined;
 
             var modalElement = document.getElementById('preferencesModal');
             var modal = window.bootstrap && modalElement

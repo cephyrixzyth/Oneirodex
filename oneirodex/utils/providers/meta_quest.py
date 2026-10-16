@@ -19,7 +19,7 @@ import re
 import requests
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.igdb_api import make_igdb_api_request
 from oneirodex.utils.providers.base import (

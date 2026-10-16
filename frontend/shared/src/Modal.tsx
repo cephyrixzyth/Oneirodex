@@ -36,6 +36,10 @@ export interface ModalProps {
   className?: string
   /** Panel classes — the dialog's own `.od-thing__panel`. */
   panelClassName?: string
+  /** Optional state hook for panel styling, emitted as `data-panel`. */
+  panelData?: string
+  /** Element to restore focus to when its launcher is removed while opening. */
+  restoreFocusRef?: RefObject<HTMLElement | null>
   /** Element to focus on open; defaults to the first focusable in the panel. */
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Escape closes unless the dialog is mid-action. Default true. */
@@ -63,6 +67,8 @@ export function Modal({
   label,
   className = '',
   panelClassName = '',
+  panelData,
+  restoreFocusRef,
   initialFocusRef,
   closeOnEscape = true,
   closeOnBackdrop = true,
@@ -71,19 +77,22 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const restoreRef = useRef<HTMLElement | null>(null)
+  const closeRef = useRef({ onClose, closeOnEscape })
+  closeRef.current = { onClose, closeOnEscape }
 
   useEffect(() => {
     if (!open) return undefined
-    restoreRef.current = (document.activeElement as HTMLElement | null) ?? null
+    restoreRef.current =
+      restoreFocusRef?.current ?? (document.activeElement as HTMLElement | null) ?? null
     const panel = panelRef.current
     const target = initialFocusRef?.current ?? (panel ? (focusables(panel)[0] ?? panel) : null)
     target?.focus()
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (closeOnEscape) {
+        if (closeRef.current.closeOnEscape) {
           event.stopPropagation()
-          onClose?.()
+          closeRef.current.onClose?.()
         }
         return
       }
@@ -114,7 +123,7 @@ export function Modal({
       const back = restoreRef.current
       if (back && back.isConnected && typeof back.focus === 'function') back.focus()
     }
-  }, [open, onClose, closeOnEscape, lockScroll, initialFocusRef])
+  }, [open, lockScroll, initialFocusRef, restoreFocusRef])
 
   if (!open || typeof document === 'undefined') return null
 
@@ -132,7 +141,7 @@ export function Modal({
       aria-label={labelledBy ? undefined : label}
       onClick={onBackdrop}
     >
-      <div ref={panelRef} className={panelClassName} tabIndex={-1}>
+      <div data-panel={panelData} ref={panelRef} className={panelClassName} tabIndex={-1}>
         {children}
       </div>
     </div>,

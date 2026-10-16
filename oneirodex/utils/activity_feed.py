@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, PlaySession, User
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.presence import accepted_friend_ids

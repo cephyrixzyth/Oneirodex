@@ -65,6 +65,41 @@ describe('EmulatorProfilesForm', () => {
     render(<EmulatorProfilesForm />)
     expect(await screen.findByText('No emulator platforms available.')).toBeInTheDocument()
   })
+
+  test('pending save disables core edits and a failed save retains the selection', async () => {
+    const user = userEvent.setup()
+    let resolveSave!: (value: any) => void
+    globalThis.fetch = vi.fn(async (_url, init) =>
+      init?.method === 'PUT'
+        ? new Promise((resolve) => {
+            resolveSave = resolve
+          })
+        : jsonOk(DATA),
+    ) as unknown as typeof fetch
+    render(<EmulatorProfilesForm />)
+    const nes = await screen.findByLabelText('NES')
+    expect(nes).toHaveClass('od-admin-input')
+    await user.selectOptions(nes, 'nestopia')
+    await user.click(screen.getByRole('button', { name: 'Save profiles' }))
+    expect(nes).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save profiles' })).toBeDisabled()
+    resolveSave(jsonOk({ error: 'Profile save unavailable' }, 500))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Profile save unavailable')
+    expect(nes).toHaveValue('nestopia')
+    expect(nes).toBeEnabled()
+  })
+
+  test('invalid catalogue offers retry instead of an empty state', async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonOk({ catalog: null }))
+      .mockResolvedValueOnce(jsonOk(DATA)) as unknown as typeof fetch
+    render(<EmulatorProfilesForm />)
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+    expect(await screen.findByLabelText('NES')).toHaveValue('fceumm')
+    expect(screen.queryByText('No emulator platforms available.')).not.toBeInTheDocument()
+  })
 })
 
 describe('EmulatorsPage navigation', () => {
@@ -85,5 +120,22 @@ describe('EmulatorsPage navigation', () => {
     expect(screen.getByRole('tab', { name: 'Firmware' })).toHaveAttribute('aria-selected', 'true')
     expect(document.getElementById('emu-panel-firmware')).not.toHaveAttribute('hidden')
     expect(document.getElementById('emu-panel-cores')).toHaveAttribute('hidden')
+  })
+
+  test('keyboard navigation selects and focuses the related panel', async () => {
+    const user = userEvent.setup()
+    render(<EmulatorsPage />)
+    const tabs = screen.getAllByRole('tab')
+    tabs[0].focus()
+    await user.keyboard('{End}')
+    expect(tabs[3]).toHaveFocus()
+    expect(tabs[3]).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel', { name: 'Firmware' })).toBeVisible()
+    await user.keyboard('{ArrowRight}')
+    expect(tabs[0]).toHaveFocus()
+    await user.keyboard('{ArrowLeft}')
+    expect(tabs[3]).toHaveFocus()
+    await user.keyboard('{Home}')
+    expect(tabs[0]).toHaveFocus()
   })
 })

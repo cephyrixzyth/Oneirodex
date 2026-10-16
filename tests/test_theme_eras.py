@@ -17,7 +17,6 @@ from oneirodex.utils.preset_themes import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 THEME_SOURCE = REPO_ROOT / 'oneirodex' / 'setup' / 'default_theme'
-TEMPLATES = REPO_ROOT / 'oneirodex' / 'templates'
 
 
 def test_default_and_unknown_themes_use_the_wood_den():
@@ -65,15 +64,21 @@ def test_era_css_and_atmosphere_are_wired_into_every_shell():
         assert brand not in blob
         assert brand not in era_css.lower()
 
-    atmosphere = (TEMPLATES / 'partials' / 'era_atmosphere.html').read_text(encoding='utf-8')
+    atmosphere = ''
+    for name in ('member_spa.py', 'admin_spa.py'):
+        html = (REPO_ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
+        atmosphere += html
+        assert 'data-era=' in html
+        assert 'id="od-era-atmosphere"' in html
+    pilot = (REPO_ROOT / 'oneirodex' / 'runtime_native' / 'admin_pilot.py').read_text(encoding='utf-8')
+    assert 'od-era.css' in pilot
     assert 'id="od-era-atmosphere"' in atmosphere
     assert 'od-era-stand' in atmosphere
-    for name in ('base.html', 'base_admin.html', 'base_empty.html'):
-        html = (TEMPLATES / name).read_text(encoding='utf-8')
-        assert 'data-era=' in html
-        assert 'css/od-era.css' in html
-        assert "partials/era_atmosphere.html" in html
-        assert html.index('css/od-shell.css') < html.index('css/od-era.css')
+
+    styleguide = (REPO_ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py').read_text(encoding='utf-8')
+    assert 'data-era=' in styleguide
+    assert 'css/od-era.css' in styleguide
+    assert 'id="od-era-atmosphere"' in styleguide
 
 
 def test_admin_chrome_stacks_above_era_atmosphere():

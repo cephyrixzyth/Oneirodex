@@ -1,6 +1,7 @@
 """DB-free wiring guards for collections delete/remove/counts/picker."""
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,37 +60,28 @@ def test_spa_list_shows_item_counts_and_delete():
 
 
 def test_newsletter_ckeditor_targets_content_field():
-    html = (ROOT / 'oneirodex' / 'templates' / 'admin' / 'admin_newsletter.html').read_text(
+    page = (ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'NewsletterPage.tsx').read_text(
         encoding='utf-8',
     )
-    assert "document.querySelector('#content')" in html
-    assert "document.querySelector('#editor')" not in html
+    assert 'Message' in page and '<textarea' in page
 
 
 def test_statistics_scripts_use_theme_asset():
-    html = (ROOT / 'oneirodex' / 'templates' / 'admin' / 'admin_statistics.html').read_text(
+    page = (ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'StatisticsPage.tsx').read_text(
         encoding='utf-8',
     )
-    assert "js/chart-utils.js'|theme_asset" in html
-    assert "js/admin-statistics.js'|theme_asset" in html
-    assert "library/themes/default/js/" not in html
+    assert "getJson('/api/admin/statistics')" in page
+    assert 'js/admin-statistics.js' not in page
 
 
 def test_statistics_charts_sit_in_a_bounded_grid():
     """W27-D3: Bootstrap columns + unbounded Chart.js grew a dual-axis scroll."""
-    html = (ROOT / 'oneirodex' / 'templates' / 'admin' / 'admin_statistics.html').read_text(
+    css = (ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'StatisticsPage.css').read_text(
         encoding='utf-8',
     )
-    css = (
-        ROOT / 'oneirodex' / 'setup' / 'default_theme' / 'css' / 'admin' / 'admin-pages.css'
-    ).read_text(encoding='utf-8')
-    js = (
-        ROOT / 'oneirodex' / 'setup' / 'default_theme' / 'js' / 'chart-utils.js'
-    ).read_text(encoding='utf-8')
-    assert 'od-adminpage-charts' in html
-    assert 'col-md-6' not in html
-    assert 'maintainAspectRatio: false' in js
-    assert 'height: 17.5rem' in css
+    assert 'repeat(auto-fit, minmax(min(100%, 26rem), 1fr))' in css
+    chart_rule = re.search(r'\.od-stats-chart\s*\{([^}]*)\}', css)
+    assert chart_rule and re.search(r'\bmin-width\s*:\s*0\s*;', chart_rule.group(1))
 
 
 def test_orphaned_manage_downloads_css_is_gone():

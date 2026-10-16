@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 
-from flask import current_app
 from oneirodex.utils.library_paths import library_dir
 
 # `stack` is a full CSS font-family value, so an absent file degrades to the
@@ -117,16 +116,25 @@ PLATFORM_FONT_HINTS: dict[str, str] = {
 DEFAULT_FONT_ID = 'system-ui'
 
 
-def fonts_dir() -> str:
-    root = current_app.config.get('FONT_PATH')
+def fonts_dir(configured_root: str | None = None) -> str:
+    """Return the font directory, optionally without Flask application state."""
+    if configured_root is not None:
+        root = configured_root
+    else:
+        try:
+            from flask import current_app
+
+            root = current_app.config.get('FONT_PATH')
+        except (ImportError, RuntimeError):
+            root = os.environ.get('FONT_PATH')
     if root:
         return root
     return os.path.join(library_dir(), 'fonts')
 
 
-def _operator_fonts() -> dict[str, dict]:
+def _operator_fonts(configured_root: str | None = None) -> dict[str, dict]:
     """Anything the operator dropped in, offered next to the built-ins."""
-    root = fonts_dir()
+    root = fonts_dir(configured_root)
     found: dict[str, dict] = {}
     if not os.path.isdir(root):
         return found
@@ -153,15 +161,15 @@ def _operator_fonts() -> dict[str, dict]:
     return found
 
 
-def available_fonts() -> dict[str, dict]:
+def available_fonts(configured_root: str | None = None) -> dict[str, dict]:
     """Built-ins plus operator drop-ins, with presence noted per entry.
 
     ``installed`` is reported honestly: a face whose file is missing still
     appears (so the picker is stable) but is flagged, because its CSS stack will
     silently fall through to the next family.
     """
-    root = fonts_dir()
-    catalogue = {**BUILT_IN_FONTS, **_operator_fonts()}
+    root = fonts_dir(configured_root)
+    catalogue = {**BUILT_IN_FONTS, **_operator_fonts(configured_root)}
     for entry in catalogue.values():
         file_name = entry.get('file')
         entry['installed'] = (
@@ -170,8 +178,8 @@ def available_fonts() -> dict[str, dict]:
     return catalogue
 
 
-def resolve_font(font_id: str | None) -> dict:
-    catalogue = available_fonts()
+def resolve_font(font_id: str | None, configured_root: str | None = None) -> dict:
+    catalogue = available_fonts(configured_root)
     return catalogue.get((font_id or '').strip().lower()) or catalogue[DEFAULT_FONT_ID]
 
 
@@ -181,14 +189,14 @@ def font_for_platform(platform_key: str | None) -> dict:
     return resolve_font(hint or DEFAULT_FONT_ID)
 
 
-def font_face_css() -> str:
+def font_face_css(configured_root: str | None = None) -> str:
     """``@font-face`` blocks for every installed face.
 
     Only emits rules for files that exist — a rule pointing at a missing file
     makes the browser fetch, fail, and fall back anyway, so it is noise.
     """
     blocks: list[str] = []
-    for entry in available_fonts().values():
+    for entry in available_fonts(configured_root).values():
         file_name = entry.get('file')
         if not file_name or not entry.get('installed'):
             continue
@@ -214,6 +222,23 @@ def font_face_css() -> str:
     return '\n'.join(blocks)
 
 
+def theme_font_stylesheet(
+    chosen: str | None = None,
+    configured_root: str | None = None,
+) -> str:
+    """Build the public font stylesheet without reading Flask request globals."""
+    entry = resolve_font(chosen or DEFAULT_FONT_ID, configured_root)
+    return (
+        f"{font_face_css(configured_root)}\n\n"
+        ":root {\n"
+        f"  --od-font-family: {entry['stack']};\n"
+        "}\n"
+        "body, .od-shell, .od-topnav, button, input, select, textarea {\n"
+        "  font-family: var(--od-font-family);\n"
+        "}\n"
+    )
+
+
 # Fonts are operator-supplied files landing on a served directory, so uploads
 # are treated as untrusted: extension allowlist + size cap + magic-byte check.
 ALLOWED_FONT_EXTENSIONS = frozenset({'.ttf', '.otf', '.woff', '.woff2'})
@@ -231,9 +256,16 @@ _FONT_MAGIC = (
 )
 
 
-def _max_font_bytes() -> int:
+def _max_font_bytes(configured_limit: int | None = None) -> int:
+    if configured_limit is None:
+        try:
+            from flask import current_app
+
+            configured_limit = current_app.config.get('FONT_MAX_BYTES')
+        except (ImportError, RuntimeError):
+            configured_limit = None
     try:
-        value = int(current_app.config.get('FONT_MAX_BYTES') or 0)
+        value = int(configured_limit or 0)
     except (TypeError, ValueError):
         value = 0
     return value if value > 0 else DEFAULT_FONT_MAX_BYTES
@@ -243,7 +275,10 @@ def looks_like_font(head: bytes) -> bool:
     return any(head.startswith(sig) for sig in _FONT_MAGIC)
 
 
-def store_font_file(file_storage) -> dict:
+def store_font_file(
+    file_storage, *, configured_root: str | None = None,
+    max_bytes: int | None = None,
+) -> dict:
     """Validate and store an uploaded font. Raises ``ValueError`` with a reason."""
     from werkzeug.utils import secure_filename
 
@@ -266,7 +301,7 @@ def store_font_file(file_storage) -> dict:
     stream.seek(0)
     if size <= 0:
         raise ValueError('That file is empty.')
-    cap = _max_font_bytes()
+    cap = _max_font_bytes(max_bytes)
     if size > cap:
         raise ValueError(f'Font is larger than the {cap // (1024 * 1024)}MB limit.')
 
@@ -275,7 +310,7 @@ def store_font_file(file_storage) -> dict:
     if not looks_like_font(head):
         raise ValueError('That file does not look like a font.')
 
-    root = fonts_dir()
+    root = fonts_dir(configured_root)
     os.makedirs(root, exist_ok=True)
     destination = os.path.join(root, name)
     file_storage.save(destination)
@@ -288,7 +323,7 @@ def store_font_file(file_storage) -> dict:
     }
 
 
-def delete_font_file(filename: str) -> bool:
+def delete_font_file(filename: str, *, configured_root: str | None = None) -> bool:
     """Remove an operator-uploaded font. Built-in names are refused."""
     from werkzeug.utils import secure_filename
 
@@ -298,7 +333,7 @@ def delete_font_file(filename: str) -> bool:
     builtin_files = {e['file'] for e in BUILT_IN_FONTS.values() if e.get('file')}
     if name in builtin_files:
         raise ValueError('That font ships with Oneirodex and cannot be deleted here.')
-    path = os.path.join(fonts_dir(), name)
+    path = os.path.join(fonts_dir(configured_root), name)
     if not os.path.isfile(path):
         return False
     os.remove(path)

@@ -302,6 +302,32 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   max-width: none;
 }
 
+/* On phones, the create form and library list are a vertical document. The
+   desktop fill layout clips the list below the form when both are stacked. */
+@media (max-width: 48rem) {
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) {
+    display: block;
+    min-height: calc(100vh - var(--od-topbar-h, 3.25rem));
+    overflow: visible;
+  }
+
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) #odLibrariesPanel,
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) #odLibrariesReactRoot,
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) .od-libraries-react {
+    display: block;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) .od-table-wrap {
+    min-height: 7rem;
+  }
+
+  .od-admin-legacy:has(.admin_manage_libraries-library-container) .od-table-scroll {
+    min-height: 7rem;
+  }
+}
+
 /* Server Settings (and other Jinja settings shells) sat in a second glass
    panel inside `.container-settings`, then filled each Bootstrap column with
    `.settings-section`. Theme CSS also pinned `.container-settings` at
@@ -438,10 +464,8 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   min-width: 0;
 }
 
-/* Demoted: the top nav already names the active section (active link +
-   optional "<Section> home" button), so the in-page title is a redundant
-   giant heading — keep it for a11y landmark purposes but shrink it to a
-   compact eyebrow label instead of a second hero heading. */
+/* Every page retains a compact visible identity, including when its section
+   destinations extend beyond the horizontal strip on a narrow screen. */
 .od-admin-page h1 {
   margin: 0 0 0.25rem;
   font-family: var(--font-display);
@@ -622,6 +646,10 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
    od-primitives.css's .od-input/.od-select/.od-textarea. `:not([class])` lets a
    control that carries its own class (DataTable filters, .od-select) opt out. */
 .od-admin-input,
+.od-admin-page
+  .od-admin-input:not(:where([type='range'], [type='color'], [type='checkbox'], [type='radio'])),
+.od-admin-panel
+  .od-admin-input:not(:where([type='range'], [type='color'], [type='checkbox'], [type='radio'])),
 .od-admin-panel select:not([class]),
 .od-admin-panel textarea:not([class]),
 .od-admin-page select:not([class]),
@@ -635,6 +663,38 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   background: var(--od-surface-2);
   color: var(--od-text);
   font: inherit;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+/* The explicit field hook wins over legacy form input[type] rules. Preserve
+   native sliders, color pickers and choice controls; file controls retain
+   their native picker because no appearance or file-button rule is applied. */
+.od-admin-page
+  .od-admin-input:not(
+    :where([type='range'], [type='color'], [type='checkbox'], [type='radio'])
+  ):focus,
+.od-admin-panel
+  .od-admin-input:not(
+    :where([type='range'], [type='color'], [type='checkbox'], [type='radio'])
+  ):focus {
+  background: var(--od-surface-2);
+  color: var(--od-text);
+  border-color: var(--od-focus-ring, var(--od-accent));
+  box-shadow: none;
+  outline: none;
+}
+
+.od-admin-page
+  .od-admin-input:not(
+    :where([type='range'], [type='color'], [type='checkbox'], [type='radio'])
+  ):focus-visible,
+.od-admin-panel
+  .od-admin-input:not(
+    :where([type='range'], [type='color'], [type='checkbox'], [type='radio'])
+  ):focus-visible {
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
+  outline-offset: 2px;
 }
 
 .od-admin-list {
@@ -1364,6 +1424,7 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
 
 .od-art-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   margin: 0 0 1rem;
   padding: 0.25rem;
@@ -1375,6 +1436,8 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
 }
 
 .od-art-tabs__btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   appearance: none;
   border: 0;
   background: transparent;

@@ -29,8 +29,6 @@ import os
 import sys
 import uuid
 
-from flask import g, has_request_context, request
-
 __all__ = ["configure_logging", "RequestIdFilter", "JsonFormatter", "new_request_id"]
 
 DEFAULT_LEVEL = "INFO"
@@ -52,6 +50,11 @@ class RequestIdFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - stdlib name
+        try:
+            from flask import g, has_request_context, request
+        except ImportError:
+            g = request = None
+            has_request_context = lambda: False
         if has_request_context():
             rid = getattr(g, "request_id", None)
             if not rid:
@@ -103,6 +106,8 @@ def _json_enabled() -> bool:
 
 def configure_logging(app=None) -> None:
     """Install the console logging config. Idempotent."""
+    from flask import g
+
     level = _level()
     formatter = "json" if _json_enabled() else "console"
 

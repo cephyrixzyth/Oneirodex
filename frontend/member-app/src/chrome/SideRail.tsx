@@ -57,7 +57,12 @@ function useCollapsedGroups() {
  * legacy Jinja pages render the same rail from the same source (the UIR-4
  * pattern). This component contributes no CSS of its own.
  */
-export function SideRail({ railState = 'expanded', onNavigate, onCloseDrawer }: LooseProps) {
+export function SideRail({
+  railState = 'expanded',
+  isMobile = false,
+  onNavigate,
+  onCloseDrawer,
+}: LooseProps) {
   const { isAdmin } = useViewer()
   const {
     showTrailers = false,
@@ -146,7 +151,18 @@ export function SideRail({ railState = 'expanded', onNavigate, onCloseDrawer }: 
   // Container, not the landmark — see AdminSideRail: a brand link inside
   // <nav> is announced as a destination and shadows real ones in queries.
   return (
-    <div className="od-rail">
+    <div
+      className="od-rail"
+      role={isMobile && railState === 'open' ? 'dialog' : undefined}
+      aria-label={isMobile && railState === 'open' ? 'Primary navigation' : undefined}
+      aria-modal={isMobile && railState === 'open' ? true : undefined}
+      aria-hidden={isMobile && railState !== 'open' ? true : undefined}
+      inert={isMobile && railState !== 'open'}
+      tabIndex={-1}
+    >
+      <button type="button" className="od-rail__close" onClick={onCloseDrawer}>
+        Close
+      </button>
       {/* Mark only, no wordmark (W28). The glyph is the brand; the word beside
           it was a second answer to the same question and it capped the mark at
           rail-icon size. `od-rail__brand-text` stays in the markup and is
@@ -157,7 +173,7 @@ export function SideRail({ railState = 'expanded', onNavigate, onCloseDrawer }: 
         <span className="od-rail__brand-text">Oneirodex</span>
       </a>
 
-      <nav className="od-rail__nav" aria-label="Primary">
+      <nav id="od-primary-navigation" className="od-rail__nav" aria-label="Primary">
         {/* The five core destinations, under the product's own name.
             Foldable like every other group — it was the one block of the rail
             that could not be put away, and on a short screen it was also the

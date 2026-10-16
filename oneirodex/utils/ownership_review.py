@@ -1,7 +1,7 @@
 """Atomic, owner-scoped decisions with optimistic concurrency and append-only undo."""
 from sqlalchemy import func, select, update
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Library, OwnershipMatchDecision, UserOwnedTitle
 from oneirodex.utils.library_acl import apply_game_access_filters
 

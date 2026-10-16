@@ -19,7 +19,7 @@ def _library_root() -> str:
         upload = current_app.config.get('UPLOAD_FOLDER')
         if upload:
             return upload
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         pass
     return library_dir(os.path.dirname(os.path.dirname(__file__)))
 

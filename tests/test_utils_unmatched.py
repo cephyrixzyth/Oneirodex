@@ -63,9 +63,9 @@ class TestHandleDeleteUnmatchedOnly:
     """Tests for handle_delete_unmatched function with all=False (replaces clear_only_unmatched_folders tests)."""
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_only_success(self, mock_logger, mock_flash, 
                                                  mock_url_for, mock_redirect, mock_log_system_event,
@@ -77,9 +77,9 @@ class TestHandleDeleteUnmatchedOnly:
         
         with app.app_context():
             with app.test_request_context():
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -104,9 +104,9 @@ class TestHandleDeleteUnmatchedOnly:
                     assert result == mock_redirect_response
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_only_no_folders(self, mock_logger, mock_flash,
                                                     mock_url_for, mock_redirect, mock_log_system_event,
@@ -131,9 +131,9 @@ class TestHandleDeleteUnmatchedOnly:
         
         with app.app_context():
             with app.test_request_context():
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -154,9 +154,9 @@ class TestHandleDeleteUnmatchedOnly:
 
     @patch('oneirodex.utils.unmatched.log_system_event')
     @patch('oneirodex.utils.unmatched.db.session.execute')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_only_database_error(self, mock_logger, mock_flash,
                                                         mock_url_for, mock_redirect,
@@ -169,9 +169,9 @@ class TestHandleDeleteUnmatchedOnly:
         
         with app.app_context():
             with app.test_request_context():
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -193,9 +193,9 @@ class TestHandleDeleteUnmatchedOnly:
 
     @patch('oneirodex.utils.unmatched.log_system_event')
     @patch('oneirodex.utils.unmatched.db.session.execute')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_only_unexpected_error(self, mock_logger, mock_flash,
                                                           mock_url_for, mock_redirect,
@@ -208,9 +208,9 @@ class TestHandleDeleteUnmatchedOnly:
         
         with app.app_context():
             with app.test_request_context():
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -235,9 +235,9 @@ class TestHandleDeleteUnmatched:
     """Tests for handle_delete_unmatched function."""
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_all_true(self, mock_logger, mock_flash, mock_url_for,
                                              mock_redirect, mock_log_system_event, app, db_session, sample_unmatched_folders):
@@ -249,9 +249,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -278,9 +278,9 @@ class TestHandleDeleteUnmatched:
                     assert result == mock_redirect_response
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_all_false(self, mock_logger, mock_flash, mock_url_for,
                                               mock_redirect, mock_log_system_event, app, db_session, sample_unmatched_folders):
@@ -292,9 +292,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -319,9 +319,9 @@ class TestHandleDeleteUnmatched:
 
     @patch('oneirodex.utils.unmatched.log_system_event')
     @patch('oneirodex.utils.unmatched.db.session.execute')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_database_error(self, mock_logger, mock_flash, mock_url_for,
                                                    mock_redirect, mock_execute, mock_log_system_event, app, db_session):
@@ -336,9 +336,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -360,9 +360,9 @@ class TestHandleDeleteUnmatched:
 
     @patch('oneirodex.utils.unmatched.log_system_event')
     @patch('oneirodex.utils.unmatched.db.session.execute')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_unexpected_error(self, mock_logger, mock_flash, mock_url_for,
                                                      mock_redirect, mock_execute, mock_log_system_event, app, db_session):
@@ -377,9 +377,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -400,9 +400,9 @@ class TestHandleDeleteUnmatched:
                     assert result == mock_redirect_response
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_no_folders_to_delete(self, mock_logger, mock_flash, mock_url_for,
                                                          mock_redirect, mock_log_system_event, app, db_session, 
@@ -428,9 +428,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'
@@ -451,9 +451,9 @@ class TestHandleDeleteUnmatched:
                     assert result == mock_redirect_response
 
     @patch('oneirodex.utils.unmatched.log_system_event')
-    @patch('oneirodex.utils.unmatched.redirect')
-    @patch('oneirodex.utils.unmatched.url_for')
-    @patch('oneirodex.utils.unmatched.flash')
+    @patch('flask.redirect')
+    @patch('flask.url_for')
+    @patch('flask.flash')
     @patch('oneirodex.utils.unmatched.logger')
     def test_handle_delete_unmatched_logging_output(self, mock_logger, mock_flash, mock_url_for,
                                                    mock_redirect, mock_log_system_event, app, db_session, sample_unmatched_folders):
@@ -465,9 +465,9 @@ class TestHandleDeleteUnmatched:
         with app.app_context():
             with app.test_request_context():
                 # Mock Flask-Login current_user and session within context
-                with patch('oneirodex.utils.unmatched.current_user', new_callable=MagicMock) as mock_current_user, \
-                     patch('oneirodex.utils.unmatched.request') as mock_request, \
-                     patch('oneirodex.utils.unmatched.session') as mock_session:
+                with patch('flask_login.current_user', new_callable=MagicMock) as mock_current_user, \
+                     patch('flask.request') as mock_request, \
+                     patch('flask.session') as mock_session:
                     
                     mock_current_user.name = 'testuser'
                     mock_current_user.role = 'admin'

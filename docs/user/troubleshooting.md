@@ -14,7 +14,7 @@ Quick checks before pinging an admin.
 | Chat, Release calendar (or another page reached from the rail) shows only the room scenery — no rail, no content | Server predates the module-identity fix: the shell linked the bundle with a `?v=` token while route chunks import it bare, so the page ran two copies of the app's context and unmounted itself | Fixed in the current tree — ask the admin to rebuild. Until then Game Catalog, Discover and Systems still work; Chat opens from any of them via the rail. |
 | Theme didn’t apply | Server predates the constant-folding fix | Fixed — see [below](#a-new-theme-doesnt-appear-after-reload). On an older build only a server restart applied a theme change. |
 | Font pref changed nothing | Server predates the `fonts.css` fix | Fixed — see [below](#the-font-preference-had-no-effect). On an older build no font choice, including the default, ever reached the page. |
-| Preferences panel is blank / errors | Server predates the room-card picker Jinja fix | Fixed — see [below](#preferences-will-not-open). On an older build the theme picker crashed while rendering. |
+| Preferences panel is blank / errors | Server predates the room-card picker fix | Fixed — see [below](#preferences-will-not-open). On an older build the theme picker crashed while rendering. |
 | Can’t find a page | Nav clutter | **Ctrl+K** / ⌘K command palette — [faq.md](faq.md) |
 | Help / Trailers missing after a refresh on Systems, Chat, or Collections | Older build hid those More items on `member_bp` pages | Update the server. They follow Admin → Server Settings (`showHelpButton` / `showTrailers`) on every member page. In-app clicks from Discover could still show them while a hard refresh hid them. |
 | Chat cramped on phone | Old frontend build | Admin rebuild `member-app` (Chat slide-out stacks ≤900px) |
@@ -28,12 +28,12 @@ see: the page came back with the previous theme's colours, and only a server
 restart ever applied one. Re-picking, hard refreshing and clearing the cache all
 made no difference, because none of them were the problem.
 
-Every template asks for its stylesheets with a *literal* path, and Jinja
-evaluates a filter applied to a literal once, at template-compile time, then
-caches the compiled template for the life of the server process. The first
-page rendered after a restart therefore baked its theme's URLs into every later
-render. The `<html data-theme>` attribute is a variable, never folded, which is
-why the page correctly *announced* the new theme while wearing the old one.
+Before the Python shell builders replaced the Jinja documents, a theme URL
+filter on a literal could be evaluated at template-compile time and cached for
+the server process. The first page rendered after a restart therefore baked
+its theme URLs into later renders. The `<html data-theme>` attribute changed,
+which is why the page could announce the new theme while still wearing the old
+one. The current shell builders resolve the URL through the shared asset helper.
 
 If you are on a build from before this fix, a server restart is the workaround.
 

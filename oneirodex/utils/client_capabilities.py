@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from oneirodex.models import ApiToken
+from oneirodex.runtime_native.auth_resolver import token_has_scope
 
 DEVICE_KINDS = frozenset({'companion', 'thin', 'browser'})
 DEFAULT_DEVICE_KIND = 'companion'
@@ -39,16 +40,19 @@ def _token_has_presence(token: ApiToken | None) -> bool:
     return token.has_scope('write:presence')
 
 
-def _token_has_lifecycle(token: ApiToken | None) -> bool:
-    if token is None:
+def _token_has_lifecycle(token: ApiToken | None, user=None) -> bool:
+    if token is None or user is None:
         return False
-    return token.has_scope('write:download') or token.has_scope('write:library')
+    return token_has_scope(user, token, 'write:download') or token_has_scope(
+        user, token, 'write:library'
+    )
 
 
 def resolve_client_capabilities(
     device_kind: str | None,
     *,
     api_token: ApiToken | None = None,
+    user=None,
 ) -> dict:
     """Return allows/denies for the current client seat."""
     kind = normalize_device_kind(device_kind)
@@ -60,7 +64,7 @@ def resolve_client_capabilities(
     if _token_has_presence(api_token):
         allows.append(PRESENCE_CAP)
 
-    if kind == 'companion' and _token_has_lifecycle(api_token):
+    if kind == 'companion' and _token_has_lifecycle(api_token, user):
         for cap in sorted(LIFECYCLE_CAPS):
             if cap not in allows:
                 allows.append(cap)
@@ -78,10 +82,11 @@ def should_deliver_install_commands(
     device_kind: str | None,
     *,
     api_token: ApiToken | None,
+    user=None,
 ) -> bool:
     """Install/update queue is companion-only and requires download/lifecycle scopes."""
     if api_token is None:
         return False
     if normalize_device_kind(device_kind) != 'companion':
         return False
-    return _token_has_lifecycle(api_token)
+    return _token_has_lifecycle(api_token, user)

@@ -6,19 +6,18 @@
 
 ## Open preferences
 
-From the member SPA **Account** drawer (under TopNav) → **Preferences**, or Ctrl/Cmd+K → Preferences. The modal uses sectioned aurora chrome (`od-prefs-modal`: Library · Look & density · Game language) — dense sections, **no heavy cards**. Changes save to your user profile and usually reload the page.
+From the member SPA **Account** menu → **Preferences**, or Ctrl/Cmd+K → Preferences. The member and admin SPAs share the same React dialog and validated preferences API. Changes save to your user profile and reload the page so server-provided theme styles and shell settings refresh.
 
-Preferences is three folding sections — **Library**, **Look & density** and **Game
-language**. Fold the ones you are not using and it stays folded next time; the panel
-opens fully expanded until you change that.
+Preferences is organized into **Library**, **Look & density**, **Play in browser** (when enabled), **Game language**, and **Install this library** (when supported). Sections remember which ones you folded. Theme and icon choices preview in the current shell; closing without saving restores the previous look.
 
 ## Color theme presets
 
-- Pick a preset from the **room-card picker** in Preferences — the six current designs are Mosslight, Afterglow Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Uploaded packs appear under **Installed**. The underlying `<select>` is visually hidden. Preferences is the only theme picker. Admins also get **Reset Default Themes** under Look & density (same action as Admin → Themes) after a deploy that changes theme CSS.
+- Pick a preset from the **room-card picker** in Preferences — the six current designs are Mosslight, Afterglow Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Uploaded packs appear under **Installed**. Preferences is the only theme picker. Admins also get **Reset Default Themes** under Look & density (same action as Admin → Themes) after a deploy that changes theme CSS.
 - A theme is a **room**, not a solid colour. Member and admin chrome share atmosphere with browser-play rooms (`html[data-era]`), while each design has its own palette, geometry, icon pack, and material feel.
 - **Default (system)** is the built-in theme id `default` (saved explicitly — not `None`). It keeps the green accent and wood-den scenery.
 - The six new designs vary accent, surfaces, glass/CRT, typography, spacing, geometry and icon style. Ask an admin to **Reset Default Themes** after a deploy so the library volume receives the current designs. Old shipped presets are retired; uploaded themes are kept and old saved selections map to a replacement.
 - Picking a room card also selects that preset’s paired icon pack (still changeable before Save). The live preview repaints the accent **and** switches the room scenery before you save.
+- Selecting a theme or icon pack previews it in the current page. **Cancel**, Escape, or closing Preferences without saving restores the saved theme and icon pack; **Save changes** keeps the selection and reloads the app.
 - The chosen theme applies on the **next page load** — every stylesheet, the brand mark, the tile chrome, the **stock avatars**, and **backup/placeholder covers** follow it. Untitled games get a Pillow placeholder painted in the active decade room (cached per theme). The seven avatars Oneirodex ships are recoloured into each preset's palette. An avatar you uploaded yourself is your picture and is never recoloured.
 - If cards do nothing, accents look wrong, rooms stay flat, or presets still look accent-only, the library volume may have stale theme files — ask an admin to **Reset Default Themes** after a rebuild.
 
@@ -31,7 +30,7 @@ opens fully expanded until you change that.
 ## Icon packs (independent of color)
 
 - Preferences → **Icon pack**: Outline, Filled, Duotone, Pixel, Soft, Mono block.
-- Outline is the default stroke set. The other five packs draw their own SVGs for every CORE glyph (primary rail, settings, More-menu set, plus user / menu / more / play). Preferences chips still preview the five primary-rail glyphs.
+- Outline is the default stroke set. The other five packs draw SVGs for 17 shared icons, including the download/downloads alias. Other shared icons keep their standard outline shape. Preferences chips preview the five primary-rail drawings.
 - Packs use `currentColor`, so they work with **any** color theme (e.g. Aurora + Pixel).
 - A preset can also set the icon *silhouette* — stroke weight, corner style, and whether glyphs are outlined or solid. A glyph drawn as a solid shape (the Favorites heart, the play triangle) stays visible under the outline presets rather than being erased by them.
 
@@ -60,7 +59,7 @@ opens fully expanded until you change that.
 
 ## Tile size
 
-- Preference: continuous **0–100% slider** (TopNav) — legacy S/M/L/XL values still load and map onto the scale.
+- Preference: continuous **0–100% slider** (TopNav) — changes save automatically to the same validated preferences API used by the dialog; legacy S/M/L/XL values still load and map onto the scale.
 - Affects Library / Favorites / Discover shelves; denser gaps on smaller sizes; grid re-measures with a short debounce so dragging feels smooth instead of snapping between sizes. Range is about **120–400px** (0–100%). **Grid** and **Rows** use that size too — Grid is genre shelves, Rows is a scaling title list, not a denser wrap.
 - **Everything on a tile scales with it** — the corner controls (menu, favourite, play status), the badges, the platform chip and the Preview pill all derive their size from the tile, so a 120% tile and a 30% tile read the same way rather than one being all chrome.
 - Hovering a tile grows it **25%** equally around its resting box (a transform, so the grid does not reflow), from the tile's own centre — including the first and last tile in a Discover row, which used to grow sideways out of the row edge. There is no accent glow on the enlarge.
@@ -69,7 +68,7 @@ opens fully expanded until you change that.
 ## Items per page
 
 - Preference: **items per page** for Library / similar browse grids.
-- Allowed values: **20 / 50 / 100 / 200 / 250 / 300 / 400 / 500 / 1000** (API allowlist; other values are rejected).
+- Allowed values: **20 / 50 / 100 / 200 / 300 / 400 / 500 / 1000** (API allowlist; other values are rejected).
 
 ## Preferred game language
 

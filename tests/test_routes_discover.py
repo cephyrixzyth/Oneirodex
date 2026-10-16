@@ -288,7 +288,7 @@ def _discover_game(**overrides):
 class TestGameDetails:
     """Test game details functionality."""
 
-    @patch('oneirodex.routes_discover.game_card_flags')
+    @patch('oneirodex.utils.discover_projections.game_card_flags')
     def test_discover_game_data_matches_shared_card_shape(
         self, mock_game_card_flags, tmp_path
     ):
@@ -307,7 +307,7 @@ class TestGameDetails:
         # test_utils_cover_url.py, and depending on it here made the assertion
         # a statement about the developer's filesystem.
         with app.test_request_context(), patch(
-            'oneirodex.routes_discover.resolve_game_cover_url',
+            'oneirodex.utils.discover_projections.resolve_game_cover_url',
             return_value='/static/library/images/cover.jpg',
         ):
             result = serialize_discover_game(
@@ -380,22 +380,6 @@ class TestGameDetails:
         assert game.name.startswith('Test Game')
         assert game.summary.startswith('Test summary')
         assert isinstance(game.size, int)
-
-
-class TestContextProcessor:
-    """Test the context processor functionality."""
-
-    @patch('oneirodex.routes_discover.get_global_settings')
-    def test_inject_settings_context_processor(self, mock_get_global_settings, app):
-        """Test that the context processor injects global settings."""
-        mock_settings = {'theme': 'default', 'site_name': 'Oneirodex'}
-        mock_get_global_settings.return_value = mock_settings
-        
-        with app.app_context():
-            from oneirodex.routes_discover import inject_settings
-            result = inject_settings()
-            
-        assert result == mock_settings
 
 
 class TestErrorHandling:

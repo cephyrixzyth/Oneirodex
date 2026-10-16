@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-inspect-staged-mod"
+description = "Allows validating staged mod archive size and entry counts before applying them."
+commands.allow = ["inspect_staged_mod"]

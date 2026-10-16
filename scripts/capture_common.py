@@ -106,11 +106,27 @@ def login(page) -> bool:
     """
     try:
         page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=25_000)
-        page.fill("#username", USER)
-        page.fill("#password", PASSWORD)
-        page.press("#password", "Enter")
-        page.wait_for_load_state("domcontentloaded", timeout=25_000)
-        page.wait_for_timeout(600)
+        username = page.locator("#username")
+        if username.count():
+            username.fill(USER)
+            password = page.locator("#password")
+        else:
+            # The native React auth form uses accessible labels and stable
+            # field names instead of the legacy Jinja form's DOM ids.
+            username = page.get_by_label("Username", exact=True)
+            password = page.get_by_label("Password", exact=True)
+            username.fill(USER)
+        if username.count() and password.count():
+            password.fill(PASSWORD)
+        else:
+            raise RuntimeError("login form fields were not found")
+        password.press("Enter")
+        # The native login is a React form: its JSON response changes history
+        # after the document's DOMContentLoaded event has already fired. Wait
+        # for the authenticated route itself instead of guessing a short delay.
+        page.wait_for_function(
+            "() => window.location.pathname !== '/login'", timeout=10_000,
+        )
         return "/login" not in page.url
     except Exception as exc:  # noqa: BLE001
         print(f"    login failed: {type(exc).__name__}: {str(exc)[:120]}")

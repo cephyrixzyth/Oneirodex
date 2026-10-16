@@ -482,7 +482,7 @@ class TestUnmatchedFolders:
         assert folder['platform_id'] == PLATFORM_IDS.get('PCWIN')  # Should be 6
         assert folder['platform_id'] == 6
     
-    @patch('oneirodex.routes_apis.scan_unmatched_rows.igdb_platform_id_for', return_value=None)
+    @patch('oneirodex.utils.scan_unmatched_rows.igdb_platform_id_for', return_value=None)
     def test_unmatched_folders_no_platform_mapping(self, _mock_igdb, client, admin_user, db_session):
         """Test unmatched_folders when platform exists but has no ID mapping."""
         # Create library with a platform; lookup is stubbed to None.

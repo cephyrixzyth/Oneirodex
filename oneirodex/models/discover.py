@@ -2,7 +2,7 @@
 materialised signal (taste facets, similarity, impression damping)."""
 from datetime import datetime, timezone
 
-from oneirodex import db
+from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
 class DiscoverySection(db.Model):

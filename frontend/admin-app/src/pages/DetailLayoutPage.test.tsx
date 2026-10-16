@@ -102,4 +102,39 @@ describe('DetailLayoutPage', () => {
     render(<DetailLayoutPage />)
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
+
+  test('failed save keeps the draft and blocks changes while saving', async () => {
+    const user = userEvent.setup()
+    let resolveSave!: (value: any) => void
+    globalThis.fetch = vi.fn(async (_url, init) =>
+      init?.method === 'PUT'
+        ? new Promise((resolve) => {
+            resolveSave = resolve
+          })
+        : jsonOk(DEFAULT),
+    ) as unknown as typeof fetch
+    render(<DetailLayoutPage />)
+    const visible = await screen.findByRole('checkbox', { name: 'Show media' })
+    await user.click(visible)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(visible).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move media up' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reset defaults' })).toBeDisabled()
+    resolveSave(jsonOk({ error: 'Layout save unavailable' }, 500))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Layout save unavailable')
+    expect(visible).not.toBeChecked()
+    expect(visible).toBeEnabled()
+  })
+
+  test('malformed saved response retains the current layout', async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn(async (_url, init) =>
+      jsonOk(init?.method === 'PUT' ? {} : DEFAULT),
+    ) as unknown as typeof fetch
+    render(<DetailLayoutPage />)
+    await screen.findByRole('checkbox', { name: 'Show summary' })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('invalid response')
+    expect(screen.getByRole('list', { name: 'Detail page sections' }).children).toHaveLength(3)
+  })
 })

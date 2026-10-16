@@ -26,6 +26,7 @@ from oneirodex.utils.ai_artwork import (
 from oneirodex.utils.preset_themes import (
     PRESET_BY_SLUG,
     PRESET_SLUGS,
+    RETIRED_PRESET_ALIASES,
     canonical_theme_slug,
     era_for_theme,
     preset_tokens,
@@ -172,15 +173,55 @@ def mark_path(theme: str, platform: str, package_root: str | Path | None = None)
     return theme_dir(theme, package_root) / f'{plat}.webp'
 
 
+def _legacy_mark_theme_slugs(theme: str, package_root: str | Path | None = None) -> list[str]:
+    canonical = canonical_theme_slug(_validate_slug(theme, kind='theme'))
+    if canonical != 'default' and canonical not in PRESET_BY_SLUG:
+        raise ValueError(f'Unknown theme slug: {canonical}')
+    root = marks_root(package_root)
+    return [
+        alias
+        for alias, replacement in RETIRED_PRESET_ALIASES.items()
+        if replacement == canonical and (root / alias).is_dir()
+    ]
+
+
+def existing_mark_path(
+    theme: str,
+    platform: str,
+    package_root: str | Path | None = None,
+) -> Path | None:
+    """Return a canonical mark or compatible artwork from a retired theme folder."""
+    canonical_path = mark_path(theme, platform, package_root)
+    if canonical_path.is_file():
+        return canonical_path
+    for alias in _legacy_mark_theme_slugs(theme, package_root):
+        legacy_path = marks_root(package_root) / alias / canonical_path.name
+        if legacy_path.is_file():
+            return legacy_path
+    return None
+
+
 def static_mark_url(theme: str, platform: str) -> str:
     theme_slug = canonical_theme_slug(_validate_slug(theme, kind='theme'))
     plat = _validate_slug(platform, kind='platform')
     return f'/static/library/system-marks/{theme_slug}/{plat}.webp'
 
 
+def existing_mark_url(
+    theme: str,
+    platform: str,
+    package_root: str | Path | None = None,
+) -> str:
+    """Prefer an existing canonical mark, then a shipped retired-theme mark."""
+    path = existing_mark_path(theme, platform, package_root)
+    if path is None:
+        return static_mark_url(theme, platform)
+    return f'/static/library/system-marks/{path.parent.name}/{path.name}'
+
+
 def mark_exists(theme: str, platform: str, package_root: str | Path | None = None) -> bool:
     try:
-        return mark_path(theme, platform, package_root).is_file()
+        return existing_mark_path(theme, platform, package_root) is not None
     except ValueError:
         return False
 
@@ -275,7 +316,7 @@ def system_mark_lab_spec(
         'label': _platform_label(plat),
         'prompt': build_system_mark_prompt(platform=plat, theme=theme_slug),
         'negative': _NEGATIVE,
-        'url': static_mark_url(theme_slug, plat),
+        'url': existing_mark_url(theme_slug, plat, package_root),
         'exists': mark_exists(theme_slug, plat, package_root),
     }
 
@@ -290,8 +331,7 @@ def _png_to_webp(png_bytes: bytes, *, size: int = MARK_SIZE) -> bytes:
     return out.getvalue()
 
 
-def _read_manifest(theme: str, package_root: str | Path | None = None) -> dict[str, Any]:
-    path = theme_dir(theme, package_root) / 'manifest.json'
+def _read_manifest_file(path: Path, *, theme: str) -> dict[str, Any]:
     if not path.is_file():
         return {'theme': theme, 'platforms': []}
     try:
@@ -307,6 +347,10 @@ def _read_manifest(theme: str, package_root: str | Path | None = None) -> dict[s
         'theme': theme,
         'platforms': [str(p).lower() for p in platforms if str(p).strip()],
     }
+
+
+def _read_manifest(theme: str, package_root: str | Path | None = None) -> dict[str, Any]:
+    return _read_manifest_file(theme_dir(theme, package_root) / 'manifest.json', theme=theme)
 
 
 def _write_manifest(theme: str, platforms: list[str], package_root: str | Path | None = None) -> None:
@@ -328,18 +372,25 @@ def list_system_marks_catalog(package_root: str | Path | None = None) -> list[di
     """Catalog rows for Art Studio / ops (one row per theme)."""
     rows: list[dict[str, Any]] = []
     for theme in theme_slugs():
-        manifest = _read_manifest(theme, package_root)
+        manifest_platforms = set(_read_manifest(theme, package_root).get('platforms') or [])
+        for alias in _legacy_mark_theme_slugs(theme, package_root):
+            alias_manifest = _read_manifest_file(
+                marks_root(package_root) / alias / 'manifest.json',
+                theme=alias,
+            )
+            manifest_platforms.update(alias_manifest.get('platforms') or [])
         present = [
             pid for pid in platform_ids()
             if mark_exists(theme, pid, package_root)
         ]
+        truthful_manifest = [pid for pid in present if pid in manifest_platforms]
         rows.append({
             'theme': theme,
             'era': era_for_theme(theme),
             'generated': len(present),
             'total': len(platform_ids()),
             'platforms': present,
-            'manifest_platforms': manifest.get('platforms') or [],
+            'manifest_platforms': truthful_manifest,
             'complete': len(present) >= len(platform_ids()),
         })
     return rows
@@ -357,11 +408,12 @@ def generate_system_mark(
     """Generate one mark. Skips when the file exists unless *force*."""
     used_prompt = _resolve_mark_prompt(platform=platform, theme=theme, prompt=prompt)
     path = mark_path(theme, platform, package_root)
-    if path.is_file() and not force:
+    existing = existing_mark_path(theme, platform, package_root)
+    if existing is not None and not force:
         return {
             'theme': theme,
             'platform': platform,
-            'url': static_mark_url(theme, platform),
+            'url': existing_mark_url(theme, platform, package_root),
             'skipped': True,
             'prompt': used_prompt,
         }
@@ -455,12 +507,16 @@ def generate_system_marks(
                     if remaining is not None:
                         remaining -= 1
             except (ArtworkGenerationError, ValueError, OSError) as exc:
+                if isinstance(exc, OSError):
+                    error = 'Failed to write generated system mark'
+                else:
+                    error = str(exc)
                 errors.append({
                     'theme': theme,
                     'platform': plat,
-                    'error': str(exc),
+                    'error': error,
                 })
-                status = f'err:{exc}'
+                status = 'err'
             done += 1
             print(f'[{done}/{planned}] {theme}/{plat} {status}', flush=True)
         if remaining is not None and remaining <= 0:

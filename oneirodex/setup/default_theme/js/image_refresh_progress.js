@@ -17,7 +17,7 @@
  * one — see `rehomeFlashes`. On the member shell the flash container renders
  * above the SPA, so any flash at all shifted the whole grid down and back.
  *
- * Loaded by `base.html` **and** `base_empty.html`. It was only on the former,
+ * Loaded by `base.html` **and** the member SPA renderer. It was only on the former,
  * and the member SPA extends the latter — so on the one page where the layout
  * shift was worst, none of this ran.
  */

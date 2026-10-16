@@ -368,9 +368,9 @@ export function EmulatorFirmwarePanel() {
           onChange={(event) => upload(event.target.files?.[0])}
         />
         {busyLabel ? (
-          <span role="status" aria-busy="true">
+          <PageStatus announcement="status" inline busy>
             {busyLabel}
-          </span>
+          </PageStatus>
         ) : null}
       </div>
 
@@ -401,9 +401,9 @@ export function EmulatorFirmwarePanel() {
       <PageStatus error={error} onRetry={load} />
 
       {notice ? (
-        <p className="od-adminpage-status" role="status">
+        <PageStatus announcement="status" className="od-adminpage-status">
           {notice}
-        </p>
+        </PageStatus>
       ) : null}
 
       <PageStatus loading={loading} inline loadingMessage="Reading firmware volume…" />

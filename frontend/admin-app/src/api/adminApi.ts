@@ -76,6 +76,25 @@ export async function postJson(url: string, body?: unknown) {
   }
 }
 
+/** Multipart POST. The browser transport adds CSRF without overriding the
+ * boundary-bearing Content-Type generated for FormData. */
+export async function postForm<T = unknown>(url: string, body: FormData): Promise<T> {
+  try {
+    return await request<T>(url, { method: 'POST', body })
+  } catch (err) {
+    return rethrowAsAdminError(err, url)
+  }
+}
+
+/** Multipart PUT with the same cookie and CSRF handling as JSON requests. */
+export async function putForm<T = unknown>(url: string, body: FormData): Promise<T> {
+  try {
+    return await request<T>(url, { method: 'PUT', body })
+  } catch (err) {
+    return rethrowAsAdminError(err, url)
+  }
+}
+
 /**
  * POST JSON and return `{ ok, status, data }` without throwing on 4xx/5xx
  * (still redirects on 401, via the transport's `onUnauthorized`). Used for

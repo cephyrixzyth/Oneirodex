@@ -6,9 +6,9 @@ canonical copy now lives here and ``routes_login`` imports it.
 """
 
 from itsdangerous import URLSafeTimedSerializer
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 
 
 def get_serializer() -> URLSafeTimedSerializer:
     """Return a ``URLSafeTimedSerializer`` keyed by the active app's SECRET_KEY."""
-    return URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return URLSafeTimedSerializer(get_runtime_config()['SECRET_KEY'])

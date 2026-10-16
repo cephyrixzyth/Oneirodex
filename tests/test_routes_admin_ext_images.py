@@ -119,6 +119,31 @@ class TestImageQueueRouteRetired:
         assert response.status_code == 200
 
 
+def test_batch_image_upload_does_not_expose_storage_path(client, admin_user, sample_game, monkeypatch):
+    from io import BytesIO
+
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(admin_user.id)
+        sess['_fresh'] = True
+
+    monkeypatch.setattr('oneirodex.routes_admin_ext.images.os.makedirs', lambda *_a, **_k: None)
+
+    def fail_save(_file, _dst):
+        raise OSError('cannot write C:\\private\\images')
+
+    monkeypatch.setattr('werkzeug.datastructures.FileStorage.save', fail_save)
+    response = client.post(
+        '/admin/api/images/batch_upload',
+        data={'files': (BytesIO(b'fake-image'), f'{sample_game.uuid}_cover.png')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['errors'][0]['error'] == 'Could not write image file'
+    assert 'C:\\private\\images' not in response.get_data(as_text=True)
+
+
 class TestImageQueueListAPI:
     """Tests for the image_queue_list API endpoint."""
     

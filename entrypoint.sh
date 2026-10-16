@@ -15,6 +15,10 @@ fi
 if [[ ! -f /app/oneirodex/static/dist/admin-app/admin-app.css ]]; then
     echo "⚠️  Warning: admin-app.css not found — admin SPA chrome will render unstyled. Rebuild the Docker image."
 fi
+if [[ ! -f /app/oneirodex/static/dist/admin-pilot/index.html ]]; then
+    echo "❌ FastAPI admin page routes require the packaged admin-pilot/index.html bundle. Rebuild the Docker image."
+    exit 1
+fi
 if [[ ! -f /app/oneirodex/static/library/themes/default/css/od-tokens.css ]]; then
     echo "⚠️  Warning: themes/default/css/od-tokens.css missing — run init or Admin → Reset Default Themes after boot."
 fi

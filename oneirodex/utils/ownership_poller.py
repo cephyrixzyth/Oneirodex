@@ -159,7 +159,7 @@ def sync_all_linked_accounts() -> dict:
     """
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import StoreAccount
     from oneirodex.utils import store_ownership
     from oneirodex.utils.store_sync_errors import AUTH_REASONS, SyncOutcomeError

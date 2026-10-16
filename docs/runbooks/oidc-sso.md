@@ -30,11 +30,16 @@ Copy from `.env.example`:
 | `OIDC_ROLE_CLAIM` | Claim used for role mapping (default: `groups`) |
 | `OIDC_ROLE_MAP` | JSON object mapping IdP claim values → Oneirodex roles |
 | `OIDC_DISPLAY_NAME` | Login button label (default: `Sign in with SSO`) |
-| `TRUSTED_PROXIES` | Number of trusted reverse-proxy hops (`0` = off, `1` = typical single nginx/Caddy/Traefik) |
+| `TRUSTED_PROXIES` | Number of forwarded proxy hops (`0` = off, `1` = typical single nginx/Caddy/Traefik). Forwarded headers are used only when `TRUSTED_PROXY_CIDRS` also matches the immediate peer. |
+| `TRUSTED_PROXY_CIDRS` | Comma-separated IPs/CIDRs for the immediate proxy source as seen by the Oneirodex container. Use the narrowest stable range possible. |
+
+Supported launchers disable Uvicorn's implicit proxy-header rewriting. Set
+both variables above; Oneirodex applies forwarded values only after checking
+the actual connection peer against `TRUSTED_PROXY_CIDRS`.
 | `SESSION_COOKIE_SECURE` | `true` by default; `false` only for deliberate direct HTTP access (authentication cookies then cross the network) |
 | `REMEMBER_COOKIE_SECURE` | Same as above for remember-me cookies |
 
-Admin settings stored in `global_settings` override env defaults when set.
+OIDC settings stored in `global_settings` may override OIDC env defaults when set. Proxy hop and peer trust remain container environment settings.
 
 ## Authentik checklist (production)
 
@@ -74,6 +79,8 @@ OIDC_REDIRECT_URI=https://oneirodex.example.com/login/oidc/callback
 OIDC_SCOPES=openid email profile
 OIDC_ROLE_CLAIM=groups
 TRUSTED_PROXIES=1
+# Replace with the immediate proxy peer address seen inside the app container.
+TRUSTED_PROXY_CIDRS=172.20.0.5/32
 SESSION_COOKIE_SECURE=true
 REMEMBER_COOKIE_SECURE=true
 ```
@@ -127,7 +134,7 @@ location / {
 }
 ```
 
-3. Set `TRUSTED_PROXIES=1` so Flask honors `X-Forwarded-Proto` / `X-Forwarded-Host` for OIDC redirects and `_external=True` URLs.
+3. Set `TRUSTED_PROXIES=1` and the proxy's source IP/CIDR in `TRUSTED_PROXY_CIDRS` so the app honors `X-Forwarded-Proto` / `X-Forwarded-Host` for OIDC redirects and external URLs.
 4. Keep `SESSION_COOKIE_SECURE=true` when users reach the site over HTTPS.
 
 ### 7. Smoke test (no IdP secrets in repo)
@@ -193,7 +200,7 @@ JIT provisioning creates users with role `user` unless a mapped claim is present
 |---------|--------|
 | No SSO button | `OIDC_ENABLED=true` **and** admin toggle enabled; restart after env change |
 | Redirect URI mismatch | IdP client redirect must match `OIDC_REDIRECT_URI` exactly |
-| Callback uses `http://` behind TLS | Set `TRUSTED_PROXIES=1`; proxy must send `X-Forwarded-Proto: https` |
+| Callback uses `http://` behind TLS | Set `TRUSTED_PROXIES=1`, allowlist the immediate proxy peer in `TRUSTED_PROXY_CIDRS`, and ensure the proxy sends `X-Forwarded-Proto: https` |
 | 503 on SSO click | Install `authlib` (`pip install authlib`) and restart |
 | Login succeeds but instant logout | `SESSION_COOKIE_SECURE` vs HTTP; fix proxy or cookie settings |
 | Wrong role | `OIDC_ROLE_CLAIM` and `OIDC_ROLE_MAP`; verify IdP group claims in token/userinfo |

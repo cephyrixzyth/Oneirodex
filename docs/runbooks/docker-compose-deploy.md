@@ -62,6 +62,11 @@ docker compose up -d --build
 
 App: http://localhost:5006
 
+The image includes the admin React shell and serves its page routes through
+FastAPI. The container entrypoint fails startup if the packaged admin shell is
+missing. Form posts and APIs that have not migrated use their native FastAPI
+compatibility adapters while preserving the existing session and CSRF behavior.
+
 Both Compose layouts set session and remember-me cookies to `Secure` by
 default when those variables are unset. Existing `.env` files from older
 templates may still explicitly set them to `false`; for HTTPS deployments,
@@ -132,9 +137,21 @@ over the Compose network.
 
 | Layer | Default | Change it by |
 |---|---|---|
-| Published host port | `127.0.0.1:5432` — `POSTGRES_HOST_BIND` (default `127.0.0.1`) and `POSTGRES_HOST_PORT` (default `5432`) | `POSTGRES_HOST_BIND=<host LAN IP>` (or `0.0.0.0`) in `.env`, then `docker compose up -d db`. Opt-in; set a strong password first. |
+| Published host port | `127.0.0.1:5432` — `POSTGRES_HOST_BIND` (default `127.0.0.1`) and `POSTGRES_HOST_PORT` (default `5432`) | Set `POSTGRES_HOST_BIND=<host LAN IP>` (or `0.0.0.0`) in `.env`; when an existing database volume is present, startup verifies the configured password through a private loopback-only connection before exposing the port. |
 | Client auth | `docker/postgres/pg_hba.conf`: scram-sha-256 from loopback, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` only. There is no `0.0.0.0/0` rule. | Add a line for any other CIDR (a custom Docker address pool, Tailscale `100.64.0.0/10`, a global IPv6 prefix), then `docker compose up -d --force-recreate db`. |
 | Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and the app container refuses to start while it is still set. Compose falls back to `postgres` only when the variable is unset, so old stacks keep starting (with a warning in the log). | See below. |
+
+The database entrypoint also checks the effective host bind before starting. An
+unset or legacy `postgres` password remains supported on loopback. Non-loopback
+publication requires a non-default `POSTGRES_PASSWORD`. On an existing database
+volume, startup temporarily starts Postgres bound only to the container's
+loopback interface and authenticates with the configured password before the
+published listener starts. The configured account must also be the volume's
+only login-capable superuser, so a second privileged role cannot bypass the
+checked credential. A mismatch, additional login-capable superuser, or failed
+probe refuses startup. Fresh volumes are initialized using the configured
+password. The check runs in the database container, so it still applies when
+the app container is stopped.
 
 Generate a password (hex, because it is spliced into `DATABASE_URL` and `@ : / ? # % $` would break the URL):
 
@@ -153,6 +170,9 @@ things change:
   as above.
 - **If `.env` still has `POSTGRES_PASSWORD=postgres` (or none), the superuser password
   is a known value.** It is no longer reachable from the LAN, but rotate it.
+- **Before enabling a non-loopback bind, rotate the password inside the database**
+  using the steps below. The database entrypoint checks that the configured
+  password authenticates against the existing volume before allowing the bind.
 
 ### Rotating the password on an existing database
 

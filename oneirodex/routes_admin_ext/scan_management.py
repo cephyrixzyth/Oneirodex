@@ -13,7 +13,7 @@ names change (``main.scan_management`` -> ``admin2.scan_management``,
 """
 
 from flask import (
-    flash, redirect, render_template, request, session, url_for,
+    flash, redirect, request, session, url_for,
 )
 from flask_login import login_required
 from sqlalchemy import func, select
@@ -43,6 +43,8 @@ from oneirodex.utils.services.scan_orchestration import (
 )
 from oneirodex.utils.unmatched import handle_delete_unmatched
 
+from oneirodex.utils.admin_spa import render_admin_spa
+
 from . import admin2_bp
 
 
@@ -62,10 +64,28 @@ def scan_management_admin_alias():
     return redirect(url_for('admin2.scan_management', **request.args.to_dict(flat=True)))
 
 
+@admin2_bp.route('/admin/scan-controls', methods=['GET'])
+@login_required
+@admin_required
+def scan_controls_classic_alias():
+    """Keep the native Auto Scan destination useful when the pilot is off."""
+    return redirect(url_for('admin2.scan_management', active_tab='auto'))
+
+
+@admin2_bp.route('/admin/unmatched', methods=['GET'])
+@login_required
+@admin_required
+def unmatched_admin_alias():
+    """Keep the old server-rendered route usable while the native pilot is off."""
+    return redirect(url_for('admin2.scan_management', active_tab='unmatched'))
+
+
 @admin2_bp.route('/scan_management', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def scan_management():
+    if request.method == 'GET':
+        return render_admin_spa(title='Libraries & scans · Oneirodex Admin')
     auto_form = AutoScanForm()
     manual_form = ScanFolderForm()
     release_group_form = ReleaseGroupForm()
@@ -141,18 +161,4 @@ def scan_management():
     if active_tab == 'libraries':
         return redirect(url_for('library.libraries'))
 
-    return render_template('admin/admin_manage_scanjobs.html',
-                           auto_form=auto_form,
-                           manual_form=manual_form,
-                           jobs=jobs,
-                           csrf_form=csrf_form,
-                           active_tab=active_tab,
-                           unmatched_folders=unmatched_folders_with_platform,
-                           unmatched_form=unmatched_form,
-                           game_count=game_count,
-                           libraries=libraries,
-                           game_names_with_ids=game_names_with_ids,
-                           release_group_form=release_group_form,
-                           scanning_filters=scanning_filters,
-                           allowed_file_types=allowed_file_types,
-                           selected_library_uuid=selected_library_uuid)
+    return render_admin_spa(title='Libraries & scans · Oneirodex Admin')

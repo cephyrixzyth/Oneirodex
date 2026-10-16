@@ -15,6 +15,7 @@ from oneirodex.utils.chat import (
     ensure_default_channels,
     list_channels_for_user,
     post_message,
+    parse_chat_limit,
 )
 
 
@@ -65,6 +66,33 @@ def _login(client, app, account):
         sess['_fresh'] = True
     with app.test_request_context():
         login_user(account)
+
+
+@pytest.mark.parametrize(
+    ('raw', 'default', 'maximum', 'expected'),
+    [(None, 50, 100, 50), ('', 20, 50, 20), ('150', 50, 100, 100), ('0', 20, 50, 1)],
+)
+def test_chat_limit_is_defaulted_and_bounded(raw, default, maximum, expected):
+    assert parse_chat_limit(raw, default=default, maximum=maximum) == expected
+
+
+def test_chat_limit_rejects_malformed_value():
+    with pytest.raises(ValueError, match='limit must be an integer'):
+        parse_chat_limit('many', default=50, maximum=100)
+
+
+def test_chat_message_api_rejects_malformed_limit(client, app, db_session, member):
+    with app.app_context():
+        channel = create_household_channel(
+            member, name='Paging room', slug=_slug('paging-room'),
+        )
+        channel_id = channel.id
+    _login(client, app, member)
+
+    response = client.get(f'/api/chat/channels/{channel_id}/messages?limit=many')
+
+    assert response.status_code == 400
+    assert response.get_json()['error'] == 'limit must be an integer'
 
 
 def test_member_can_create_household_channel(app, db_session, member):

@@ -77,6 +77,7 @@ export async function syncLifecycleRegistryToServer(
   try {
     const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/api/client/lifecycle`, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         Authorization: formatBearerAuthorization(token),
         'Content-Type': 'application/json',
@@ -106,6 +107,7 @@ export async function pullLifecycleRegistryFromServer(
   try {
     const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/api/client/lifecycle`, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         Authorization: formatBearerAuthorization(token),
       },

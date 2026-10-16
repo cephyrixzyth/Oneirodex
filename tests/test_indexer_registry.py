@@ -251,6 +251,31 @@ def test_arr_indexers_api_add_and_list(client, app, admin, db_session):
     assert len(data['presets']) >= 1
 
 
+def test_arr_config_response_reports_secret_presence_without_returning_secrets(client, app, admin, db_session):
+    _login(client, app, admin)
+    app.config['ENABLE_ARR_MODULE'] = True
+    _ensure_arr_settings(
+        db_session,
+        prowlarr_url='https://example.com', prowlarr_api_key='never-return-this',
+        qbittorrent_url='http://qbit.local:8080', qbittorrent_password='also-private',
+    )
+    response = client.get('/api/arr/config')
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body['prowlarr_api_key_set'] is True
+    assert body['qbittorrent_password_set'] is True
+    assert 'prowlarr_api_key' not in body
+    assert 'qbittorrent_password' not in body
+
+    saved = client.put('/api/arr/config', json={'prowlarr_url': 'https://example.com'})
+    assert saved.status_code == 200
+    body = saved.get_json()['config']
+    assert body['prowlarr_api_key_set'] is True
+    assert body['qbittorrent_password_set'] is True
+    assert 'never-return-this' not in saved.get_data(as_text=True)
+    assert 'also-private' not in saved.get_data(as_text=True)
+
+
 def test_search_skips_incomplete_native(app, db_session, monkeypatch):
     _ensure_arr_settings(db_session, indexers=[])
     calls = {'n': 0}

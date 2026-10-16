@@ -1,7 +1,7 @@
 """Register-only store ownership sync APIs (never downloads from stores)."""
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import request
+from flask import g, request
 from flask_login import current_user, login_required
 
 from oneirodex.schemas.ownership import (
@@ -52,6 +52,7 @@ from oneirodex.utils.store_sync_jobs import (
     request_cancel,
     run_store_sync,
 )
+from oneirodex.utils.api_tokens import user_has_scope
 from oneirodex.utils.ownership_review import (
     REVIEW_FILTERS,
     ReviewError,
@@ -96,6 +97,11 @@ def undo_ownership_match(title_id):
 
 
 def _match_decision(title_id, *, undo=False):
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or (not undo and 'game_uuid' not in data):
         return api_error('A JSON decision with game_uuid (or null) is required', code='bad_request')
@@ -141,6 +147,11 @@ def _outcome_error(store, reason, job=None):
 
 def _sync_response(store):
     """Run one member-triggered live sync as a recorded job."""
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if not is_ownership_sync_enabled():
         return _outcome_error(store, 'sync_disabled')
     try:
@@ -158,6 +169,11 @@ def _sync_response(store):
 
 
 def _disconnect_response(store, disconnect):
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
     # Holds the member's running slot, so no sync can be mid-flight (and write
@@ -173,6 +189,11 @@ def _disconnect_response(store, disconnect):
 def _connect_response(store, connect):
     """Save a link or reconnect while no sync for it runs; a sync finishing
     later would otherwise write back the old token over the new one."""
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
     try:
@@ -195,6 +216,11 @@ def sync_all_ownership():
     One store failing does not stop the others; each result carries its own
     status and redacted reason. Unlinked stores come back as ``skipped``.
     """
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
     results = sync_all_stores(current_user.id, trigger='member', actor_id=current_user.id)
@@ -209,6 +235,11 @@ def sync_all_ownership():
 def cancel_ownership_sync(store):
     """Ask a running GOG / Epic / Amazon sync to stop at its next page. Steam,
     Xbox and PlayStation make one provider call and are refused, not faked."""
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if store not in LIVE_SYNC_ADAPTERS:
         return api_error('No live sync exists for this store', code='not_found')
     try:
@@ -229,6 +260,11 @@ def _read_csv_payload() -> str:
 
 
 def _csv_response(import_csv, **extra):
+    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+        return api_error(
+            'Missing scope: write:library', code='forbidden',
+            detail={'required_scope': 'write:library'},
+        )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
     csv_text = _read_csv_payload()

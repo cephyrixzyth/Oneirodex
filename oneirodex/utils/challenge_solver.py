@@ -9,10 +9,10 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.security import validate_connector_http_url
 
@@ -78,9 +78,19 @@ def _set_last_error(message: str | None) -> None:
     _LAST_ERROR = message
 
 
-def challenge_solver_enabled() -> bool:
+def _safe_solver_error(exc: Exception) -> str:
+    """Return an operator-useful failure class without retaining request data."""
+    return f'Challenge solver request failed ({type(exc).__name__}).'
+
+
+def _config_values(config=None):
+    return get_runtime_config() if config is None else config
+
+
+def challenge_solver_enabled(config=None) -> bool:
     """Opt-in: env flag OR admin Features DB toggle (either enables)."""
-    raw = current_app.config.get('ENABLE_CHALLENGE_SOLVER', False)
+    values = _config_values(config)
+    raw = values.get('ENABLE_CHALLENGE_SOLVER', False)
     if isinstance(raw, bool):
         env_on = raw
     else:
@@ -91,46 +101,47 @@ def challenge_solver_enabled() -> bool:
     return bool(cfg.get('challenge_solver_enabled'))
 
 
-def get_challenge_config() -> dict[str, Any]:
+def get_challenge_config(config=None) -> dict[str, Any]:
+    values = _config_values(config)
     cfg = _arr_cfg()
     url = (
         (cfg.get('challenge_solver_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('CHALLENGE_SOLVER_URL') or '').strip().rstrip('/')
+        or str(values.get('CHALLENGE_SOLVER_URL') or '').strip().rstrip('/')
     )
     provider = (
         cfg.get('challenge_solver_provider')
-        or current_app.config.get('CHALLENGE_SOLVER_PROVIDER')
+        or values.get('CHALLENGE_SOLVER_PROVIDER')
         or 'flaresolverr_compat'
     )
     if provider not in _VALID_PROVIDERS:
         provider = 'flaresolverr_compat'
     max_tier = cfg.get('challenge_solver_max_tier')
     if max_tier is None:
-        max_tier = current_app.config.get('CHALLENGE_SOLVER_MAX_TIER', 5)
+        max_tier = values.get('CHALLENGE_SOLVER_MAX_TIER', 5)
     try:
         max_tier = int(max_tier)
     except (TypeError, ValueError):
         max_tier = 5
-    timeout_ms = current_app.config.get('CHALLENGE_SOLVER_TIMEOUT_MS', 60000)
+    timeout_ms = values.get('CHALLENGE_SOLVER_TIMEOUT_MS', 60000)
     try:
         timeout_ms = int(timeout_ms)
     except (TypeError, ValueError):
         timeout_ms = 60000
     token_url = (
         (cfg.get('challenge_token_api_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('CHALLENGE_TOKEN_API_URL') or '').strip().rstrip('/')
+        or str(values.get('CHALLENGE_TOKEN_API_URL') or '').strip().rstrip('/')
     )
     token_key = (
         cfg.get('challenge_token_api_key')
-        or current_app.config.get('CHALLENGE_TOKEN_API_KEY')
+        or values.get('CHALLENGE_TOKEN_API_KEY')
         or ''
     )
     return {
-        'enabled': challenge_solver_enabled(),
+        'enabled': challenge_solver_enabled(values),
         'env_enabled': (
-            current_app.config.get('ENABLE_CHALLENGE_SOLVER')
-            if isinstance(current_app.config.get('ENABLE_CHALLENGE_SOLVER'), bool)
-            else str(current_app.config.get('ENABLE_CHALLENGE_SOLVER', '')).lower() in (
+            values.get('ENABLE_CHALLENGE_SOLVER')
+            if isinstance(values.get('ENABLE_CHALLENGE_SOLVER'), bool)
+            else str(values.get('ENABLE_CHALLENGE_SOLVER', '')).lower() in (
                 '1', 'true', 'yes', 'on',
             )
         ),
@@ -144,7 +155,7 @@ def get_challenge_config() -> dict[str, Any]:
     }
 
 
-def save_challenge_config(payload: dict[str, Any]) -> dict[str, Any]:
+def save_challenge_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
     row = _settings_row()
     if row is None:
         row = GlobalSettings()
@@ -194,7 +205,7 @@ def save_challenge_config(payload: dict[str, Any]) -> dict[str, Any]:
             current['challenge_token_api_key'] = key
     row.arr_settings = current
     db.session.commit()
-    return get_challenge_config()
+    return get_challenge_config(config)
 
 
 def is_challenge_response(response: requests.Response) -> bool:
@@ -236,8 +247,11 @@ class ChallengeSolverClient:
         if self.provider == 'trawl':
             try:
                 return self._request_trawl_scrape(url, max_timeout_ms=max_timeout_ms)
-            except RuntimeError:
-                logger.debug('TRAWL /scrape failed; falling back to /v1', exc_info=True)
+            except RuntimeError as exc:
+                logger.debug(
+                    'TRAWL /scrape failed; falling back to /v1 (error_type=%s)',
+                    type(exc).__name__,
+                )
         return self._request_flaresolverr_get(url, max_timeout_ms=max_timeout_ms)
 
     def _request_flaresolverr_get(self, url: str, *, max_timeout_ms: int | None = None) -> SolverSolution:
@@ -249,7 +263,11 @@ class ChallengeSolverClient:
             'maxTimeout': timeout,
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(endpoint, json=payload, timeout=http_timeout)
+        resp = self._session.post(
+            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
+        )
+        if 300 <= resp.status_code < 400:
+            raise RuntimeError('Challenge solver redirect refused')
         if resp.status_code >= 400:
             raise RuntimeError(f'Challenge solver HTTP {resp.status_code}')
         data = resp.json() if resp.content else {}
@@ -268,14 +286,18 @@ class ChallengeSolverClient:
             'maxTier': min(self.max_tier, 4),
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(endpoint, json=payload, timeout=http_timeout)
+        resp = self._session.post(
+            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
+        )
+        if 300 <= resp.status_code < 400:
+            raise RuntimeError('Challenge solver redirect refused')
         if resp.status_code >= 400:
             raise RuntimeError(f'TRAWL scrape HTTP {resp.status_code}')
         data = resp.json() if resp.content else {}
         tier = data.get('tier')
         timings = data.get('timings')
         if tier is not None or timings is not None:
-            logger.debug('TRAWL scrape tier=%s timings=%s', tier, timings)
+            logger.debug('TRAWL scrape returned tier/timing metadata')
         solution = data.get('solution') or data
         if isinstance(solution, dict) and solution.get('status') == 'error':
             raise RuntimeError(str(solution.get('message') or 'TRAWL scrape failed'))
@@ -344,7 +366,10 @@ class TokenCaptchaClient:
             urljoin(self.base_url + '/', 'createTask'),
             json=payload,
             timeout=30,
+            allow_redirects=False,
         )
+        if 300 <= resp.status_code < 400:
+            raise RuntimeError('Token API redirect refused')
         if resp.status_code >= 400:
             raise RuntimeError(f'Token API HTTP {resp.status_code}')
         data = resp.json() if resp.content else {}
@@ -365,7 +390,10 @@ class TokenCaptchaClient:
                 urljoin(self.base_url + '/', 'getTaskResult'),
                 json={'clientKey': self.api_key, 'taskId': task_id},
                 timeout=30,
+                allow_redirects=False,
             )
+            if 300 <= resp.status_code < 400:
+                raise RuntimeError('Token API redirect refused')
             if resp.status_code >= 400:
                 raise RuntimeError(f'Token API HTTP {resp.status_code}')
             data = resp.json() if resp.content else {}
@@ -381,10 +409,10 @@ class TokenCaptchaClient:
         raise RuntimeError('Token task timed out')
 
 
-def _solver_client() -> ChallengeSolverClient | None:
-    if not challenge_solver_enabled():
+def _solver_client(config=None) -> ChallengeSolverClient | None:
+    if not challenge_solver_enabled(config):
         return None
-    cfg = get_challenge_config()
+    cfg = get_challenge_config(config)
     url = cfg.get('url') or ''
     if not url:
         return None
@@ -403,8 +431,9 @@ def _solver_client() -> ChallengeSolverClient | None:
     )
 
 
-def _token_client() -> TokenCaptchaClient | None:
-    cfg = get_challenge_config()
+def _token_client(config=None) -> TokenCaptchaClient | None:
+    values = _config_values(config)
+    cfg = get_challenge_config(values)
     if cfg.get('provider') != 'token_api':
         return None
     token_url = cfg.get('token_api_url') or ''
@@ -417,7 +446,7 @@ def _token_client() -> TokenCaptchaClient | None:
     arr = _arr_cfg()
     api_key = (
         arr.get('challenge_token_api_key')
-        or current_app.config.get('CHALLENGE_TOKEN_API_KEY')
+        or values.get('CHALLENGE_TOKEN_API_KEY')
         or ''
     )
     if not api_key:
@@ -484,8 +513,11 @@ def fetch_with_challenge_retry(
         solution = client.request_get(url)
         _set_last_error(None)
     except Exception as exc:
-        _set_last_error(str(exc))
-        logger.warning('Challenge solver failed for %s: %s', url, exc)
+        _set_last_error(_safe_solver_error(exc))
+        logger.warning(
+            'Challenge solver request failed (error_type=%s)',
+            type(exc).__name__,
+        )
         return resp
 
     retry_kwargs = _apply_solution_to_request_kwargs(kwargs, solution)
@@ -496,14 +528,14 @@ def fetch_with_challenge_retry(
     return retry_resp
 
 
-def challenge_solver_status(*, probe: bool = False) -> dict[str, Any]:
-    cfg = get_challenge_config()
+def challenge_solver_status(*, probe: bool = False, config=None) -> dict[str, Any]:
+    cfg = get_challenge_config(config)
     reachable = False
     error = _LAST_ERROR
     probe_ok = False
     if cfg.get('enabled') and cfg.get('url'):
         if probe:
-            client = _solver_client()
+            client = _solver_client(config)
             if client is None:
                 error = error or 'Solver URL invalid or not configured'
             else:
@@ -513,7 +545,7 @@ def challenge_solver_status(*, probe: bool = False) -> dict[str, Any]:
                     probe_ok = solution.status_code < 500
                     _set_last_error(None)
                 except Exception as exc:
-                    error = str(exc)
+                    error = _safe_solver_error(exc)
                     _set_last_error(error)
         else:
             try:
@@ -522,7 +554,7 @@ def challenge_solver_status(*, probe: bool = False) -> dict[str, Any]:
                 if not ok:
                     error = 'Solver URL failed validation'
             except Exception as exc:
-                error = str(exc)
+                error = f'Solver URL validation failed ({type(exc).__name__}).'
     return {
         'enabled': cfg.get('enabled'),
         'env_enabled': cfg.get('env_enabled'),

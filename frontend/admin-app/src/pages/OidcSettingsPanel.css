@@ -1,0 +1,15 @@
+.od-oidc-panel {
+  scroll-margin-top: 5rem;
+}
+.od-oidc-panel h2 {
+  font-size: var(--od-font-xl);
+}
+.od-oidc-form {
+  min-width: 0;
+}
+.od-oidc-role-map {
+  font-family: var(--od-font-mono);
+}
+.od-oidc-readiness {
+  overflow-wrap: anywhere;
+}

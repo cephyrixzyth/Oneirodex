@@ -62,6 +62,32 @@ def test_approve_proposal_requires_path_and_igdb_id(client, app, admin_user):
     assert 'igdb_id' in response.get_json()['detail']
 
 
+def test_approve_proposal_does_not_return_filesystem_error_path(
+    client, app, admin_user, monkeypatch, tmp_path,
+):
+    _login(client, app, admin_user)
+    private_path = str(tmp_path / 'private-library-root')
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.library_tools.is_safe_path',
+        lambda _path, _bases: (True, None),
+    )
+
+    def fail(_path):
+        raise OSError(f'permission denied: {private_path}')
+
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.library_tools.remove_proposal_files', fail,
+    )
+    response = client.post(
+        '/api/library_tools/proposals/approve',
+        json={'path': private_path, 'igdb_id': 123},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json()['error'] == 'Could not clear proposal files'
+    assert private_path not in response.get_data(as_text=True)
+
+
 def test_doctor_dry_run_requires_roots(client, app, admin_user):
     _login(client, app, admin_user)
     response = client.post('/api/library_tools/doctor/dry_run', json={})

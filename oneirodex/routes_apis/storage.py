@@ -97,7 +97,8 @@ def hardlink_apply(body: HardlinkBody):
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     except OSError as exc:
-        return api_error(f'Hardlink failed: {exc}', code='internal')
+        current_app.logger.warning('Hardlink operation failed (%s)', type(exc).__name__)
+        return api_error('Hardlink operation failed', code='internal')
     try:
         log_system_event(
             f'Hardlink created: {result.get("source")} -> {result.get("dest")}',

@@ -148,6 +148,50 @@ class TestPublicOriginUsesTrustedHostOnly:
         with app.test_request_context('/', base_url='http://192.168.50.116:5006'):
             assert public_origin() == 'http://192.168.50.116:5006'
 
+    def test_native_request_origin_uses_only_a_trusted_matching_host(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from oneirodex.utils import public_origin as origins
+
+        monkeypatch.setattr(origins, 'configured_site_url', lambda: '')
+        request = SimpleNamespace(
+            base_url='http://192.168.50.116:5006/',
+            headers={'host': '192.168.50.116:5006'},
+        )
+        assert origins.public_origin_for_request(request, {}) == 'http://192.168.50.116:5006'
+
+        forged = SimpleNamespace(
+            base_url='http://attacker.example/',
+            headers={'host': 'attacker.example'},
+        )
+        assert origins.public_origin_for_request(forged, {}) == 'http://127.0.0.1'
+
+        mismatch = SimpleNamespace(
+            base_url='http://attacker.example/',
+            headers={'host': 'games.example.test'},
+        )
+        assert origins.public_origin_for_request(
+            mismatch, {'TRUSTED_LINK_HOSTS': 'games.example.test'},
+        ) == 'http://127.0.0.1'
+
+        malformed = SimpleNamespace(
+            base_url='http://192.168.50.116:bad-port/',
+            headers={'host': '192.168.50.116:bad-port'},
+        )
+        assert origins.public_origin_for_request(malformed, {}) == 'http://127.0.0.1'
+
+    def test_native_request_prefers_configured_public_site_url(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from oneirodex.utils import public_origin as origins
+
+        monkeypatch.setattr(origins, 'configured_site_url', lambda: 'https://games.example.test')
+        request = SimpleNamespace(
+            base_url='http://attacker.example/',
+            headers={'host': 'attacker.example'},
+        )
+        assert origins.public_origin_for_request(request, {}) == 'https://games.example.test'
+
 
 class TestResetEmailUrl:
     def test_reset_url_builds_against_a_real_endpoint(self, app, monkeypatch):

@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-End-to-end steps for Unraid: install Authentik, create the Oneirodex OAuth app, set `OIDC_*` + `TRUSTED_PROXIES=1`, smoke-test SSO.
+End-to-end steps for Unraid: install Authentik, create the Oneirodex OAuth app, set `OIDC_*`, `TRUSTED_PROXIES=1`, and the proxy source in `TRUSTED_PROXY_CIDRS`, then smoke-test SSO.
 
 Assume:
 
@@ -99,6 +99,8 @@ OIDC_DISPLAY_NAME=Sign in with SSO
 
 # Critical behind Unraid reverse proxy (Swag / NPM / Traefik)
 TRUSTED_PROXIES=1
+# Replace with the immediate proxy peer address seen inside the app container.
+TRUSTED_PROXY_CIDRS=172.20.0.5/32
 SESSION_COOKIE_SECURE=true
 REMEMBER_COOKIE_SECURE=true
 ```
@@ -107,7 +109,7 @@ Then **Apply / Restart** the Oneirodex container.
 
 ### Why `TRUSTED_PROXIES=1`?
 
-Unraid reverse proxies terminate HTTPS and talk HTTP to the container. Without trusting one proxy hop, Flask builds callback URLs as `http://…:5006/...`, Authentik rejects them, and cookies misbehave. `TRUSTED_PROXIES=1` makes Oneirodex honor `X-Forwarded-Proto: https`.
+Unraid reverse proxies terminate HTTPS and talk HTTP to the container. Without trusting one proxy hop, callback URLs may use `http://…:5006/...`, which Authentik can reject. Set `TRUSTED_PROXIES=1` and allowlist the proxy's source IP/CIDR as seen by the app container in `TRUSTED_PROXY_CIDRS`; this lets Oneirodex honor `X-Forwarded-Proto: https` only from that proxy.
 
 Confirm your proxy sends at least:
 
@@ -149,7 +151,7 @@ Both must be on:
 |--------|-----|
 | No SSO button | Restart container after env change; enable Admin Integrations toggle |
 | Redirect URI mismatch | Authentik redirect URI must equal `OIDC_REDIRECT_URI` exactly |
-| Callback is `http://192.168.x.x:5006/...` | Set `TRUSTED_PROXIES=1`; fix proxy `X-Forwarded-Proto` |
+| Callback is `http://192.168.x.x:5006/...` | Set `TRUSTED_PROXIES=1`, allowlist the proxy peer in `TRUSTED_PROXY_CIDRS`, and fix proxy `X-Forwarded-Proto` |
 | Instant logout after SSO | Cookies: keep `SESSION_COOKIE_SECURE=true` only when users use HTTPS |
 | Wrong / missing email | Authentik user needs email; Oneirodex matches local users by email first |
 
@@ -161,7 +163,7 @@ Both must be on:
 - [ ] OAuth2 provider + Application (`slug` = issuer path)  
 - [ ] Redirect URI = `https://<oneirodex>/login/oidc/callback`  
 - [ ] Groups + groups claim (optional)  
-- [ ] Oneirodex Docker: `OIDC_*` + `TRUSTED_PROXIES=1` + secure cookies  
+- [ ] Oneirodex Docker: `OIDC_*` + `TRUSTED_PROXIES=1` + `TRUSTED_PROXY_CIDRS` + secure cookies
 - [ ] Restart Oneirodex  
 - [ ] Admin → Integrations → enable OIDC + set Site URL  
 - [ ] Smoke SSO login  
@@ -188,5 +190,5 @@ REMEMBER_COOKIE_SECURE=false
 
 In Authentik, register the **same** redirect URI (HTTP is fine for lab only). Create a local Oneirodex admin first — SSO stays optional until **both** `OIDC_ENABLED=true` **and** `global_settings.oidc_enabled` (Admin → Integrations → OIDC / SSO) are on. Put `akadmin` (or household users) in `oneirodex-admin` if the first SSO login should be an admin.
 
-When you later put HTTPS in front, flip cookies to `true`, set `TRUSTED_PROXIES=1`, and update issuer/redirect to HTTPS URLs.
+When you later put HTTPS in front, flip cookies to `true`, set `TRUSTED_PROXIES=1` and the proxy address in `TRUSTED_PROXY_CIDRS`, and update issuer/redirect to HTTPS URLs.
 

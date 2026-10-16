@@ -237,12 +237,13 @@ def capture(page, shots: list[Shot]) -> list[str]:
         try:
             SHOT_DIR.mkdir(parents=True, exist_ok=True)
             out = SHOT_DIR / f"{shot.name}.png"
-            page.screenshot(path=str(out), full_page=shot.full_page, timeout=20_000)
+            image = page.screenshot(full_page=shot.full_page, timeout=20_000)
+            out.write_bytes(image)
             print("    shot:", out.relative_to(ROOT))
             for slot in shot.readme:
                 _sync_readme(out, slot)
         except Exception as exc:  # noqa: BLE001
-            print(f"    shot failed: {type(exc).__name__}")
+            print(f"    shot failed: {type(exc).__name__}: {str(exc)[:200]}")
             failures.append(f"{shot.name} (screenshot)")
         # Leave modals and menus closed for the next surface.
         page.keyboard.press("Escape")

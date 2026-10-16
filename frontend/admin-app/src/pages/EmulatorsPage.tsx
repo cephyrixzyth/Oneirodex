@@ -31,6 +31,16 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalize(data: unknown): EmulatorProfilesData {
   const root = asRecord(data)
+  if (
+    !root.catalog ||
+    typeof root.catalog !== 'object' ||
+    Array.isArray(root.catalog) ||
+    !root.profiles ||
+    typeof root.profiles !== 'object' ||
+    Array.isArray(root.profiles)
+  ) {
+    throw new Error('Emulator profiles returned an invalid response.')
+  }
   const catalog: Record<string, string[]> = {}
   for (const [platform, cores] of Object.entries(asRecord(root.catalog))) {
     catalog[platform] = Array.isArray(cores) ? cores.map(String) : []
@@ -50,11 +60,14 @@ export function EmulatorProfilesForm() {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [saveError, setSaveError] = useState<unknown>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setLoadError(null)
+    setSaveError(null)
+    setStatus('')
     getJson('/api/emulator-profiles')
       .then((data) => {
         if (cancelled) return
@@ -74,8 +87,9 @@ export function EmulatorProfilesForm() {
   }, [reloadKey])
 
   async function save() {
-    if (busy) return
+    if (busy || loading || loadError) return
     setBusy(true)
+    setSaveError(null)
     setStatus('Saving…')
     try {
       const body: Record<string, string | null> = {}
@@ -85,7 +99,8 @@ export function EmulatorProfilesForm() {
       setProfiles(saved.profiles)
       setStatus('Saved.')
     } catch (err) {
-      setStatus(errorText(err) || 'Save failed')
+      setStatus('')
+      setSaveError(errorText(err) || 'Save failed')
     } finally {
       setBusy(false)
     }
@@ -103,6 +118,7 @@ export function EmulatorProfilesForm() {
         preferred core when set.
       </p>
       <PageStatus loading={loading} error={loadError} onRetry={() => setReloadKey((k) => k + 1)}>
+        <PageStatus error={saveError} />
         <p className="od-admin-lede od-admin-lede--flush" aria-live="polite">
           {status}
         </p>
@@ -118,7 +134,8 @@ export function EmulatorProfilesForm() {
                   </label>
                   <select
                     id={`emu-${platform}`}
-                    className="od-emu-select"
+                    className="od-admin-input od-emu-select"
+                    disabled={busy}
                     value={profiles[platform] || ''}
                     onChange={(e) =>
                       setProfiles((prev) => ({ ...prev, [platform]: e.target.value || null }))

@@ -18,6 +18,7 @@ import { scanJobsStructureSignature } from '../../../../oneirodex/setup/default_
 import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
 import { useLibraryScan } from '../hooks/useLibraryScan'
 import { useVisibilityPoll } from '../hooks/useVisibilityPoll'
+import './ScansPage.css'
 
 interface PathModalState {
   path?: string
@@ -120,8 +121,8 @@ export function ScansPage() {
 
   return (
     <Page
-      title="Libraries & scans"
-      lede="Scan jobs, identify workbench, and image queue. Start / queue / force from Scan jobs (Jinja Libraries & scans) or Refresh all here."
+      title="Scan jobs"
+      lede="Review live scan progress, retry completed scans, and inspect unmatched folders."
     >
       <PageStatus error={error} errorMessage="Unable to load scan status." />
       <div className="od-admin-panel">
@@ -135,15 +136,15 @@ export function ScansPage() {
             {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
           </Button>
           {scanMotifActive ? (
-            <span
-              className="od-admin-scan-live"
-              role="status"
-              aria-live="polite"
-              data-state={running ? 'running' : 'queued'}
+            <PageStatus
+              announcement="status"
+              inline
+              className={'od-admin-scan-live'}
+              dataState={running ? 'running' : 'queued'}
             >
               <span className="od-spinner od-spinner--sm" aria-hidden="true" />
               {running ? 'Scanning…' : `Queued… (${queuedJobs.length})`}
-            </span>
+            </PageStatus>
           ) : null}
         </div>
         {!status ? (
@@ -166,6 +167,8 @@ export function ScansPage() {
             <DataTable
               rows={recentJobs}
               getRowKey={(job) => job.id}
+              caption="Recent scan jobs"
+              scrollLabel="Recent scan jobs table"
               emptyMessage="No scan jobs yet."
               initialSort={{ key: 'status', dir: 'asc' }}
               dense
@@ -174,7 +177,9 @@ export function ScansPage() {
                   key: 'id',
                   label: 'Job',
                   value: (job) => String(job.id),
-                  render: (job) => <code>{String(job.id).slice(0, 8)}</code>,
+                  render: (job) => (
+                    <code className="od-scan-job-id">{String(job.id).slice(0, 8)}</code>
+                  ),
                 },
                 {
                   key: 'library',
@@ -306,8 +311,14 @@ export function ScansPage() {
               </p>
             ) : null}
             <p className="od-admin-lede">
-              When a scan is already running, Auto Scan / Refresh all offer <strong>Queue</strong>{' '}
-              (default) or <strong>Force parallel</strong> with an Unraid/NAS load warning.
+              When a scan is already running, the scan controls and Refresh all offer{' '}
+              <strong>Queue</strong> (default) or <strong>Force parallel</strong> with an Unraid/NAS
+              load warning.
+            </p>
+            <p className="od-admin-lede">
+              <a href="/admin/scan-controls">Start or schedule a scan</a>
+              {' · '}
+              <a href="/scan_management?active_tab=manual">Open manual scan and identify</a>
             </p>
           </>
         )}

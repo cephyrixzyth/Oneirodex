@@ -34,6 +34,7 @@ def derive_issues(
     db_reachable=None,
     awake_ok=None,
     companions_stale=None,
+    livekit=None,
 ):
     """Build ``issues`` for ops summary.
 
@@ -88,6 +89,23 @@ def derive_issues(
 
     if awake_ok is False:
         add('awake_fail', 'bad', 'Readiness check failed', href='/awake')
+
+    # LiveKit is optional. Report known problems only when the source has
+    # explicitly established that the feature is enabled; missing fields stay
+    # unknown and must not be turned into an outage or configuration claim.
+    if isinstance(livekit, dict) and livekit.get('enabled') is True:
+        if livekit.get('configured') is False:
+            add(
+                'livekit_incomplete_config',
+                'warn',
+                'LiveKit is enabled but not fully configured',
+            )
+        elif livekit.get('configured') is True and livekit.get('reachable') is False:
+            add(
+                'livekit_unreachable',
+                'warn',
+                'LiveKit is configured but unreachable',
+            )
 
     # Soft scan failures — warning only (hard path/DB/awake cover ops breakers).
     if scan_failures:

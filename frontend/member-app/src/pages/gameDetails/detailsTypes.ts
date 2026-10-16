@@ -3,6 +3,14 @@
 /** A nested payload object the page only ever reads field-by-field. */
 export type DetailsRecord = Record<string, unknown>
 
+export interface TranslationPatch {
+  uuid: string
+  label: string
+  patch_format?: string | null
+  target_language?: string | null
+  source_url?: string | null
+}
+
 /**
  * The `/api/games/<uuid>/details` payload as the page actually reads it.
  *
@@ -65,7 +73,7 @@ export interface DetailsGame {
   player_perspectives?: DetailsRecord[] | null
   platforms?: DetailsRecord[] | null
   urls?: DetailsRecord[] | null
-  translation_patches?: DetailsRecord[] | null
+  translation_patches?: TranslationPatch[] | null
   vr_compat?: 'native_vr' | 'injector_profile' | 'flat' | null
   /** INSP-40 — headset records behind the VR line; deep links only. */
   vr_profiles?: {

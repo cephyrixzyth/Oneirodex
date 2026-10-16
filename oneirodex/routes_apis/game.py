@@ -16,6 +16,7 @@ from oneirodex.models import (
     Theme,
 )
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.game_core import get_game_by_uuid
 from oneirodex.utils.game_details_payload import (
@@ -288,6 +289,7 @@ def game_freshness_get(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/freshness/check', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def game_freshness_check(game_uuid):
     """On-demand local vs store freshness check."""
     from oneirodex.utils.freshness import check_and_store_freshness

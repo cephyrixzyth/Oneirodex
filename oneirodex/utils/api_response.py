@@ -47,35 +47,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from flask import jsonify
+from oneirodex.utils.api_contract import ERROR_CODES, api_error_payload, api_ok_payload
 
 __all__ = ['api_ok', 'api_error', 'ERROR_CODES']
-
-
-# Stable codes. Add here rather than inventing strings at the call site, so the
-# frontend can branch on a known set and QA can assert on it.
-ERROR_CODES = {
-    'bad_request': 400,
-    'unauthorized': 401,
-    'forbidden': 403,
-    'not_found': 404,
-    'conflict': 409,
-    'unprocessable': 422,
-    # Werkzeug rejected the body against MAX_CONTENT_LENGTH before any route
-    # ran, so the per-route "file too large" message never got a chance to
-    # fire. Distinct from `bad_request` because the client's fix is different:
-    # send less, not send differently.
-    'payload_too_large': 413,
-    'rate_limited': 429,
-    'internal': 500,
-    # An upstream the server depends on answered badly — IGDB, SteamGridDB,
-    # GiantBomb, an *arr instance. Distinct from `internal` (our bug) and from
-    # `unavailable` (the integration is switched off), which is a difference the
-    # operator acts on: retry, versus go and configure something. Fifteen route
-    # sites already returned a bare 502 with no code to branch on.
-    'bad_gateway': 502,
-    'unavailable': 503,
-}
 
 
 def api_ok(payload: Mapping[str, Any] | None = None, *, status: int = 200, **extra):
@@ -88,25 +62,9 @@ def api_ok(payload: Mapping[str, Any] | None = None, *, status: int = 200, **ext
     Reserved keys (``ok``, ``error``, ``error_code``) are not overridable; a
     payload carrying them would defeat the point of a stable envelope.
     """
-    body: dict[str, Any] = {}
-    if payload:
-        body.update(payload)
-    if extra:
-        body.update(extra)
+    from flask import jsonify
 
-    for reserved in ('ok', 'error', 'error_code'):
-        body.pop(reserved, None)
-
-    body['ok'] = True
-    # Present and null rather than absent. The documented contract is that
-    # `error` and `error_code` are on *every* response — a client doing
-    # `if (data.error)` or reading `data.error_code` should see the same keys
-    # whichever way the call went, not `undefined` on the success path.
-    body['error'] = None
-    body['error_code'] = None
-    # Legacy mirror: pre-GT-B1 clients branch on `success`.
-    body.setdefault('success', True)
-    return jsonify(body), status
+    return jsonify(api_ok_payload(payload, **extra)), status
 
 
 def api_error(
@@ -138,26 +96,16 @@ def api_error(
     / ``body_code``. ``body_error`` is for the handful of callers that put a
     machine token in ``error`` and a human sentence in ``message``.
     """
-    resolved_status = status if status is not None else ERROR_CODES.get(code, 400)
-    text = str(message or '').strip() or 'Request failed'
-
-    body: dict[str, Any] = {}
-    if extra:
-        body.update(extra)
-
-    body['ok'] = False
-    # `error` stays a string on purpose — see module docstring. Turning it into
-    # an object would render as "[object Object]" in every unmigrated caller.
-    body['error'] = body_error if body_error is not None else text
-    body['error_code'] = code
-    if detail is not None:
-        body['detail'] = detail
-    # Legacy mirrors.
-    body['message'] = text
-    body['success'] = False
-    if body_status is not None:
-        body['status'] = body_status
-    if body_code is not None:
-        body['code'] = body_code
+    body, resolved_status = api_error_payload(
+        message,
+        code=code,
+        status=status,
+        detail=detail,
+        body_status=body_status,
+        body_code=body_code,
+        body_error=body_error,
+        **extra,
+    )
+    from flask import jsonify
 
     return jsonify(body), resolved_status

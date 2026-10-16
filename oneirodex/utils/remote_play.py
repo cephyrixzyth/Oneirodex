@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.security import validate_connector_http_url
 
@@ -28,9 +28,10 @@ def _cfg_dict() -> dict[str, Any]:
     return dict(cfg) if isinstance(cfg, dict) else {}
 
 
-def remote_play_enabled() -> bool:
+def remote_play_enabled(*, config=None) -> bool:
     """Opt-in: env flag OR admin DB toggle."""
-    raw = current_app.config.get('ENABLE_REMOTE_PLAY', False)
+    settings = config if config is not None else get_runtime_config()
+    raw = settings.get('ENABLE_REMOTE_PLAY', False)
     if isinstance(raw, bool):
         env_on = raw
     else:
@@ -41,8 +42,9 @@ def remote_play_enabled() -> bool:
     return bool(getattr(row, 'enable_remote_play', False))
 
 
-def _env_flag(name: str) -> bool:
-    raw = current_app.config.get(name, False)
+def _env_flag(name: str, *, config=None) -> bool:
+    settings = config if config is not None else get_runtime_config()
+    raw = settings.get(name, False)
     if isinstance(raw, bool):
         return raw
     return str(raw).lower() in ('1', 'true', 'yes', 'on')
@@ -71,17 +73,18 @@ def _primary_base_url(cfg: dict[str, Any]) -> str:
     return sunshine or wolf
 
 
-def get_remote_play_config(*, admin: bool = False) -> dict[str, Any]:
+def get_remote_play_config(*, admin: bool = False, config=None) -> dict[str, Any]:
+    settings = config if config is not None else get_runtime_config()
     cfg = _cfg_dict()
     sunshine = (
         (cfg.get('sunshine_base_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('SUNSHINE_BASE_URL') or '').strip().rstrip('/')
+        or str(settings.get('SUNSHINE_BASE_URL') or '').strip().rstrip('/')
     )
     wolf = (
         (cfg.get('wolf_base_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('WOLF_BASE_URL') or '').strip().rstrip('/')
+        or str(settings.get('WOLF_BASE_URL') or '').strip().rstrip('/')
     )
-    provider = (cfg.get('provider') or current_app.config.get('REMOTE_PLAY_PROVIDER') or 'sunshine').strip().lower()
+    provider = (cfg.get('provider') or settings.get('REMOTE_PLAY_PROVIDER') or 'sunshine').strip().lower()
     if provider not in _VALID_PROVIDERS:
         provider = 'sunshine'
     merged = {
@@ -89,17 +92,17 @@ def get_remote_play_config(*, admin: bool = False) -> dict[str, Any]:
         'sunshine_base_url': sunshine,
         'wolf_base_url': wolf,
         'provider': provider,
-        'token_hint': (cfg.get('token_hint') or current_app.config.get('REMOTE_PLAY_TOKEN_HINT') or '').strip(),
-        'pin_hint': (cfg.get('pin_hint') or current_app.config.get('REMOTE_PLAY_PIN_HINT') or '').strip(),
-        'app_hint': (cfg.get('app_hint') or current_app.config.get('REMOTE_PLAY_APP_HINT') or '').strip(),
-        'host_label': (cfg.get('host_label') or current_app.config.get('REMOTE_PLAY_HOST_LABEL') or '').strip(),
+        'token_hint': (cfg.get('token_hint') or settings.get('REMOTE_PLAY_TOKEN_HINT') or '').strip(),
+        'pin_hint': (cfg.get('pin_hint') or settings.get('REMOTE_PLAY_PIN_HINT') or '').strip(),
+        'app_hint': (cfg.get('app_hint') or settings.get('REMOTE_PLAY_APP_HINT') or '').strip(),
+        'host_label': (cfg.get('host_label') or settings.get('REMOTE_PLAY_HOST_LABEL') or '').strip(),
     }
     base = _primary_base_url(merged)
     host, port = _moonlight_endpoint(base)
     row = _settings_row()
     payload: dict[str, Any] = {
-        'enabled': remote_play_enabled(),
-        'env_enabled': _env_flag('ENABLE_REMOTE_PLAY'),
+        'enabled': remote_play_enabled(config=settings),
+        'env_enabled': _env_flag('ENABLE_REMOTE_PLAY', config=settings),
         'db_enabled': bool(getattr(row, 'enable_remote_play', False)) if row else False,
         'provider': provider,
         'sunshine_base_url': sunshine,
@@ -113,7 +116,7 @@ def get_remote_play_config(*, admin: bool = False) -> dict[str, Any]:
         'moonlight_port': port,
     }
     if admin:
-        token = (cfg.get('remote_play_token') or current_app.config.get('REMOTE_PLAY_TOKEN') or '').strip()
+        token = (cfg.get('remote_play_token') or settings.get('REMOTE_PLAY_TOKEN') or '').strip()
         payload['token_set'] = bool(token)
     return payload
 
@@ -138,10 +141,10 @@ def build_copy_hint(cfg: dict[str, Any] | None = None) -> str | None:
     return ' — '.join(parts)
 
 
-def member_remote_play_status() -> dict[str, Any]:
-    if not remote_play_enabled():
+def member_remote_play_status(*, config=None) -> dict[str, Any]:
+    if not remote_play_enabled(config=config):
         return {'enabled': False, 'configured': False}
-    cfg = get_remote_play_config()
+    cfg = get_remote_play_config(config=config)
     return {
         'enabled': True,
         'configured': bool(cfg.get('configured')),

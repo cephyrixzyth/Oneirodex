@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { SettingsPage } from './SettingsPage'
+import { SETTINGS_GROUPS } from '../components/navConfig'
 
 function stubModuleStatus(payload: any, { ok = true, status = 200 } = {}) {
   const fetchMock = vi.fn(async (url) => {
@@ -99,5 +100,39 @@ describe('SettingsPage module badges', () => {
     )
     expect(screen.getByRole('tabpanel', { name: /Library & matching/ })).toBeInTheDocument()
     expect(screen.queryByText('Remote play')).not.toBeInTheDocument()
+  })
+
+  test('section keyboard navigation moves selection and focus and retains configured links', async () => {
+    stubModuleStatus({})
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+    const tabs = screen.getAllByRole('tab')
+    tabs[0].focus()
+    await user.keyboard('{ArrowRight}')
+    expect(tabs[1]).toHaveFocus()
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
+    expect(tabs[0]).toHaveAttribute('tabindex', '-1')
+    await user.keyboard('{End}')
+    expect(tabs[tabs.length - 1]).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+    expect(tabs[0]).toHaveFocus()
+    await user.keyboard('{ArrowLeft}')
+    expect(tabs[tabs.length - 1]).toHaveFocus()
+    await user.keyboard('{Home}')
+    expect(tabs[0]).toHaveFocus()
+    for (let index = 0; index < SETTINGS_GROUPS.length; index += 1) {
+      await user.click(tabs[index])
+      expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', tabs[index].id)
+      expect(tabs[index]).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getAllByRole('tab').filter((tab) => tab.tabIndex === 0)).toHaveLength(1)
+      for (const item of SETTINGS_GROUPS[index].items) {
+        const link = screen.getByText(item.title).closest('a')
+        expect(link).toHaveAttribute('href', item.to)
+      }
+    }
   })
 })

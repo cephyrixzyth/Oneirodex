@@ -201,7 +201,7 @@
 
 .od-shelf__pin:focus-visible,
 .od-shelf__hide:focus-visible {
-  outline: var(--od-focus-ring, 2px solid var(--od-accent));
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
   outline-offset: 2px;
 }
 
@@ -455,6 +455,7 @@
   top: 0;
   bottom: 0;
   width: calc(var(--od-gutter, 1rem) + var(--od-space-6, 1.5rem));
+  min-width: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -491,9 +492,8 @@
   );
 }
 
-/* Present on shelf hover (not wheel), and always for the keyboard — a control
-   that only exists under a pointer cannot be tabbed to. */
-.od-shelf__viewport:hover .od-shelf__arrow:not(:disabled),
+/* Enabled edge controls stay available before pointer/touch activation. */
+.od-shelf__arrow:not(:disabled),
 .od-shelf__arrow:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -520,7 +520,7 @@
 }
 
 .od-shelf__arrow:focus-visible {
-  outline: var(--od-focus-ring, 2px solid var(--od-accent));
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
   outline-offset: -4px;
 }
 
@@ -569,7 +569,7 @@
 }
 
 .od-shelf__more:focus-visible {
-  outline: var(--od-focus-ring, 2px solid var(--od-accent));
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
   outline-offset: 2px;
 }
 

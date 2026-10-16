@@ -1,0 +1,93 @@
+.od-delete-libraries {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgb(5 7 10 / 82%);
+  backdrop-filter: blur(8px);
+}
+
+.od-delete-libraries__panel {
+  display: grid;
+  gap: 1rem;
+  width: min(36rem, 100%);
+  padding: 1.1rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-2xl);
+  background: var(--od-surface);
+  color: var(--od-text);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
+}
+
+.od-delete-libraries__header,
+.od-delete-libraries__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.od-delete-libraries__header h2 {
+  margin: 0;
+  font-size: var(--od-font-lg);
+}
+
+.od-delete-libraries__header p {
+  margin-block: 0.35rem 0;
+}
+
+.od-delete-libraries__targets {
+  max-height: 10rem;
+  overflow: auto;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  color: var(--od-text-muted);
+}
+
+.od-delete-libraries__single {
+  margin: 0;
+}
+
+.od-delete-libraries__force {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.od-delete-libraries__progress {
+  display: grid;
+  gap: 0.5rem;
+  color: var(--od-text-muted);
+}
+
+.od-delete-libraries__progress p {
+  margin: 0;
+}
+
+.od-delete-libraries__progress progress {
+  width: 100%;
+  accent-color: var(--od-accent);
+}
+
+.od-delete-libraries__actions {
+  justify-content: flex-end;
+  padding-block-start: 0.25rem;
+}
+
+@media (max-width: 680px) {
+  .od-delete-libraries {
+    align-items: flex-end;
+    padding: 0.5rem;
+  }
+
+  .od-delete-libraries__panel {
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    padding: 0.85rem;
+  }
+}

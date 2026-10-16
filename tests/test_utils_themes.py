@@ -239,7 +239,7 @@ class TestUploadTheme:
                 assert result is None
 
     @patch('os.path.exists', return_value=False)
-    @patch('oneirodex.utils.themes.flash')
+    @patch('flask.flash')
     def test_upload_theme_upload_folder_missing(self, mock_flash, mock_exists, theme_manager):
         """Test theme upload when upload folder doesn't exist."""
         with theme_manager.app.app_context():
@@ -250,7 +250,7 @@ class TestUploadTheme:
         mock_flash.assert_called_once_with('Error: Library folder does not exist.', 'error')
 
     @patch('os.path.exists')
-    @patch('oneirodex.utils.themes.flash')
+    @patch('flask.flash')
     def test_upload_theme_missing_theme_json(self, mock_flash, mock_exists, theme_manager):
         """Test theme upload with missing theme.json."""
         mock_exists.side_effect = lambda path: 'UPLOAD_FOLDER' in path or 'themes' in path
@@ -271,7 +271,7 @@ class TestUploadTheme:
         assert result is None
 
     @patch('os.path.exists')
-    @patch('oneirodex.utils.themes.flash')
+    @patch('flask.flash')
     def test_upload_theme_missing_css_folder(self, mock_flash, mock_exists, theme_manager, sample_theme_data):
         """Test theme upload with missing CSS folder."""
         mock_exists.side_effect = lambda path: 'UPLOAD_FOLDER' in path or 'themes' in path

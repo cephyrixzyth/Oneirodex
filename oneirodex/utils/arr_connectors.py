@@ -11,10 +11,9 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
-from flask import current_app
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.challenge_solver import fetch_with_challenge_retry
 from oneirodex.utils.indexer_registry import (
@@ -23,6 +22,7 @@ from oneirodex.utils.indexer_registry import (
 )
 from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
 from oneirodex.utils.security import validate_connector_http_url, validate_outbound_http_url
+from oneirodex.utils.runtime_config import get_runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -129,34 +129,56 @@ def _settings() -> GlobalSettings | None:
     ).scalars().first()
 
 
-def get_arr_config() -> dict[str, Any]:
+def get_arr_config(*, config=None) -> dict[str, Any]:
     row = _settings()
     cfg = getattr(row, 'arr_settings', None) if row else None
     if not isinstance(cfg, dict):
         cfg = {}
+    app_config = config if config is not None else get_runtime_config()
     return {
-        'prowlarr_url': (cfg.get('prowlarr_url') or current_app.config.get('PROWLARR_URL') or '').rstrip('/'),
-        'prowlarr_api_key': cfg.get('prowlarr_api_key') or current_app.config.get('PROWLARR_API_KEY') or '',
-        'jackett_url': (cfg.get('jackett_url') or current_app.config.get('JACKETT_URL') or '').rstrip('/'),
-        'jackett_api_key': cfg.get('jackett_api_key') or current_app.config.get('JACKETT_API_KEY') or '',
-        'qbittorrent_url': (cfg.get('qbittorrent_url') or current_app.config.get('QBITTORRENT_URL') or '').rstrip('/'),
-        'qbittorrent_username': cfg.get('qbittorrent_username') or current_app.config.get('QBITTORRENT_USERNAME') or 'admin',
-        'qbittorrent_password': cfg.get('qbittorrent_password') or current_app.config.get('QBITTORRENT_PASSWORD') or '',
-        'transmission_url': (cfg.get('transmission_url') or current_app.config.get('TRANSMISSION_URL') or '').rstrip('/'),
-        'transmission_username': cfg.get('transmission_username') or current_app.config.get('TRANSMISSION_USERNAME') or '',
-        'transmission_password': cfg.get('transmission_password') or current_app.config.get('TRANSMISSION_PASSWORD') or '',
-        'deluge_url': (cfg.get('deluge_url') or current_app.config.get('DELUGE_URL') or '').rstrip('/'),
-        'deluge_password': cfg.get('deluge_password') or current_app.config.get('DELUGE_PASSWORD') or '',
-        'sabnzbd_url': (cfg.get('sabnzbd_url') or current_app.config.get('SABNZBD_URL') or '').rstrip('/'),
-        'sabnzbd_api_key': cfg.get('sabnzbd_api_key') or current_app.config.get('SABNZBD_API_KEY') or '',
-        'nzbget_url': (cfg.get('nzbget_url') or current_app.config.get('NZBGET_URL') or '').rstrip('/'),
-        'nzbget_username': cfg.get('nzbget_username') or current_app.config.get('NZBGET_USERNAME') or '',
-        'nzbget_password': cfg.get('nzbget_password') or current_app.config.get('NZBGET_PASSWORD') or '',
+        'prowlarr_url': (cfg.get('prowlarr_url') or app_config.get('PROWLARR_URL') or '').rstrip('/'),
+        'prowlarr_api_key': cfg.get('prowlarr_api_key') or app_config.get('PROWLARR_API_KEY') or '',
+        'jackett_url': (cfg.get('jackett_url') or app_config.get('JACKETT_URL') or '').rstrip('/'),
+        'jackett_api_key': cfg.get('jackett_api_key') or app_config.get('JACKETT_API_KEY') or '',
+        'qbittorrent_url': (cfg.get('qbittorrent_url') or app_config.get('QBITTORRENT_URL') or '').rstrip('/'),
+        'qbittorrent_username': cfg.get('qbittorrent_username') or app_config.get('QBITTORRENT_USERNAME') or 'admin',
+        'qbittorrent_password': cfg.get('qbittorrent_password') or app_config.get('QBITTORRENT_PASSWORD') or '',
+        'transmission_url': (cfg.get('transmission_url') or app_config.get('TRANSMISSION_URL') or '').rstrip('/'),
+        'transmission_username': cfg.get('transmission_username') or app_config.get('TRANSMISSION_USERNAME') or '',
+        'transmission_password': cfg.get('transmission_password') or app_config.get('TRANSMISSION_PASSWORD') or '',
+        'deluge_url': (cfg.get('deluge_url') or app_config.get('DELUGE_URL') or '').rstrip('/'),
+        'deluge_password': cfg.get('deluge_password') or app_config.get('DELUGE_PASSWORD') or '',
+        'sabnzbd_url': (cfg.get('sabnzbd_url') or app_config.get('SABNZBD_URL') or '').rstrip('/'),
+        'sabnzbd_api_key': cfg.get('sabnzbd_api_key') or app_config.get('SABNZBD_API_KEY') or '',
+        'nzbget_url': (cfg.get('nzbget_url') or app_config.get('NZBGET_URL') or '').rstrip('/'),
+        'nzbget_username': cfg.get('nzbget_username') or app_config.get('NZBGET_USERNAME') or '',
+        'nzbget_password': cfg.get('nzbget_password') or app_config.get('NZBGET_PASSWORD') or '',
         'indexers': list(cfg.get('indexers') or []) if isinstance(cfg.get('indexers'), list) else [],
     }
 
 
-def save_arr_config(payload: dict[str, Any]) -> dict[str, Any]:
+def public_arr_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Return connector configuration without exposing credential values."""
+    return {
+        'prowlarr_url': cfg.get('prowlarr_url') or '',
+        'prowlarr_api_key_set': bool(cfg.get('prowlarr_api_key')),
+        'jackett_url': cfg.get('jackett_url') or '',
+        'jackett_api_key_set': bool(cfg.get('jackett_api_key')),
+        'qbittorrent_url': cfg.get('qbittorrent_url') or '',
+        'qbittorrent_username': cfg.get('qbittorrent_username') or 'admin',
+        'qbittorrent_password_set': bool(cfg.get('qbittorrent_password')),
+        'transmission_url': cfg.get('transmission_url') or '',
+        'transmission_username': cfg.get('transmission_username') or '',
+        'transmission_password_set': bool(cfg.get('transmission_password')),
+        'sabnzbd_url': cfg.get('sabnzbd_url') or '',
+        'sabnzbd_api_key_set': bool(cfg.get('sabnzbd_api_key')),
+        'nzbget_url': cfg.get('nzbget_url') or '',
+        'nzbget_username': cfg.get('nzbget_username') or '',
+        'nzbget_password_set': bool(cfg.get('nzbget_password')),
+    }
+
+
+def save_arr_config(payload: dict[str, Any], *, config=None) -> dict[str, Any]:
     """Update hub connector fields without wiping indexers / challenge / debrid keys."""
     row = _settings()
     if not row:
@@ -164,7 +186,7 @@ def save_arr_config(payload: dict[str, Any]) -> dict[str, Any]:
         db.session.add(row)
     current = dict(getattr(row, 'arr_settings', None) or {})
     # Seed hub defaults from env when keys are absent so validation sees effective values.
-    hub_view = get_arr_config()
+    hub_view = get_arr_config(config=config)
     for key in _HUB_KEYS:
         if key not in current and hub_view.get(key):
             current[key] = hub_view[key]
@@ -195,8 +217,8 @@ def save_arr_config(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def connector_status() -> list[dict[str, Any]]:
-    cfg = get_arr_config()
+def connector_status(*, config=None) -> list[dict[str, Any]]:
+    cfg = get_arr_config(config=config)
     native = indexer_status_summary()
     return [
         native,

@@ -21,10 +21,12 @@ from oneirodex.utils.client_commands import (
     claim_pending_commands,
     enqueue_client_command,
     nack_client_commands,
+    open_path_target_authorized,
 )
 from oneirodex.utils.client_lifecycle import load_lifecycle_map, save_lifecycle_records
 from oneirodex.utils.client_presence import record_client_heartbeat
 from oneirodex.utils.library_acl import user_can_access_game
+from oneirodex.utils.rbac import is_admin
 from oneirodex.schemas.client import ClientLifecycleBody
 from oneirodex.utils.validation import validate_body
 
@@ -43,6 +45,7 @@ def _capabilities_payload(device_kind: str | None = None) -> dict:
     return resolve_client_capabilities(
         device_kind,
         api_token=_api_token(),
+        user=current_user,
     )
 
 
@@ -80,7 +83,9 @@ def client_heartbeat():
     )
     payload = device.to_dict()
     payload.update(_capabilities_payload(device.device_kind))
-    if should_deliver_install_commands(device.device_kind, api_token=_api_token()):
+    if should_deliver_install_commands(
+        device.device_kind, api_token=_api_token(), user=current_user
+    ):
         payload['commands'] = claim_pending_commands(current_user.id)
     else:
         payload['commands'] = []
@@ -138,13 +143,19 @@ def client_commands_post():
         )
 
     if action == 'open_path':
-        # Unmatched / admin scanjobs may omit game_uuid; matched titles still ACL-check.
+        admin = is_admin(current_user)
+        # Unmatched / scan-job paths are admin-only. Members must bind a path
+        # to a game they can access and stay beneath that game's recorded root.
         if game_uuid:
             game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
             if not game:
                 return api_error('Game not found', code='not_found')
             if not user_can_access_game(current_user, game):
                 return api_error('Forbidden', code='forbidden')
+        elif not admin:
+            return api_error('Forbidden', code='forbidden')
+        if not open_path_target_authorized(current_user, game if game_uuid else None, open_path, admin=admin):
+            return api_error('Forbidden', code='forbidden')
         try:
             command = enqueue_client_command(
                 current_user.id,
@@ -195,7 +206,9 @@ def client_commands_get():
     if not _has_companion_token():
         return api_error('Companion API token required', code='forbidden')
     device_kind = normalize_device_kind(request.args.get('device_kind'))
-    if not should_deliver_install_commands(device_kind, api_token=_api_token()):
+    if not should_deliver_install_commands(
+        device_kind, api_token=_api_token(), user=current_user
+    ):
         return jsonify({'commands': []})
     limit = request.args.get('limit', 10, type=int) or 10
     limit = max(1, min(limit, 25))
@@ -207,6 +220,15 @@ def client_commands_get():
 def client_commands_ack():
     if not _has_companion_token():
         return api_error('Companion API token required', code='forbidden')
+    if not (
+        user_has_scope('write:download')
+        or user_has_scope('write:library')
+    ):
+        return api_error(
+            'Missing scope: write:download or write:library',
+            code='forbidden',
+            detail={'required_scope': 'write:download or write:library'},
+        )
     data = request.get_json(silent=True) or {}
     ids = data.get('ids') if isinstance(data.get('ids'), list) else []
     removed = ack_client_commands(current_user.id, [str(i) for i in ids])
@@ -218,6 +240,15 @@ def client_commands_ack():
 def client_commands_nack():
     if not _has_companion_token():
         return api_error('Companion API token required', code='forbidden')
+    if not (
+        user_has_scope('write:download')
+        or user_has_scope('write:library')
+    ):
+        return api_error(
+            'Missing scope: write:download or write:library',
+            code='forbidden',
+            detail={'required_scope': 'write:download or write:library'},
+        )
     data = request.get_json(silent=True) or {}
     ids = data.get('ids') if isinstance(data.get('ids'), list) else []
     released = nack_client_commands(current_user.id, [str(i) for i in ids])

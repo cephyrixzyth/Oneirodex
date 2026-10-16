@@ -192,13 +192,21 @@ def start_library_scan():
             position=None,
         )
 
-    folder = (
-        data.get('folder')
-        or request.form.get('folder')
-        or request.args.get('folder')
-        or library.last_scan_folder
-    )
-    if not folder:
+    use_library_root = data.get('use_library_root') is True
+    if 'use_library_root' in data and not isinstance(data.get('use_library_root'), bool):
+        return api_error('use_library_root must be a boolean', code='bad_request', body_status='rejected', job_id=None, position=None)
+    if use_library_root:
+        folder = data.get('folder', '')
+    else:
+        folder = (
+            data.get('folder')
+            or request.form.get('folder')
+            or request.args.get('folder')
+            or library.last_scan_folder
+        )
+    if not isinstance(folder, str):
+        return api_error('folder must be a string', code='bad_request', body_status='rejected', job_id=None, position=None)
+    if not folder and not use_library_root:
         return api_error(
             (
                 'No folder provided and library has no last_scan_folder. '
@@ -210,12 +218,38 @@ def start_library_scan():
             position=None,
         )
 
+    # Match the Auto Scan form's root-relative picker contract while keeping
+    # old callers that send an absolute `folder` path byte-for-byte compatible.
+    # Resolving and checking the path at the API boundary gives native clients
+    # the same allowlist protection as the classic form handler.
+    from oneirodex.utils.library_roots import resolve_scan_path
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+    folder = folder.strip() if isinstance(folder, str) else ''
+    library_root = data.get('library_root')
+    if library_root is not None and not isinstance(library_root, str):
+        return api_error('library_root must be a string', code='bad_request', body_status='rejected', job_id=None, position=None)
+    resolved_folder, root_error = resolve_scan_path(
+        folder, library_root, current_app,
+    )
+    if root_error:
+        return api_error('Unknown scan location', code='bad_request', body_status='rejected', job_id=None, position=None)
+    allowed_bases = get_allowed_base_directories(current_app)
+    if not allowed_bases:
+        return api_error('Scan locations are not configured', code='unavailable', body_status='rejected', job_id=None, position=None)
+    safe, _path_error = is_safe_path(resolved_folder, allowed_bases)
+    if not safe:
+        return api_error('Access denied for this scan location', code='forbidden', body_status='rejected', job_id=None, position=None)
     scan_mode = (
         data.get('scan_mode')
         or request.form.get('scan_mode')
         or request.args.get('scan_mode')
         or 'folders'
     )
+    if scan_mode not in ('auto', 'folders', 'files'):
+        return api_error('scan_mode must be auto, folders, or files', code='bad_request', body_status='rejected', job_id=None, position=None)
+    if scan_mode == 'auto':
+        from oneirodex.utils.services.scan_orchestration import resolve_scan_mode_for_path
+        scan_mode = resolve_scan_mode_for_path(resolved_folder, scan_mode)
     force_raw = (
         data.get('force_parallel')
         if 'force_parallel' in data
@@ -228,21 +262,52 @@ def start_library_scan():
     )
     queue_policy = parse_queue_policy(policy_raw, force_parallel=force_raw)
 
+    from oneirodex.utils.scan_queue import normalize_schedule_fields
+    schedule_value = data.get('schedule')
+    if schedule_value is not None and not isinstance(schedule_value, str):
+        return api_error('schedule must be a string', code='bad_request', body_status='rejected', job_id=None, position=None)
+    schedule = (schedule_value or '').strip() or None
+    interval_unit = data.get('schedule_interval_unit')
+    cron_expr = data.get('schedule_cron')
+    if interval_unit is not None and not isinstance(interval_unit, str):
+        return api_error('schedule_interval_unit must be a string', code='bad_request', body_status='rejected', job_id=None, position=None)
+    if cron_expr is not None and not isinstance(cron_expr, str):
+        return api_error('schedule_cron must be a string', code='bad_request', body_status='rejected', job_id=None, position=None)
+    schedule_fields = normalize_schedule_fields(
+        schedule,
+        interval_value=data.get('schedule_interval_value'),
+        interval_unit=interval_unit,
+        cron_expr=cron_expr,
+    )
+    if schedule_fields.get('error'):
+        return api_error(schedule_fields['error'], code='bad_request', body_status='rejected', job_id=None, position=None)
+
     def _bool(key, default=False):
         if key in data:
-            return bool(data.get(key))
-        raw = request.form.get(key) or request.args.get(key)
+            raw = data.get(key)
+        else:
+            raw = request.form.get(key) or request.args.get(key)
         if raw is None:
             return default
-        return str(raw).strip().lower() in ('1', 'true', 'yes', 'on')
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return raw != 0
+        if isinstance(raw, str):
+            return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+        return False
 
     result = start_or_queue_scan(
-        folder_path=folder,
+        folder_path=resolved_folder,
         library_uuid=library_uuid,
         scan_mode=scan_mode,
         remove_missing=_bool('remove_missing'),
         download_missing_images=_bool('download_missing_images'),
-        force_updates_extras_scan=_bool('force_updates_extras'),
+        force_updates_extras_scan=_bool('force_updates_extras', _bool('force_updates_extras_scan')),
+        fetch_hltb=_bool('fetch_hltb'),
+        force_hltb_refetch=_bool('force_hltb_refetch'),
+        schedule=schedule,
+        schedule_fields=schedule_fields,
         queue_policy=queue_policy,
         allow_force=True,  # route is @admin_required
         app=current_app._get_current_object(),

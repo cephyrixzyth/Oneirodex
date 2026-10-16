@@ -24,42 +24,14 @@ from oneirodex.utils.debrid_connectors import (
 )
 from oneirodex.utils.indexer_registry import indexer_status_summary
 from oneirodex.utils.module_status import arr_module_on
+from oneirodex.utils.acquire_readiness import (
+    acquire_allowed as _acquire_allowed,
+    indexer_readiness as _indexer_readiness,
+)
 from oneirodex.utils.rbac import is_librarian, normalize_role
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
-
-
-def _acquire_allowed() -> bool:
-    return arr_module_on() or debrid_enabled()
-
-
-def _indexer_readiness() -> dict:
-    """Native + hub readiness for Acquire empty-state (same warning semantics as Arr status)."""
-    if not arr_module_on():
-        return {
-            'native_ready': False,
-            'hubs_ready': False,
-            'indexers_ready': False,
-            'indexer_warnings': [],
-            'native_count': 0,
-            'native_ready_count': 0,
-        }
-    native = indexer_status_summary()
-    cfg = get_arr_config()
-    hubs_ready = bool(
-        (cfg.get('prowlarr_url') and cfg.get('prowlarr_api_key'))
-        or (cfg.get('jackett_url') and cfg.get('jackett_api_key'))
-    )
-    native_ready = bool(native.get('configured'))
-    return {
-        'native_ready': native_ready,
-        'hubs_ready': hubs_ready,
-        'indexers_ready': native_ready or hubs_ready,
-        'indexer_warnings': list(native.get('warnings') or []),
-        'native_count': int(native.get('count') or 0),
-        'native_ready_count': int(native.get('ready') or 0),
-    }
 
 
 @apis_bp.route('/acquire/status', methods=['GET'])

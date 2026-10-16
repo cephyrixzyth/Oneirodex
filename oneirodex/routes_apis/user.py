@@ -29,7 +29,7 @@ from oneirodex.schemas.user import CheckUsernameBody
 from oneirodex.utils.icon_themes import icon_pack_css_url, list_icon_packs
 from oneirodex.utils.presence import accepted_friend_ids, presence_for_user
 from oneirodex.utils.validation import validate_body
-from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.api_tokens import require_api_scope, require_api_token_scope
 from sqlalchemy import func, select, and_, delete
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
@@ -179,6 +179,7 @@ def check_favorite(game_uuid):
 
 @apis_bp.route('/toggle_favorite/<game_uuid>', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def toggle_favorite(game_uuid):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
@@ -326,6 +327,7 @@ def get_game_status(game_uuid):
 
 @apis_bp.route('/set_game_status/<game_uuid>', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def set_game_status(game_uuid):
     """Set or update the user's completion status for a game"""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()

@@ -18,7 +18,7 @@ from typing import Iterable
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import DiscoverySection, UserPreference
 from oneirodex.utils.discover_feed import MAX_ADMIN_FORCED, MAX_MEMBER_PINS
 

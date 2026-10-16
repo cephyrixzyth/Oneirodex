@@ -2,7 +2,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProposeLeafLibraries } from './ProposeLeafLibraries'
-import { LIBRARY_ADD_URL, LIBRARY_SCAN_URL, PROPOSE_LEAF_URL } from '../api/proposeLeafLibrariesApi'
+import {
+  LIBRARY_CREATE_URL,
+  LIBRARY_SCAN_URL,
+  PROPOSE_LEAF_URL,
+} from '../api/proposeLeafLibrariesApi'
 
 const CANDIDATES = [
   {
@@ -57,32 +61,20 @@ describe('ProposeLeafLibraries', () => {
           }),
         }
       }
-      if (href.includes(LIBRARY_ADD_URL)) {
+      if (href === LIBRARY_CREATE_URL) {
         expect(opts?.method).toBe('POST')
         const form = opts.body
         expect(form.get('name')).toBe('NES ROMs')
         expect(form.get('platform')).toBe('NES')
         expect(form.get('scan_depth')).toBe('1')
-        expect(form.get('csrf_token')).toBe('test-csrf')
-        return {
-          ok: true,
-          status: 200,
-          redirected: true,
-          url: 'http://localhost/libraries',
-          headers: new Headers({ 'content-type': 'application/json' }),
-
-          text: async () => JSON.stringify({}),
-          json: async () => ({}),
-        }
-      }
-      if (href.includes('/api/get_libraries')) {
+        expect(new Headers(opts.headers).get('X-CSRFToken')).toBe('test-csrf')
         return {
           ok: true,
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async () => JSON.stringify({}),
-          json: async () => [{ uuid: 'lib-nes-1', name: 'NES ROMs' }],
+          text: async () => JSON.stringify({ library_uuid: 'lib-nes-1' }),
+          json: async () => ({ library_uuid: 'lib-nes-1' }),
         }
       }
       if (href.includes(LIBRARY_SCAN_URL)) {
@@ -121,7 +113,7 @@ describe('ProposeLeafLibraries', () => {
     expect(screen.getByText(/Nothing is created until you confirm/i)).toBeInTheDocument()
 
     // Propose only — no library create yet
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(false)
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_CREATE_URL))).toBe(false)
 
     const nesCheckbox = screen.getByRole('checkbox', { name: /select nes roms/i })
     await user.click(nesCheckbox)
@@ -131,7 +123,7 @@ describe('ProposeLeafLibraries', () => {
     await user.click(await screen.findByRole('button', { name: /^create library$/i }))
 
     await waitFor(() => {
-      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(true)
+      expect(fetchMock.mock.calls.some((c) => String(c[0]) === LIBRARY_CREATE_URL)).toBe(true)
     })
     await waitFor(() => {
       expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_SCAN_URL))).toBe(true)
@@ -269,7 +261,7 @@ describe('ProposeLeafLibraries', () => {
     await user.click(screen.getByRole('button', { name: /confirm create \(1\)/i }))
     await user.click(await screen.findByRole('button', { name: /^cancel$/i }))
 
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(false)
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_CREATE_URL))).toBe(false)
   })
 
   test('shows API error message honestly', async () => {

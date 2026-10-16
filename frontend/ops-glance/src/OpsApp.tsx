@@ -70,7 +70,7 @@ export function OpsApp({ pollMs = 15000 }: OpsAppProps) {
   return (
     <main className="ops-glance">
       <header className="ops-glance__header">
-        <div className="ops-glance__title">Operations glance</div>
+        <h1 className="ops-glance__title">Operations glance</h1>
         <button type="button" onClick={refresh} disabled={loading}>
           Refresh
         </button>

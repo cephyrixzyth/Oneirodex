@@ -190,3 +190,25 @@ def test_open_path_dedupes_same_path(tmp_path, monkeypatch):
     claimed = cc.claim_pending_commands(9)
     assert len(claimed) == 2
     assert {row['path'] for row in claimed} == {str(target), str(other)}
+
+
+def test_open_path_uses_native_runtime_config_without_flask_context(tmp_path, monkeypatch):
+    from oneirodex.runtime_native.runtime_context import runtime_config_scope
+
+    games = tmp_path / 'native-games'
+    games.mkdir()
+    target = games / 'Title'
+    target.mkdir()
+    monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path / 'queue'))
+    config = {
+        'DATA_FOLDER_GAMES': str(games),
+        'BASE_FOLDER_WINDOWS': None,
+        'BASE_FOLDER_POSIX': None,
+        'ONEIRODEX_LIBRARY_ROOTS': '',
+    }
+
+    with runtime_config_scope(config):
+        assert str(games) in cc._open_path_allowed_bases()
+        command = cc.enqueue_client_command(18, '', 'open_path', path=str(target))
+
+    assert command['path'] == str(target)

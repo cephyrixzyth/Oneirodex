@@ -3,6 +3,7 @@
 from flask import jsonify, request
 
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from flask_login import current_user, login_required
 from sqlalchemy import func, select
 
@@ -16,6 +17,7 @@ from oneirodex.schemas.collections import (
 )
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.api_tokens import require_api_token_scope
 
 from . import apis_bp
 from oneirodex.utils.rbac import is_admin
@@ -72,6 +74,7 @@ def list_collections():
 
 @apis_bp.route('/collections', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(CreateCollectionBody)
 def create_collection(body: CreateCollectionBody):
     collection = GameCollection(
@@ -139,6 +142,7 @@ def get_collection(collection_uuid: str):
 
 @apis_bp.route('/collections/<collection_uuid>', methods=['PATCH'])
 @login_required
+@require_api_token_scope('write:library')
 def update_collection(collection_uuid: str):
     collection, refusal = _editable_collection(collection_uuid)
     if refusal is not None:
@@ -167,6 +171,7 @@ def update_collection(collection_uuid: str):
 
 @apis_bp.route('/collections/<collection_uuid>', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def delete_collection(collection_uuid: str):
     collection, refusal = _editable_collection(collection_uuid)
     if refusal is not None:
@@ -181,6 +186,7 @@ def delete_collection(collection_uuid: str):
 
 @apis_bp.route('/collections/<collection_uuid>/items', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(AddCollectionItemBody)
 def add_collection_item(collection_uuid: str, body: AddCollectionItemBody):
     collection, refusal = _editable_collection(collection_uuid)
@@ -206,6 +212,7 @@ def add_collection_item(collection_uuid: str, body: AddCollectionItemBody):
 
 @apis_bp.route('/collections/<collection_uuid>/items/<game_uuid>', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def remove_collection_item(collection_uuid: str, game_uuid: str):
     collection, refusal = _editable_collection(collection_uuid)
     if refusal is not None:
@@ -225,6 +232,7 @@ def remove_collection_item(collection_uuid: str, game_uuid: str):
 
 @apis_bp.route('/collections/<collection_uuid>/items/order', methods=['PUT'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(ReorderCollectionItemsBody)
 def reorder_collection_items(collection_uuid: str, body: ReorderCollectionItemsBody):
     collection, refusal = _editable_collection(collection_uuid)
@@ -344,6 +352,7 @@ def free_games_feed():
 
 @apis_bp.route('/news/free-games/<int:offer_id>/claim-assist', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def free_games_claim_assist(offer_id: int):
     """
     Avenue B: when the store is connected, register the title + Steam live sync.

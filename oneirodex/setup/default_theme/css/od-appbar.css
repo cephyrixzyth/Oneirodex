@@ -873,24 +873,14 @@ a.od-cbtn:focus-visible {
   display: none;
 }
 
-/* ---------- UIR-7: the same retirement for admin's React pages ----------
- *
- * base_admin.html already sets data-chrome="v2", so admin was inheriting the
- * marker and none of the effect: member pages lost their titles while the
- * admin SPA kept every one of its h1s. "Library and admin should look the
- * same" is the whole point of the refresh, and that mismatch was the most
- * visible way to fail it.
- *
- * admin-app wraps each page in `.od-admin-page` with the heading and lede as
- * direct children, so a two-selector rule covers all eleven pages plus the
- * shared `Page` component with no JSX edits at all.
- *
- * Simpler than the member case, and safer: here the heading is a sibling of
- * the page content rather than sharing a block with the page's controls, so
- * hiding it cannot take a button with it.
- */
+/* Admin pages keep their compact heading visible and in the accessibility
+ * tree. The section strip may scroll, and its label can name a broader group
+ * than the actual page. Ledes remain optional context without a second hero. */
 
-:root[data-chrome='v2'] .od-admin-page > h1,
+:root[data-chrome='v2'] .od-admin-page > h1 {
+  display: block;
+}
+
 :root[data-chrome='v2'] .od-admin-page > .od-admin-lede {
   display: none;
 }

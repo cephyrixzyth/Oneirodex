@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, User
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
 
 
 def event_visible_to(event, viewer_id: int | None) -> bool:

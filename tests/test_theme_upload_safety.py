@@ -37,7 +37,7 @@ def manager(tmp_path, monkeypatch):
     upload.mkdir()
     library = tmp_path / 'library'
     monkeypatch.setattr(themes, 'library_dir', lambda _root: str(library))
-    monkeypatch.setattr(themes, 'flash', lambda *_args: None)
+    monkeypatch.setattr('flask.flash', lambda *_args: None)
     app = Flask(__name__)
     app.config['UPLOAD_FOLDER'] = str(upload)
     return themes.ThemeManager(app)
@@ -46,7 +46,7 @@ def manager(tmp_path, monkeypatch):
 def test_upload_rejects_expanded_limit_before_extracting(manager, monkeypatch):
     monkeypatch.setattr(themes, 'MAX_THEME_EXPANDED_BYTES', 1024)
     messages = []
-    monkeypatch.setattr(themes, 'flash', lambda message, level: messages.append((message, level)))
+    monkeypatch.setattr('flask.flash', lambda message, level: messages.append((message, level)))
     archive = _theme_zip('Too Large', extra={'large.txt': b'x' * 2048})
     original_extractall = zipfile.ZipFile.extractall
     extracted = []

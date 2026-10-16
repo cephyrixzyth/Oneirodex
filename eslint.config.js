@@ -31,6 +31,12 @@ export default [
       '**/build/**',
       '**/coverage/**',
       '**/node_modules/**',
+      // Workspace-local board/skill code and generated review/staging
+      // artifacts are private tooling, not repository lint targets. A local
+      // `eslint .` should match the clean-checkout CI surface.
+      '.agents/**',
+      '.artifacts/**',
+      'docs/_private/**',
       // Local Python virtualenvs ship bundled JS (werkzeug debugger, urllib3
       // emscripten worker) that `eslint .` would otherwise lint. CI has no venv;
       // ignore it so `npm run lint` matches CI when run in a dev checkout.

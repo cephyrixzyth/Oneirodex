@@ -462,8 +462,8 @@ class TestDownloadImage:
                     assert args[0] == 'https://example.com/t_original/image.jpg'
                     assert kwargs.get('timeout')
 
-    def test_download_image_http_error(self, monkeypatch):
-        """Test download_image with HTTP error."""
+    def test_download_image_http_error(self, monkeypatch, caplog):
+        """HTTP failure is returned to the caller and written to structured logs."""
         mock_response = MagicMock()
         mock_response.status_code = 404
         self._allow_url(monkeypatch)
@@ -472,9 +472,10 @@ class TestDownloadImage:
             MagicMock(return_value=mock_response),
         )
 
-        with patch('builtins.print') as mock_print:
-            download_image('https://example.com/image.jpg', '/path/image.jpg')
-            mock_print.assert_called_with("Failed to download the image. Status Code: 404")
+        success, error = download_image('https://example.com/image.jpg', '/path/image.jpg')
+        assert success is False
+        assert error == 'HTTP 404 downloading image.'
+        assert 'Image download returned HTTP status 404' in caplog.text
 
     def test_download_image_create_directory(self, monkeypatch):
         """Test download_image creates directory when it doesn't exist."""
@@ -502,17 +503,19 @@ class TestDownloadImage:
                                 '/new/path', exist_ok=True,
                             )
 
-    def test_download_image_request_exception(self, monkeypatch):
-        """Test download_image handles request exceptions."""
+    def test_download_image_request_exception(self, monkeypatch, caplog):
+        """Network errors are summarized without exposing upstream exception text."""
         self._allow_url(monkeypatch)
         monkeypatch.setattr(
             'oneirodex.utils.clients.images.safe_get',
             MagicMock(side_effect=requests.exceptions.ConnectionError("Network error")),
         )
 
-        with patch('builtins.print') as mock_print:
-            download_image('https://example.com/image.jpg', '/path/image.jpg')
-            mock_print.assert_called()
+        success, error = download_image('https://example.com/image.jpg', '/path/image.jpg')
+        assert success is False
+        assert error == 'Network error while downloading the image.'
+        assert 'Image download request failed (ConnectionError)' in caplog.text
+        assert 'Network error' not in caplog.text
 
 
 class TestCommaSeparatedUrls:

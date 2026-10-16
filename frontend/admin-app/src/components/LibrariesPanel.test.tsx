@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { getJson, postJsonResult } from '../api/adminApi'
 import { LibrariesPanel } from './LibrariesPanel'
@@ -87,6 +88,25 @@ test('hides selected copy until a row is checked', async () => {
   expect(screen.queryByText('0 selected')).toBeNull()
 })
 
+test('keeps the native library error visible and retries the roster request', async () => {
+  window.sessionStorage.setItem('od-libraries-catalog-refresh-v1', '1')
+  const user = userEvent.setup()
+  vi.mocked(getJson).mockRejectedValueOnce(new Error('Temporary review failure.'))
+  render(<LibrariesPanel />)
+
+  const retry = await screen.findByRole('button', { name: 'Retry loading libraries' })
+  expect(screen.getByRole('alert')).toHaveTextContent('Unable to load libraries.')
+  const callsBeforeRetry = vi
+    .mocked(getJson)
+    .mock.calls.filter(([url]) => url === '/api/get_libraries').length
+  await user.click(retry)
+  expect(await screen.findByText('_pc')).toBeInTheDocument()
+  const callsAfterRetry = vi
+    .mocked(getJson)
+    .mock.calls.filter(([url]) => url === '/api/get_libraries').length
+  expect(callsAfterRetry).toBeGreaterThan(callsBeforeRetry)
+})
+
 test('the real Jinja libraries panel exposes the add-and-first-scan form', async () => {
   render(<LibrariesPanel />)
   expect(await screen.findByRole('heading', { name: 'Add one library' })).toBeInTheDocument()
@@ -94,6 +114,27 @@ test('the real Jinja libraries panel exposes the add-and-first-scan form', async
     await screen.findByRole('option', { name: 'Nintendo Entertainment System (NES)' }),
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeDisabled()
+})
+
+test('native libraries expose folder proposal and CSV/JSON import with previews before confirmation', async () => {
+  render(<LibrariesPanel />)
+  await screen.findByText('_pc')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Propose from folder' }))
+  expect(await screen.findByRole('heading', { name: 'Propose leaf libraries' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Propose' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: /Confirm create/ })).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Import CSV/JSON' }))
+  expect(
+    await screen.findByRole('heading', { name: 'Import leaf libraries (CSV / JSON)' }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: /Confirm create/ })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Import CSV/JSON' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 })
 
 test('libraries count lives in the topbar trail and opens a platform filter menu', async () => {
@@ -117,11 +158,49 @@ test('libraries count lives in the topbar trail and opens a platform filter menu
   const dialog = screen.getByRole('dialog', { name: 'Libraries summary' })
   expect(within(dialog).getByText('Nintendo Entertainment System (NES)')).toBeTruthy()
   expect(within(dialog).queryByText('PC Windows')).toBeNull()
-  fireEvent.click(within(dialog).getByText('Nintendo Entertainment System (NES)'))
+  const platformButton = within(dialog)
+    .getByText('Nintendo Entertainment System (NES)')
+    .closest('button')
+  expect(platformButton).not.toBeNull()
+  platformButton?.focus()
+  fireEvent.click(platformButton!)
   await waitFor(() => {
     expect(screen.queryByText('_pc')).toBeNull()
   })
   expect(screen.getByText('NES')).toBeTruthy()
+  expect(document.activeElement).toBe(trigger)
+})
+
+test('libraries summary restores focus after Escape and Done, but not an outside click', async () => {
+  render(<LibrariesPanel />)
+  await screen.findByText('_pc')
+  const trigger = await screen.findByRole('button', { name: /3 libraries/i })
+
+  fireEvent.click(trigger)
+  screen.getByLabelText('Filter by platform').focus()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('dialog', { name: 'Libraries summary' })).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+
+  fireEvent.click(trigger)
+  const done = screen.getByRole('button', { name: 'Done' })
+  done.focus()
+  fireEvent.click(done)
+  expect(screen.queryByRole('dialog', { name: 'Libraries summary' })).toBeNull()
+  expect(document.activeElement).toBe(trigger)
+
+  const outside = document.createElement('button')
+  outside.textContent = 'Outside target'
+  document.body.append(outside)
+  try {
+    fireEvent.click(trigger)
+    screen.getByLabelText('Filter by platform').focus()
+    await userEvent.setup().click(outside)
+    expect(screen.queryByRole('dialog', { name: 'Libraries summary' })).toBeNull()
+    expect(document.activeElement).toBe(outside)
+  } finally {
+    outside.remove()
+  }
 })
 
 test('group column is present only when a library is grouped', async () => {
@@ -141,7 +220,7 @@ test('row Group opens a dialog and posts group_name', async () => {
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
   const row = screen.getByRole('row', { name: /_pc/i })
-  fireEvent.click(within(row).getByRole('button', { name: 'Group' }))
+  fireEvent.click(within(row).getByRole('button', { name: 'Group _pc library' }))
   fireEvent.change(screen.getByPlaceholderText('e.g. Arcade cabinets'), {
     target: { value: 'PC' },
   })
@@ -173,15 +252,53 @@ test('colors game counts when a platform total is known', async () => {
   expect(full.style.color).not.toEqual(empty.style.color)
 })
 
-test('row Edit opens the shared modal instead of navigating away', async () => {
-  const openEdit = vi.fn()
-  window.odLibrariesOpenBatchEdit = openEdit
+test('row Edit opens the shared React modal and applies selected fields through the batch API', async () => {
+  vi.mocked(postJsonResult).mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: { updated: 1, skipped: 0, failed: 0 },
+  })
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
   const row = screen.getByText('_pc').closest('tr')
   expect(row).toBeTruthy()
-  fireEvent.click(within(row!).getByRole('button', { name: 'Edit' }))
-  expect(openEdit).toHaveBeenCalledWith([{ uuid: 'a', name: '_pc' }])
-  expect(screen.queryByRole('link', { name: 'Edit' })).toBeNull()
-  delete window.odLibrariesOpenBatchEdit
+  fireEvent.click(within(row!).getByRole('button', { name: 'Edit _pc library' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Edit library' })
+  expect(dialog).toBeInTheDocument()
+  fireEvent.change(within(dialog).getByLabelText('Scan depth'), { target: { value: '2' } })
+  fireEvent.change(within(dialog).getByLabelText('Update library when folders change'), {
+    target: { value: 'off' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }))
+  await waitFor(() =>
+    expect(postJsonResult).toHaveBeenCalledWith('/api/admin/libraries/batch/edit', {
+      library_uuids: ['a'],
+      scan_depth: 2,
+      watch_enabled: false,
+    }),
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+test('row Delete requires the exact library name and posts through the React confirmation dialog', async () => {
+  render(<LibrariesPanel />)
+  await screen.findByText('_pc')
+  const row = screen.getByText('_pc').closest('tr')
+  expect(row).toBeTruthy()
+  fireEvent.click(within(row!).getByRole('button', { name: 'Delete _pc library' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Delete library' })
+  const confirm = within(dialog).getByRole('button', { name: 'Confirm delete' })
+  expect(confirm).toBeDisabled()
+  fireEvent.change(within(dialog).getByLabelText(/Type _pc to confirm/i), {
+    target: { value: '_pc' },
+  })
+  expect(confirm).toBeEnabled()
+  fireEvent.click(confirm)
+  await waitFor(() =>
+    expect(postJsonResult).toHaveBeenCalledWith('/api/admin/libraries/batch/delete', {
+      library_uuids: ['a'],
+      force: true,
+    }),
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
 })

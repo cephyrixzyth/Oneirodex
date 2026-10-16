@@ -1,0 +1,265 @@
+.od-preferences__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.5rem, 3vw, 2rem);
+  background: #06100edc;
+  backdrop-filter: blur(8px);
+}
+.od-preferences {
+  display: flex;
+  flex-direction: column;
+  width: min(880px, 100%);
+  max-height: min(90dvh, 940px);
+  overflow: hidden;
+  color: var(--od-text, #e5efe9);
+  background: var(--od-surface, #101a17);
+  border: 1px solid var(--od-border, #2c453a);
+  border-radius: 18px;
+  box-shadow: 0 28px 90px #0009;
+}
+.od-preferences__header,
+.od-preferences__footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--od-surface-raised, #15231e);
+}
+.od-preferences__header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--od-border, #2c453a);
+}
+.od-preferences__header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.od-preferences__eyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--od-muted, #a9bcb1);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.od-preferences__close {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--od-border, #2c453a);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.od-preferences__body {
+  overflow: auto;
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+.od-preferences__section {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--od-border, #2c453a);
+}
+.od-preferences__section h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+.od-preferences__section > p,
+.od-preferences__theme-group > p {
+  margin: 0.15rem 0 0.8rem;
+  color: var(--od-muted, #a9bcb1);
+  font-size: 0.9rem;
+}
+.od-preferences__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 0.9rem;
+}
+.od-preferences__field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  color: var(--od-text, #e5efe9);
+  font-size: 0.9rem;
+}
+.od-preferences__select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--od-border, #2c453a);
+  border-radius: 9px;
+  background: var(--od-surface, #101a17);
+  color: inherit;
+}
+.od-preferences__label {
+  display: block;
+  margin: 0.7rem 0 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.od-preferences__theme-group {
+  margin: 0.75rem 0;
+}
+.od-preferences__theme-group h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.od-preferences__themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+.od-preferences__theme,
+.od-preferences__icon-pack {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+  padding: 0.5rem;
+  border: 1px solid var(--od-border, #2c453a);
+  border-radius: 10px;
+  background: var(--od-surface-raised, #15231e);
+  color: inherit;
+  cursor: pointer;
+}
+.od-preferences__theme.is-selected,
+.od-preferences__icon-pack.is-selected {
+  outline: 2px solid var(--od-accent, #34d399);
+  outline-offset: 1px;
+}
+.od-preferences__theme small {
+  color: var(--od-muted, #a9bcb1);
+}
+.od-preferences__swatch {
+  height: 52px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #143528, #23644c 55%, #89a879);
+}
+.od-preferences__swatch[data-era='80s'] {
+  background: linear-gradient(135deg, #242341, #984791 55%, #e5a16f);
+}
+.od-preferences__swatch[data-era='90s'] {
+  background: linear-gradient(135deg, #172949, #3168a4 55%, #8cc4d5);
+}
+.od-preferences__icon-packs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.od-preferences__icon-pack {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+}
+.od-preferences__range {
+  width: 100%;
+  accent-color: var(--od-accent, #34d399);
+}
+.od-preferences__check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+.od-preferences__check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--od-accent, #34d399);
+}
+.od-preferences__hint {
+  font-size: 0.85rem;
+}
+.od-preferences__message {
+  padding: 0.7rem;
+  border: 1px solid #a84a4a;
+  border-radius: 8px;
+  color: #ffd5d5;
+  background: #481d24;
+}
+.od-preferences__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--od-border, #2c453a);
+}
+.od-preferences__footer [role='status'] {
+  margin-right: auto;
+  color: var(--od-muted, #a9bcb1);
+}
+.od-preferences__primary,
+.od-preferences__secondary {
+  min-height: 2.65rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--od-border, #2c453a);
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.od-preferences__primary {
+  border-color: var(--od-accent, #34d399);
+  background: var(--od-accent, #34d399);
+  color: #07130e;
+}
+.od-preferences__primary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.od-preferences__text-button {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--od-muted, #a9bcb1);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.od-preferences__section > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  list-style: none;
+}
+.od-preferences__section > summary::-webkit-details-marker {
+  display: none;
+}
+.od-preferences__section > summary::before {
+  content: '›';
+  display: inline-block;
+  color: var(--od-accent, #34d399);
+  transition: transform 0.15s ease;
+}
+.od-preferences__section[open] > summary::before {
+  transform: rotate(90deg);
+}
+.od-preferences__section > summary h3 {
+  margin: 0;
+}
+@media (max-width: 560px) {
+  .od-preferences__scrim {
+    padding: 0;
+    align-items: end;
+  }
+  .od-preferences {
+    max-height: 94dvh;
+    border-radius: 16px 16px 0 0;
+  }
+  .od-preferences__header,
+  .od-preferences__footer {
+    padding: 0.85rem;
+  }
+  .od-preferences__body {
+    padding: 0 0.85rem 0.85rem;
+  }
+  .od-preferences__footer {
+    flex-wrap: wrap;
+  }
+  .od-preferences__footer [role='status'] {
+    width: 100%;
+  }
+  .od-preferences__theme {
+    min-width: 0;
+  }
+}

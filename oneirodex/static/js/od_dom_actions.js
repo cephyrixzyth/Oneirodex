@@ -39,40 +39,20 @@
     return set;
   }
 
-  // Every data-od-click name used by a template or by shipped JS. `reload` is
+  // Every data-od-click name used by shipped legacy markup or JS. `reload` is
   // handled separately and is not a global.
   var CLICK_ACTIONS = allowlist([
-    'autoPickBest',
     'changePage',
     'clearEntry',
-    'closeExtrasModal',
-    'closeModal',
-    'closeNfoModal',
-    'confirmDelete',
-    'copyToClipboard',
     'deleteFileType',
-    'deleteImage',
-    'deleteInvite',
     'deleteSingle',
-    'downloadBatch',
     'downloadSingle',
     'editFileType',
-    'openExtrasModal',
-    'openModal',
-    'openNfoModal',
-    'plusSlides',
-    'refreshHLTB',
-    'refreshQueue',
-    'retryFailed',
-    'saveSettings',
-    'showDeleteModal',
-    'showExtrasTab',
-    'testSettings',
     'toggleIgnoreStatus'
   ]);
 
-  // Every data-od-change name used by a template or by shipped JS.
-  var CHANGE_ACTIONS = allowlist(['applyFilters', 'onLibraryChange', 'updateRecipients']);
+  // Every data-od-change name used by shipped legacy markup or JS.
+  var CHANGE_ACTIONS = allowlist([]);
 
   function namedFn(name, allowed) {
     if (!name || allowed[name] !== true) return null;

@@ -38,6 +38,7 @@ const NotificationsPage = lazy(() =>
 const ReportIssuePage = lazy(() =>
   import('./pages/ReportIssuePage').then((m) => ({ default: m.ReportIssuePage })),
 )
+
 const AcquirePage = lazy(() =>
   import('./pages/AcquirePage').then((m) => ({ default: m.AcquirePage })),
 )
@@ -140,7 +141,7 @@ function Layout({ tileSize, onTileSizeChange }: LooseProps) {
   const location = useLocation()
   const viewer = useViewer()
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const { railState, drawerOpen, toggle: toggleRail, closeDrawer } = useRailState()
+  const { railState, drawerOpen, isMobile, toggle: toggleRail, closeDrawer } = useRailState()
   const hideDock = location.pathname.startsWith('/social-companion')
   const detailsMatch = location.pathname.match(/^\/game_details\/([^/]+)/)
   const dockGameUuid = detailsMatch?.[1] || ''
@@ -189,6 +190,7 @@ function Layout({ tileSize, onTileSizeChange }: LooseProps) {
       </a>
       <SideRail
         railState={railState}
+        isMobile={isMobile}
         onCloseDrawer={closeDrawer}
         onNavigate={(link: any) => {
           // Chat and Friends are panels, not routes, but they are destinations
@@ -201,7 +203,8 @@ function Layout({ tileSize, onTileSizeChange }: LooseProps) {
         <button
           type="button"
           className="od-rail__scrim"
-          aria-label="Close navigation"
+          aria-hidden="true"
+          tabIndex={-1}
           onClick={closeDrawer}
         />
       ) : null}
@@ -212,6 +215,7 @@ function Layout({ tileSize, onTileSizeChange }: LooseProps) {
           onOpenCommandPalette={() => setPaletteOpen(true)}
           onToggleRail={toggleRail}
           railState={railState}
+          isMobile={isMobile}
         />
       )}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

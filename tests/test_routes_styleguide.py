@@ -2,8 +2,8 @@
 
 The styleguide is the visual contract for the primitives: it renders the GT
 button family and the bridged Bootstrap family side by side so a divergence is
-visible instead of arriving as a bug report. That only works if it stays
-complete, so these tests assert two things a stylesheet edit can quietly break:
+visible instead of arriving as a bug report. Its checked-in specimen HTML is
+expanded before serving, so these tests assert two things a stylesheet edit can quietly break:
 
   * every ``.od-btn`` modifier defined in od-primitives.css is rendered here
   * every token scale the page advertises actually exists in od-tokens.css
@@ -116,7 +116,7 @@ class TestStyleguideCoverage:
     def test_advertised_token_scales_exist(self, client, admin_user):
         """Every --od-* token the page references must be defined.
 
-        The page builds its scales from Jinja loops, so a step removed from
+        The page advertises its scale tokens directly, so a step removed from
         od-tokens.css shows up here as an empty swatch rather than an error.
         """
         tokens = (THEME_CSS / 'od-tokens.css').read_text(encoding='utf-8')

@@ -1,7 +1,8 @@
-from flask import render_template, jsonify
+from flask import jsonify
 from flask_login import login_required
 from oneirodex.utils.statistics import get_download_statistics
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from . import download_bp
 
 @download_bp.route('/admin/statistics')
@@ -9,7 +10,7 @@ from . import download_bp
 @admin_required
 def statistics():
     """Display the statistics page"""
-    return render_template('admin/admin_statistics.html')
+    return render_admin_spa(title='Statistics · Oneirodex Admin')
 
 @download_bp.route('/admin/statistics/data')
 @login_required

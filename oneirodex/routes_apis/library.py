@@ -1,5 +1,6 @@
 # /oneirodex/routes_apis/library.py
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.validation import read_json_body
 from flask import current_app, jsonify, request, url_for
 from flask_login import login_required, current_user
 from oneirodex import db
@@ -8,7 +9,7 @@ from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.library_acl import filter_libraries, user_can_access_library
-from oneirodex.utils.platform_release_estimates import PLATFORM_RELEASE_ESTIMATES
+from oneirodex.utils.platform_release_projection import platform_release_totals
 from oneirodex.utils.library_batch import (
     LIBRARY_BATCH_DELETE_CAP,
     LIBRARY_BATCH_UUID_CAP,
@@ -24,9 +25,90 @@ from oneirodex.utils.library_watch import (
 from oneirodex.utils.rbac import is_librarian
 from sqlalchemy import func, select
 from uuid import uuid4
+import os
+from PIL import Image as PILImage, UnidentifiedImageError
 from . import apis_bp
 
 _DEFAULT_LIBRARY_IMAGE = 'newstyle/default_library.jpg'
+_LIBRARY_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+_LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+
+@apis_bp.route('/admin/libraries', methods=['POST'])
+@login_required
+@admin_required
+def create_library():
+    """Create library metadata for the React form; the client queues its first scan."""
+    data = request.form if request.mimetype == 'multipart/form-data' else (read_json_body() or {})
+    name = str(data.get('name') or '').strip()
+    platform_key = str(data.get('platform') or '').strip()
+    try:
+        depth = int(data.get('scan_depth', 1))
+        watch_enabled = _parse_watch_enabled(data.get('watch_enabled', 'default'))
+    except (TypeError, ValueError):
+        return api_error('Choose a supported scan depth and watch setting.', code='bad_request')
+    if not name or len(name) > 255:
+        return api_error('Library name is required and must be 255 characters or fewer.', code='bad_request')
+    if depth not in (1, 2):
+        return api_error('Scan depth must be 1 or 2.', code='bad_request')
+    try:
+        platform = LibraryPlatform[platform_key]
+    except KeyError:
+        return api_error('Choose a supported platform.', code='bad_request')
+
+    image_url = url_for('static', filename=_DEFAULT_LIBRARY_IMAGE)
+    saved_image_path = None
+    image = request.files.get('image')
+    if image and image.filename:
+        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
+        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
+            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
+        image.stream.seek(0, os.SEEK_END)
+        image_size = image.stream.tell()
+        image.stream.seek(0)
+        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+            return api_error('Library image must be 10 MB or smaller.', code='bad_request')
+        try:
+            with PILImage.open(image.stream) as opened:
+                if opened.width * opened.height > 80_000_000:
+                    return api_error('Library image dimensions are too large.', code='bad_request')
+                converted = opened.convert('RGBA')
+                if converted.width > 1024 or converted.height > 1024:
+                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
+                image_name = f'{uuid4()}.png'
+                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+                os.makedirs(image_dir, exist_ok=True)
+                saved_image_path = os.path.join(image_dir, image_name)
+                converted.save(saved_image_path, 'PNG')
+                image_url = url_for('static', filename=f'library/images/{image_name}')
+        except (UnidentifiedImageError, OSError, ValueError):
+            if saved_image_path and os.path.exists(saved_image_path):
+                os.remove(saved_image_path)
+            return api_error('The uploaded library image could not be read.', code='bad_request')
+
+    library = Library(
+        uuid=str(uuid4()),
+        name=name,
+        platform=platform,
+        scan_depth=depth,
+        watch_enabled=watch_enabled,
+        image_url=image_url,
+    )
+    db.session.add(library)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        if saved_image_path and os.path.exists(saved_image_path):
+            os.remove(saved_image_path)
+        return api_error('Library could not be created.', code='internal', status=500)
+    log_system_event(
+        f'Library created: {library.name}',
+        event_type='library',
+        event_level='information',
+        audit_user=getattr(current_user, 'id', None),
+    )
+    return api_ok({'library_uuid': library.uuid, 'name': library.name})
 
 
 def _resolve_library_image_url(raw: str | None) -> str:
@@ -85,32 +167,7 @@ def _platform_release_totals() -> dict[str, int]:
     built-in ROM-set estimates. Platforms with none of those stay absent so
     the UI leaves those game counts uncoloured instead of treating them as empty.
     """
-    totals: dict[str, int] = {}
-    igdb_rows = db.session.execute(
-        select(
-            IgdbPlatformRelease.library_platform,
-            func.count(func.distinct(IgdbPlatformRelease.igdb_game_id)),
-        ).group_by(IgdbPlatformRelease.library_platform)
-    ).all()
-    for key, n in igdb_rows:
-        count = int(n or 0)
-        if key and count > 0:
-            totals[str(key)] = count
-    dat_rows = db.session.execute(
-        select(
-            ReferenceSet.library_platform,
-            func.max(ReferenceSet.entry_count),
-        ).group_by(ReferenceSet.library_platform)
-    ).all()
-    for key, n in dat_rows:
-        count = int(n or 0)
-        if key and count > 0:
-            totals[str(key)] = count
-    # Estimates only fill gaps — never override DAT / IGDB.
-    for key, count in PLATFORM_RELEASE_ESTIMATES.items():
-        if key not in totals and count > 0:
-            totals[key] = int(count)
-    return totals
+    return platform_release_totals(db.session, IgdbPlatformRelease, ReferenceSet)
 
 
 def _library_public_fields(library: Library) -> dict:
@@ -122,8 +179,83 @@ def _library_public_fields(library: Library) -> dict:
         'scan_depth': int(getattr(library, 'scan_depth', 1) or 1),
         'last_scan_folder': getattr(library, 'last_scan_folder', None),
         'group_name': (group or '').strip() or None,
+        'image_url': _resolve_library_image_url(getattr(library, 'image_url', None)),
         **_library_watch_payload(library),
     }
+
+
+@apis_bp.route('/admin/libraries/<string:library_uuid>', methods=['GET', 'PUT'])
+@login_required
+@admin_required
+def admin_library_detail(library_uuid):
+    """Read or update one library for the native admin editor."""
+    library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalars().first()
+    if not library:
+        return api_error('Library not found.', code='not_found', status=404)
+    if request.method == 'GET':
+        return api_ok(_library_public_fields(library))
+
+    data = request.form if request.mimetype == 'multipart/form-data' else (read_json_body() or {})
+    if not isinstance(data, dict) and request.mimetype != 'multipart/form-data':
+        return api_error('Provide valid library fields.', code='bad_request')
+    name = str(data.get('name') or '').strip()
+    if not name or len(name) > 255:
+        return api_error('Library name is required and must be 255 characters or fewer.', code='bad_request')
+    try:
+        platform = LibraryPlatform[str(data.get('platform') or '').strip()]
+        depth = int(data.get('scan_depth', 1))
+        watch_enabled = _parse_watch_enabled(data.get('watch_enabled', 'default'))
+    except (KeyError, TypeError, ValueError):
+        return api_error('Choose a supported platform, scan depth, and watch setting.', code='bad_request')
+    if depth not in (1, 2):
+        return api_error('Scan depth must be 1 or 2.', code='bad_request')
+
+    image = request.files.get('image')
+    saved_image_path = None
+    if image and image.filename:
+        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
+        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
+            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
+        image.stream.seek(0, os.SEEK_END)
+        image_size = image.stream.tell()
+        image.stream.seek(0)
+        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+            return api_error('Library image must be 10 MB or smaller.', code='bad_request')
+        try:
+            with PILImage.open(image.stream) as opened:
+                if opened.width * opened.height > 80_000_000:
+                    return api_error('Library image dimensions are too large.', code='bad_request')
+                converted = opened.convert('RGBA')
+                if converted.width > 1024 or converted.height > 1024:
+                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
+                image_name = f'{uuid4()}.png'
+                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+                os.makedirs(image_dir, exist_ok=True)
+                saved_image_path = os.path.join(image_dir, image_name)
+                converted.save(saved_image_path, 'PNG')
+                image_url = url_for('static', filename=f'library/images/{image_name}')
+        except (UnidentifiedImageError, OSError, ValueError):
+            if saved_image_path and os.path.exists(saved_image_path):
+                os.remove(saved_image_path)
+            return api_error('The uploaded library image could not be read.', code='bad_request')
+        library.image_url = image_url
+
+    library.name = name
+    library.platform = platform
+    library.scan_depth = depth
+    library.watch_enabled = watch_enabled
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        if saved_image_path and os.path.exists(saved_image_path):
+            os.remove(saved_image_path)
+        return api_error('Library could not be saved.', code='internal', status=500)
+    log_system_event(
+        f'Library updated: {library.name}', event_type='library', event_level='information',
+        audit_user=getattr(current_user, 'id', None),
+    )
+    return api_ok(_library_public_fields(library))
 
 
 def _rejected_body(payload: dict, http_status: int):
@@ -167,22 +299,15 @@ def _cap_error(cap: int):
 
 def _start_library_delete_job(library: Library) -> str:
     """Enqueue background library deletion; returns job_id."""
+    from oneirodex.utils.library_deletion import start_library_delete_job
     from oneirodex.routes_admin_ext.library_delete import (
         delete_library_background,
         deletion_progress,
     )
 
-    job_id = str(uuid4())
-    deletion_progress[job_id] = {
-        'status': 'initializing',
-        'message': f'Preparing to delete library "{library.name}"...',
-        'current': 0,
-        'total': 0,
-        'library_name': library.name,
-        'library_uuid': library.uuid,
-    }
-    delete_library_background(library.uuid, job_id)
-    return job_id
+    return start_library_delete_job(
+        library, worker=delete_library_background, progress=deletion_progress,
+    )
 
 
 @apis_bp.route('/get_libraries')

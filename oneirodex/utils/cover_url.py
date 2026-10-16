@@ -3,12 +3,12 @@
 import hashlib
 import logging
 import os
-
-from flask import current_app, url_for
+from urllib.parse import quote
 
 from oneirodex.utils.cover_art_studio import generated_root, render_cover_art
 from oneirodex.utils.library_paths import library_dir
 from oneirodex.utils.preset_themes import DEFAULT_ERA, era_for_theme
+from oneirodex.utils.static_urls import static_asset_url
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,19 @@ DEFAULT_COVER_STATIC = 'newstyle/default_cover.jpg'
 _PLACEHOLDER_COVER_SUBDIR = 'covers'
 
 
-def _default_cover_url():
-    return url_for('static', filename=DEFAULT_COVER_STATIC)
+def _static_url(filename, app=None):
+    if app is None:
+        return static_asset_url(filename)
+    root = (app.config.get('APPLICATION_ROOT') or '').rstrip('/')
+    static_path = (getattr(app, 'static_url_path', None) or '/static').rstrip('/')
+    prefix = f'{root}{static_path}'
+    if not prefix.startswith('/'):
+        prefix = '/' + prefix
+    return f'{prefix}/{quote(str(filename).lstrip("/"), safe="/")}'
+
+
+def _default_cover_url(app=None):
+    return _static_url(DEFAULT_COVER_STATIC, app)
 
 
 def _placeholder_slug(title):
@@ -47,7 +58,7 @@ def _current_theme_era() -> tuple[str, str]:
     return slug, era_for_theme(slug)
 
 
-def _placeholder_cover_filename(title):
+def _placeholder_cover_filename(title, app=None):
     """Render (or reuse a cached) branded placeholder cover for ``title``.
 
     Returns a ``static``-relative filename, or ``None`` when rendering isn't
@@ -59,7 +70,7 @@ def _placeholder_cover_filename(title):
         return None
     try:
         theme_slug, era = _current_theme_era()
-        covers_dir = generated_root() / _PLACEHOLDER_COVER_SUBDIR
+        covers_dir = generated_root(getattr(app, 'root_path', None)) / _PLACEHOLDER_COVER_SUBDIR
         filename = f'{_placeholder_slug(title)}_{theme_slug}.jpg'
         dest = covers_dir / filename
         if not dest.is_file():
@@ -74,12 +85,12 @@ def _placeholder_cover_filename(title):
         return None
 
 
-def _fallback_cover_url(title=None):
+def _fallback_cover_url(title=None, app=None):
     """Prefer a per-title branded placeholder over the boring static default."""
-    filename = _placeholder_cover_filename(title)
+    filename = _placeholder_cover_filename(title, app)
     if filename:
-        return url_for('static', filename=filename)
-    return _default_cover_url()
+        return _static_url(filename, app)
+    return _default_cover_url(app)
 
 
 def _normalize_remote_url(url):
@@ -92,22 +103,22 @@ def _normalize_remote_url(url):
     return url
 
 
-def _local_cover_path(filename):
-    return os.path.join(library_dir(), 'images', filename.lstrip('/\\'))
+def _local_cover_path(filename, app=None):
+    return os.path.join(library_dir(getattr(app, 'root_path', None)), 'images', filename.lstrip('/\\'))
 
 
-def _local_cover_exists(filename):
+def _local_cover_exists(filename, app=None):
     if not filename:
         return False
     try:
-        return os.path.isfile(_local_cover_path(filename))
+        return os.path.isfile(_local_cover_path(filename, app))
     except OSError:
         return False
 
 
-def _resolve_from_parts(url, download_url, is_downloaded, title=None):
+def _resolve_from_parts(url, download_url, is_downloaded, title=None, app=None):
     """Resolve a browser-usable URL from primary + remote fallback parts."""
-    default = _fallback_cover_url(title)
+    default = _fallback_cover_url(title, app)
     url = _normalize_remote_url(url)
     download_url = _normalize_remote_url(download_url)
 
@@ -122,7 +133,7 @@ def _resolve_from_parts(url, download_url, is_downloaded, title=None):
         # it points at library images; otherwise fall back.
         if '/library/images/' in url:
             filename = url.split('/library/images/', 1)[-1]
-            if _local_cover_exists(filename):
+            if _local_cover_exists(filename, app):
                 return url
             if download_url.startswith(('http://', 'https://')):
                 return download_url
@@ -130,8 +141,8 @@ def _resolve_from_parts(url, download_url, is_downloaded, title=None):
         return url
 
     # Local library filename (normal Image.url shape)
-    if url and is_downloaded and _local_cover_exists(url):
-        return url_for('static', filename=f"library/images/{url.lstrip('/')}")
+    if url and is_downloaded and _local_cover_exists(url, app):
+        return _static_url(f"library/images/{url.lstrip('/')}", app)
 
     if download_url.startswith(('http://', 'https://')):
         return download_url
@@ -143,7 +154,7 @@ def _resolve_from_parts(url, download_url, is_downloaded, title=None):
     return default
 
 
-def resolve_cover_url(cover_image, title=None):
+def resolve_cover_url(cover_image, title=None, *, app=None):
     """Return a browser-usable cover URL for an Image row, string path, or default.
 
     Prefer a local static file when it is downloaded *and present on disk*.
@@ -156,29 +167,29 @@ def resolve_cover_url(cover_image, title=None):
     instead of the generic static default when ``title`` is given.
     """
     if isinstance(cover_image, str):
-        return _resolve_from_parts(cover_image, '', False, title=title)
+        return _resolve_from_parts(cover_image, '', False, title=title, app=app)
 
     if not cover_image:
-        return _fallback_cover_url(title)
+        return _fallback_cover_url(title, app)
 
     url = getattr(cover_image, 'url', None) or ''
     download_url = getattr(cover_image, 'download_url', None) or ''
     is_downloaded = bool(getattr(cover_image, 'is_downloaded', False))
-    return _resolve_from_parts(url, download_url, is_downloaded, title=title)
+    return _resolve_from_parts(url, download_url, is_downloaded, title=title, app=app)
 
 
-def resolve_game_cover_url(game, cover_image=None):
+def resolve_game_cover_url(game, cover_image=None, *, app=None):
     """Resolve cover for a game, falling back to legacy ``Game.cover`` string.
 
     Falls back to a titled placeholder (Pillow-rendered, cached on disk)
     rather than the static ``default_cover.jpg`` when the game has a name.
     """
     title = getattr(game, 'name', None) if game is not None else None
-    primary = resolve_cover_url(cover_image, title=title)
-    default = _fallback_cover_url(title)
+    primary = resolve_cover_url(cover_image, title=title, app=app)
+    default = _fallback_cover_url(title, app)
     if primary != default:
         return primary
     legacy = getattr(game, 'cover', None) if game is not None else None
     if legacy:
-        return resolve_cover_url(legacy, title=title)
+        return resolve_cover_url(legacy, title=title, app=app)
     return default

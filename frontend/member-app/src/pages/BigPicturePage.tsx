@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { fetchBrowseGames } from '../api/browse'
+import { initiateGameDownload } from '../api/downloads'
 import { queueClientCommand } from '../api/clientCommands'
 import { VoiceLobby } from '../components/VoiceLobby'
 import { SocialCompanionDock } from '../components/SocialCompanionDock'
@@ -63,10 +64,6 @@ function refuseOnThinSeat() {
   return true
 }
 
-function downloadUrl(uuid: any) {
-  return `/download_game/${encodeURIComponent(uuid)}`
-}
-
 function attractUrl(uuid: any) {
   const qs = new URLSearchParams({ attract_mode: 'true' })
   if (uuid) {
@@ -84,6 +81,7 @@ function focusGameFromQuery() {
 }
 
 export function BigPicturePage() {
+  const navigate = useNavigate()
   const shellConfig = useShellConfig()
   const perPage = Number(shellConfig.perPage) || DEFAULT_PER_PAGE
   // Latched once per render rather than per press: the seat cannot change
@@ -101,7 +99,18 @@ export function BigPicturePage() {
     games: LooseProps[]
     index: number
     select: (nextIndex: number) => void
-  }>({ games: [], index: 0, select: () => {} })
+    download: (uuid: string) => void
+  }>({ games: [], index: 0, select: () => {}, download: () => {} })
+
+  const requestDownload = async (uuid: string) => {
+    try {
+      await initiateGameDownload(uuid)
+      navigate('/downloads')
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : 'Unable to start this download.', 'error')
+    }
+  }
+  padState.current.download = requestDownload
 
   useEffect(() => {
     const controller = new AbortController()
@@ -152,7 +161,7 @@ export function BigPicturePage() {
   }
 
   useEffect(() => {
-    padState.current = { games: list, index, select }
+    padState.current = { games: list, index, select, download: requestDownload }
   })
 
   useEffect(() => {
@@ -218,7 +227,7 @@ export function BigPicturePage() {
 
       if (west && now - lastNav > GAMEPAD_REPEAT_MS) {
         if (!refuseOnThinSeat()) {
-          window.location.href = downloadUrl(padGames[padIndex].uuid)
+          padState.current.download(padGames[padIndex].uuid)
         }
         lastNav = now
       }
@@ -269,7 +278,7 @@ export function BigPicturePage() {
       case 'D':
         event.preventDefault()
         if (!refuseOnThinSeat()) {
-          window.location.href = downloadUrl(list[index].uuid)
+          void requestDownload(list[index].uuid)
         }
         break
       case 'Escape':
@@ -355,9 +364,13 @@ export function BigPicturePage() {
                   Open
                 </Link>
                 {thinSeat ? null : (
-                  <a className="od-bp__btn" href={downloadUrl(selected.uuid)}>
+                  <button
+                    type="button"
+                    className="od-bp__btn"
+                    onClick={() => void requestDownload(selected.uuid)}
+                  >
                     Download
-                  </a>
+                  </button>
                 )}
                 {!thinSeat &&
                 selected.client_connected &&

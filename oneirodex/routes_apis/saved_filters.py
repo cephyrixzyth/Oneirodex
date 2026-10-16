@@ -27,6 +27,7 @@ from oneirodex.utils.filter_tree import (
     parse_filter_tree,
 )
 from oneirodex.utils.library_acl import apply_game_access_filters
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
@@ -72,6 +73,7 @@ def list_saved_filters():
 
 @apis_bp.route('/filters/saved', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(SavedFilterCreateBody)
 def create_saved_filter(body: SavedFilterCreateBody):
     try:
@@ -107,6 +109,7 @@ def create_saved_filter(body: SavedFilterCreateBody):
 
 @apis_bp.route('/filters/saved/<int:filter_id>', methods=['PUT'])
 @login_required
+@require_api_token_scope('write:library')
 @validate_body(SavedFilterUpdateBody)
 def update_saved_filter(filter_id: int, body: SavedFilterUpdateBody):
     row = _own(filter_id)
@@ -143,6 +146,7 @@ def update_saved_filter(filter_id: int, body: SavedFilterUpdateBody):
 
 @apis_bp.route('/filters/saved/<int:filter_id>', methods=['DELETE'])
 @login_required
+@require_api_token_scope('write:library')
 def delete_saved_filter(filter_id: int):
     row = _own(filter_id)
     if not row:

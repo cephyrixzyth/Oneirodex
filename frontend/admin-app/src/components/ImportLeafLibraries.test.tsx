@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ImportLeafLibraries } from './ImportLeafLibraries'
 import {
   IMPORT_LEAF_PREVIEW_URL,
-  LIBRARY_ADD_URL,
+  LIBRARY_CREATE_URL,
   LIBRARY_SCAN_URL,
 } from '../api/proposeLeafLibrariesApi'
 
@@ -82,34 +82,20 @@ describe('ImportLeafLibraries', () => {
           }),
         }
       }
-      if (href.includes(LIBRARY_ADD_URL)) {
+      if (href === LIBRARY_CREATE_URL) {
         expect(opts?.method).toBe('POST')
         const form = opts.body
         expect(form.get('name')).toBe('Nintendo Switch')
         expect(form.get('platform')).toBe('SWITCH')
         expect(form.get('scan_depth')).toBe('1')
-        expect(form.get('csrf_token')).toBe('test-csrf')
-        return {
-          ok: true,
-          status: 200,
-          redirected: true,
-          url: 'http://localhost/libraries',
-          headers: new Headers({ 'content-type': 'application/json' }),
-
-          text: async () => JSON.stringify({}),
-          json: async () => ({}),
-        }
-      }
-      if (href.includes('/api/get_libraries')) {
+        expect(new Headers(opts.headers).get('X-CSRFToken')).toBe('test-csrf')
         return {
           ok: true,
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
 
-          text: async function () {
-            return JSON.stringify(await this.json())
-          },
-          json: async () => [{ uuid: 'lib-switch-1', name: 'Nintendo Switch' }],
+          text: async () => JSON.stringify({ library_uuid: 'lib-switch-1' }),
+          json: async () => ({ library_uuid: 'lib-switch-1' }),
         }
       }
       if (href.includes(LIBRARY_SCAN_URL)) {
@@ -156,7 +142,7 @@ describe('ImportLeafLibraries', () => {
     expect(screen.getByText(/Nothing is created until you confirm/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /row errors/i })).toBeInTheDocument()
 
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(false)
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_CREATE_URL))).toBe(false)
 
     await user.click(screen.getByRole('checkbox', { name: /select nintendo switch/i }))
     await user.click(screen.getByRole('button', { name: /confirm create \(1\)/i }))
@@ -165,7 +151,7 @@ describe('ImportLeafLibraries', () => {
     await user.click(await screen.findByRole('button', { name: /^create library$/i }))
 
     await waitFor(() => {
-      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(true)
+      expect(fetchMock.mock.calls.some((c) => String(c[0]) === LIBRARY_CREATE_URL)).toBe(true)
     })
     await waitFor(() => {
       expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_SCAN_URL))).toBe(true)
@@ -351,6 +337,6 @@ describe('ImportLeafLibraries', () => {
     await user.click(screen.getByRole('button', { name: /confirm create \(1\)/i }))
     await user.click(await screen.findByRole('button', { name: /^cancel$/i }))
 
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_ADD_URL))).toBe(false)
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes(LIBRARY_CREATE_URL))).toBe(false)
   })
 })

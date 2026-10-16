@@ -5,17 +5,17 @@ from __future__ import annotations
 import base64
 import hashlib
 
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 
 MAGIC = b'GTENC1:'
 
 
 def encrypt_saves_enabled() -> bool:
-    if str(current_app.config.get('ENCRYPT_EMULATOR_SAVES', 'false')).lower() in (
+    if str(get_runtime_config().get('ENCRYPT_EMULATOR_SAVES', 'false')).lower() in (
         '1', 'true', 'yes', 'on',
     ):
         return True
@@ -32,7 +32,7 @@ def _fernet():
         raise RuntimeError(
             'cryptography package is required for encrypted emulator saves',
         ) from exc
-    secret = (current_app.config.get('SECRET_KEY') or 'oneirodex').encode('utf-8')
+    secret = (get_runtime_config().get('SECRET_KEY') or 'oneirodex').encode('utf-8')
     digest = hashlib.sha256(secret).digest()
     key = base64.urlsafe_b64encode(digest)
     return Fernet(key)

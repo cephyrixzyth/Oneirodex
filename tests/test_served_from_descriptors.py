@@ -511,19 +511,40 @@ def _make_admin(db_session):
 
 
 @pytest.fixture
-def served(app, db_session, tmp_path, monkeypatch):
+def served(tmp_path, monkeypatch):
     """A library root, a member and an ASGI app wired to them."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from oneirodex import db
+    from flask import Flask
+
     root = tmp_path / 'library'
     root.mkdir()
+    app = Flask(__name__, root_path=str(Path(__file__).resolve().parents[1] / 'oneirodex'))
+    app.config.update(TESTING=True, SECRET_KEY='descriptor-test', DATA_FOLDER_GAMES=str(root))
     monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(root))
     monkeypatch.setenv('ONEIRODEX_LIBRARY_DIR', str(tmp_path / 'runtime'))
-    user = _make_admin(db_session)
+    # ASGI now uses an independent native Session. Seed a private SQLite
+    # database for this runtime test so its committed fixtures are visible to
+    # that session without escaping the shared PostgreSQL SAVEPOINT fixture.
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'served.sqlite'}",
+        connect_args={'check_same_thread': False},
+    )
+    db.metadata.create_all(engine)
+    setup_session = Session(engine, expire_on_commit=False)
+    user = _make_admin(setup_session)
     lazy = asgi_mod.LazyASGIApp()
     lazy._flask_app = app
+    lazy._native_sqlalchemy_engine = engine
     lazy._ensure_flask = AsyncMock()
     lazy._get_user_id = AsyncMock(return_value=user.id)
     monkeypatch.setattr(asgi_mod, 'log_system_event', _quiet)
-    return types.SimpleNamespace(root=root, user=user, lazy=lazy, db=db_session, tmp=tmp_path)
+    try:
+        yield types.SimpleNamespace(root=root, user=user, lazy=lazy, db=setup_session, app=app, tmp=tmp_path)
+    finally:
+        setup_session.close()
+        engine.dispose()
 
 
 def _get_rom(served, game) -> _Wire:
@@ -589,9 +610,12 @@ def test_asgi_rejects_legacy_download_scope_after_account_becomes_child(served):
     member.set_password('password123')
     served.db.add(member)
     served.db.commit()
-    _, raw = generate_api_token(member, 'legacy download', ['write:download'])
-    member.role = 'child'
-    served.db.commit()
+    with served.lazy._native_database_scope(served.app):
+        from oneirodex.runtime_native.db_session import native_db
+        native_member = native_db.session.get(User, member.id)
+        _, raw = generate_api_token(native_member, 'legacy download', ['write:download'])
+        native_member.role = 'child'
+        native_db.session.commit()
     scope = {'headers': [(b'authorization', f'Bearer {raw}'.encode('ascii'))]}
     served.lazy._get_user_id = asgi_mod.LazyASGIApp._get_user_id.__get__(
         served.lazy, asgi_mod.LazyASGIApp,

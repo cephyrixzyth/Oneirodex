@@ -28,7 +28,13 @@ export function LibrariesTrailSummary({
     typeof document !== 'undefined' ? document.getElementById(ADMIN_TOPBAR_TRAIL_ID) : null,
   )
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelId = useId()
+
+  const closeAndRestoreFocus = () => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
 
   useLayoutEffect(() => {
     setTrailHost(document.getElementById(ADMIN_TOPBAR_TRAIL_ID))
@@ -40,7 +46,7 @@ export function LibrariesTrailSummary({
       if (!rootRef.current?.contains(event.target as Node | null)) setOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') closeAndRestoreFocus()
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -65,6 +71,7 @@ export function LibrariesTrailSummary({
       <button
         type="button"
         className={`od-cbtn od-contextbar__count${open ? ' is-on' : ''}`}
+        ref={triggerRef}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={open ? panelId : undefined}
@@ -81,7 +88,7 @@ export function LibrariesTrailSummary({
         >
           <div className="od-pop__head">
             <span className="od-pop__title">Libraries</span>
-            <button type="button" className="od-cbtn" onClick={() => setOpen(false)}>
+            <button type="button" className="od-cbtn" onClick={closeAndRestoreFocus}>
               Done
             </button>
           </div>
@@ -126,6 +133,7 @@ export function LibrariesTrailSummary({
                     onClick={() => {
                       onPlatformFilter(platformFilter === row.platform ? '' : row.platform)
                       setOpen(false)
+                      triggerRef.current?.focus()
                     }}
                   >
                     <span className="od-libraries-trail__name">{row.platform}</span>

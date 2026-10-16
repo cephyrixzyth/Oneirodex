@@ -6,10 +6,10 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.challenge_solver import fetch_with_challenge_retry
 
@@ -22,22 +22,24 @@ def _settings() -> GlobalSettings | None:
     ).scalars().first()
 
 
-def debrid_enabled() -> bool:
-    return str(current_app.config.get('ENABLE_DEBRID', 'true')).lower() in (
+def debrid_enabled(*, config=None) -> bool:
+    config = config if config is not None else get_runtime_config()
+    return str(config.get('ENABLE_DEBRID', 'true')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
-def get_debrid_config() -> dict[str, Any]:
+def get_debrid_config(*, config=None) -> dict[str, Any]:
+    config = config if config is not None else get_runtime_config()
     row = _settings()
     cfg = getattr(row, 'arr_settings', None) if row else None
     if not isinstance(cfg, dict):
         cfg = {}
     return {
-        'real_debrid_token': cfg.get('real_debrid_token') or current_app.config.get('REAL_DEBRID_TOKEN') or '',
-        'alldebrid_api_key': cfg.get('alldebrid_api_key') or current_app.config.get('ALLDEBRID_API_KEY') or '',
-        'premiumize_api_key': cfg.get('premiumize_api_key') or current_app.config.get('PREMIUMIZE_API_KEY') or '',
-        'torbox_api_key': cfg.get('torbox_api_key') or current_app.config.get('TORBOX_API_KEY') or '',
+        'real_debrid_token': cfg.get('real_debrid_token') or config.get('REAL_DEBRID_TOKEN') or '',
+        'alldebrid_api_key': cfg.get('alldebrid_api_key') or config.get('ALLDEBRID_API_KEY') or '',
+        'premiumize_api_key': cfg.get('premiumize_api_key') or config.get('PREMIUMIZE_API_KEY') or '',
+        'torbox_api_key': cfg.get('torbox_api_key') or config.get('TORBOX_API_KEY') or '',
     }
 
 
@@ -60,28 +62,28 @@ def save_debrid_config(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def debrid_status() -> list[dict[str, Any]]:
-    cfg = get_debrid_config()
+def debrid_status(*, config=None) -> list[dict[str, Any]]:
+    cfg = get_debrid_config(config=config)
     return [
         {
             'id': 'real_debrid',
             'configured': bool(cfg.get('real_debrid_token')),
-            'enabled': debrid_enabled(),
+            'enabled': debrid_enabled(config=config),
         },
         {
             'id': 'alldebrid',
             'configured': bool(cfg.get('alldebrid_api_key')),
-            'enabled': debrid_enabled(),
+            'enabled': debrid_enabled(config=config),
         },
         {
             'id': 'premiumize',
             'configured': bool(cfg.get('premiumize_api_key')),
-            'enabled': debrid_enabled(),
+            'enabled': debrid_enabled(config=config),
         },
         {
             'id': 'torbox',
             'configured': bool(cfg.get('torbox_api_key')),
-            'enabled': debrid_enabled(),
+            'enabled': debrid_enabled(config=config),
         },
     ]
 

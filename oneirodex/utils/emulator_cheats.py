@@ -14,8 +14,8 @@ except ImportError:  # Windows (standalone): msvcrt byte-range locks instead
     fcntl = None
     import msvcrt
 
-from flask import current_app
 from werkzeug.utils import secure_filename
+from oneirodex.utils.runtime_config import get_runtime_config
 from oneirodex.utils.library_paths import library_dir
 
 _SAFE_UUID = re.compile(
@@ -69,7 +69,7 @@ _DIALECT_LABELS = {
 
 
 def cheats_root() -> str:
-    root = current_app.config.get('EMULATOR_CHEATS_PATH')
+    root = get_runtime_config().get('EMULATOR_CHEATS_PATH')
     if root:
         return root
     return os.path.join(library_dir(), 'cheats')
@@ -101,7 +101,7 @@ def _too_large() -> CheatLimitError:
 
 def _storage_limit() -> int:
     try:
-        configured = int(current_app.config.get('CHEAT_STORAGE_MAX_BYTES') or 0)
+        configured = int(get_runtime_config().get('CHEAT_STORAGE_MAX_BYTES') or 0)
     except (TypeError, ValueError):
         configured = 0
     return configured if configured > 0 else MAX_CHEAT_STORAGE_BYTES

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { PageStatus } from '@oneirodex/ui'
-import { getJson } from '../api/adminApi'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Button, PageStatus } from '@oneirodex/ui'
+import { getJson, postJson } from '../api/adminApi'
+import { errorText } from '../utils/errorText'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { MetricStrip } from '../components/opsWidgets'
 import { CreateUserForm } from '../components/CreateUserForm'
@@ -40,8 +41,35 @@ export function InvitesPage() {
   const quotaTotal = users.reduce((n, u) => n + (Number(u.invite_quota) || 0), 0)
 
   const [reloadKey, setReloadKey] = useState(0)
+  const [quotaUser, setQuotaUser] = useState('')
+  const [adjustment, setAdjustment] = useState('0')
+  const [saving, setSaving] = useState(false)
+  const [quotaError, setQuotaError] = useState('')
+  const [quotaMessage, setQuotaMessage] = useState('')
+
+  async function adjustQuota(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (saving) return
+    setSaving(true)
+    setQuotaError('')
+    setQuotaMessage('')
+    try {
+      const data = await postJson('/admin/api/invites/quota', {
+        user_id: quotaUser,
+        invites_number: Number(adjustment),
+      })
+      setQuotaMessage(`Quota updated to ${data.invite_quota}.`)
+      setReloadKey((key) => key + 1)
+    } catch (err) {
+      setQuotaError(errorText(err) || 'Could not adjust invite quota.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
+    setLoading(true)
+    setError(null)
     getJson('/admin/api/invites')
       .then((data) => setUsers(Array.isArray(data.users) ? data.users : []))
       .catch((err) => setError(err))
@@ -50,9 +78,16 @@ export function InvitesPage() {
 
   if (error) {
     return (
-      <div className="od-admin-page">
+      <Page title="Invites" lede="Per-user invite quota and unused tokens.">
         <PageStatus error errorMessage="Unable to load invite quotas." />
-      </div>
+        <Button
+          type="button"
+          className="od-btn--secondary"
+          onClick={() => setReloadKey((key) => key + 1)}
+        >
+          Retry loading invites
+        </Button>
+      </Page>
     )
   }
 
@@ -61,9 +96,9 @@ export function InvitesPage() {
       title="Invites"
       lede={
         <>
-          Per-user invite quota and unused tokens. Adjust quota on the classic form if needed.
-          Members can create invites as links without an email address — see their Invites panel.
-          Admins can also skip invites entirely and add a member here.
+          Per-user invite quota and unused tokens. Add or subtract quota below. Members can create
+          invites as links without an email address — see their Invites panel. Admins can also skip
+          invites entirely and add a member here.
         </>
       }
     >
@@ -71,10 +106,48 @@ export function InvitesPage() {
         onCreated={() => setReloadKey((key) => key + 1)}
         title="Create user without invite"
       />
+      <form className="od-admin-panel" onSubmit={adjustQuota}>
+        <h2 className="od-admin-subhead">Adjust invite quota</h2>
+        <label className="od-admin-field">
+          Member
+          <select
+            className="od-admin-input"
+            required
+            value={quotaUser}
+            onChange={(e) => setQuotaUser(e.target.value)}
+          >
+            <option value="">Choose a member</option>
+            {users.map((user) => (
+              <option key={user.user_id || user.id} value={user.user_id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="od-admin-field">
+          Quota adjustment
+          <input
+            className="od-admin-input"
+            type="number"
+            required
+            min={-1000}
+            max={1000}
+            step={1}
+            value={adjustment}
+            onChange={(e) => setAdjustment(e.target.value)}
+          />
+        </label>
+        <p className="od-admin-lede">
+          Positive numbers add quota; negative numbers subtract it. Existing invite tokens are
+          retained.
+        </p>
+        <PageStatus error={quotaError || null} />
+        {quotaMessage ? <PageStatus announcement="status">{quotaMessage}</PageStatus> : null}
+        <Button type="submit" disabled={saving || loading}>
+          {saving ? 'Saving…' : 'Adjust quota'}
+        </Button>
+      </form>
       <AdminPageActions label="Invite page actions">
-        <a className="od-cbtn" href="/admin/manage_invites">
-          Classic invite editor
-        </a>
         <a className="od-cbtn" href="/admin/users">
           Users
         </a>

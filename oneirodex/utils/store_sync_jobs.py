@@ -30,11 +30,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import delete, event, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import StoreSyncJob
 from oneirodex.utils.store_sync_errors import (
     StoreSyncError, SyncOutcomeError, classify_sync_exception, reason_payload,
@@ -188,6 +188,14 @@ LINK_TRIGGERS = frozenset({'connect', 'disconnect'})
 
 def _start(user_id: int, store: str, trigger: str, actor_id: int | None) -> StoreSyncJob:
     _expire_stale(user_id, store)
+    # Avoid the common duplicate-running insert entirely. The unique partial
+    # index below remains the cross-process race guard, but its IntegrityError
+    # path is only for a true simultaneous start and must not be the normal way
+    # an already-visible slot is detected.
+    holder = running_job(user_id, store)
+    if holder is not None:
+        busy = 'store_busy' if holder.trigger in LINK_TRIGGERS else 'sync_in_progress'
+        raise SyncOutcomeError(busy, job=holder if busy == 'sync_in_progress' else None)
     now = utcnow()
     job = StoreSyncJob(
         user_id=user_id, store=store, trigger=trigger, actor_id=actor_id,
@@ -337,7 +345,7 @@ def request_cancel(user_id: int, store: str) -> StoreSyncJob:
 
 def latest_jobs(user_ids=None) -> dict[tuple[int, str], StoreSyncJob]:
     """Newest job per (member, store); optionally limited to some members."""
-    newest = select(StoreSyncJob.user_id, StoreSyncJob.store, db.func.max(StoreSyncJob.id).label('id'))
+    newest = select(StoreSyncJob.user_id, StoreSyncJob.store, func.max(StoreSyncJob.id).label('id'))
     if user_ids is not None:
         newest = newest.where(StoreSyncJob.user_id.in_(list(user_ids)))
     newest = newest.group_by(StoreSyncJob.user_id, StoreSyncJob.store).subquery()

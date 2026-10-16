@@ -5,7 +5,7 @@ Bodies moved verbatim from ``oneirodex/utils/functions.py`` in wave A2.3.
 import re
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import ReleaseGroup
 from oneirodex.utils.quality_profiles import active_exclude_terms_for_scan
 

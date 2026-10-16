@@ -51,3 +51,11 @@ def test_wanted_queue_add_and_fulfill(tmp_path, monkeypatch):
     assert len(wu.list_wanted(1)) == 1
     assert wu.mark_fulfilled(1, 'game-1', kind='update') == 1
     assert wu.list_wanted(1)[0]['status'] == 'available'
+
+
+def test_wanted_queue_uses_explicit_app_upload_root(tmp_path):
+    app = SimpleNamespace(config={'UPLOAD_FOLDER': str(tmp_path)})
+    item = wu.add_wanted(2, game_uuid='game-2', app=app)
+
+    assert wu.list_wanted(2, app=app) == [item]
+    assert (tmp_path / 'wanted_updates' / 'user_2.json').is_file()

@@ -25,6 +25,8 @@ export function LibrariesPage() {
   } = useLibraryScan()
 
   useEffect(() => {
+    setRows(null)
+    setError(null)
     getJson('/api/get_libraries')
       .then((data) => setRows(Array.isArray(data) ? data : []))
       .catch(setError)
@@ -36,8 +38,17 @@ export function LibrariesPage() {
       lede="Manage library folders and platforms. Sibling scan pages live under Libraries & scans in the rail."
     >
       <PageStatus error={error} errorMessage="Unable to load libraries." />
+      {error ? (
+        <Button
+          type="button"
+          className="od-btn--secondary"
+          onClick={() => setReloadKey((key) => key + 1)}
+        >
+          Retry loading libraries
+        </Button>
+      ) : null}
       <p className="od-admin-lede">
-        Prefer the unified classic page: <a href="/scan_management?active_tab=auto">Scan jobs</a>
+        Scan and schedule work from <a href="/admin/scan-controls">Scan controls</a>
         {' · '}
         Library hero image:{' '}
         <a href="/admin/art_studio#stock">Choose image from Backup &amp; stock</a>
@@ -70,6 +81,8 @@ export function LibrariesPage() {
           <DataTable
             rows={rows}
             getRowKey={(lib) => lib.uuid}
+            caption="Libraries"
+            scrollLabel="Libraries table"
             emptyMessage="No libraries yet. Add one to start scanning."
             initialSort={{ key: 'name', dir: 'asc' }}
             dense
@@ -97,6 +110,7 @@ export function LibrariesPage() {
                   <Button
                     type="button"
                     size="sm"
+                    aria-label={`Scan ${String(lib.name || 'library')}`}
                     disabled={scanBusyKey === lib.uuid || !lib.last_scan_folder}
                     title={
                       lib.last_scan_folder

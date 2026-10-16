@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from oneirodex.utils.member_spa import render_member_spa
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.models import (
     Library, Game, Genre, GameMode, PlayerPerspective, Theme, Image,
     UserPreference, GlobalSettings, user_game_status
@@ -14,14 +15,12 @@ from oneirodex.utils.functions import (
 )
 from oneirodex.utils.local_metadata import has_local_metadata, has_local_images
 from oneirodex.utils.auth import admin_required
-from oneirodex.forms import CsrfForm, CsrfProtectForm
+from oneirodex.forms import CsrfForm
 from sqlalchemy.orm import joinedload
 from sqlalchemy import select, func, and_
-from oneirodex.utils.processors import get_global_settings
 from oneirodex.utils.secondary_scrapers import game_card_flags
 from oneirodex.utils.cover_url import resolve_game_cover_url
 from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_library
-from oneirodex import cache
 import json
 import urllib.parse
 
@@ -33,32 +32,22 @@ def get_saved_filters_from_cookie():
         cookie_value = request.cookies.get('libraryFilters')
         if not cookie_value:
             return {}
-        
+
         # Decode URL-encoded cookie value and parse JSON
         decoded_value = urllib.parse.unquote(cookie_value)
         saved_filters = json.loads(decoded_value)
-        
+
         # Return only non-empty filter values
         return {k: v for k, v in saved_filters.items() if v}
     except (json.JSONDecodeError, ValueError, TypeError) as e:
         print(f"Error parsing saved filters cookie: {e}")
         return {}
 
-@library_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Context processor to inject global settings into templates"""
-    return get_global_settings()
-
-
 @library_bp.route('/libraries')
 @login_required
 @admin_required
 def libraries():
-    libraries = db.session.execute(select(Library).order_by(Library.display_order.asc())).scalars().all()
-    csrf_form = CsrfProtectForm()
-    game_count = db.session.execute(select(func.count(Game.id))).scalar()  # Fetch the game count here
-    return render_template('admin/admin_manage_libraries.html', libraries=libraries, csrf_form=csrf_form, game_count=game_count)
+    return render_admin_spa(title='Libraries & scans - Oneirodex Admin')
 
 @library_bp.route('/library')
 @login_required

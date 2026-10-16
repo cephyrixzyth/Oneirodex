@@ -43,10 +43,18 @@ export function SettingsPage() {
   }
 
   useEffect(() => {
+    let cancelled = false
     getJson('/api/settings/module-status')
-      .then((data) => setModuleStatus(data && typeof data === 'object' ? data : null))
+      .then((data) => {
+        if (!cancelled) setModuleStatus(data && typeof data === 'object' ? data : null)
+      })
       // A failed badge fetch must not blank the hub — the links are the page.
-      .catch(() => setModuleStatus(null))
+      .catch(() => {
+        if (!cancelled) setModuleStatus(null)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (

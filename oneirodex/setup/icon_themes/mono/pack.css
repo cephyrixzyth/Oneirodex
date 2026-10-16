@@ -1,4 +1,4 @@
-html[data-icon-pack="mono"] .od-icon {
+html[data-icon-pack="mono"] .od-icon:is([data-icon="library"], [data-icon="discover"], [data-icon="systems"], [data-icon="download"], [data-icon="downloads"], [data-icon="favorites"], [data-icon="settings"], [data-icon="collections"], [data-icon="wishlist"], [data-icon="updates"], [data-icon="ownership"], [data-icon="calendar"], [data-icon="news"], [data-icon="playtime"], [data-icon="user"], [data-icon="menu"], [data-icon="more"], [data-icon="play"]) {
   stroke-width: var(--od-icon-stroke, 0.5);
   stroke-linecap: var(--od-icon-linecap, square);
   stroke-linejoin: var(--od-icon-linejoin, miter);

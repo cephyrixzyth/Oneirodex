@@ -137,6 +137,9 @@ def test_parse_trusted_proxy_count():
     assert apply_proxy_fix(app) is False
     assert app.wsgi_app == 'original'
 
-    app = SimpleNamespace(config={'TRUSTED_PROXIES': 1}, wsgi_app='original')
+    app = SimpleNamespace(
+        config={'TRUSTED_PROXIES': 1, 'TRUSTED_PROXY_CIDRS': '10.0.0.0/24'},
+        wsgi_app='original',
+    )
     assert apply_proxy_fix(app) is True
     assert app.wsgi_app != 'original'

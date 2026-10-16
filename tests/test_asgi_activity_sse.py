@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 import inspect
 import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from asgi import LazyASGIApp
@@ -26,7 +28,7 @@ def test_asgi_intercepts_both_sse_paths():
     routes = LazyASGIApp._SSE_ROUTES
     assert '/api/activity/stream' in routes
     assert '/api/events/stream' in routes
-    assert src.index('_SSE_ROUTES') < src.index('await self._app(')
+    assert src.index('_SSE_ROUTES') < src.index('await self._native_read_api_app(')
 
 
 def test_sse_routes_config():
@@ -36,6 +38,27 @@ def test_sse_routes_config():
     assert events['restrict_child'] is False
     assert 'activity' in activity['event_types']
     assert events['event_types'] is None
+
+
+def test_sse_authorization_uses_native_db_scope_without_flask_context(monkeypatch):
+    import oneirodex
+    from oneirodex.models import User
+    from oneirodex.runtime_native import db_session
+
+    user = SimpleNamespace(role='member')
+
+    class Session:
+        @staticmethod
+        def get(model, user_id):
+            assert model is User
+            return user if user_id == 7 else None
+
+    monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=Session()))
+    monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
+    app = LazyASGIApp()
+    app._flask_app = object()
+
+    assert _run(app._authorize_sse_user(7, restrict_child=True)) is None
 
 
 def _run(coro):

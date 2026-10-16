@@ -20,7 +20,7 @@
  *   actions. This is the UIR-1 "bar two" idea, now the only bar.
  *
  * Shared surface
- *   Loaded by base.html / base_admin.html / base_empty.html, so the member SPA,
+ *   Loaded by base.html / base_admin.html and the member SPA renderer, so the member SPA,
  *   the admin SPA and legacy Jinja pages all render identical chrome from this
  *   one file (the UIR-4 pattern). New filename rather than an edit to
  *   od-chrome.css so `theme_asset` falls back to default for themes that have
@@ -101,7 +101,7 @@
   scrollbar-gutter: stable;
   /* Top bar overlays this pane — reserve its height so resting content starts
      clear of Search / View / account. */
-  padding: calc(var(--od-topbar-h) + var(--od-stack)) var(--od-gutter) var(--od-section-gap);
+  padding: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + var(--od-stack)) var(--od-gutter) var(--od-section-gap);
 }
 
 /* Chat / surfaces that omit the top bar: drop the reserved strip. */
@@ -124,10 +124,10 @@
   );
   --od-tile-hover-pad-x: calc(var(--od-tile-hover-bleed-x) + 2.75rem);
   padding-block-start: calc(
-    var(--od-topbar-h) + max(var(--od-stack), var(--od-tile-hover-bleed-y))
+    var(--od-topbar-reserve-h, var(--od-topbar-h)) + max(var(--od-stack), var(--od-tile-hover-bleed-y))
   );
   padding-top: calc(
-    var(--od-topbar-h) + max(var(--od-stack), var(--od-tile-hover-bleed-y))
+    var(--od-topbar-reserve-h, var(--od-topbar-h)) + max(var(--od-stack), var(--od-tile-hover-bleed-y))
   );
   /* Gutter only. Padding reserves room for hover enlarge on all edges.
      Hovered tiles scale by 1.25x and need overflow:visible to grow outside
@@ -150,8 +150,8 @@
    and put the hover bleed on the grid so first-row enlarge still clears. */
 #main-content.od-shell__main:has(.od-library-selection),
 .od-shell > #content:has(.od-library-selection) {
-  padding-block-start: calc(var(--od-topbar-h) + 0.15rem) !important;
-  padding-top: calc(var(--od-topbar-h) + 0.15rem) !important;
+  padding-block-start: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + 0.15rem) !important;
+  padding-top: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + 0.15rem) !important;
 }
 
 /* Keep the first-run store prompt close to the top navigation. The normal
@@ -159,8 +159,8 @@
    above this small prompt before the tile grid begins. */
 #main-content.od-shell__main:has(.od-store-setup-prompt),
 .od-shell > #content:has(.od-store-setup-prompt) {
-  padding-block-start: calc(var(--od-topbar-h) + 0.15rem) !important;
-  padding-top: calc(var(--od-topbar-h) + 0.15rem) !important;
+  padding-block-start: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + 0.15rem) !important;
+  padding-top: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + 0.15rem) !important;
 }
 
 #main-content.od-shell__main:has(.od-library-selection) .game-library-container,
@@ -248,7 +248,7 @@ body.od-shell-host .od-admin-main {
   z-index: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: calc(var(--od-topbar-h) + var(--od-stack)) var(--od-gutter) var(--od-section-gap);
+  padding: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + var(--od-stack)) var(--od-gutter) var(--od-section-gap);
 }
 
 /* Libraries & scans: full width under the thin bar. Libraries tab fills the
@@ -263,7 +263,7 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   padding-right: var(--od-gutter, 1rem);
   padding-bottom: 0.65rem;
   padding-left: var(--od-gutter, 1rem);
-  padding-top: calc(var(--od-topbar-h, 3.25rem) + 0.35rem) !important;
+  padding-top: calc(var(--od-topbar-reserve-h, var(--od-topbar-h, 3.25rem)) + 0.35rem) !important;
 }
 
 body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(#librariesPanel.active),
@@ -334,6 +334,13 @@ body.od-shell-host > #admin-legacy-content[hidden] {
   font-family: var(--font-display);
   font-size: var(--od-font-lg);
   white-space: nowrap;
+}
+
+/* Hidden on desktop; the mobile drawer needs a visible close action inside the
+   modal surface so keyboard and touch users can dismiss it without finding the
+   toggle behind the scrim. */
+.od-rail__close {
+  display: none;
 }
 
 /* --- Brand mark, themed ----------------------------------------------------
@@ -881,7 +888,6 @@ button.od-rail__link {
   /* Matches the nav's own horizontal padding so footer controls line up with
      the rail links above them rather than sitting on their own inset. */
   padding: var(--od-space-2) var(--od-space-3);
-  border-top: 1px solid var(--od-border);
 }
 
 /* A control group in the footer aligns left, like every rail row. Centring it
@@ -1376,6 +1382,35 @@ button.od-rail__link {
    -------------------------------------------------------------------------- */
 
 @media (max-width: 900px) {
+  /* Keep the rail toggle and account control on the first row. Page controls
+     get a full-width second row so view switchers cannot paint over the
+     hamburger when the three desktop flex groups have no room to shrink. */
+  .od-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'start actions'
+      'page page';
+  }
+
+  .od-topbar__start {
+    grid-area: start;
+    flex: none;
+  }
+
+  .od-topbar__page {
+    grid-area: page;
+    justify-content: flex-start;
+    flex: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .od-topbar__start ~ .od-topbar__actions {
+    grid-area: actions;
+    flex: none;
+  }
+
   .od-shell,
   .od-shell[data-rail='collapsed'] {
     grid-template-columns: minmax(0, 1fr);
@@ -1388,18 +1423,44 @@ button.od-rail__link {
     z-index: 1070;
     width: min(var(--od-rail-w), 80vw);
     transform: translateX(-100%);
-    transition: transform var(--od-motion-base) var(--od-motion-ease);
+    visibility: hidden;
+    transition: transform var(--od-motion-base) var(--od-motion-ease),
+      visibility 0s linear var(--od-motion-base);
     box-shadow: var(--od-shadow-lg);
   }
 
-  /* `expanded`, not `open`. The shell only ever sets data-rail to `expanded`
-     or `collapsed` (App.tsx `data-rail={railState}`), so `[data-rail='open']`
-     matched nothing and the drawer could never be opened on mobile — the
-     hamburger appeared to do nothing. Mapping it to the real state makes the
-     toggle work: expanded slides the drawer in, collapsed slides it out, and
-     the choice persists like it does on desktop. */
-  [data-rail='expanded'] .od-rail {
+  .od-rail__close {
+    position: absolute;
+    top: var(--od-space-2);
+    right: var(--od-space-3);
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    height: 2.75rem;
+    padding-inline: var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-md);
+    background: var(--od-surface);
+    color: var(--od-text);
+    font-size: var(--od-font-sm);
+    cursor: pointer;
+  }
+
+  .od-rail__close:focus-visible {
+    outline: 2px solid var(--od-accent);
+    outline-offset: 2px;
+  }
+
+  /* Desktop expansion is a saved preference, not an instruction to open the
+     mobile drawer. Only the explicit `open` state displays it on narrow
+     screens; this keeps both shells closed on first load and aligns with the
+     shared useRailState contract. */
+  [data-rail='open'] .od-rail {
     transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
   }
 
   /* Collapsed is meaningless on mobile — the drawer is either open or gone —
@@ -1419,10 +1480,19 @@ button.od-rail__link {
   }
 
   .od-rail__scrim {
+    display: block;
     position: fixed;
     inset: 0;
     z-index: 1069;
     background: color-mix(in srgb, var(--od-bg) 70%, transparent);
+  }
+
+  .od-rail__scrim[hidden] {
+    display: none;
+  }
+
+  [data-rail='open'] .od-rail__scrim {
+    display: block;
   }
 
   .od-topbar__search {
@@ -1445,6 +1515,25 @@ button.od-rail__link {
   }
 }
 
+/* Admin section destinations can outnumber the space in the page row on a
+   phone. Keep the row bounded and let its buttons scroll as a group, so long
+   Settings, Themes, Images and Art Studio labels cannot widen the document. */
+@media (max-width: 700px) {
+  body.od-shell-host .od-topbar__page > .od-cbtn-group {
+    box-sizing: border-box;
+    flex-wrap: nowrap;
+    justify-content: flex-start !important;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    width: 100%;
+  }
+
+  body.od-shell-host .od-topbar__page > .od-cbtn-group > * {
+    flex: 0 0 auto;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Skip link — the rail puts ~23 links before main content, so bypassing them
    matters more here than it did with a five-item bar.
@@ -1464,6 +1553,9 @@ button.od-rail__link {
   border: 1px solid var(--od-accent);
   border-radius: var(--od-radius-sm);
   color: var(--od-text);
+  text-decoration: none;
+  outline: 2px solid var(--od-accent);
+  outline-offset: 2px;
 }
 
 /* --------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from oneirodex.utils.chat import (
     list_messages,
     mark_channel_read,
     open_or_create_dm,
+    parse_chat_limit,
     post_message,
     search_messages,
     set_channel_muted,
@@ -192,7 +193,10 @@ def chat_messages_list(channel_id: int):
     ch, refusal = _visible_channel(channel_id)
     if refusal is not None:
         return refusal
-    limit = min(100, max(1, int(request.args.get('limit') or 50)))
+    try:
+        limit = parse_chat_limit(request.args.get('limit'), default=50, maximum=100)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
     before = request.args.get('before')
     since = request.args.get('since')
     before_id = int(before) if before and str(before).isdigit() else None
@@ -378,7 +382,10 @@ def chat_emoji_delete(slug: str):
 @require_api_scope('read:social')
 def chat_search():
     q = (request.args.get('q') or '').strip()
-    limit = min(50, max(1, int(request.args.get('limit') or 20)))
+    try:
+        limit = parse_chat_limit(request.args.get('limit'), default=20, maximum=50)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
     try:
         results = search_messages(current_user, q, limit=limit)
     except ValueError as exc:

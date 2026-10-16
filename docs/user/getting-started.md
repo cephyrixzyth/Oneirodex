@@ -69,7 +69,7 @@ If you are an admin and the new member has no email at all — a child's console
 
 **Command palette:** press **Ctrl+K** (⌘K on Mac) or the top-nav **Search** hint to jump to any primary/More page, Preferences, Admin, or Help. On **Game Catalog**, Ctrl+K searches **library titles** first. Screenshot backlog for palette / Ops / health probes: [CAPTURE.md](../assets/readme/CAPTURE.md).
 
-Game Catalog **page size** options go up through **200–1000** (full allowlist 20/50/100/200/250/300/400/500/1000) — [preferences-themes.md](preferences-themes.md). Game Catalog Filters include **Signals** chips (UPDATE · MISSING · NEW · LANG). Filters open from a **Filters** button on the catalog bar.
+Game Catalog **page size** options go up through **200–1000** (full allowlist 20/50/100/200/300/400/500/1000) — [preferences-themes.md](preferences-themes.md). Game Catalog Filters include **Signals** chips (UPDATE · MISSING · NEW · LANG). Filters open from a **Filters** button on the catalog bar.
 
 **Discover shelves** can be pinned or hidden per account (**Rows** in the top bar) — the buttons take effect immediately. News **See all** opens the News page. A shelf with nothing honest to show is hidden rather than padded. **Game Catalog** shows one tile per title, not per copy — Preview → Available on lists the other systems. A grey Play button still opens and explains why.
 

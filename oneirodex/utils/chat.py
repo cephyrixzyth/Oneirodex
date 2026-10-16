@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     ChatChannel,
     ChatChannelMember,
@@ -22,11 +22,20 @@ from oneirodex.utils.chat_attachments import (
 )
 from oneirodex.utils.custom_emoji import custom_reaction_keys
 from oneirodex.utils.notifications import notify_user
-from oneirodex.utils.rbac import normalize_role, role_at_least
+from oneirodex.utils.role_catalog import normalize_role, role_at_least
 
 MENTION_RE = re.compile(r'@([A-Za-z0-9_.-]{2,64})')
 ALLOWED_REACTIONS = frozenset({'👍', '❤️', '😂', '🎉', '👀'})
 PROTECTED_CHANNEL_SLUGS = frozenset({'general', 'looking-for-players'})
+
+
+def parse_chat_limit(raw: str | None, *, default: int, maximum: int) -> int:
+    """Parse a bounded chat pagination limit or raise a client-safe error."""
+    try:
+        requested = int(raw) if raw not in (None, '') else default
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError('limit must be an integer') from exc
+    return min(maximum, max(1, requested))
 
 
 def is_allowed_reaction(emoji: str) -> bool:

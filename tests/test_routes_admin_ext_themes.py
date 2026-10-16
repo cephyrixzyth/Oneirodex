@@ -294,6 +294,8 @@ class TestManageThemesRoute:
             
             response = client.get('/admin/themes')
             assert response.status_code == 200
+            assert b'id="admin-app-root"' in response.data
+            mock_theme_manager.assert_not_called()
 
     @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
     @patch('oneirodex.routes_admin_ext.themes.Path')
@@ -523,6 +525,7 @@ class TestThemeReadmeRoute:
         
         response = client.get('/admin/themes/readme')
         assert response.status_code == 200
+        assert b'id="admin-app-root"' in response.data
 
     def test_theme_readme_get_method_only(self, client, admin_user):
         """Test that theme readme only accepts GET requests."""
@@ -645,10 +648,11 @@ class TestResetDefaultThemesRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.post('/admin/themes/reset')
+        response = client.post('/admin/themes/reset', json={})
 
-        assert response.status_code == 302
-        assert 'source directory not found' in logged_messages(mock_log)
+        assert response.status_code == 500
+        assert response.get_json()['error_code'] == 'internal'
+        assert 'source directory not found' not in response.get_data(as_text=True)
         # A reset that cannot proceed must leave the installed theme alone.
         assert (installed / 'theme.json').is_file()
 
@@ -661,9 +665,9 @@ class TestResetDefaultThemesRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.post('/admin/themes/reset')
+        response = client.post('/admin/themes/reset', json={})
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         installed = json.loads((themes_root / 'default' / 'theme.json').read_text(encoding='utf-8'))
         assert installed['name'] == 'Default Theme'
         assert (themes_root / 'default' / 'css' / 'od-tokens.css').is_file()
@@ -681,10 +685,10 @@ class TestResetDefaultThemesRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.post('/admin/themes/reset')
+        response = client.post('/admin/themes/reset', json={})
 
-        assert response.status_code == 302
-        assert 'Failed to remove existing default theme' in logged_messages(mock_log)
+        assert response.status_code == 500
+        assert response.get_json()['error_code'] == 'internal'
 
     @patch('oneirodex.routes_admin_ext.themes.log_system_event')
     @patch('shutil.copytree', side_effect=Exception('Copy failed'))
@@ -704,10 +708,10 @@ class TestResetDefaultThemesRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.post('/admin/themes/reset')
+        response = client.post('/admin/themes/reset', json={})
 
-        assert response.status_code == 302
-        assert 'Failed to copy default theme' in logged_messages(mock_log)
+        assert response.status_code == 500
+        assert response.get_json()['error_code'] == 'internal'
         assert not (themes_root / 'default').exists()
 
     @patch('oneirodex.routes_admin_ext.themes.log_system_event')
@@ -725,10 +729,10 @@ class TestResetDefaultThemesRoute:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
-        response = client.post('/admin/themes/reset')
+        response = client.post('/admin/themes/reset', json={})
 
-        assert response.status_code == 302
-        assert 'Error resetting default themes' in logged_messages(mock_log)
+        assert response.status_code == 500
+        assert response.get_json()['error_code'] == 'internal'
 
     def test_reset_default_themes_post_method_only(self, client, admin_user):
         """Test that reset default themes only accepts POST requests."""

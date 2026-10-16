@@ -6,6 +6,7 @@ import { UpdatesPage } from './UpdatesPage'
 import * as updatesApi from '../api/updates'
 import * as clientCommands from '../api/clientCommands'
 import * as calendarApi from '../api/calendar'
+import * as downloadsApi from '../api/downloads'
 import { ShellHarness } from '../testShell'
 
 vi.mock('../api/updates', () => ({
@@ -23,6 +24,10 @@ vi.mock('../api/calendar', () => ({
   fetchCalendar: vi.fn(),
 }))
 
+vi.mock('../api/downloads', () => ({
+  initiateGameDownload: vi.fn(),
+}))
+
 beforeEach(() => {
   vi.mocked(updatesApi.fetchUpdatesInbox).mockReset()
   vi.mocked(updatesApi.fetchStoreSearch).mockReset()
@@ -38,6 +43,8 @@ beforeEach(() => {
   })
   vi.mocked(clientCommands.queueClientCommand).mockReset()
   vi.mocked(calendarApi.fetchCalendar).mockReset()
+  vi.mocked(downloadsApi.initiateGameDownload).mockReset()
+  vi.mocked(downloadsApi.initiateGameDownload).mockResolvedValue({})
   vi.mocked(calendarApi.fetchCalendar).mockResolvedValue({
     releases: [
       {
@@ -82,11 +89,13 @@ test('inbox shows apply action and queues companion update pack', async () => {
   )
 
   expect(await screen.findByText('Behind Game')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: /Download update/i })).toHaveAttribute(
-    'href',
-    '/download_other/update/game-1/upd-1',
-  )
-
+  await user.click(screen.getByRole('button', { name: /Download update/i }))
+  await waitFor(() => {
+    expect(downloadsApi.initiateGameDownload).toHaveBeenCalledWith('game-1', {
+      kind: 'update',
+      versionUuid: 'upd-1',
+    })
+  })
   await user.click(screen.getByRole('button', { name: /Apply with companion/i }))
   await waitFor(() => {
     expect(clientCommands.queueClientCommand).toHaveBeenCalledWith('game-1', 'update', {

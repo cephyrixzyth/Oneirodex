@@ -1,6 +1,5 @@
 """Updates inbox — freshness-behind games in one place."""
 
-import os
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app, jsonify, request
@@ -12,6 +11,8 @@ from oneirodex.models import Game, GameExtra, GameUpdate
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.library_acl import apply_game_access_filters
 from oneirodex.utils.lifecycle import web_client_connected
+from oneirodex.utils.api_tokens import require_api_token_scope
+from oneirodex.utils.update_projections import batch_local_packs, dlc_summary
 from oneirodex.utils.secondary_scrapers import (
     search_gog_games,
     search_steam_games,
@@ -31,85 +32,12 @@ UPDATES_SCAN_MAX = 50
 UPDATES_SCAN_STALE_SECONDS = 86400
 
 
-def _basename_label(path: str, fallback: str) -> str:
-    name = os.path.basename(path.rstrip('\\/')) if path else ''
-    return name or fallback
-
-
-def _pack_row(kind: str, game_uuid: str, version_uuid: str, label: str) -> dict:
-    return {
-        'kind': kind,
-        'uuid': version_uuid,
-        'label': label,
-        'download_url': f'/download_other/{kind}/{game_uuid}/{version_uuid}',
-    }
-
-
 def _batch_local_packs(game_uuids: list[str]) -> dict[str, list[dict]]:
-    """Load update/extra packs for many games in two queries."""
-    packs_by_game: dict[str, list[dict]] = {uuid: [] for uuid in game_uuids}
-    if not game_uuids:
-        return packs_by_game
-
-    updates = db.session.execute(
-        select(GameUpdate)
-        .filter(GameUpdate.game_uuid.in_(game_uuids))
-        .order_by(GameUpdate.created_at.desc())
-    ).scalars().all()
-    for update in updates:
-        packs_by_game.setdefault(update.game_uuid, []).append(
-            _pack_row(
-                'update',
-                update.game_uuid,
-                update.uuid,
-                f'Update: {_basename_label(update.file_path, update.uuid[:8])}',
-            )
-        )
-
-    extras = db.session.execute(
-        select(GameExtra)
-        .filter(GameExtra.game_uuid.in_(game_uuids))
-        .order_by(GameExtra.created_at.desc())
-    ).scalars().all()
-    for extra in extras:
-        packs_by_game.setdefault(extra.game_uuid, []).append(
-            _pack_row(
-                'extra',
-                extra.game_uuid,
-                extra.uuid,
-                f'Extra: {_basename_label(extra.file_path, extra.uuid[:8])}',
-            )
-        )
-    return packs_by_game
+    return batch_local_packs(db.session, GameUpdate, GameExtra, game_uuids)
 
 
 def _dlc_summary(game: Game) -> dict | None:
-    payload = getattr(game, 'freshness_payload', None) or {}
-    dlc = payload.get('dlc')
-    if isinstance(dlc, dict) and dlc:
-        missing = dlc.get('missing_dlc_count_estimate')
-        if missing is None:
-            missing = dlc.get('missing_count')
-        store_count = dlc.get('store_dlc_count')
-        if store_count is None:
-            store_count = dlc.get('store_count')
-        return {
-            'store_count': store_count,
-            'local_hint': dlc.get('local_dlc_count_hint') or dlc.get('local_hint'),
-            'missing_count': missing,
-            'store': dlc.get('store'),
-        }
-    remotes = payload.get('remotes') if isinstance(payload, dict) else None
-    if isinstance(remotes, list):
-        for remote in remotes:
-            if isinstance(remote, dict) and remote.get('dlc_count') is not None:
-                return {
-                    'store_count': remote.get('dlc_count'),
-                    'local_hint': (payload.get('local') or {}).get('dlc_count_hint'),
-                    'missing_count': None,
-                    'store': remote.get('store'),
-                }
-    return None
+    return dlc_summary(game)
 
 
 @apis_bp.route('/updates/inbox', methods=['GET'])
@@ -303,6 +231,7 @@ def _updates_scan_due_query(library_uuid=None, cutoff=None):
 
 @apis_bp.route('/updates/scan', methods=['POST'])
 @login_required
+@require_api_token_scope('write:library')
 def updates_scan():
     """Re-probe library titles for store updates, oldest-checked first.
 

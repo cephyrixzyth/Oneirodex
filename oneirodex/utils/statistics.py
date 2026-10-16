@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from oneirodex.models import DownloadRequest, Game, User, user_favorites, InviteToken
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 
 def get_download_statistics():
     """Gather various download statistics"""

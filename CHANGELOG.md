@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.9] — 2026-10-15
+
+### Improved
+- Unify member and admin navigation, controls, tables, filters and shared icon/theme primitives across the React applications.
+- Complete the static React and native FastAPI runtime transition, removing Jinja-rendered application pages while retaining existing session compatibility.
+- Scrub Docker build context of user BIOS staging output so firmware and key files cannot enter shipped image layers.
+
+### Security
+- Authenticate forwarded client and origin headers against `TRUSTED_PROXY_CIDRS` before applying `TRUSTED_PROXIES` hop parsing. Supported launchers disable Uvicorn's implicit rewriting. Reverse-proxy deployments must configure the immediate proxy source IP/CIDR.
+- Bind desktop path reveals to an accessible game folder; require admin authority for unmatched and unbound scan-job paths.
+- Revalidate qBittorrent hardlink pipeline redirects and outbound destinations through the shared safe-request policy.
+
 ## [1.1.8] — 2026-10-08
 
 ### Improved

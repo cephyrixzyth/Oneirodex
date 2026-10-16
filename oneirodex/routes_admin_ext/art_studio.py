@@ -6,7 +6,7 @@ import base64
 import io
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import jsonify, render_template, request, send_file
+from flask import jsonify, request, send_file
 from flask_login import login_required
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -19,6 +19,7 @@ from oneirodex.schemas.admin_art_studio import (
     ArtStudioPreviewBody,
 )
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.cover_art_studio import (
     apply_pack_as_fallback,
     apply_pack_to_game,
@@ -56,7 +57,7 @@ def _json_body() -> dict:
 @login_required
 @admin_required
 def art_studio_page():
-    return render_template('admin/admin_art_studio.html')
+    return render_admin_spa(title='Art studio · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/api/art-studio/preview', methods=['POST'])
@@ -137,10 +138,10 @@ def art_studio_generate(body: ArtStudioGenerateBody):
         return jsonify({**manifest, 'preview_url': preview}), 201
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
-    except PermissionError as exc:
-        return api_error(f'Permission denied writing generated art pack: {exc}', code='internal')
-    except OSError as exc:
-        return api_error(f'Failed to write generated art pack to disk: {exc}', code='internal')
+    except PermissionError:
+        return api_error('Permission denied writing generated art pack', code='internal')
+    except OSError:
+        return api_error('Failed to write generated art pack to disk', code='internal')
 
 
 @admin2_bp.route('/admin/api/art-studio/download/<pack_id>', methods=['GET'])
@@ -154,10 +155,10 @@ def art_studio_download(pack_id: str):
         return api_error(str(exc), code='bad_request')
     except FileNotFoundError:
         return api_error('Pack not found', code='not_found')
-    except PermissionError as exc:
-        return api_error(f'Permission denied reading art pack: {exc}', code='internal')
-    except OSError as exc:
-        return api_error(f'Failed to read art pack from disk: {exc}', code='internal')
+    except PermissionError:
+        return api_error('Permission denied reading art pack', code='internal')
+    except OSError:
+        return api_error('Failed to read art pack from disk', code='internal')
     return send_file(
         io.BytesIO(payload),
         mimetype='application/zip',
@@ -174,8 +175,8 @@ def art_studio_stock_catalog():
     try:
         items = list_stock_catalog()
         return jsonify({'items': items, 'count': len(items)})
-    except Exception as exc:  # noqa: BLE001
-        return api_error(f'Failed to list stock catalog: {exc}', code='internal')
+    except Exception:  # noqa: BLE001
+        return api_error('Failed to list stock catalog', code='internal')
 
 
 @admin2_bp.route('/admin/api/art-studio/stock/generate', methods=['POST'])
@@ -200,10 +201,10 @@ def art_studio_stock_generate():
         return jsonify(result), 201
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
-    except PermissionError as exc:
-        return api_error(f'Permission denied writing stock packs: {exc}', code='internal')
-    except OSError as exc:
-        return api_error(f'Failed to write stock packs: {exc}', code='internal')
+    except PermissionError:
+        return api_error('Permission denied writing stock packs', code='internal')
+    except OSError:
+        return api_error('Failed to write stock packs', code='internal')
 
 
 @admin2_bp.route('/admin/api/art-studio/apply', methods=['POST'])
@@ -236,12 +237,12 @@ def art_studio_apply(body: ArtStudioApplyBody):
         return api_error(str(exc), code='not_found')
     except (ValueError, FileNotFoundError) as exc:
         return api_error(str(exc), code='bad_request')
-    except PermissionError as exc:
-        return api_error(f'Permission denied writing cover art: {exc}', code='internal')
-    except OSError as exc:
-        return api_error(f'Failed to write cover art to disk: {exc}', code='internal')
-    except Exception as exc:  # noqa: BLE001 - surface DB/commit failures as JSON, not an HTML 500 page
-        return api_error(f'Unexpected error applying pack: {exc}', code='internal')
+    except PermissionError:
+        return api_error('Permission denied writing cover art', code='internal')
+    except OSError:
+        return api_error('Failed to write cover art to disk', code='internal')
+    except Exception:  # noqa: BLE001 - surface DB/commit failures as JSON, not an HTML 500 page
+        return api_error('Unexpected error applying pack', code='internal')
 
 
 @admin2_bp.route('/admin/api/art-studio/batch-generate', methods=['POST'])
@@ -310,11 +311,11 @@ def _art_studio_apply_batch_impl():
                 'pack_id': manifest['pack_id'],
                 **result,
             })
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             failed.append({
                 'game_uuid': game.uuid,
                 'name': game.name,
-                'error': str(exc),
+                'error': 'Failed to generate or apply art pack',
             })
 
     log_system_event(
@@ -340,8 +341,8 @@ def art_studio_system_marks_catalog():
             'count': len(items),
             'all_platforms': platform_choices(),
         })
-    except Exception as exc:  # noqa: BLE001
-        return api_error(f'Failed to list system marks: {exc}', code='internal')
+    except Exception:  # noqa: BLE001
+        return api_error('Failed to list system marks', code='internal')
 
 
 @admin2_bp.route('/admin/api/art-studio/system-marks/lab', methods=['GET'])
@@ -412,6 +413,6 @@ def art_studio_system_marks_generate():
     except ArtworkGenerationError as exc:
         # Match cover generate: AI/backend failure is a gateway problem, not bad input.
         return api_error(str(exc), code='bad_gateway')
-    except OSError as exc:
-        return api_error(f'Failed to write system marks: {exc}', code='internal')
+    except OSError:
+        return api_error('Failed to write system marks', code='internal')
 

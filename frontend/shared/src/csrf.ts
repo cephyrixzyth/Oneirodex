@@ -58,6 +58,18 @@ export function getCsrfToken(): string {
   return document.getElementById('csrf_token')?.textContent || ''
 }
 
+/** Update the shared meta token after a server-issued bootstrap response. */
+export function setCsrfToken(token: string): void {
+  if (typeof document === 'undefined') return
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.name = 'csrf-token'
+    document.head.append(meta)
+  }
+  meta.content = token
+}
+
 /**
  * Build request headers carrying the CSRF token.
  *

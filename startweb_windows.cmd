@@ -57,4 +57,4 @@ set ONEIRODEX_MIGRATIONS_COMPLETE=true
 set ONEIRODEX_INITIALIZATION_COMPLETE=true
 
 REM Start uvicorn with workers (migrations already complete)
-uvicorn asgi:asgi_app --host 0.0.0.0 --port %PORT% --workers 4
+uvicorn asgi:asgi_app --host 0.0.0.0 --port %PORT% --workers 4 --no-proxy-headers

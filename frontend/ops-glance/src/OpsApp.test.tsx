@@ -35,7 +35,38 @@ describe('OpsApp', () => {
 
     render(<OpsApp pollMs={15000} />)
 
+    expect(screen.getByRole('heading', { level: 1, name: 'Operations glance' })).toBeInTheDocument()
     expect(await screen.findByText('ops-host')).toBeInTheDocument()
+  })
+
+  test('announces initial and changed severity without repeating unchanged polls', async () => {
+    vi.mocked(fetchOpsSummary)
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce({
+        ...snapshot,
+        as_of: '2026-07-22T23:00:15+00:00',
+      })
+      .mockResolvedValueOnce({
+        ...snapshot,
+        as_of: '2026-07-22T23:00:30+00:00',
+        issues: { overall: 'warn', items: [] },
+      })
+    const user = userEvent.setup()
+
+    render(<OpsApp pollMs={15000} />)
+
+    expect(await screen.findByText('ops-host')).toBeInTheDocument()
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status).toHaveAttribute('aria-atomic', 'true')
+    expect(status).toHaveTextContent('All systems healthy')
+
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(screen.getByText(/Updated/)).toBeInTheDocument())
+    expect(status).toHaveTextContent('All systems healthy')
+
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(status).toHaveTextContent('Attention needed'))
   })
 
   test('aborts an in-flight request on unmount without applying its result', async () => {

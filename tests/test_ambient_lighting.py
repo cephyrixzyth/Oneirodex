@@ -162,6 +162,25 @@ def test_notify_play_session_start_async_hyperion(app, db_session, monkeypatch):
     mock_async.assert_called_once()
 
 
+def test_explicit_ambient_config_play_hook_needs_no_flask_context(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        'oneirodex.utils.ambient_lighting.get_ambient_config',
+        lambda _config: {'provider': 'off', 'enabled': False},
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.ambient_lighting._run_async',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError('disabled lighting must not start a worker')
+        ),
+    )
+
+    notify_play_session_started(
+        SimpleNamespace(role='user'), config={'ENABLE_AMBIENT_LIGHTING': False},
+    )
+
+
 def test_ambient_lighting_status_api(client, app, db_session, monkeypatch):
     _disable_ambient(app, db_session, monkeypatch)
     from uuid import uuid4

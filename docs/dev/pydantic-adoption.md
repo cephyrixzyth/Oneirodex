@@ -127,6 +127,16 @@ Flask blueprints (`/api` for `routes_apis/`).
 | `routes_admin_ext/art_studio.py` | `POST /admin/api/art-studio/preview` (`art_studio_preview`) | `ArtStudioPreviewBody` |
 | `routes_admin_ext/art_studio.py` | `POST /admin/api/art-studio/generate` (`art_studio_generate`) | `ArtStudioGenerateBody` |
 | `routes_admin_ext/art_studio.py` | `POST /admin/api/art-studio/apply` (`art_studio_apply`) | `ArtStudioApplyBody` |
+| `routes_admin_ext/attract_mode.py` | `PUT /api/admin/attract-mode/settings` (`admin_attract_settings_api`) | `AttractModeBody` |
+| `routes_admin_ext/features.py` | `PUT /api/admin/features/settings` (`features_settings_api`) | `FeaturePreferencesBody` |
+| `routes_admin_ext/features.py` | `PUT /api/admin/features/challenge` (`features_challenge_save_api`) | `ChallengeSolverBody` |
+| `routes_admin_ext/filters.py` | `POST /api/admin/scan-filters` (`scan_filters_api`) | `ScanFilterBody` |
+| `routes_admin_ext/newsletter.py` | `POST /api/admin/newsletters` (`newsletter_send`) | `NewsletterSendBody` |
+| `routes_admin_ext/igdb.py` | `PUT /api/admin/igdb/settings` (`igdb_settings_api`) | `JsonObjectBody` + `validate_igdb_data` |
+| `routes_admin_ext/settings.py` | `PUT /api/admin/server-settings` (`server_settings_api`) | `JsonObjectBody` + `validate_server_settings` |
+| `routes_apis/integrations.py` | `PUT /admin/integrations/oidc` (`oidc_admin_config_put`) | `OidcAdminBody` |
+| `routes_apis/integrations.py` | `PUT /admin/integrations/community` (`community_chat_settings_api`) | `CommunityChatBody` |
+| `routes_smtp.py` | `PUT /api/admin/smtp/settings` (`smtp_settings_api`) | `JsonObjectBody` + `validate_smtp_data` |
 | `routes_arr.py` | `POST /api/arr/download` (`arr_download`) | `ArrDownloadBody` |
 | `routes_arr.py` | `POST /api/arr/hardlink/preview` (`arr_hardlink_preview`) | `ArrHardlinkPreviewBody` |
 | `routes_apis/game.py` | `POST /api/games/batch/favorite` (`games_batch_favorite`) | `BatchFavoriteBody` (`@validate_batch_body`) |
@@ -174,6 +184,14 @@ Flask blueprints (`/api` for `routes_apis/`).
   `updated`/`skipped`/`errors`/`limit`. Now 422 `unprocessable` with the
   same extra keys plus `detail` naming the field. Over-limit is still 400.
   Happy-path `ok` is still "did every item succeed" (not `api_ok`).
+- **Admin feature, scan-filter, newsletter, attract-mode, OIDC, and community
+  settings bodies** — schema validation now runs through `@validate_body`;
+  custom error handlers preserve each endpoint's existing 400 code and message.
+  Authorization decorators still run before body validation.
+- **Server, IGDB, and SMTP settings bodies** — `JsonObjectBody` verifies the
+  top-level JSON object, then the existing endpoint-specific validators retain
+  their field rules and 400 messages. The server-settings handler applies it
+  only to PUT; GET remains body-free.
 
 ## Deliberately not adopted (and why)
 
@@ -193,6 +211,10 @@ Leave these until the contract can be preserved; do not force them.
 - `admin_freshness_refresh` — every field optional with a default; admin authZ
   is done in the body, not a decorator. Nothing to delete and validation must
   not run before the admin check.
+- `routes_apis/library.py` create/edit endpoints accept multipart image uploads
+  as well as JSON. They use `read_json_body()` only for the JSON branch and
+  retain their existing form and field validation; a JSON-only decorator would
+  break the multipart contract.
 
 ### `routes_apis/scan.py` (+ `scan_unmatched.py`, `scan_unmatched_edit.py` since H-D.4)
 

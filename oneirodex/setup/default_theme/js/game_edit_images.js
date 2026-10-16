@@ -54,34 +54,14 @@ function uploadFile(file, gameUuid, csrfToken, imageType = 'screenshot') {
                 displayImage(data);
             }
             if (data.flash) {
-                // Create and display flash message
-                let flashContainer = document.querySelector('.flashes');
-                if (!flashContainer) {
-                    // Create the main flash container if it doesn't exist
-                    const mainContainer = document.createElement('div');
-                    mainContainer.className = 'content-flash';
-                    document.querySelector('.glass-panel').prepend(mainContainer);
-                    
-                    // Create the flashes container
-                    flashContainer = document.createElement('div');
-                    flashContainer.className = 'flashes';
-                    mainContainer.appendChild(flashContainer);
-                }
-                
-                const flashMessage = document.createElement('div');
-                flashMessage.className = 'flash';
-                flashMessage.textContent = data.flash;
-                flashContainer.appendChild(flashMessage);
-
-                // Remove the flash message after 3 seconds
-                setTimeout(() => {
-                    flashMessage.remove();
-                    if (document.querySelector('.flashes').children.length === 0) {
-                        document.querySelector('.flashes').remove();
-                    }
-                }, 3000);
-                
-                console.log('Success:', data.flash);
+                const feedback = document.createElement('p');
+                feedback.className = 'od-edit-images__feedback';
+                feedback.setAttribute('role', 'status');
+                feedback.textContent = data.flash;
+                const editor = document.querySelector('.od-edit-images');
+                editor.querySelector('.od-edit-images__feedback')?.remove();
+                editor.prepend(feedback);
+                setTimeout(() => feedback.remove(), 3000);
             }
         } else {
             throw new Error('Upload succeeded but no URL was returned.');
@@ -163,21 +143,50 @@ function buildEditorImageNode(data, options) {
     return wrap;
 }
 
+function clearCoverPreview() {
+    const container = document.querySelector('#cover-image-editor .cover-image-container');
+    container.querySelectorAll('#cover-preview-img, [data-cover-fallback], .delete-cover-image-container')
+        .forEach((node) => node.remove());
+    return container;
+}
+
 function displayCoverImage(data) {
-    let coverImageEditor = document.getElementById('cover-image-editor');
-
-    let existingImg = coverImageEditor.querySelector('img');
-    if (existingImg) {
-        existingImg.remove();
-    }
-
-    let img = document.createElement('img');
+    const container = clearCoverPreview();
+    const img = document.createElement('img');
+    img.id = 'cover-preview-img';
     img.src = data.url;
-    img.alt = "Cover Image";
-    img.style.maxWidth = "300px";
-    img.style.maxHeight = "300px";
+    img.alt = 'Cover Image';
+    img.dataset.imageId = String(data.image_id);
+    container.appendChild(img);
 
-    coverImageEditor.insertBefore(img, coverImageEditor.firstChild);
+    const actions = document.createElement('div');
+    actions.className = 'delete-cover-image-container';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-danger';
+    button.textContent = 'Delete Cover Image';
+    button.addEventListener('click', () => deleteImage(data.image_id));
+    actions.appendChild(button);
+    container.appendChild(actions);
+}
+
+function displayCoverFallback() {
+    const editor = document.getElementById('cover-image-editor');
+    const container = clearCoverPreview();
+    const fallback = document.createElement('div');
+    fallback.className = 'od-cover-fallback';
+    fallback.setAttribute('data-cover-fallback', '');
+    const mark = document.createElement('span');
+    mark.className = 'od-cover-fallback__mark od-brand-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    const title = document.createElement('p');
+    title.className = 'od-cover-fallback__title';
+    title.textContent = editor.dataset.gameName;
+    const note = document.createElement('p');
+    note.className = 'od-cover-fallback__note';
+    note.textContent = 'No cover art';
+    fallback.append(mark, title, note);
+    container.appendChild(fallback);
 }
 
 function deleteImage(imageId) {
@@ -214,17 +223,10 @@ function deleteImage(imageId) {
     })
     .then(data => {
         console.log('Delete response:', data);
-        if (data.default_cover) {
-            // This was a cover image, replace with default
-            const coverImageEditor = document.getElementById('cover-image-editor');
-            const img = coverImageEditor.querySelector('img');
-            if (img) {
-                img.src = data.default_cover;
-                img.removeAttribute('data-image-id');
-            }
+        if (isCoverImage) {
+            displayCoverFallback();
         } else {
-            // Regular screenshot, just remove it
-            document.getElementById(`image-${imageId}`).remove();
+            document.getElementById(`image-${imageId}`)?.remove();
         }
     })
     .catch((error) => {

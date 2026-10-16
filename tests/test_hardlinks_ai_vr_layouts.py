@@ -143,6 +143,34 @@ def test_hardlink_apply_api_requires_flags(client, app, admin, tmp_path, monkeyp
     assert resp.status_code == 403
 
 
+def test_hardlink_apply_does_not_return_local_os_error_paths(
+    client, app, admin, tmp_path, monkeypatch,
+):
+    _login(client, app, admin)
+    src = tmp_path / 'a.bin'
+    src.write_bytes(b'1234')
+    dest = tmp_path / 'b.bin'
+    monkeypatch.setitem(app.config, 'ENABLE_HARDLINK_HELPERS', True)
+    monkeypatch.setitem(app.config, 'ALLOW_HARDLINK_APPLY', True)
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.storage.get_allowed_base_directories',
+        lambda _app: [str(tmp_path)],
+    )
+    secret_path = str(tmp_path / 'private-storage-root')
+
+    def fail(*_args, **_kwargs):
+        raise OSError(f'permission denied: {secret_path}')
+
+    monkeypatch.setattr('oneirodex.routes_apis.storage.apply_hardlink', fail)
+    response = client.post(
+        '/api/storage/hardlink/apply', json={'source': str(src), 'dest': str(dest)},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json()['error'] == 'Hardlink operation failed'
+    assert secret_path not in response.get_data(as_text=True)
+
+
 def test_vr_catalog_flag_off(client, app, admin):
     _login(client, app, admin)
     app.config['ENABLE_VR_BROWSE'] = False

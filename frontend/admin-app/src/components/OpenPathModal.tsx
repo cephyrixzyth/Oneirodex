@@ -1,9 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Modal } from '@oneirodex/ui'
+import { PageStatus, Modal, Button } from '@oneirodex/ui'
 import { postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import './OpenPathModal.css'
-import { Button } from '@oneirodex/ui'
 
 async function copyPath(path: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
@@ -125,9 +124,9 @@ export function OpenPathModal({
         </Button>
       </div>
       {status ? (
-        <p className="od-open-path__status" role="status">
+        <PageStatus announcement="status" className="od-open-path__status">
           {status}
-        </p>
+        </PageStatus>
       ) : null}
     </Modal>
   )

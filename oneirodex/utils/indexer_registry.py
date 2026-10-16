@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.security import validate_outbound_http_url
 

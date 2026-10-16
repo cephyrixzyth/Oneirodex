@@ -4,7 +4,6 @@ Bodies moved verbatim from ``oneirodex/utils/functions.py`` in wave A2.3.
 """
 import os
 import time
-from flask import current_app
 from oneirodex.utils.security import (
     get_allowed_base_directories,
     is_safe_path,
@@ -26,6 +25,16 @@ __all__ = [
 
 # Default cap for recursive size walks (NAS/Unraid trees can take minutes otherwise).
 _DEFAULT_FOLDER_SIZE_TIMEOUT_SEC = 60
+
+
+def _current_app_or_none():
+    """Resolve Flask's current app only for legacy context-aware callers."""
+    try:
+        from flask import current_app
+
+        return current_app._get_current_object()
+    except (ImportError, RuntimeError):
+        return None
 
 #: Most bytes of an NFO that are read and stored. Real ones are tens of KB of
 #: ASCII art; the details page shows the first 10,000 characters anyway.
@@ -105,8 +114,9 @@ def get_folder_size_in_bytes(folder_path, timeout=_DEFAULT_FOLDER_SIZE_TIMEOUT_S
     try:
         # Validate folder path security (only if we're in an application context)
         try:
-            if current_app:
-                allowed_bases = get_allowed_base_directories(current_app)
+            app = _current_app_or_none()
+            if app is not None:
+                allowed_bases = get_allowed_base_directories(app)
                 if not allowed_bases:
                     print(f"Security error: No allowed base directories configured for path: {folder_path}")
                     return 0
@@ -179,25 +189,32 @@ def get_folder_size_in_bytes(folder_path, timeout=_DEFAULT_FOLDER_SIZE_TIMEOUT_S
         return 0
 
 
-def get_folder_size_in_bytes_updates(folder_path, timeout=_DEFAULT_FOLDER_SIZE_TIMEOUT_SEC):
+def get_folder_size_in_bytes_updates(
+    folder_path,
+    timeout=_DEFAULT_FOLDER_SIZE_TIMEOUT_SEC,
+    *,
+    allowed_bases=None,
+    logger=None,
+):
     """Calculate folder size excluding update and extras folders."""
     try:
         # Validate folder path security (only if we're in an application context)
-        try:
-            if current_app:
-                allowed_bases = get_allowed_base_directories(current_app)
-                if not allowed_bases:
-                    print(f"Security error: No allowed base directories configured for path: {folder_path}")
-                    return 0
-
-                is_safe, error_message = is_safe_path(folder_path, allowed_bases)
-                if not is_safe:
-                    print(f"Security error: Path validation failed for {folder_path}: {error_message}")
-                    return 0
-        except RuntimeError:
-            # Working outside of application context - skip validation for now  
-            # This is expected during unit tests
-            pass
+        if allowed_bases is None:
+            try:
+                app = _current_app_or_none()
+                if app is not None:
+                    allowed_bases = get_allowed_base_directories(app)
+            except RuntimeError:
+                # Retain the historical context-free utility behavior for tests.
+                allowed_bases = None
+        if allowed_bases is not None:
+            if not allowed_bases:
+                print(f"Security error: No allowed base directories configured for path: {folder_path}")
+                return 0
+            is_safe, error_message = is_safe_path(folder_path, allowed_bases, logger=logger)
+            if not is_safe:
+                print(f"Security error: Path validation failed for {folder_path}: {error_message}")
+                return 0
         # Handle single file case first
         if os.path.isfile(folder_path):
             return os.path.getsize(folder_path)
@@ -268,25 +285,26 @@ def get_folder_size_in_bytes_updates(folder_path, timeout=_DEFAULT_FOLDER_SIZE_T
         return 0
 
 
-def read_first_nfo_content(full_disk_path):
+def read_first_nfo_content(full_disk_path, *, allowed_bases=None, logger=None):
     """Read the content of the first NFO file found in the given path."""
     
     # Validate folder path security (only if we're in an application context)
-    try:
-        if current_app:
-            allowed_bases = get_allowed_base_directories(current_app)
-            if not allowed_bases:
-                print(f"Security error: No allowed base directories configured for path: {full_disk_path}")
-                return None
-
-            is_safe, error_message = is_safe_path(full_disk_path, allowed_bases)
-            if not is_safe:
-                print(f"Security error: Path validation failed for {full_disk_path}: {error_message}")
-                return None
-    except RuntimeError:
-        # Working outside of application context - skip validation for now  
-        # This is expected during unit tests
-        pass
+    if allowed_bases is None:
+        try:
+            app = _current_app_or_none()
+            if app is not None:
+                allowed_bases = get_allowed_base_directories(app)
+        except RuntimeError:
+            # Retain the historical context-free utility behavior for tests.
+            allowed_bases = None
+    if allowed_bases is not None:
+        if not allowed_bases:
+            print(f"Security error: No allowed base directories configured for path: {full_disk_path}")
+            return None
+        is_safe, error_message = is_safe_path(full_disk_path, allowed_bases, logger=logger)
+        if not is_safe:
+            print(f"Security error: Path validation failed for {full_disk_path}: {error_message}")
+            return None
     
     if os.path.isfile(full_disk_path):
         print("Path is a file, not a directory. Skipping NFO scan.")

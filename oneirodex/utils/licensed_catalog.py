@@ -6,14 +6,12 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import current_app, has_app_context
 from sqlalchemy import delete, func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, IgdbPlatformRelease, Library
 from oneirodex.platform import LibraryPlatform
-from oneirodex.utils.functions import igdb_platform_id_for
-from oneirodex.utils.igdb_api import make_igdb_api_request
+from oneirodex.utils.helpers.platforms import igdb_platform_id_for
 from oneirodex.utils.library_acl import apply_game_access_filters
 from oneirodex.utils.set_completion import (
     REGION_LABELS,
@@ -190,11 +188,15 @@ def upsert_releases_from_igdb_payload(
 
 
 def _igdb_endpoint() -> str:
-    if has_app_context():
+    try:
+        from flask import current_app
+
         return current_app.config.get(
             'IGDB_API_ENDPOINT',
             'https://api.igdb.com/v4/games',
         )
+    except (ImportError, RuntimeError):
+        pass
     return 'https://api.igdb.com/v4/games'
 
 
@@ -217,7 +219,12 @@ def refresh_platform_catalog(
     """Replace the cache for one platform. One platform per call."""
     platform = _require_catalog_platform(library_platform)
     igdb_platform_id = _igdb_platform_id(platform)
-    fetch = request_fn or make_igdb_api_request
+    if request_fn is None:
+        from oneirodex.utils.igdb_api import make_igdb_api_request
+
+        fetch = make_igdb_api_request
+    else:
+        fetch = request_fn
     endpoint = _igdb_endpoint()
     now = datetime.now(timezone.utc)
     collected: dict[tuple[int, str], dict[str, Any]] = {}

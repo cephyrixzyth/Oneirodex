@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from oneirodex import db
-from oneirodex.models import DownloadRequest, Game, GlobalSettings
+from oneirodex.models import DownloadRequest, Game, GlobalSettings, User
 from oneirodex.utils.api_tokens import require_api_scope
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.event_bus import publish_download_event
@@ -72,6 +72,8 @@ def _create_or_get_download_request(
     *,
     file_location: str,
     zip_file_path: str,
+    kind: str = 'base',
+    version_uuid: str | None = None,
 ) -> DownloadRequest:
     existing_request = db.session.execute(
         select(DownloadRequest).filter_by(
@@ -91,8 +93,16 @@ def _create_or_get_download_request(
         zip_file_path=zip_file_path,
     )
     db.session.add(new_request)
-    if file_location == game.full_disk_path:
+    if kind == 'base' and file_location == game.full_disk_path:
         game.times_downloaded += 1
+    elif kind in ('update', 'extra') and version_uuid:
+        from oneirodex.models import GameExtra, GameUpdate
+        version_model = GameUpdate if kind == 'update' else GameExtra
+        version = db.session.execute(
+            select(version_model).filter_by(uuid=version_uuid, game_uuid=game.uuid)
+        ).scalars().first()
+        if version is not None:
+            version.times_downloaded = int(version.times_downloaded or 0) + 1
     db.session.commit()
 
     try:
@@ -247,6 +257,8 @@ def api_initiate_game_download(game_uuid: str) -> Tuple[dict, int]:
             game,
             file_location=file_location,
             zip_file_path=zip_file_path,
+            kind=kind,
+            version_uuid=resolved_version,
         )
         return api_ok({
             'download_id': download_request.id,
@@ -302,6 +314,31 @@ def api_my_downloads():
         if item.game is not None and user_can_access_game(current_user, item.game)
     ]
     return jsonify([_serialize_download_request(item) for item in visible_requests]), 200
+
+
+@apis_bp.route('/admin/download-requests', methods=['GET'])
+@login_required
+@admin_required
+def api_admin_download_requests():
+    """List download jobs for the admin request table without exposing paths."""
+    rows = db.session.execute(
+        select(DownloadRequest, User.name.label('username'))
+        .join(User, DownloadRequest.user_id == User.id)
+        .options(joinedload(DownloadRequest.game))
+        .order_by(DownloadRequest.request_time.desc(), DownloadRequest.id.desc())
+    ).all()
+    return api_ok({'requests': [
+        {
+            'id': row.id,
+            'username': username,
+            'game_uuid': row.game_uuid[:8] if row.game_uuid else '',
+            'status': row.status or 'unknown',
+            'file_name': _download_file_name(row),
+            'request_time': row.request_time.isoformat() if row.request_time else None,
+            'completion_time': row.completion_time.isoformat() if row.completion_time else None,
+        }
+        for row, username in rows
+    ]})
 
 
 @apis_bp.route('/delete_download/<int:request_id>', methods=['DELETE'])

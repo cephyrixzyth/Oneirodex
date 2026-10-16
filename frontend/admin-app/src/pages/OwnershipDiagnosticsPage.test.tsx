@@ -234,3 +234,44 @@ test('a later page that fails to load says so', async () => {
   )
   expect(screen.getByRole('row', { name: /Riley.*GOG|GOG.*Riley/ })).toBeInTheDocument()
 })
+
+test('a pending repair blocks other repairs and pagination until refresh finishes', async () => {
+  const user = userEvent.setup()
+  let release!: (value: any) => void
+  const body = {
+    ...BODY,
+    next_after_id: 2,
+    members: [
+      {
+        user_id: 2,
+        name: 'Riley',
+        stores: [
+          store('gog', 'GOG'),
+          store('epic', 'Epic Games', { state: 'syncing', admin_actions: ['cancel'] }),
+        ],
+      },
+    ],
+  }
+  const fetcher = vi.fn((_url, init) =>
+    init?.method === 'POST'
+      ? new Promise((resolve) => {
+          release = resolve
+        })
+      : response(body),
+  )
+  vi.stubGlobal('fetch', fetcher)
+  renderPage()
+  const sync = await screen.findByRole('button', { name: 'Retry sync' })
+  const cancel = screen.getByRole('button', { name: 'Stop sync' })
+  expect(screen.getByRole('region', { name: 'Store connections table' })).toHaveAttribute(
+    'tabindex',
+    '0',
+  )
+  await user.click(sync)
+  expect(cancel).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Show more members' })).toBeDisabled()
+  await user.click(cancel)
+  expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  release(await response({ ok: true, job: { status: 'succeeded' } }))
+  await waitFor(() => expect(cancel).toBeEnabled())
+})

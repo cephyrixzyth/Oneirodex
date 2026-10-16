@@ -21,6 +21,7 @@ import { ArtStudioControls } from './artStudio/ArtStudioControls'
 import { ArtStudioFallbacks } from './artStudio/ArtStudioFallbacks'
 import { ArtStudioStage } from './artStudio/ArtStudioStage'
 import { ArtStudioTabs } from './artStudio/ArtStudioTabs'
+import { Page } from '../components/Page'
 
 function initialTab(): ArtStudioTab {
   if (typeof window === 'undefined') return 'studio'
@@ -410,16 +411,18 @@ export function ArtStudioPage() {
     : undefined
 
   return (
-    <div className="od-admin-page">
+    <Page
+      title="Art studio"
+      lede={
+        <>
+          Create local artwork without cloud AI. Type a title to preview a cover, or use{' '}
+          <strong>Pick &amp; queue</strong> for provider artwork.
+        </>
+      }
+    >
       <header className="od-art-studio-head">
         <div>
           <p className="od-art-studio-kicker">Admin · Cover atelier</p>
-          <h1>Art studio</h1>
-          <p className="od-admin-lede od-art-studio-lede">
-            Type a title — watch an <strong>artistic</strong> cover form (motifs, bezels, initials).
-            Local Pillow renderer, aurora tokens, no cloud AI. Use <strong>Pick &amp; queue</strong>{' '}
-            for SteamGridDB / IGDB art.
-          </p>
         </div>
         {skin ? (
           <span
@@ -434,132 +437,160 @@ export function ArtStudioPage() {
 
       <ArtStudioTabs selectTab={selectTab} tab={tab} />
 
-      {tab === 'images' ? <ImagesPage embedded /> : null}
+      <div
+        id="art-panel-images"
+        role="tabpanel"
+        aria-labelledby="art-tab-images"
+        hidden={tab !== 'images'}
+      >
+        {tab === 'images' ? <ImagesPage embedded /> : null}
+      </div>
 
-      {tab === 'marks' ? (
-        <div className="od-art-stock-tab">
-          <SystemMarksPanel />
-        </div>
-      ) : null}
+      <div
+        id="art-panel-marks"
+        role="tabpanel"
+        aria-labelledby="art-tab-marks"
+        hidden={tab !== 'marks'}
+      >
+        {tab === 'marks' ? (
+          <div className="od-art-stock-tab">
+            <SystemMarksPanel />
+          </div>
+        ) : null}
+      </div>
 
-      {tab === 'stock' ? (
-        <div className="od-art-stock-tab">
-          <StockPicker onApplied={onStockApplied} showLibraryUuid />
-          <ArtStudioFallbacks fallbackBust={fallbackBust} />
-        </div>
-      ) : null}
+      <div
+        id="art-panel-stock"
+        role="tabpanel"
+        aria-labelledby="art-tab-stock"
+        hidden={tab !== 'stock'}
+      >
+        {tab === 'stock' ? (
+          <div className="od-art-stock-tab">
+            <StockPicker onApplied={onStockApplied} showLibraryUuid />
+            <ArtStudioFallbacks fallbackBust={fallbackBust} />
+          </div>
+        ) : null}
+      </div>
 
-      {tab === 'studio' ? (
-        <>
-          <PageStatus error={error} />
-          {message ? (
-            <p className="od-admin-lede" role="status">
-              {message}
-            </p>
-          ) : null}
+      <div
+        id="art-panel-studio"
+        role="tabpanel"
+        aria-labelledby="art-tab-studio"
+        hidden={tab !== 'studio'}
+      >
+        {tab === 'studio' ? (
+          <>
+            <PageStatus error={error} />
+            {message ? (
+              <PageStatus announcement="status" className="od-admin-lede">
+                {message}
+              </PageStatus>
+            ) : null}
 
-          <section className="od-art-studio od-art-studio--workspace" aria-label="Cover studio">
-            <ArtStudioStage
-              activeVariant={activeVariant}
-              heroSrc={heroSrc}
-              previewArtistic={previewArtistic}
-              previewBusy={previewBusy}
-              previewChromeStyle={previewChromeStyle}
-              previews={previews}
-              setVariantKey={setVariantKey}
-              skin={skin}
-              systemText={systemText}
-              title={title}
-            />
+            <section className="od-art-studio od-art-studio--workspace" aria-label="Cover studio">
+              <ArtStudioStage
+                activeVariant={activeVariant}
+                heroSrc={heroSrc}
+                previewArtistic={previewArtistic}
+                previewBusy={previewBusy}
+                previewChromeStyle={previewChromeStyle}
+                previews={previews}
+                setVariantKey={setVariantKey}
+                skin={skin}
+                systemText={systemText}
+                title={title}
+              />
 
-            <ArtStudioControls
-              applyFallback={applyFallback}
-              applyToGame={applyToGame}
-              busy={busy}
-              downloadZip={downloadZip}
-              gameUuid={gameUuid}
-              hasTitle={hasTitle}
-              headline={headline}
-              packId={packId}
-              previewBusy={previewBusy}
-              runGenerate={runGenerate}
-              runPreview={runPreview}
-              setGameUuid={setGameUuid}
-              setHeadline={setHeadline}
-              setSubtitle={setSubtitle}
-              setSystem={setSystem}
-              setTitle={setTitle}
-              setTitleScale={setTitleScale}
-              setVariantKey={setVariantKey}
-              subtitle={subtitle}
-              system={system}
-              title={title}
-              titleScale={titleScale}
-              variantKey={variantKey}
-            />
-          </section>
+              <ArtStudioControls
+                applyFallback={applyFallback}
+                applyToGame={applyToGame}
+                busy={busy}
+                downloadZip={downloadZip}
+                gameUuid={gameUuid}
+                hasTitle={hasTitle}
+                headline={headline}
+                packId={packId}
+                previewBusy={previewBusy}
+                runGenerate={runGenerate}
+                runPreview={runPreview}
+                setGameUuid={setGameUuid}
+                setHeadline={setHeadline}
+                setSubtitle={setSubtitle}
+                setSystem={setSystem}
+                setTitle={setTitle}
+                setTitleScale={setTitleScale}
+                setVariantKey={setVariantKey}
+                subtitle={subtitle}
+                system={system}
+                title={title}
+                titleScale={titleScale}
+                variantKey={variantKey}
+              />
+            </section>
 
-          <section
-            className="od-admin-panel od-art-studio-fallbacks"
-            aria-label="Library default covers"
-          >
-            <div className="od-art-studio-fallbacks__head">
-              <div>
-                <h2 className="od-admin-panel-title">Library default covers</h2>
-                <p className="od-admin-lede">
-                  Site-wide fallbacks when a title has no downloaded art. Generate a pack above,
-                  then set as fallback — or open{' '}
-                  <button
-                    type="button"
-                    className="od-art-inline-link"
-                    onClick={() => selectTab('stock')}
-                  >
-                    Backup &amp; stock
-                  </button>{' '}
-                  for platform packs and stock motifs.
-                </p>
+            <section
+              className="od-admin-panel od-art-studio-fallbacks"
+              aria-label="Library default covers"
+            >
+              <div className="od-art-studio-fallbacks__head">
+                <div>
+                  <h2 className="od-admin-panel-title">Library default covers</h2>
+                  <p className="od-admin-lede">
+                    Site-wide fallbacks when a title has no downloaded art. Generate a pack above,
+                    then set as fallback — or open{' '}
+                    <button
+                      type="button"
+                      className="od-art-inline-link"
+                      onClick={() => selectTab('stock')}
+                    >
+                      Backup &amp; stock
+                    </button>{' '}
+                    for platform packs and stock motifs.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={busy === 'regen-fallback'}
+                  onClick={regenerateDefaults}
+                >
+                  {busy === 'regen-fallback' ? 'Regenerating…' : 'Regenerate defaults'}
+                </Button>
               </div>
-              <Button
-                type="button"
-                variant="primary"
-                disabled={busy === 'regen-fallback'}
-                onClick={regenerateDefaults}
-              >
-                {busy === 'regen-fallback' ? 'Regenerating…' : 'Regenerate defaults'}
-              </Button>
-            </div>
-            <div className="od-art-studio-fallbacks__grid">
-              {FALLBACK_ASSETS.map((asset) => (
-                <figure key={asset.key} className="od-art-studio-fallbacks__card">
-                  <img
-                    src={`${asset.path}?v=${fallbackBust}`}
-                    alt={asset.label}
-                    onError={(e) => {
-                      e.currentTarget.style.visibility = 'hidden'
-                    }}
-                  />
-                  <figcaption>
-                    <strong>{asset.label}</strong>
-                    <span>{asset.hint}</span>
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
+              <div className="od-art-studio-fallbacks__grid">
+                {FALLBACK_ASSETS.map((asset) => (
+                  <figure key={asset.key} className="od-art-studio-fallbacks__card">
+                    <img
+                      src={`${asset.path}?v=${fallbackBust}`}
+                      alt={asset.label}
+                      onError={(e) => {
+                        e.currentTarget.style.visibility = 'hidden'
+                      }}
+                    />
+                    <figcaption>
+                      <strong>{asset.label}</strong>
+                      <span>{asset.hint}</span>
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </section>
 
-          <ArtStudioBatch
-            batchApplyPlaceholders={batchApplyPlaceholders}
-            batchLog={batchLog}
-            batchOpen={batchOpen}
-            batchSelected={batchSelected}
-            busy={busy}
-            loadMissing={loadMissing}
-            missingCovers={missingCovers}
-            setBatchOpen={setBatchOpen}
-            toggleBatch={toggleBatch}
-          />
-        </>
-      ) : null}
-    </div>
+            <ArtStudioBatch
+              batchApplyPlaceholders={batchApplyPlaceholders}
+              batchLog={batchLog}
+              batchOpen={batchOpen}
+              batchSelected={batchSelected}
+              busy={busy}
+              loadMissing={loadMissing}
+              missingCovers={missingCovers}
+              setBatchOpen={setBatchOpen}
+              toggleBatch={toggleBatch}
+            />
+          </>
+        ) : null}
+      </div>
+    </Page>
   )
 }

@@ -1,4 +1,4 @@
-"""DB-free guards for React admin SPA shell (base_admin)."""
+"""DB-free guards for the Python-built React admin SPA shell."""
 
 import re
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / 'oneirodex' / 'templates'
 ADMIN_TEMPLATES = TEMPLATES / 'admin'
-BASE_ADMIN = TEMPLATES / 'base_admin.html'
+ADMIN_SHELL = ROOT / 'oneirodex' / 'utils' / 'admin_spa.py'
 ADMIN_APP_SRC = ROOT / 'frontend' / 'admin-app' / 'src'
 #: How the brand mark is rendered, which is no longer a file reference.
 #:
@@ -39,24 +39,20 @@ TEST_SUFFIXES = ('.test.jsx', '.test.js', '.test.tsx', '.test.ts',
                  '.spec.jsx', '.spec.js', '.spec.tsx', '.spec.ts')
 
 
-def test_base_admin_exists_without_member_sidebar():
-    assert BASE_ADMIN.is_file()
-    text = BASE_ADMIN.read_text(encoding='utf-8')
+def test_python_admin_shell_has_no_member_sidebar_and_loads_the_spa():
+    text = ADMIN_SHELL.read_text(encoding='utf-8')
     assert 'id="sidebar"' not in text
-    assert 'admin-app-root' in text
-    assert 'admin-legacy-content' in text
-    # Both bundles go through the `dist_asset` filter, which appends a build
-    # fingerprint so a rebuilt SPA is not served from cache (e17ca7e1). The
-    # literal `dist/` prefix the path used to carry is now the filter's job, so
-    # assert on what the template names and on the filter carrying it.
-    assert "'admin-app/admin-app.js'|dist_asset" in text
-    assert "'admin-app/admin-app.css'|dist_asset" in text
+    assert 'id="admin-app-root"' in text
+    assert 'id="admin-legacy-content"' in text
+    assert "admin-app/admin-app.js" in text
+    assert "admin-app/admin-app.css" in text
 
 
 def test_base_admin_loads_spa_assets():
-    text = BASE_ADMIN.read_text(encoding='utf-8')
+    text = ADMIN_SHELL.read_text(encoding='utf-8')
     assert 'admin-spa' in text
     assert 'csrf-token' in text
+    assert 'generate_csrf()' in text
 
 
 def test_the_admin_brand_mark_is_rendered_by_exactly_one_chrome_component():
@@ -123,10 +119,60 @@ def test_the_admin_brand_mark_is_rendered_by_exactly_one_chrome_component():
     )
 
 
-def test_admin_dashboard_extends_base_admin():
-    dash = (ADMIN_TEMPLATES / 'admin_dashboard.html').read_text(encoding='utf-8')
-    assert '{% extends "base_admin.html" %}' in dash
-    assert '{% extends "base.html" %}' not in dash
+def test_admin_dashboard_uses_the_non_template_react_shell():
+    renderer = (ROOT / 'oneirodex' / 'utils' / 'admin_spa.py').read_text(encoding='utf-8')
+    route = (ROOT / 'oneirodex' / 'routes_site.py').read_text(encoding='utf-8')
+    assert 'data-admin-render="spa"' in renderer
+    assert "render_admin_spa(title='Dashboard · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'admin_dashboard.html').exists()
+    for name in ('admin_manage_extensions.html', 'admin_ops.html', 'admin_settings_shell.html', 'storage.html', 'admin_plugins.html'):
+        assert not (ADMIN_TEMPLATES / name).exists()
+
+
+def test_discovery_sections_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'system.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Discovery sections · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'admin_discovery_sections.html').exists()
+
+
+def test_statistics_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_downloads_ext' / 'statistics.py').read_text(encoding='utf-8')
+    page = (ADMIN_APP_SRC / 'pages' / 'StatisticsPage.tsx').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Statistics · Oneirodex Admin')" in route
+    assert "getJson('/api/admin/statistics')" in page
+    assert not (ADMIN_TEMPLATES / 'admin_statistics.html').exists()
+
+
+def test_features_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'features.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Features · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'features_settings.html').exists()
+
+
+def test_themes_and_authoring_guide_use_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'themes.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Themes · Oneirodex Admin')" in route
+    assert "render_admin_spa(title='Theme authoring guide · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'admin_manage_themes.html').exists()
+    assert not (ADMIN_TEMPLATES / 'admin_manage_themes_readme.html').exists()
+
+
+def test_server_settings_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'settings.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Server settings · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'new_server_settings.html').exists()
+
+
+def test_arr_module_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_arr.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Arr module · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'arr_module.html').exists()
+
+
+def test_attract_mode_uses_react_shell():
+    route = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'attract_mode.py').read_text(encoding='utf-8')
+    assert "render_admin_spa(title='Attract mode · Oneirodex Admin')" in route
+    assert not (ADMIN_TEMPLATES / 'attract_mode_settings.html').exists()
 
 
 def test_no_hardcoded_default_theme_js_in_admin_templates():

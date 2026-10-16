@@ -1,7 +1,8 @@
 import os
 import uuid
-from flask import redirect, url_for, flash, render_template, current_app
-from flask_login import login_required, current_user
+from flask import redirect, url_for, flash, current_app
+from flask_login import login_required
+from oneirodex.utils.member_spa import render_member_spa, current_user
 from oneirodex import db
 from oneirodex.models import Game
 from sqlalchemy import select
@@ -35,7 +36,7 @@ def play_game(game_uuid):
 def playromtest():
     """Legacy test route — prefer /play_game/<uuid> → WebRetro."""
     flash("Use Play from a game details page for browser emulation.", "info")
-    return render_template('games/playrom.html')
+    return render_member_spa()
 
 # NOTE: This API route is now handled by ASGI for async streaming  
 # This Flask route should not be reached as ASGI intercepts it first

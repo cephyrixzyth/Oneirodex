@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { csrfHeaders, getCsrfToken } from './csrf.js'
+import { csrfHeaders, getCsrfToken, setCsrfToken } from './csrf.js'
 
 function setBody(html: any) {
   document.body.innerHTML = html
@@ -37,6 +37,18 @@ describe('getCsrfToken fallback chain', () => {
   test('returns an empty string when the page carries no token', () => {
     setBody('')
     expect(getCsrfToken()).toBe('')
+  })
+})
+
+describe('setCsrfToken', () => {
+  test('updates the shared token or creates the standard meta tag', () => {
+    setBody('')
+    setCsrfToken('bootstrapped')
+    expect(getCsrfToken()).toBe('bootstrapped')
+    setCsrfToken('refreshed')
+    expect(document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')).toBe(
+      'refreshed',
+    )
   })
 })
 

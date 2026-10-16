@@ -319,8 +319,97 @@ def test_apply_rejects_invalid_image_type(client, app, db_session, admin_user, m
     assert 'image_type' in resp.get_json()['error']
 
 
+def test_apply_artwork_does_not_return_raw_unexpected_exception(
+    client, app, db_session, admin_user, monkeypatch,
+):
+    from oneirodex.models import Game, Library
+    from oneirodex.platform import LibraryPlatform
+
+    lib = Library(name=f'artlib_{uuid4().hex[:8]}', platform=LibraryPlatform.PCWIN)
+    db_session.add(lib)
+    db_session.flush()
+    game = Game(
+        uuid=str(uuid4()), name=f'ArtGame_{uuid4().hex[:8]}',
+        full_disk_path=f'/tmp/{uuid4().hex}', library_uuid=lib.uuid,
+    )
+    db_session.add(game)
+    db_session.commit()
+    _login_admin(client, app, admin_user)
+    secret = 'private-token-from-upstream'
+
+    def fail(*_args, **_kwargs):
+        raise OSError(f'https://provider.invalid/image?token={secret}')
+
+    monkeypatch.setattr('oneirodex.routes_apis.providers.apply_cover_from_url', fail)
+    response = client.post(
+        f'/api/games/{game.uuid}/artwork/steamgriddb',
+        json={'url': 'https://cdn.example/x.png'},
+    )
+
+    assert response.status_code == 502
+    assert response.get_json()['error'] == 'Failed to apply artwork'
+    assert secret not in response.get_data(as_text=True)
+
+
+def test_apply_artwork_does_not_return_raw_provider_runtime_error(
+    client, app, db_session, admin_user, monkeypatch,
+):
+    from oneirodex.models import Game, Library
+    from oneirodex.platform import LibraryPlatform
+
+    lib = Library(name=f'artlib_{uuid4().hex[:8]}', platform=LibraryPlatform.PCWIN)
+    db_session.add(lib)
+    db_session.flush()
+    game = Game(
+        uuid=str(uuid4()), name=f'ArtGame_{uuid4().hex[:8]}',
+        full_disk_path=f'/tmp/{uuid4().hex}', library_uuid=lib.uuid,
+    )
+    db_session.add(game)
+    db_session.commit()
+    _login_admin(client, app, admin_user)
+    secret = 'private-provider-response-token'
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(f'upstream URL leaked?token={secret}')
+
+    monkeypatch.setattr('oneirodex.routes_apis.providers.apply_cover_from_url', fail)
+    response = client.post(
+        f'/api/games/{game.uuid}/artwork/steamgriddb',
+        json={'url': 'https://cdn.example/x.png'},
+    )
+
+    assert response.status_code == 503
+    assert response.get_json()['error'] == 'Artwork provider unavailable'
+    assert secret not in response.get_data(as_text=True)
+
+
 def test_search_api_rejects_bad_image_type(client, app, db_session, admin_user, monkeypatch):
     monkeypatch.setenv('STEAMGRIDDB_API_KEY', 'test-key')
     _login_admin(client, app, admin_user)
     resp = client.get('/api/providers/steamgriddb/search?q=Celeste&image_type=banner')
     assert resp.status_code == 400
+
+
+def test_provider_search_does_not_return_raw_runtime_error(
+    client, app, db_session, admin_user, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    _login_admin(client, app, admin_user)
+    secret = 'private-search-response-token'
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(f'upstream response?key={secret}')
+
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.providers.get_provider',
+        lambda _provider_id: SimpleNamespace(
+            id='steamgriddb', is_enabled=lambda: True, search_artwork=fail,
+        ),
+    )
+
+    response = client.get('/api/providers/steamgriddb/search?q=Oneirodex')
+
+    assert response.status_code == 502
+    assert response.get_json()['error'] == 'Artwork provider request failed'
+    assert secret not in response.get_data(as_text=True)

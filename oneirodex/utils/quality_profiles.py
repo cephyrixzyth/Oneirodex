@@ -17,7 +17,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 
 PROFILE_FIELD_DEFAULTS: dict[str, Any] = {

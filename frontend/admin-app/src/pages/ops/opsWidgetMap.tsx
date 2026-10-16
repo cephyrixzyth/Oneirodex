@@ -28,7 +28,24 @@ import {
   RECENT_ERROR_COLUMNS,
   SCAN_JOB_COLUMNS,
 } from './opsColumns'
-import { livekitLabel, type OpsSummary, type OpsSystemDetail } from '../OpsPage'
+import {
+  livekitLabel,
+  livekitTone,
+  malwareLabel,
+  malwareTone,
+  type OpsSummary,
+  type OpsSystemDetail,
+} from '../OpsPage'
+
+function ServiceStatus({
+  value,
+  tone = 'na',
+}: {
+  value: string
+  tone?: 'good' | 'warn' | 'bad' | 'na'
+}) {
+  return <span className={`od-ops-service-status od-ops-service-status--${tone}`}>{value}</span>
+}
 
 /** INSP-44 — first GPU's name and VRAM, or why the tile reads n/a. */
 export function gpuHint(gpu: OpsSummary): string {
@@ -41,6 +58,39 @@ export function gpuHint(gpu: OpsSummary): string {
   const temp = first.temp_c != null ? ` · ${first.temp_c}°C` : ''
   const source = gpu.source === 'reader' ? ' (reader)' : ''
   return `${first.name || 'GPU'}${vram}${temp}${source}`
+}
+
+function readinessChecks(checks: unknown): ReactNode {
+  if (!checks || typeof checks !== 'object' || Array.isArray(checks)) return 'n/a'
+  const entries = Object.entries(checks as Record<string, unknown>)
+  if (!entries.length) return 'n/a'
+  const summary = (value: unknown) => {
+    if (value === null) return 'unavailable'
+    if (typeof value !== 'object') return String(value)
+    const row = value as Record<string, unknown>
+    const state = row.status ?? row.state ?? row.result
+    if (state != null && typeof state !== 'object') return String(state)
+    if (typeof row.ok === 'boolean') return row.ok ? 'passed' : 'failed'
+    if (typeof row.healthy === 'boolean') return row.healthy ? 'healthy' : 'unhealthy'
+    if (typeof row.reachable === 'boolean') return row.reachable ? 'reachable' : 'unreachable'
+    return 'details available'
+  }
+  return (
+    <div className="od-ops-readiness">
+      <ul aria-label="Readiness checks">
+        {entries.map(([name, value]) => (
+          <li key={name}>
+            <strong>{name}</strong>
+            <span>{summary(value)}</span>
+          </li>
+        ))}
+      </ul>
+      <details>
+        <summary>View check data</summary>
+        <pre>{JSON.stringify(checks, null, 2)}</pre>
+      </details>
+    </div>
+  )
 }
 
 export interface OpsDeviceRow {
@@ -59,6 +109,8 @@ export interface OpsDeviceRow {
  * so the page's memo can depend on exactly the five things it passes in. */
 export function buildOpsWidgets({
   snapshot,
+  loading = false,
+  unavailable = false,
   presentDetailIds,
   systemDetail,
   recentLogs,
@@ -66,6 +118,8 @@ export function buildOpsWidgets({
   devices = null,
 }: {
   snapshot: OpsSummary
+  loading?: boolean
+  unavailable?: boolean
   presentDetailIds: string[]
   systemDetail: OpsSystemDetail
   recentLogs: Record<string, unknown>[] | null
@@ -84,7 +138,15 @@ export function buildOpsWidgets({
   const lastSeen = companions?.last_seen
 
   const map: Record<string, ReactNode> = {
-    status: <OpsStatusBanner severity={severity} items={issues?.items} ariaLabel="System status" />,
+    status: (
+      <OpsStatusBanner
+        severity={severity}
+        items={issues?.items}
+        ariaLabel="System status"
+        loading={loading}
+        unavailable={unavailable}
+      />
+    ),
     'm-cpu': (
       <MetricTile
         label="CPU"
@@ -232,73 +294,104 @@ export function buildOpsWidgets({
         {!services ? (
           <p>{snapshot?.services_error || 'Services data unavailable.'}</p>
         ) : (
-          <div className="od-ops-panel__scroll">
-            <table className="od-ops-table od-ops-table--services">
-              <thead>
-                <tr>
-                  <th>Service</th>
-                  <th>Status</th>
-                  <th>Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Readyz</td>
-                  <td>{formatReadyz(services.awake)}</td>
-                  <td>
-                    {services.awake?.checks
-                      ? Object.entries(services.awake.checks)
-                          .map(
-                            ([k, v]) =>
-                              `${k}:${typeof v === 'object' ? (v as { status?: unknown } | null)?.status || JSON.stringify(v) : v}`,
-                          )
-                          .join(' · ') || 'n/a'
-                      : 'n/a'}
-                  </td>
-                </tr>
-                <tr>
-                  <td>LiveKit</td>
-                  <td>{livekitLabel(services.livekit)}</td>
-                  <td>{services.livekit?.error || '—'}</td>
-                </tr>
-                <tr>
-                  <td>Malware</td>
-                  <td>{services.malware?.enabled ? 'on' : 'off'}</td>
-                  <td>
-                    {services.malware?.enabled
-                      ? `ClamAV ${services.malware.clamav_reachable ? 'up' : 'down (heuristics only)'}`
-                      : '—'}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Queues</td>
-                  <td>
-                    {services.queues?.scans_active ?? 0} active ·{' '}
-                    {services.queues?.scans_pending ?? 0} pending
-                  </td>
-                  <td>{services.queues?.downloads_open ?? 0} downloads open</td>
-                </tr>
-                <tr>
-                  <td>Library watch</td>
-                  <td>{formatLibraryWatchStatus(services.library_watch)}</td>
-                  <td>{formatLibraryWatchDetail(services.library_watch)}</td>
-                </tr>
-                {(services.game_servers?.servers || []).map((server: OpsSummary) => (
-                  <tr key={server.uuid || server.display_name}>
-                    <td>Game server · {server.display_name || 'unnamed'}</td>
-                    <td>
-                      {server.reachable === true
-                        ? 'reachable'
-                        : server.reachable === false
-                          ? 'unreachable'
-                          : 'n/a'}
-                    </td>
-                    <td>{server.error || server.method || '—'}</td>
+          <>
+            <p className="od-ops-panel__scroll-hint">
+              Swipe or use arrow keys to view more service details.
+            </p>
+            <div
+              className="od-ops-panel__scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="Services table; scroll horizontally on narrow screens"
+            >
+              <table className="od-ops-table od-ops-table--services">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Detail</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Readyz</td>
+                    <td>
+                      <ServiceStatus
+                        value={formatReadyz(services.awake)}
+                        tone={
+                          services.awake?.status === 'ok'
+                            ? 'good'
+                            : services.awake?.status
+                              ? 'bad'
+                              : 'na'
+                        }
+                      />
+                    </td>
+                    <td>{readinessChecks(services.awake?.checks)}</td>
+                  </tr>
+                  <tr>
+                    <td>LiveKit</td>
+                    <td>
+                      <ServiceStatus
+                        value={livekitLabel(services.livekit)}
+                        tone={livekitTone(services.livekit)}
+                      />
+                    </td>
+                    <td>{services.livekit?.error || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>Malware</td>
+                    <td>
+                      <ServiceStatus
+                        value={malwareLabel(services.malware)}
+                        tone={malwareTone(services.malware)}
+                      />
+                    </td>
+                    <td>
+                      {services.malware?.clamav_error || services.malware?.clamav_version || '—'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Queues</td>
+                    <td>
+                      {services.queues?.scans_active ?? 0} active ·{' '}
+                      {services.queues?.scans_pending ?? 0} pending
+                    </td>
+                    <td>{services.queues?.downloads_open ?? 0} downloads open</td>
+                  </tr>
+                  <tr>
+                    <td>Library watch</td>
+                    <td>{formatLibraryWatchStatus(services.library_watch)}</td>
+                    <td>{formatLibraryWatchDetail(services.library_watch)}</td>
+                  </tr>
+                  {(services.game_servers?.servers || []).map((server: OpsSummary) => (
+                    <tr key={server.uuid || server.display_name}>
+                      <td>Game server · {server.display_name || 'unnamed'}</td>
+                      <td>
+                        <ServiceStatus
+                          value={
+                            server.reachable === true
+                              ? 'reachable'
+                              : server.reachable === false
+                                ? 'unreachable'
+                                : 'unavailable'
+                          }
+                          tone={
+                            server.reachable === true
+                              ? 'good'
+                              : server.reachable === false
+                                ? 'bad'
+                                : 'na'
+                          }
+                        />
+                      </td>
+                      <td>{server.error || server.method || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     ),

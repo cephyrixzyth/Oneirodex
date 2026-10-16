@@ -60,6 +60,7 @@ export function GameCard({
   discoverReason = '',
 }: LooseProps) {
   const cardRef = useRef<any>(null)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
   const longPressTimer = useRef(0)
   const longPressFired = useRef(false)
   const trailerTimer = useRef(0)
@@ -182,6 +183,19 @@ export function GameCard({
     document.addEventListener('click', closeMenus)
     return () => document.removeEventListener('click', closeMenus)
   }, [menuOpen, statusOpen, playInfoOpen])
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return undefined
+    }
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMenuOpen(false)
+      menuButtonRef.current?.focus()
+    }
+    document.addEventListener('keydown', closeMenuOnEscape)
+    return () => document.removeEventListener('keydown', closeMenuOnEscape)
+  }, [menuOpen])
 
   const handleFavoriteClick = async (event: any) => {
     event.preventDefault()
@@ -405,13 +419,14 @@ export function GameCard({
         />
 
         <button
+          ref={menuButtonRef}
           id={`menuButton-${game.uuid}`}
           type="button"
           className="button-glass-hamburger"
           data-chrome-anchor="top-right"
           aria-label={`Open actions for ${game.name}`}
           aria-expanded={menuOpen}
-          aria-controls={`popupMenu-${game.uuid}`}
+          aria-controls={menuOpen ? `popupMenu-${game.uuid}` : undefined}
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -422,8 +437,19 @@ export function GameCard({
           <span aria-hidden="true">☰</span>
         </button>
 
-        {/* Hover affordance — the tile itself opens details, so this is the one
-            way to look before committing. Keyboard users get it via focus. */}
+        <GameCardAdminMenu
+          enableDeleteOnDisk={enableDeleteOnDisk}
+          game={game}
+          igdbUrl={igdbUrl}
+          isAdmin={isAdmin}
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
+          steamRunUrl={steamRunUrl}
+          steamStoreUrl={steamStoreUrl}
+        />
+
+        {/* The actions disclosure is followed by its native controls in Tab
+            order; Preview remains the next separate tile action. */}
         <button
           type="button"
           className="od-tile-preview-hint"
@@ -437,17 +463,6 @@ export function GameCard({
         >
           Preview
         </button>
-
-        <GameCardAdminMenu
-          enableDeleteOnDisk={enableDeleteOnDisk}
-          game={game}
-          igdbUrl={igdbUrl}
-          isAdmin={isAdmin}
-          menuOpen={menuOpen}
-          setMenuOpen={setMenuOpen}
-          steamRunUrl={steamRunUrl}
-          steamStoreUrl={steamStoreUrl}
-        />
 
         {/* The clip lives here now, not on .game-card — the card was clipping
             its own popup menu. See .game-card__cover-link in components.css. */}

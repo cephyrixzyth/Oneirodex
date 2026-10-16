@@ -18,9 +18,7 @@ from __future__ import annotations
 
 import re
 
-from flask import current_app, has_app_context
-
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL, UnmatchedFolder
 from oneirodex.platform import NATIVE_PC_PLATFORMS
 from oneirodex.utils.game_name_parse import parse_game_label
@@ -216,9 +214,11 @@ def titles_identify_agree(left: str | None, right: str | None) -> bool:
 def _catalog_http_allowed() -> bool:
     """Skip live Steam/GOG/Moby/TGDB in pytest. Production still consults them."""
     try:
+        from flask import current_app, has_app_context
+
         if has_app_context() and current_app.config.get('TESTING'):
             return False
-    except Exception:
+    except (ImportError, RuntimeError):
         pass
     return True
 

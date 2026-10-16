@@ -115,18 +115,6 @@ class TestLibraryBlueprint:
 
     """Test cases for the library blueprint."""
 
-    @patch('oneirodex.routes_library.get_global_settings')
-    def test_inject_settings_context_processor(self, mock_get_global_settings, app, db_session):
-        """Test the inject_settings context processor."""
-        mock_get_global_settings.return_value = {'test_setting': 'test_value'}
-        
-        with app.app_context():
-            from oneirodex.routes_library import inject_settings
-            result = inject_settings()
-            
-        assert result == {'test_setting': 'test_value'}
-        mock_get_global_settings.assert_called_once()
-
     def test_libraries_route_requires_login(self, client):
         """Test that the libraries route requires authentication."""
         response = client.get('/libraries')
@@ -147,17 +135,12 @@ class TestLibraryBlueprint:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
         
-        with patch('oneirodex.routes_library.render_template') as mock_render:
-            mock_render.return_value = 'rendered template'
+        with patch('oneirodex.routes_library.render_admin_spa') as mock_render:
+            mock_render.return_value = 'rendered admin shell'
             response = client.get('/libraries')
             
         assert response.status_code == 200
-        mock_render.assert_called_once()
-        args, kwargs = mock_render.call_args
-        assert args[0] == 'admin/admin_manage_libraries.html'
-        assert 'libraries' in kwargs
-        assert 'csrf_form' in kwargs
-        assert 'game_count' in kwargs
+        mock_render.assert_called_once_with(title='Libraries & scans - Oneirodex Admin')
 
     def test_library_route_requires_login(self, client):
         """Test that the library route requires authentication."""
@@ -173,13 +156,12 @@ class TestLibraryBlueprint:
         # Ensure user has no preferences initially
         assert test_user.preferences is None
         
-        with patch('oneirodex.routes_library.get_games') as mock_get_games:
-            mock_get_games.return_value = ([], 0, 0, 1)
-            with patch('oneirodex.routes_library.render_template') as mock_render:
-                mock_render.return_value = 'rendered template'
-                response = client.get('/library')
+        with patch('oneirodex.routes_library.render_member_spa') as mock_render:
+            mock_render.return_value = 'rendered member shell'
+            response = client.get('/library')
         
         assert response.status_code == 200
+        mock_render.assert_called_once()
         # Check that preferences were created
         db_session.refresh(test_user)
         assert test_user.preferences is not None

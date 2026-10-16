@@ -36,6 +36,7 @@ export async function fetchAssistPack(
     `${baseUrl.replace(/\/$/, '')}/api/games/${encodeURIComponent(gameUuid)}/assists`,
     {
       headers: { Authorization: formatBearerAuthorization(token) },
+      redirect: 'error',
     },
   )
   if (!response.ok) {

@@ -172,7 +172,7 @@ def classify_watch_path(
 
 def library_remove_missing_policy(library_uuid: str) -> bool:
     """Honor Admin remove-missing from the library's most recent ScanJob."""
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import ScanJob
 
     row = db.session.execute(
@@ -188,7 +188,7 @@ def library_remove_missing_policy(library_uuid: str) -> bool:
 
 def has_active_or_queued_scan(library_uuid: str, folder_path: str) -> bool:
     """True when a Running/Stopping/Queued job already covers this library root."""
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import ScanJob
 
     folder_n = normalize_fs_path(folder_path)
@@ -232,7 +232,7 @@ def library_watch_effective(lib) -> bool:
 
 def list_watchable_libraries() -> list[dict]:
     """Libraries with a readable ``last_scan_folder`` root that opt into watch."""
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import Library
 
     libs = db.session.execute(
@@ -490,7 +490,7 @@ class LibraryWatchController:
             return
         if not (batch.kinds & {'add', 'change'}):
             return
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.library_health import clear_restored_missing_path_status
 
         cleared = clear_restored_missing_path_status(

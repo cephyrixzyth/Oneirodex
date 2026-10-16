@@ -18,7 +18,7 @@ pages — the switch is ``wants_json_error``.
 
 from __future__ import annotations
 
-from oneirodex.utils.api_response import ERROR_CODES
+from oneirodex.utils.api_contract import ERROR_CODES
 
 
 def wants_json_error(request) -> bool:

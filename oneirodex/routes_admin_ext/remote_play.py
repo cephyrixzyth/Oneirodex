@@ -1,9 +1,9 @@
 """Admin remote play settings page (React shell)."""
 
-from flask import render_template
 from flask_login import login_required
 
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 
 from . import admin2_bp
 
@@ -12,4 +12,4 @@ from . import admin2_bp
 @login_required
 @admin_required
 def remote_play_page():
-    return render_template('admin/admin_remote_play.html')
+    return render_admin_spa(title='Remote play · Oneirodex Admin')

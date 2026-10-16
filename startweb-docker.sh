@@ -101,4 +101,4 @@ export ONEIRODEX_INITIALIZATION_COMPLETE=true
 # single-process. Override UVICORN_WORKERS=2+ only when you accept per-worker state
 # (or after a shared cache lands).
 WORKERS="${UVICORN_WORKERS:-1}"
-exec uvicorn asgi:asgi_app --host 0.0.0.0 --port "$PORT" --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"
+exec uvicorn asgi:asgi_app --host 0.0.0.0 --port "$PORT" --workers "$WORKERS" --no-proxy-headers --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"

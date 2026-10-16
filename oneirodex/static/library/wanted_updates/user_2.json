@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "a6dadbf0-f42f-43d1-bdc8-c9f6cbb28a6f",
+      "game_uuid": "f509abcf-7ba4-4365-ab09-3c4b37814b7e",
+      "kind": "dlc",
+      "label": "Test Game",
+      "store": null,
+      "store_id": null,
+      "status": "available",
+      "created_at": "2026-10-14T23:34:16.973772+00:00",
+      "fulfilled_at": "2026-10-14T23:34:16.977864+00:00"
+    },
+    {
+      "id": "b419c6c2-72ac-4489-8121-48314e34601d",
+      "game_uuid": "465a42dc-0948-439c-bb5c-c47f610d4398",
+      "kind": "dlc",
+      "label": "Test Game",
+      "store": null,
+      "store_id": null,
+      "status": "wanted",
+      "created_at": "2026-10-14T23:37:22.448215+00:00"
+    },
+    {
+      "id": "60f30fce-a95d-4e3d-9b58-9a032f9d7558",
+      "game_uuid": "8608133c-60d3-4d1e-9fa0-c022246d8433",
+      "kind": "dlc",
+      "label": "Test Game",
+      "store": null,
+      "store_id": null,
+      "status": "available",
+      "created_at": "2026-10-14T23:39:29.104916+00:00",
+      "fulfilled_at": "2026-10-14T23:39:29.107901+00:00"
+    }
+  ]
+}

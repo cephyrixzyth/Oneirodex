@@ -5,10 +5,9 @@ from __future__ import annotations
 import os
 import re
 
-from flask import current_app, url_for
 from sqlalchemy import and_, exists, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     GameExtra,
     GameUpdate,
@@ -22,62 +21,47 @@ from oneirodex.utils.cover_url import resolve_game_cover_url
 from oneirodex.utils.functions import format_size, get_url_icon, sanitize_string_input
 from oneirodex.utils.lifecycle import web_lifecycle_fields
 from oneirodex.utils.play_url import browse_play_fields, library_platform_key
-from oneirodex.utils.rbac import normalize_role, role_at_least
+from oneirodex.utils.role_catalog import normalize_role, role_at_least
+from oneirodex.utils.runtime_config import get_runtime_config
+from oneirodex.utils.static_urls import static_asset_url
 from oneirodex.utils.rom_language import preferred_locale_matches
 from oneirodex.utils.multi_disc import disc_browse_fields
 from oneirodex.utils.secondary_scrapers import game_card_flags
 from oneirodex.utils.steam_store_specs import public_store_specs
 
 
+def _config_value(key: str, default=None):
+    config = get_runtime_config()
+    if config is not None:
+        return config.get(key, default)
+    return os.getenv(key, default)
+
+
 def _rom_patch_apply_enabled() -> bool:
-    try:
-        return str(current_app.config.get('ENABLE_ROM_PATCH_APPLY', '')).lower() in (
+    return str(_config_value('ENABLE_ROM_PATCH_APPLY', 'true')).lower() in (
             '1',
             'true',
             'yes',
             'on',
-        )
-    except RuntimeError:
-        return os.getenv('ENABLE_ROM_PATCH_APPLY', 'true').lower() in (
-            '1',
-            'true',
-            'yes',
-            'on',
-        )
+    )
 
 
 def _rom_ai_translate_enabled() -> bool:
-    try:
-        return str(current_app.config.get('ENABLE_ROM_AI_TRANSLATE', '')).lower() in (
+    return str(_config_value('ENABLE_ROM_AI_TRANSLATE', 'true')).lower() in (
             '1',
             'true',
             'yes',
             'on',
-        )
-    except RuntimeError:
-        return os.getenv('ENABLE_ROM_AI_TRANSLATE', 'true').lower() in (
-            '1',
-            'true',
-            'yes',
-            'on',
-        )
+    )
 
 
 def _patch_catalog_enabled() -> bool:
-    try:
-        return str(current_app.config.get('ENABLE_PATCH_CATALOG', '')).lower() in (
+    return str(_config_value('ENABLE_PATCH_CATALOG', 'true')).lower() in (
             '1',
             'true',
             'yes',
             'on',
-        )
-    except RuntimeError:
-        return os.getenv('ENABLE_PATCH_CATALOG', 'true').lower() in (
-            '1',
-            'true',
-            'yes',
-            'on',
-        )
+    )
 
 
 def _ai_target_lang_hint(preferred_locale: str | None) -> str:
@@ -215,10 +199,7 @@ def local_image_on_disk(raw: str) -> bool:
     """
     if not raw:
         return False
-    try:
-        folder = current_app.config.get('UPLOAD_FOLDER') or ''
-    except RuntimeError:
-        folder = os.getenv('UPLOAD_FOLDER') or ''
+    folder = _config_value('UPLOAD_FOLDER') or ''
     if not folder:
         return True
     try:
@@ -251,10 +232,15 @@ def _servable_image_url(img) -> str | None:
     if raw.startswith(('http://', 'https://', '/')):
         return raw
     if bool(getattr(img, 'is_downloaded', False)) and raw and local_image_on_disk(raw):
-        return url_for('static', filename=f'library/images/{raw}')
+        return _static_image_url(raw)
     if download_url.startswith(('http://', 'https://')):
         return download_url
     return None
+
+
+def _static_image_url(raw: str) -> str:
+    """Build a static image URL in both Flask requests and native ASGI routes."""
+    return static_asset_url(f'library/images/{raw}')
 
 
 def _pick_backdrop(candidates: dict, screenshots: list) -> str | None:
@@ -320,10 +306,7 @@ def build_game_details_payload(game, user) -> dict:
     show_translations_block = (
         needs_translation or bool(translation_patches) or show_ai_translate
     )
-    try:
-        ai_service_url = (current_app.config.get('RETROARCH_AI_SERVICE_URL') or '').strip() or None
-    except RuntimeError:
-        ai_service_url = (os.getenv('RETROARCH_AI_SERVICE_URL') or '').strip() or None
+    ai_service_url = (_config_value('RETROARCH_AI_SERVICE_URL') or '').strip() or None
 
     cover_image = None
     screenshots = []
@@ -347,7 +330,7 @@ def build_game_details_payload(game, user) -> dict:
             if raw.startswith(('http://', 'https://', '/')):
                 screenshots.append(raw)
             elif is_downloaded and raw and local_image_on_disk(raw):
-                screenshots.append(url_for('static', filename=f'library/images/{raw}'))
+                screenshots.append(_static_image_url(raw))
             elif download_url.startswith(('http://', 'https://')):
                 # Pending / failed local download — still show remote IGDB art
                 screenshots.append(download_url)

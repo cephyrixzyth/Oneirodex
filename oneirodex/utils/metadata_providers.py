@@ -12,7 +12,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from oneirodex import cache, db
+from oneirodex import cache
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.event_logging import log_system_event
 

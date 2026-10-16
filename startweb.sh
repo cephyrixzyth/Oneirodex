@@ -100,4 +100,4 @@ export PORT=${PORT:-5006}
 WORKERS="${UVICORN_WORKERS:-1}"
 close_startup_story 0
 trap - EXIT
-uvicorn asgi:asgi_app --host 0.0.0.0 --port $PORT --workers "$WORKERS" --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"
+uvicorn asgi:asgi_app --host 0.0.0.0 --port $PORT --workers "$WORKERS" --no-proxy-headers --timeout-graceful-shutdown "${UVICORN_GRACEFUL_TIMEOUT:-5}"

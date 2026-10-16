@@ -12,7 +12,7 @@ from urllib.parse import urljoin, urlsplit
 
 from sqlalchemy import func, select
 
-from oneirodex.utils.rbac import VALID_ROLES, normalize_role
+from oneirodex.utils.role_catalog import VALID_ROLES, normalize_role
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.admin_invariant import lock_admin_mutation
 
@@ -124,7 +124,7 @@ def is_oidc_enabled(settings_record=None) -> bool:
     if not get_env_oidc_enabled():
         return False
     if settings_record is None:
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import GlobalSettings
 
         settings_record = global_settings_row()
@@ -139,7 +139,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
 
     Does not contact the IdP — reports local configuration completeness only.
     """
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import GlobalSettings
 
     if settings_record is None:
@@ -202,7 +202,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
 
 def build_oidc_config(settings_record=None) -> OidcConfig | None:
     if settings_record is None:
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import GlobalSettings
 
         settings_record = global_settings_row()
@@ -407,7 +407,10 @@ def register_oidc_provider(app, config: OidcConfig) -> None:
     _oidc_registered_key = registration_key
 
 
-def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcConfig):
+def provision_or_update_user(
+    db_session, claims: dict[str, Any], config: OidcConfig, *,
+    roles_locked: bool | None = None, trust_provider_email: bool | None = None,
+):
     """JIT provision or update a local User from OIDC claims."""
     from datetime import datetime, timezone
     from uuid import uuid4
@@ -436,7 +439,7 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
         User.oidc_subject == subject,
     )).scalars().first()
 
-    if user is None and email and _email_verified(claims):
+    if user is None and email and _email_verified(claims, trust_provider_email=trust_provider_email):
         candidate_user = db_session.execute(
             select(User).filter(func.lower(User.email) == email)
         ).scalars().first()
@@ -492,15 +495,16 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
         # The local email is left alone: overwriting it from the provider let
         # a linked IdP account take over password resets for the local account.
         # Sec-B: lock roles after first provision so IdP group churn cannot escalate/demote.
-        roles_locked = True
-        try:
-            from flask import current_app, has_app_context
+        locked = True if roles_locked is None else bool(roles_locked)
+        if roles_locked is None:
+            try:
+                from flask import current_app, has_app_context
 
-            if has_app_context():
-                roles_locked = bool(current_app.config.get('OIDC_LOCK_ROLES', True))
-        except Exception:
-            roles_locked = True
-        if not roles_locked:
+                if has_app_context():
+                    locked = bool(current_app.config.get('OIDC_LOCK_ROLES', True))
+            except Exception:
+                locked = True
+        if not locked:
             new_role = normalize_role(role)
             if user.role != new_role:
                 # Optional group sync can demote an admin just like the admin
@@ -533,7 +537,7 @@ def provision_or_update_user(db_session, claims: dict[str, Any], config: OidcCon
     return user
 
 
-def _email_verified(claims: dict[str, Any]) -> bool:
+def _email_verified(claims: dict[str, Any], *, trust_provider_email: bool | None = None) -> bool:
     """The provider vouches for the email (OIDC ``email_verified``), or the
     operator vouches for the provider (``OIDC_TRUST_PROVIDER_EMAIL``)."""
     value = claims.get('email_verified')
@@ -541,6 +545,8 @@ def _email_verified(claims: dict[str, Any]) -> bool:
         value = value.strip().lower() == 'true'
     if value is True:
         return True
+    if trust_provider_email is not None:
+        return bool(trust_provider_email)
     try:
         from flask import current_app, has_app_context
 

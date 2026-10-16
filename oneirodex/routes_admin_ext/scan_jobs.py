@@ -15,7 +15,7 @@ import logging
 import os
 
 from flask import (
-    abort, current_app, flash, redirect, render_template, request, session, url_for,
+    abort, current_app, flash, redirect, request, session, url_for,
 )
 from flask_login import login_required
 from sqlalchemy import delete, select
@@ -33,6 +33,8 @@ from oneirodex.utils.gamenames import get_game_names_from_folder
 from oneirodex.utils.library_roots import resolve_scan_path
 from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 
+from oneirodex.utils.admin_spa import render_admin_spa
+
 from . import admin2_bp
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,8 @@ logger = logging.getLogger(__name__)
 @login_required
 @admin_required
 def scan_folder():
+    if request.method == 'GET':
+        return render_admin_spa(title='Libraries & scans · Oneirodex Admin')
     ## to be fixed broken again after update
     form = ScanFolderForm()
     release_group_form = ReleaseGroupForm()
@@ -75,24 +79,14 @@ def scan_folder():
         allowed_bases = get_allowed_base_directories(current_app)
         if not allowed_bases:
             flash('Service configuration error: No allowed base directories configured.', 'error')
-            return render_template('admin/admin_manage_scanjobs.html',
-                                  form=form, manual_form=form, csrf_form=csrf_form,
-                                  game_names_with_ids=game_names_with_ids,
-                                  release_group_form=release_group_form,
-                                  scanning_filters=scanning_filters,
-                                  allowed_file_types=allowed_file_types)
+            return render_admin_spa(title='Libraries & scans · Oneirodex Admin')
 
         # Security validation: ensure the folder path is within allowed directories
         is_safe, error_message = is_safe_path(folder_path, allowed_bases)
         if not is_safe:
             logger.warning(f"Security error: Scan folder path validation failed for {folder_path}: {error_message}")
             flash(f"Access denied: {error_message}", 'error')
-            return render_template('admin/admin_manage_scanjobs.html',
-                                  form=form, manual_form=form, csrf_form=csrf_form,
-                                  game_names_with_ids=game_names_with_ids,
-                                  release_group_form=release_group_form,
-                                  scanning_filters=scanning_filters,
-                                  allowed_file_types=allowed_file_types)
+            return render_admin_spa(title='Libraries & scans · Oneirodex Admin')
 
         if os.path.exists(folder_path) and os.access(folder_path, os.R_OK):
             logger.debug("Folder exists and is accessible.")
@@ -105,14 +99,7 @@ def scan_folder():
             flash("Folder does not exist or cannot be accessed.", "error")
             logger.warning("Folder does not exist or cannot be accessed.")
 
-    return render_template('admin/admin_manage_scanjobs.html',
-                          form=form,
-                          manual_form=form,
-                          csrf_form=csrf_form,
-                          game_names_with_ids=game_names_with_ids,
-                          release_group_form=release_group_form,
-                          scanning_filters=scanning_filters,
-                          allowed_file_types=allowed_file_types)
+    return render_admin_spa(title='Libraries & scans · Oneirodex Admin')
 
 
 @admin2_bp.route('/cancel_scan_job/<job_id>', methods=['POST'])

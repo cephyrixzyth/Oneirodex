@@ -7,6 +7,19 @@
 -r requirements.txt
 
 pytest==9.1.1
+# Starlette 1.7 uses HTTPX2 for its TestClient implementation.
+httpx2==2.13.1
+# CI test harnesses still exercise the Flask/WSGI compatibility layer and
+# import HTTPX directly; these are test-only, not runtime dependencies.
+a2wsgi==1.10.10
+httpx==0.28.1
+# Legacy Flask route and fixture compatibility. These packages remain available
+# to the migration/test harness but are not installed in the ASGI runtime image.
+flask==3.1.3
+flask_wtf==1.3.0
+flask_sqlalchemy==3.1.1
+flask_login==0.6.3
+jinja2==3.1.6
 # Coverage for the marker-based CI core (`pytest -m "not integration" --cov`).
 # Pinned for the same reason as pytest: an unpinned plugin turns a green branch
 # red with no repo change behind it.

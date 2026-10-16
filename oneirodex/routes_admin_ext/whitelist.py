@@ -1,5 +1,5 @@
 # /oneirodex/routes_admin_ext/whitelist.py
-from flask import render_template, redirect, url_for, request, flash, abort
+from flask import redirect, url_for, request, flash, abort
 from flask_login import login_required, current_user
 from oneirodex.models import Whitelist, User
 from oneirodex import db
@@ -10,6 +10,43 @@ from . import admin2_bp
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.auth import admin_required
+from oneirodex.schemas.whitelist import AddWhitelistBody
+from oneirodex.utils.validation import validate_body
+from oneirodex.utils.admin_spa import render_admin_spa
+
+@admin2_bp.route('/admin/api/whitelist', methods=['GET'])
+@login_required
+@admin_required
+def list_whitelist_api():
+    entries = db.session.execute(select(Whitelist).order_by(Whitelist.email)).scalars().all()
+    emails = [entry.email.lower() for entry in entries]
+    registered = set(db.session.execute(
+        select(func.lower(User.email)).filter(func.lower(User.email).in_(emails))
+    ).scalars().all()) if emails else set()
+    return api_ok(entries=[{'id': entry.id, 'email': entry.email,
+                           'is_registered': entry.email.lower() in registered} for entry in entries])
+
+
+@admin2_bp.route('/admin/api/whitelist', methods=['POST'])
+@login_required
+@admin_required
+@validate_body(AddWhitelistBody)
+def add_whitelist_api(body: AddWhitelistBody):
+    entry = Whitelist(email=body.email)
+    try:
+        db.session.add(entry)
+        db.session.commit()
+        log_system_event(f"Admin {current_user.name} added email to whitelist: {body.email}", event_type='audit', event_level='information')
+        return api_ok(id=entry.id, email=entry.email, status=201)
+    except IntegrityError:
+        db.session.rollback()
+        log_system_event(f"Admin {current_user.name} attempted to add duplicate email to whitelist: {body.email}", event_type='audit', event_level='warning')
+        return api_error('The email is already in the whitelist.', code='conflict')
+    except Exception:
+        db.session.rollback()
+        log_system_event('Error adding email to whitelist', event_type='error', event_level='error')
+        return api_error('Unable to add the email to the whitelist.', code='internal')
+
 
 @admin2_bp.route('/admin/whitelist', methods=['GET', 'POST'])
 @login_required
@@ -44,26 +81,13 @@ def whitelist():
             flash('An error occurred while adding the email to the whitelist', 'danger')
         return redirect(url_for('admin2.whitelist'))
 
-    # Get whitelist entries and check registration status efficiently
-    whitelist_entries = db.session.execute(select(Whitelist)).scalars().all()
-    
-    # Get all registered emails in one query to avoid N+1 problem
-    registered_emails = set()
-    if whitelist_entries:
-        whitelist_emails = [entry.email.lower() for entry in whitelist_entries]
-        registered_users = db.session.execute(
-            select(User.email).filter(func.lower(User.email).in_(whitelist_emails))
-        ).scalars().all()
-        registered_emails = {email.lower() for email in registered_users}
-    
-    # Set registration status for each entry
-    for entry in whitelist_entries:
-        entry.is_registered = entry.email.lower() in registered_emails
+    if request.method == 'POST':
+        errors = form.email.errors or ['Please enter a valid email address.']
+        for error in errors:
+            flash(error, 'danger')
+        return redirect(url_for('admin2.whitelist'))
 
-    return render_template('admin/admin_manage_whitelist.html', 
-                         title='Whitelist', 
-                         whitelist=whitelist_entries, 
-                         form=form)
+    return render_admin_spa(title='Whitelist · Oneirodex Admin')
 
 @admin2_bp.route('/admin/whitelist/<int:whitelist_id>', methods=['DELETE'])
 @login_required

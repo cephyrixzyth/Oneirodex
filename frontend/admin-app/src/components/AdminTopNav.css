@@ -109,6 +109,37 @@ body.od-shell-host header.od-topbar .od-topbar__start {
   align-items: center;
 }
 
+/* Keep admin page actions on their own row on phones and small tablets. The
+   generic shell rule has lower specificity than this admin chrome, which left
+   portaled controls free to overlap the navigation toggle. */
+@media (max-width: 900px) {
+  body.od-shell-host header.od-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'start actions'
+      'page page';
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__start {
+    grid-area: start;
+    flex: none;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page {
+    grid-area: page;
+    justify-content: flex-start;
+    flex: none;
+    min-width: 0;
+    width: 100%;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__actions {
+    grid-area: actions;
+    flex: none;
+  }
+}
+
 .od-topnav__dropdown {
   position: relative;
 }

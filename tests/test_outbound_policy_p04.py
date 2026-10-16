@@ -416,6 +416,24 @@ def test_qbittorrent_add_still_works_for_a_lan_client(app, monkeypatch):
     assert [m for m, _ in seen] == ['POST', 'POST']
 
 
+def test_arr_hardlink_qbittorrent_redirect_to_metadata_is_refused(app, monkeypatch):
+    from oneirodex.utils import arr_hardlink_pipeline
+
+    monkeypatch.setitem(app.config, 'ALLOW_PRIVATE_LAN_URLS', True)
+    monkeypatch.setattr(arr_hardlink_pipeline, 'get_arr_config', lambda **_kwargs: dict(LAN_CFG))
+    seen: list[str] = []
+
+    def fake(self, method, url, **kwargs):
+        seen.append(url)
+        return _response(302, METADATA)
+
+    monkeypatch.setattr(requests.Session, 'request', fake)
+    with app.app_context():
+        with pytest.raises(BlockedOutboundUrl):
+            arr_hardlink_pipeline.list_completed_torrents()
+    assert seen == ['http://192.168.1.31:8080/api/v2/auth/login']
+
+
 def test_sabnzbd_add_revalidates_redirect_hops(app, monkeypatch):
     monkeypatch.setitem(app.config, 'ALLOW_PRIVATE_LAN_URLS', True)
     monkeypatch.setattr(arr_connectors, 'get_arr_config', lambda: dict(LAN_CFG))

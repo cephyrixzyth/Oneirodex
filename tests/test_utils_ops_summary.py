@@ -442,6 +442,38 @@ def test_awake_pulse_none_when_unavailable():
         assert _awake_pulse() is None
 
 
+def test_malware_pulse_preserves_unknown_source_fields(monkeypatch):
+    from oneirodex.utils import ops_summary
+
+    monkeypatch.setattr(ops_summary, 'module_status', lambda: {'clamav': {}})
+    assert ops_summary._malware_pulse() == {
+        'enabled': None,
+        'block_on_hit': None,
+        'clamav_reachable': None,
+        'clamav_version': None,
+        'clamav_error': None,
+        'heuristics': {},
+    }
+
+
+def test_malware_pulse_preserves_explicit_false_values(monkeypatch):
+    from oneirodex.utils import ops_summary
+
+    monkeypatch.setattr(
+        ops_summary,
+        'module_status',
+        lambda: {
+            'enabled': False,
+            'block_on_hit': False,
+            'clamav': {'available': False},
+        },
+    )
+    result = ops_summary._malware_pulse()
+    assert result['enabled'] is False
+    assert result['block_on_hit'] is False
+    assert result['clamav_reachable'] is False
+
+
 def test_companion_pulse_last_seen_breakdown():
     newest = datetime(2026, 7, 28, 18, 0, tzinfo=timezone.utc)
     scalars = [

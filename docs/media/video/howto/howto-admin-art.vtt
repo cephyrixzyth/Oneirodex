@@ -1,29 +1,29 @@
 WEBVTT
 
 1
-00:00:00.429 --> 00:00:06.741
+00:00:00.458 --> 00:00:06.770
 Art studio and extensions. Covers without a cloud, the image queue, and reference sets.
 
 2
-00:00:07.353 --> 00:00:15.681
+00:00:07.384 --> 00:00:15.712
 Art studio paints a cover from a title — motifs, bezels, initials — with a local renderer. No cloud AI.
 
 3
-00:00:16.433 --> 00:00:18.857
+00:00:16.473 --> 00:00:18.897
 Type a name and the preview updates.
 
 4
-00:00:20.221 --> 00:00:27.109
+00:00:20.113 --> 00:00:27.001
 Generate writes the full pack; Pick and queue fetches SteamGridDB or IGDB art instead.
 
 5
-00:00:27.868 --> 00:00:32.596
+00:00:27.763 --> 00:00:32.491
 Backup and stock keeps fallbacks, and System marks holds a badge per console.
 
 6
-00:00:33.360 --> 00:00:41.760
+00:00:33.244 --> 00:00:41.644
 Extensions lists library extensions — DLC, patches, translations — and Reference sets take your DAT uploads.
 
 7
-00:00:42.854 --> 00:00:52.646
+00:00:42.737 --> 00:00:52.529
 That is art studio and extensions. The written guide is in the docs folder, at docs/admin/theme-fonts-and-images.md.

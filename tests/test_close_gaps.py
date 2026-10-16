@@ -119,6 +119,9 @@ def test_arr_status_enabled(client, app, admin):
     body = resp.get_json()
     assert body['enabled'] is True
     assert 'connectors' in body
+    assert isinstance(body['hardlink_pipeline_enabled'], bool)
+    assert isinstance(body['hardlink_helpers_enabled'], bool)
+    assert isinstance(body['hardlink_apply_allowed'], bool)
 
 
 def test_providers_list_includes_giantbomb(client, app, admin):

@@ -7,12 +7,10 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game
 from oneirodex.utils.api_response import api_error
+from oneirodex.utils.admin_search import GAMES_SEARCH_RESULT_LIMIT
 from oneirodex.utils.auth import admin_required
 
 from . import apis_bp
-
-GAMES_SEARCH_RESULT_LIMIT = 20
-
 
 @apis_bp.route('/admin/games_search', methods=['GET'])
 @login_required

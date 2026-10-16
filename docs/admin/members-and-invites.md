@@ -30,6 +30,21 @@ with no mail server: the form demanded one, handed it to a mailer that was never
 configured, and the link — which works perfectly well pasted into a chat window —
 was never shown to anybody.
 
+## Adjusting household quota
+
+In **Admin → Invites**, choose a member under **Adjust invite quota** and enter an integer from −1000 to 1000. Positive values add quota; negative values subtract it. The saved total appears after submission and the table refreshes. Existing invite tokens are retained. This preserves the classic editor's additive behavior, including a total below zero after subtraction.
+
+If the invite roster fails to load, use **Retry loading invites** to request it again without leaving the page.
+
+## Registration whitelist
+
+**Admin → Whitelist** grants self-registration to selected email addresses. Add an address, then use the registration-status column to see whether that address already belongs to an account. Addresses are normalized to lowercase; duplicate and invalid addresses are rejected. Removal requires confirmation and removes the whitelist entry, while retaining any existing account. Invites remain another way to grant access.
+
+The public registration form uses the same acknowledgement for accepted and
+ineligible account details so it does not reveal whether an email or username
+already belongs to someone. Use the admin registration-status column when
+checking a household address.
+
 ## Adding a member with no email at all
 
 Some accounts have nowhere to send mail and never will: a child's console login,

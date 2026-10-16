@@ -6,7 +6,7 @@ import os
 import re
 from typing import Any
 
-from oneirodex.utils.rom_name_peel import LANG_LIST_PAREN_RE, REGION_CAPTURE_RE
+from oneirodex.utils.rom_language_patterns import LANG_LIST_PAREN_RE, REGION_CAPTURE_RE
 
 # Capture the first region-like parenthetical for storage.
 _REGION_CAPTURE = REGION_CAPTURE_RE
@@ -121,6 +121,18 @@ def parse_rom_language_tags(path_or_name: str) -> dict[str, Any]:
         'rom_languages': ','.join(languages) if languages else None,
         'has_english': has_english if languages else None,
         'languages': languages,
+    }
+
+
+def rom_language_fields_from_path(path_or_name: str | None) -> dict[str, Any]:
+    """Return only the stored region/language fields for a dump label or path."""
+    label = os.path.basename(str(path_or_name).replace('\\', '/').rstrip('/')) if path_or_name else ''
+    if not label:
+        return {'rom_region': None, 'rom_languages': None}
+    parsed = parse_rom_language_tags(label)
+    return {
+        'rom_region': parsed.get('rom_region'),
+        'rom_languages': parsed.get('rom_languages'),
     }
 
 

@@ -5,8 +5,19 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from flask import current_app, g, has_request_context
 from werkzeug.utils import secure_filename
+
+
+def _runtime_config():
+    """Resolve app configuration only for server-side BIOS helpers.
+
+    The standalone firmware import script loads this module by file path so it
+    can run outside the application package and without a server secret. Keep
+    the package import lazy so that path stays true.
+    """
+    from oneirodex.utils.runtime_config import get_runtime_config
+
+    return get_runtime_config()
 
 # Common libretro system files (operators supply legally obtained BIOS).
 #
@@ -236,7 +247,7 @@ def firmware_play_state(platform_key: str | None, core: str | None) -> dict[str,
 
 
 def bios_root() -> str:
-    root = current_app.config.get('EMULATOR_BIOS_PATH')
+    root = (_runtime_config() or {}).get('EMULATOR_BIOS_PATH')
     if root:
         return root
     # Imported here: scripts/import_bios.py loads this module by path, without
@@ -260,8 +271,9 @@ def list_bios_files() -> list[dict[str, Any]]:
     present on disk and still will not load, and the UI has to be able to say
     so rather than silently listing it as ready.
     """
-    if has_request_context() and hasattr(g, '_bios_files_cache'):
-        return g._bios_files_cache
+    cached = _request_cache()
+    if cached is not None:
+        return cached
 
     root = bios_root()
     os.makedirs(root, exist_ok=True)
@@ -283,9 +295,26 @@ def list_bios_files() -> list[dict[str, Any]]:
 
     rows.sort(key=lambda row: (row['subdir'], row['name'].lower()))
 
-    if has_request_context():
-        g._bios_files_cache = rows
+    _set_request_cache(rows)
     return rows
+
+
+def _request_cache(value=None, *, write=False):
+    try:
+        from flask import g, has_request_context
+
+        if not has_request_context():
+            return None
+        if write:
+            g._bios_files_cache = value
+            return value
+        return getattr(g, '_bios_files_cache', None)
+    except ImportError:
+        return None
+
+
+def _set_request_cache(value):
+    _request_cache(value, write=True)
 
 
 def bios_status_for_cores() -> list[dict[str, Any]]:
@@ -355,7 +384,7 @@ DEFAULT_BIOS_MAX_BYTES = 64 * 1024 * 1024
 
 def _max_bios_bytes() -> int:
     try:
-        value = int(current_app.config.get('EMULATOR_BIOS_MAX_BYTES') or 0)
+        value = int((_runtime_config() or {}).get('EMULATOR_BIOS_MAX_BYTES') or 0)
     except (TypeError, ValueError):
         value = 0
     return value if value > 0 else DEFAULT_BIOS_MAX_BYTES

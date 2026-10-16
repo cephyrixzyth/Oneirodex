@@ -1,7 +1,8 @@
-from flask import redirect, render_template
+from flask import redirect
 from flask_login import login_required
 
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from . import admin2_bp
 
 
@@ -19,4 +20,4 @@ def admin_help():
 @admin_required
 def admin_plugins():
     """React PluginsPage mounts when legacy body is empty."""
-    return render_template('admin/admin_plugins.html')
+    return render_admin_spa(title='Export to emulator frontends · Oneirodex Admin')

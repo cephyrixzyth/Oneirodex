@@ -1,4 +1,9 @@
-"""Locale preference API / cookie setter."""
+"""Legacy Flask compatibility routes for the UI locale preference.
+
+The primary ASGI dispatcher routes this API to ``runtime_native.locale``.
+Keep the Flask handler during the reversible runtime migration for WSGI and
+existing route-level compatibility callers.
+"""
 
 from flask import jsonify, make_response, request, session
 from flask_login import current_user, login_required
@@ -7,7 +12,7 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import UserPreference
 from oneirodex.utils.api_response import api_error
-from oneirodex.utils.i18n import SUPPORTED_LOCALES, normalize_locale
+from oneirodex.utils.locale_core import SUPPORTED_LOCALES, normalize_locale
 
 from . import apis_bp
 
@@ -17,10 +22,7 @@ from . import apis_bp
 def get_locale():
     prefs = getattr(current_user, 'preferences', None)
     current = normalize_locale(getattr(prefs, 'locale', None) if prefs else None)
-    return jsonify({
-        'locale': current,
-        'supported': list(SUPPORTED_LOCALES),
-    })
+    return jsonify({'locale': current, 'supported': list(SUPPORTED_LOCALES)})
 
 
 @apis_bp.route('/locale', methods=['POST'])

@@ -7,39 +7,67 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from flask import current_app
 
 from oneirodex.utils.arr_connectors import DEFAULT_TIMEOUT, get_arr_config
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.hardlinks import apply_hardlink, preview_hardlink
-from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import (
+    get_allowed_base_directories,
+    is_safe_path,
+    validate_connector_http_url,
+)
+from oneirodex.utils.runtime_config import get_runtime_config
 
 
-def pipeline_enabled() -> bool:
-    return str(current_app.config.get('ENABLE_ARR_HARDLINK_PIPELINE', '')).lower() in (
+def _config(config=None):
+    if config is not None:
+        return config
+    active = get_runtime_config()
+    if active is not None:
+        return active
+    from flask import current_app
+
+    return current_app.config
+
+
+def _legacy_app():
+    from flask import current_app
+
+    return current_app._get_current_object()
+
+
+def pipeline_enabled(*, config=None) -> bool:
+    app_config = _config(config)
+    return str(app_config.get('ENABLE_ARR_HARDLINK_PIPELINE', '')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
-def hardlink_helpers_enabled() -> bool:
-    return str(current_app.config.get('ENABLE_HARDLINK_HELPERS', '')).lower() in (
+def hardlink_helpers_enabled(*, config=None) -> bool:
+    app_config = _config(config)
+    return str(app_config.get('ENABLE_HARDLINK_HELPERS', '')).lower() in (
         '1', 'true', 'yes', 'on',
     )
 
 
-def hardlink_apply_allowed() -> bool:
-    return hardlink_helpers_enabled() and str(
-        current_app.config.get('ALLOW_HARDLINK_APPLY', ''),
+def hardlink_apply_allowed(*, config=None) -> bool:
+    app_config = _config(config)
+    return hardlink_helpers_enabled(config=app_config) and str(
+        app_config.get('ALLOW_HARDLINK_APPLY', ''),
     ).lower() in ('1', 'true', 'yes', 'on')
 
 
-def _qb_session() -> tuple[requests.Session, dict[str, Any]]:
-    cfg = get_arr_config()
+def _qb_session(*, config=None) -> tuple[requests.Session, dict[str, Any]]:
+    cfg = get_arr_config(config=config)
     if not cfg['qbittorrent_url']:
         raise RuntimeError('qBittorrent URL is not configured')
     session = requests.Session()
-    login = session.post(
+    login = safe_request(
+        'POST',
         urljoin(cfg['qbittorrent_url'] + '/', 'api/v2/auth/login'),
+        validator=validate_connector_http_url,
+        session=session,
         data={
             'username': cfg['qbittorrent_username'],
             'password': cfg['qbittorrent_password'],
@@ -51,11 +79,14 @@ def _qb_session() -> tuple[requests.Session, dict[str, Any]]:
     return session, cfg
 
 
-def list_completed_torrents(*, limit: int = 50) -> list[dict[str, Any]]:
+def list_completed_torrents(*, limit: int = 50, config=None) -> list[dict[str, Any]]:
     """Return completed torrents with content paths from qBittorrent."""
-    session, cfg = _qb_session()
-    resp = session.get(
+    session, cfg = _qb_session(config=config)
+    resp = safe_request(
+        'GET',
         urljoin(cfg['qbittorrent_url'] + '/', 'api/v2/torrents/info'),
+        validator=validate_connector_http_url,
+        session=session,
         params={'filter': 'completed'},
         timeout=DEFAULT_TIMEOUT,
     )
@@ -105,8 +136,9 @@ def parse_remote_path_map(raw: str | None) -> list[tuple[str, str]]:
     return pairs
 
 
-def _configured_path_map() -> list[tuple[str, str]]:
-    return parse_remote_path_map(current_app.config.get('ARR_REMOTE_PATH_MAP'))
+def _configured_path_map(*, config=None) -> list[tuple[str, str]]:
+    app_config = _config(config)
+    return parse_remote_path_map(app_config.get('ARR_REMOTE_PATH_MAP'))
 
 
 def _normalise(path: str) -> str:
@@ -114,7 +146,7 @@ def _normalise(path: str) -> str:
     return (path or '').replace('\\', '/').rstrip('/')
 
 
-def map_remote_path(path: str, mappings: list[tuple[str, str]] | None = None) -> str:
+def map_remote_path(path: str, mappings: list[tuple[str, str]] | None = None, *, config=None) -> str:
     """Rewrite a download client's path into one this process can actually see.
 
     The client and Oneirodex usually run in different containers, so
@@ -128,7 +160,7 @@ def map_remote_path(path: str, mappings: list[tuple[str, str]] | None = None) ->
     """
     if not path:
         return path
-    pairs = _configured_path_map() if mappings is None else mappings
+    pairs = _configured_path_map(config=config) if mappings is None else mappings
     if not pairs:
         return path
 
@@ -180,29 +212,32 @@ def propose_hardlinks(
     *,
     limit: int = 50,
     torrents: list[dict[str, Any]] | None = None,
+    app=None,
 ) -> dict[str, Any]:
     """Preview hardlinks from completed torrents into a library destination directory."""
-    if not pipeline_enabled():
+    app_config = app.config if app is not None else None
+    if not pipeline_enabled(config=app_config):
         raise PermissionError('Arr→hardlink pipeline is disabled')
-    if not hardlink_helpers_enabled():
+    if not hardlink_helpers_enabled(config=app_config):
         raise PermissionError('Hardlink helpers are disabled')
 
     dest_dir = os.path.abspath((library_dest_dir or '').strip())
     if not dest_dir or not os.path.isdir(dest_dir):
         raise ValueError('library_dest_dir must be an existing directory')
 
-    bases = get_allowed_base_directories(current_app)
+    app = app if app is not None else _legacy_app()
+    bases = get_allowed_base_directories(app)
     ok_d, err_d = is_safe_path(dest_dir, bases)
     if not ok_d:
         raise PermissionError(err_d or 'Unsafe destination directory')
 
-    items = torrents if torrents is not None else list_completed_torrents(limit=limit)
+    items = torrents if torrents is not None else list_completed_torrents(limit=limit, config=app.config)
     proposals: list[dict[str, Any]] = []
-    path_map = _configured_path_map()
+    path_map = _configured_path_map(config=app.config)
     for item in items:
         raw_path = item.get('content_path') or ''
         # Rewrite the client's view of the path into ours before touching disk.
-        local_path = map_remote_path(raw_path, path_map)
+        local_path = map_remote_path(raw_path, path_map, config=app.config)
         source = _pick_source_file(local_path)
         if not source:
             reason = 'no source file found'
@@ -247,7 +282,7 @@ def propose_hardlinks(
         })
     return {
         'library_dest_dir': dest_dir,
-        'apply_allowed': hardlink_apply_allowed(),
+        'apply_allowed': hardlink_apply_allowed(config=app.config),
         'count': len(proposals),
         'proposals': proposals,
     }
@@ -257,10 +292,12 @@ def apply_proposals(
     proposals: list[dict[str, Any]],
     *,
     only_ok: bool = True,
+    app=None,
 ) -> dict[str, Any]:
-    if not pipeline_enabled():
+    app_config = app.config if app is not None else None
+    if not pipeline_enabled(config=app_config):
         raise PermissionError('Arr→hardlink pipeline is disabled')
-    if not hardlink_apply_allowed():
+    if not hardlink_apply_allowed(config=app_config):
         raise PermissionError(
             'Hardlink apply is disabled. Set ALLOW_HARDLINK_APPLY=true '
             '(and ENABLE_HARDLINK_HELPERS / ENABLE_ARR_HARDLINK_PIPELINE).',
@@ -268,7 +305,8 @@ def apply_proposals(
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    bases = get_allowed_base_directories(current_app)
+    app = app if app is not None else _legacy_app()
+    bases = get_allowed_base_directories(app)
 
     for item in proposals:
         source = (item.get('source') or '').strip()

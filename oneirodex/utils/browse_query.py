@@ -17,13 +17,14 @@ pages: 0, current_page: N}`` body the success path produces.
 
 from __future__ import annotations
 
+from math import ceil
 from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, lazyload
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import (
     Category,
     Game,
@@ -227,14 +228,13 @@ def run_browse_query(args, user) -> BrowseQueryResult:
             else Game.date_identified.desc()
         )
 
-    pagination = db.paginate(query, page=page, per_page=per_page, error_out=False)
-    games = pagination.items
+    games, total, pages = _native_paginate(query, page=page, per_page=per_page)
 
     result = BrowseQueryResult(
         page=page,
         games=games,
-        total=pagination.total,
-        pages=pagination.pages,
+        total=total,
+        pages=pages,
         current_user_id=current_user_id,
     )
 
@@ -345,3 +345,19 @@ def run_browse_query(args, user) -> BrowseQueryResult:
             }
 
     return result
+
+
+def _native_paginate(query, *, page: int, per_page: int, session=None):
+    """Execute Flask-SQLAlchemy-compatible pagination without request state."""
+    page = page if page and page > 0 else 1
+    per_page = per_page if per_page and per_page > 0 else 20
+    per_page = min(per_page, 1000)
+    session = session or db.session
+    count_query = query.options(lazyload("*")).order_by(None).subquery()
+    total = session.execute(
+        select(func.count()).select_from(count_query)
+    ).scalar() or 0
+    items = session.execute(
+        query.limit(per_page).offset((page - 1) * per_page)
+    ).unique().scalars().all()
+    return items, total, ceil(total / per_page) if total else 0

@@ -93,7 +93,7 @@ def main() -> int:
         (README_ASSETS / "app-icon.png", 512),
         (NEWSTYLE / "oneirodex_logo.png", 512),
         (NEWSTYLE / "oneirodex_logo_small.png", 128),
-        # Tab / touch icons — names are fixed by partials/favicon.html.
+        # Tab / touch icons — keep these filenames stable for browser entry points.
         (ICONS / "favicon.png", 64),
         (ICONS / "favicon-32.png", 32),
         (ICONS / "favicon-48.png", 48),
@@ -108,7 +108,7 @@ def main() -> int:
     ico = ICONS / "favicon.ico"
     draw_mark(256).save(ico, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)])
     print(f"  {ico.relative_to(ROOT)}  multi-size")
-    print("\nBump gt_icon_v in oneirodex/templates/partials/favicon.html to bust caches.")
+    print("\nBrand assets generated.")
     return 0
 
 

@@ -39,9 +39,11 @@ COPY oneirodex/setup/default_theme/js/scanJobsDom.js oneirodex/setup/default_the
 # vite writes each bundle to oneirodex/static/dist/<app>/ (outDir is resolved
 # from the app dir in its vite.config); `npm run build` per workspace runs the
 # app's `tsc --noEmit && vite build`.
-RUN mkdir -p oneirodex/static/dist/member-app oneirodex/static/dist/admin-app oneirodex/static/dist/ops-glance \
+RUN mkdir -p oneirodex/static/dist/member-app oneirodex/static/dist/admin-app oneirodex/static/dist/admin-pilot oneirodex/static/dist/ops-glance \
     && npm run build --workspace=member-app \
+    && npm run build:auth-pilot --workspace=member-app \
     && npm run build --workspace=admin-app \
+    && npm run build:pilot --workspace=admin-app \
     && npm run build --workspace=ops-glance
 
 FROM python:3.12-slim
@@ -89,7 +91,9 @@ RUN mkdir -p /etc/postgresql-common \
 
 COPY . .
 COPY --from=frontend-build /build/oneirodex/static/dist/member-app /app/oneirodex/static/dist/member-app
+COPY --from=frontend-build /build/oneirodex/static/dist/member-auth /app/oneirodex/static/dist/member-auth
 COPY --from=frontend-build /build/oneirodex/static/dist/admin-app /app/oneirodex/static/dist/admin-app
+COPY --from=frontend-build /build/oneirodex/static/dist/admin-pilot /app/oneirodex/static/dist/admin-pilot
 COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirodex/static/dist/ops-glance
 
 RUN pip install -r requirements.txt

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import ipaddress
+import logging
 import os
 import re
 import socket
@@ -13,7 +14,6 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import current_app
 from requests.exceptions import RequestException
 from requests.models import PreparedRequest
 
@@ -23,7 +23,18 @@ from requests.models import PreparedRequest
 _USER_DIR_RE = re.compile(r'([Uu]sers?|[Hh]ome)([/\\])[^/\\]+')
 
 
-def is_safe_path(user_path, allowed_bases):
+def _active_logger(logger=None):
+    if logger is not None:
+        return logger
+    try:
+        from flask import current_app
+
+        return current_app.logger
+    except (ImportError, RuntimeError):
+        return logging.getLogger(__name__)
+
+
+def is_safe_path(user_path, allowed_bases, *, logger=None):
     """Securely validate that a user-provided path is within allowed directories."""
     if not user_path or not isinstance(user_path, str):
         return False, "Invalid path format"
@@ -54,24 +65,26 @@ def is_safe_path(user_path, allowed_bases):
                     continue
 
             except (OSError, ValueError) as e:
-                current_app.logger.warning(f"Invalid base path {sanitize_path_for_logging(base)}: {e}")
+                active_logger = _active_logger(logger)
+                active_logger.warning(f"Invalid base path {sanitize_path_for_logging(base)}: {e}")
                 continue
 
         return False, "Access denied - path outside allowed directories"
 
     except (OSError, ValueError) as e:
-        current_app.logger.warning(f"Path validation error for {sanitize_path_for_logging(user_path)}: {e}")
+        active_logger = _active_logger(logger)
+        active_logger.warning(f"Path validation error for {sanitize_path_for_logging(user_path)}: {e}")
         return False, "Invalid path format"
 
 
-def is_safe_path_strict(user_path, allowed_bases):
+def is_safe_path_strict(user_path, allowed_bases, *, logger=None):
     """``is_safe_path`` for destructive operations: the path must sit *below* a base.
 
     ``is_safe_path`` accepts an allowed base itself, which is right for reads
     but fatal for a delete: a ``folder_path`` equal to a library root would
     ``rmtree`` the whole library.
     """
-    is_safe, error_message = is_safe_path(user_path, allowed_bases)
+    is_safe, error_message = is_safe_path(user_path, allowed_bases, logger=logger)
     if not is_safe:
         return is_safe, error_message
     try:

@@ -1,8 +1,7 @@
 import os
 import fnmatch
-from flask import flash
 import re
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game
 from sqlalchemy import select
 from oneirodex.utils.fandom_alias import expand_fandom_search_variants
@@ -17,15 +16,34 @@ from oneirodex.utils.rom_name_peel import rom_title_case
 LETTER_BUCKET_RE = re.compile(r'^_[a-z0-9#if]$', re.IGNORECASE)
 
 
+def has_request_context():
+    try:
+        from flask import has_request_context as check
+    except ImportError:
+        return False
+    return check()
+
+
+def flash(message):
+    from flask import flash as legacy_flash
+
+    return legacy_flash(message)
+
+
+def _flash_if_request_context(message):
+    if has_request_context():
+        flash(message)
+
+
 def should_skip_scan_dir(name, skip_dir_patterns=None, skip_dir_regexes=None):
     """True when folder basename matches a skip-dir glob or regex (case-insensitive)."""
     if not name:
         return False
     if skip_dir_patterns is None:
-        from oneirodex.utils.functions import DEFAULT_SKIP_DIR_GLOBS
+        from oneirodex.utils.helpers.scan_filters import DEFAULT_SKIP_DIR_GLOBS
         skip_dir_patterns = DEFAULT_SKIP_DIR_GLOBS
     if skip_dir_regexes is None:
-        from oneirodex.utils.functions import DEFAULT_SKIP_DIR_REGEXES
+        from oneirodex.utils.helpers.scan_filters import DEFAULT_SKIP_DIR_REGEXES
         skip_dir_regexes = DEFAULT_SKIP_DIR_REGEXES
     folded = name.casefold()
     for pattern in skip_dir_patterns:
@@ -175,7 +193,9 @@ def get_game_names_from_folder(
 ):
     if not os.path.exists(folder_path) or not os.access(folder_path, os.R_OK):
         print(f"Error: The folder '{folder_path}' does not exist or is not readable.")
-        flash(f"Error: The folder '{folder_path}' does not exist or is not readable.")
+        _flash_if_request_context(
+            f"Error: The folder '{folder_path}' does not exist or is not readable."
+        )
         return []
     game_names_with_paths = []
     for item, full_path in _list_game_dirs(

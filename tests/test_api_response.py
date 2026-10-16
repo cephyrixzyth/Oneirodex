@@ -12,6 +12,7 @@ import pytest
 from flask import Flask
 
 from oneirodex.utils.api_response import api_error, api_ok, ERROR_CODES
+from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
 
 
 @pytest.fixture()
@@ -129,6 +130,30 @@ def test_api_error_body_error_keeps_machine_token(app):
     assert body['status'] == 'rejected'
 
 
+@pytest.mark.parametrize(
+    ('message', 'options'),
+    [
+        ('Admin required', {'code': 'forbidden'}),
+        ('  ', {}),
+        ('Method not allowed', {'code': 'bad_request', 'status': 405}),
+        ('Disabled', {'code': 'forbidden', 'status': 503}),
+        ('Missing', {'code': 'not_found', 'detail': {'field': 'id'}, 'path': '/safe'}),
+        (
+            'Type the exact library name to confirm.',
+            {'code': 'bad_request', 'body_status': 'rejected',
+             'body_error': 'confirm_name_required'},
+        ),
+    ],
+)
+def test_framework_independent_error_contract_matches_flask(app, message, options):
+    """Native ASGI errors and legacy Flask errors must serialize identically."""
+    with app.test_request_context():
+        flask_body, flask_status = _body(app, api_error(message, **options))
+    native_body, native_status = api_error_payload(message, **options)
+
+    assert (native_body, native_status) == (flask_body, flask_status)
+
+
 # ---------------------------------------------------------------------------
 # Success
 # ---------------------------------------------------------------------------
@@ -158,6 +183,14 @@ def test_api_ok_payload_cannot_override_envelope(app):
     # which is what this pins, but the keys stay present per the contract above.
     assert body['error'] is None
     assert body['error_code'] is None
+
+
+def test_framework_independent_success_contract_matches_flask(app):
+    payload = {'games': 12, 'libraries': 3, 'success': False}
+    with app.test_request_context():
+        flask_body, _ = _body(app, api_ok(payload, source='native'))
+
+    assert api_ok_payload(payload, source='native') == flask_body
 
 
 def test_error_codes_map_to_sane_statuses():

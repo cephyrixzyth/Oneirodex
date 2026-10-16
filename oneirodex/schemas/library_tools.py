@@ -8,7 +8,7 @@ form field, rename preview/apply fall through to 404 with no presence 400, and
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -27,6 +27,34 @@ class ApproveProposalBody(BaseModel):
 
     path: _RequiredText
     igdb_id: int | str
+
+
+class LinkExistingGameBody(BaseModel):
+    """``POST /api/library_tools/link_existing_game``."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    game_uuid: _RequiredText
+    full_disk_path: _RequiredText
+    library_uuid: str | None = None
+    from_unmatched: bool = False
+
+
+class ManualScanListBody(BaseModel):
+    """List while idle, but preserve the legacy busy-scan queue action."""
+
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+
+    library_uuid: str = Field(min_length=1, max_length=36)
+    folder: str = Field(default='', max_length=2048)
+    root: str = Field(default='', max_length=100)
+    scan_mode: Literal['auto', 'folders', 'files'] = 'auto'
+    force_updates_extras_scan: bool = False
+    fetch_hltb: bool = True
+    force_hltb_refetch: bool = False
+    # The UI first checks whether a scan is already active. `inspect` must not
+    # create a queued job; the operator then chooses Queue or Force explicitly.
+    queue_policy: Literal['inspect', 'queue', 'force'] = 'inspect'
 
 
 class ScanRootsBody(BaseModel):

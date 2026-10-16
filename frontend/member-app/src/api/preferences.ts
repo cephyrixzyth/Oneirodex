@@ -1,50 +1,28 @@
 /**
  * Member preferences helpers.
  *
- * Theme tokens live in the volume-served `od-tokens.css` stylesheet. Changing
- * theme from the SPA (Preferences modal or `/settings_panel`) must end in a
- * full page reload so that stylesheet is re-fetched. The theme preferences
- * modal (`preferences_modal.js`) already calls `window.location.reload()` after
- * a successful save — keep that contract if you add SPA-side theme saves here.
+ * Theme tokens live in the volume-served `od-tokens.css` stylesheet. The shared
+ * React preferences dialog and this debounced tile-size save both use the
+ * same validated JSON endpoint. Full-page reloads are reserved for dialog
+ * saves, where shell settings and volume-served styles need to refresh.
  */
 
-import { csrfHeaders, errorFromResponse, getCsrfToken } from '@oneirodex/ui'
+import { putPreferences } from '@oneirodex/ui'
 export async function savePreferences(partial: LooseProps) {
-  const csrf = getCsrfToken()
-  const body = new FormData()
+  const body: Record<string, string | number | boolean> = {}
   Object.entries(partial).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      body.append(key, value as string)
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      body[key] = value
     }
   })
-  if (csrf && partial.csrf_token === undefined) {
-    body.append('csrf_token', csrf)
-  }
-
-  const res = await fetch('/settings_panel', {
-    method: 'POST',
-    credentials: 'same-origin',
-    // `csrf` above is still read directly: this endpoint also wants the token
-    // as a form field, which headers cannot supply.
-    headers: csrfHeaders({ 'X-Requested-With': 'XMLHttpRequest' }),
-    body,
-  })
-
-  if (!res.ok) {
-    throw await errorFromResponse(res, 'preferences save failed')
-  }
-
-  return res.json().catch(() => ({}))
+  return putPreferences(body)
 }
 
 /**
  * The shell-known fields plus the one being changed.
  *
- * `/settings_panel` treats a post without `_full_form` as a partial save and
- * fills the stored values in underneath, so a slider drag no longer has to
- * carry every SelectField (it never did, and every such save was failing
- * validation). What is carried here is still sent, so the shell's view of a
- * field wins over a stale stored one.
+ * The JSON preferences API merges omitted fields with the stored values, so a
+ * slider drag only needs the shell-known defaults plus its changed value.
  */
 export function preferencesFromShell(shellConfig: LooseProps = {}, partial: LooseProps = {}) {
   return {

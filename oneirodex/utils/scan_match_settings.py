@@ -10,7 +10,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from oneirodex import cache, db
+from oneirodex.runtime_native.db_session import native_db as db
+from oneirodex.utils.cache import cache
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.duplicate_check import DEFAULT_TITLE_THRESHOLD
 from oneirodex.utils.match_scoring import DEFAULT_AMBIGUOUS_GAP, DEFAULT_HIGH_THRESHOLD

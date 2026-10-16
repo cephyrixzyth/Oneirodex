@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw
-from flask import current_app, url_for
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
+from oneirodex.utils.runtime_config import get_runtime_config
+from oneirodex.utils.static_urls import static_asset_url
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Image as GameImage
 from oneirodex.utils.cover_art_paint import (
     pick_art_direction,
@@ -437,7 +438,7 @@ def save_pack(
 
 
 def pack_preview_url(pack_id: str, filename: str = 'tile_400x600.webp') -> str:
-    return url_for('static', filename=f'library/generated/{pack_id}/{filename}')
+    return static_asset_url(f'library/generated/{pack_id}/{filename}')
 
 
 def build_zip_bytes(pack_id: str, package_root: str | Path | None = None) -> bytes:
@@ -474,6 +475,8 @@ def apply_pack_to_game(
     *,
     filename: str | None = None,
     package_root: str | Path | None = None,
+    image_save_path: str | Path | None = None,
+    static_url_path: str | None = None,
 ) -> dict[str, Any]:
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
@@ -494,7 +497,7 @@ def apply_pack_to_game(
         src = _pick_cover_file(pack_dir, fmt)
     ext = src.suffix.lower() or '.webp'
     file_name = secure_filename(f'{game_uuid}_cover_studio_{uuid.uuid4().hex[:10]}{ext}')
-    save_dir = current_app.config['IMAGE_SAVE_PATH']
+    save_dir = image_save_path if image_save_path is not None else get_runtime_config()['IMAGE_SAVE_PATH']
     os.makedirs(save_dir, exist_ok=True)
     dest = os.path.join(save_dir, file_name)
     dest_path = Path(dest).resolve()
@@ -528,11 +531,12 @@ def apply_pack_to_game(
         except OSError:
             pass
         raise
+    static_root = (static_url_path or '/static').rstrip('/')
     return {
         'game_uuid': game_uuid,
         'pack_id': pack_id,
         'filename': file_name,
-        'cover_url': url_for('static', filename=f'library/images/{file_name}'),
+        'cover_url': f'{static_root}/library/images/{file_name}',
     }
 
 

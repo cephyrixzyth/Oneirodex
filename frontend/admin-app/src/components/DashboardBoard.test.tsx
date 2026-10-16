@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { DashboardBoard } from './DashboardBoard'
 import { defaultDashboardLayout } from './dashboardLayout'
@@ -27,9 +28,45 @@ describe('DashboardBoard controls', () => {
   test('optional widgets start hidden and Add widget brings them in', () => {
     board()
     expect(screen.queryByText('cpu tile')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Add widget/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'CPU' }))
+    const trigger = screen.getByRole('button', { name: /Add widget/ })
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-controls')
+    fireEvent.click(screen.getByRole('button', { name: 'CPU' }))
     expect(screen.getByText('cpu tile')).toBeInTheDocument()
+    expect(trigger).not.toHaveAttribute('aria-controls')
+  })
+
+  test('Add widget uses native Tab order and Escape restores focus', async () => {
+    board()
+    const user = userEvent.setup()
+    const trigger = screen.getByRole('button', { name: /Add widget/ })
+    expect(trigger).not.toHaveAttribute('aria-controls')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-controls')).toBe(
+      screen.getByRole('group', { name: 'Widgets to add' }).id,
+    )
+    trigger.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'CPU' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('group', { name: 'Widgets to add' })).toBeNull()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  test('outside pointer dismissal keeps focus on its destination', () => {
+    board()
+    const trigger = screen.getByRole('button', { name: /Add widget/ })
+    fireEvent.click(trigger)
+    const outside = document.createElement('button')
+    outside.className = 'test-outside-target'
+    document.body.append(outside)
+    outside.focus()
+    fireEvent.pointerDown(outside)
+    expect(screen.queryByRole('group', { name: 'Widgets to add' })).toBeNull()
+    expect(document.activeElement).toBe(outside)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    outside.remove()
   })
 
   test('hide removes a widget and offers it back; hidden state persists', () => {

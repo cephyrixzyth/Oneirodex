@@ -304,7 +304,7 @@ def claim_assist_for_user(user_id: int, offer: Any) -> dict[str, Any]:
     """
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import StoreAccount
     from oneirodex.utils.store_ownership import (
         get_ownership_summary,
@@ -611,12 +611,17 @@ _cover_cache: dict[str, tuple[str | None, float]] = {}
 
 
 def _cover_lookup_enabled() -> bool:
-    """False outside an app context — there are no IGDB credentials there."""
+    """Read the active native config or legacy Flask config, if available."""
+    from oneirodex.runtime_native.runtime_context import get_runtime_config
+
+    config = get_runtime_config()
+    if config is not None:
+        return bool(config.get('ENABLE_FREE_GAMES_COVER_LOOKUP', True))
     try:
         from flask import current_app
 
         return bool(current_app.config.get('ENABLE_FREE_GAMES_COVER_LOOKUP', True))
-    except RuntimeError:
+    except (ImportError, RuntimeError):
         return False
 
 
@@ -736,7 +741,7 @@ def sync_free_game_offers(*, notify: bool = True) -> dict[str, int]:
     """Upsert remote offers; deactivate missing per source; optionally notify on inserts."""
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import FreeGameOffer
 
     by_source = collect_remote_offers()
@@ -815,7 +820,7 @@ def sync_free_game_offers(*, notify: bool = True) -> dict[str, int]:
 def notify_new_free_games(rows: list[Any]) -> int:
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import User
     from oneirodex.utils.notifications import notify_user
 
@@ -851,7 +856,7 @@ def list_active_offers(
 ) -> list[dict[str, Any]]:
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import FreeGameOffer
 
     q = select(FreeGameOffer).where(FreeGameOffer.active.is_(True))
@@ -865,7 +870,7 @@ def list_active_offers(
 def connected_stores_for_user(user_id: int) -> set[str]:
     from sqlalchemy import select
 
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import StoreAccount
 
     rows = db.session.execute(

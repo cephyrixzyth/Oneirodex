@@ -6,7 +6,7 @@ it without a cycle.
 """
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 
 __all__ = ["get_or_create_entity"]
 

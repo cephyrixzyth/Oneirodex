@@ -1,6 +1,7 @@
 /** Kind chip toggles for library browse (maps to /browse_games item_kind). */
 
 import { ITEM_KINDS, ITEM_KIND_LABEL, ITEM_KIND_LABEL_PLURAL } from '../utils/itemKind'
+import { FilterChipGroup } from '@oneirodex/ui'
 
 /** Chips shown in the Library Kind filter row. */
 export const ITEM_KIND_FILTER_CHIPS = ITEM_KINDS.map((kind) => ({
@@ -118,24 +119,28 @@ export function ItemKindFilterChips({
   cleanFilters,
   t = (key: any) => key,
 }: LooseProps) {
-  const selected = new Set(parseItemKindFilter(filters.item_kind))
+  const selected = parseItemKindFilter(filters.item_kind)
+  const applySelection = (values: string[]) => {
+    const next = { ...filters }
+    const formatted = formatItemKindFilter(values)
+    if (formatted) next.item_kind = formatted
+    else delete next.item_kind
+    delete next.content_kind
+    onApply(cleanFilters(next))
+  }
+
   return (
-    <div className="od-badge-filter-chips" role="group" aria-label={t('Kind filters')}>
-      {ITEM_KIND_FILTER_CHIPS.map((chip) => {
-        const active = selected.has(chip.kind)
-        return (
-          <button
-            key={chip.kind}
-            type="button"
-            className={`od-badge-filter-chip${active ? ' is-active' : ''}`}
-            aria-pressed={active}
-            title={t(chip.title)}
-            onClick={() => toggleItemKindFilter(filters, chip.kind, onApply, cleanFilters)}
-          >
-            {t(chip.label)}
-          </button>
-        )
-      })}
-    </div>
+    <FilterChipGroup
+      label={t('Kind filters')}
+      options={ITEM_KIND_FILTER_CHIPS.map((chip) => ({
+        value: chip.kind,
+        label: t(chip.label),
+        title: t(chip.title),
+      }))}
+      value={selected}
+      onChange={applySelection}
+      size="compact"
+      className="od-badge-filter-chips"
+    />
   )
 }

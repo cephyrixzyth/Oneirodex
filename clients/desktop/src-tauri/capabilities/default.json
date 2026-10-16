@@ -74,6 +74,8 @@
 
     "allow-run-flips-apply",
 
+    "allow-inspect-staged-mod",
+
     "allow-apply-staged-mod"
 
   ]

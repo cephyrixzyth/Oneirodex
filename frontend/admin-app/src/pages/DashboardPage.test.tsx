@@ -179,6 +179,25 @@ test('DashboardPage disk-only issues stay Warning / Info', async () => {
   expect(screen.queryByText('Action required')).toBeNull()
 })
 
+test('DashboardPage health banner stays neutral while its first summary loads', () => {
+  globalThis.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof globalThis.fetch
+  render(<DashboardPage />)
+  const health = screen.getByRole('region', { name: 'Health' })
+  expect(health).toHaveAttribute('aria-busy', 'true')
+  expect(within(health).getByText('Checking health…')).toBeInTheDocument()
+  expect(within(health).queryByText('All systems healthy')).toBeNull()
+})
+
+test('DashboardPage health banner reports unavailable after the first summary fails', async () => {
+  globalThis.fetch = vi.fn(async () => {
+    throw new Error('offline')
+  }) as unknown as typeof globalThis.fetch
+  render(<DashboardPage />)
+  const health = screen.getByRole('region', { name: 'Health' })
+  expect(await within(health).findByText('Health status unavailable')).toBeInTheDocument()
+  expect(within(health).queryByText('All systems healthy')).toBeNull()
+})
+
 test('DashboardPage board exposes reset layout', async () => {
   mockSummary()
   // Centre page slot matches Users Invites/Support / member Library actions.

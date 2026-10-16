@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from sqlalchemy import delete, func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Genre, Library, Theme, UserContentFilter, UserLibraryAccess
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
 
 FILTER_TYPE_GENRE = 'genre'
 FILTER_TYPE_THEME = 'theme'

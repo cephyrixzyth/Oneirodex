@@ -13,13 +13,12 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
-from flask import current_app
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings, User
 from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
 from oneirodex.utils.security import validate_connector_http_url
 
 logger = logging.getLogger(__name__)
@@ -82,30 +81,39 @@ def _lighting_cfg() -> dict[str, Any]:
     return dict(cfg) if isinstance(cfg, dict) else {}
 
 
-def _env_bool(key: str, default: bool = False) -> bool:
-    raw = current_app.config.get(key, default)
+def _config_values(config=None):
+    if config is not None:
+        return config
+    from flask import current_app
+
+    return current_app.config
+
+
+def _env_bool(key: str, default: bool = False, config=None) -> bool:
+    raw = _config_values(config).get(key, default)
     if isinstance(raw, bool):
         return raw
     return str(raw).lower() in ('1', 'true', 'yes', 'on')
 
 
-def ambient_lighting_enabled() -> bool:
+def ambient_lighting_enabled(config=None) -> bool:
     """Opt-in: env flag OR admin DB toggle (either enables)."""
-    if _env_bool('ENABLE_AMBIENT_LIGHTING', False):
+    if _env_bool('ENABLE_AMBIENT_LIGHTING', False, config):
         return True
     return bool(_lighting_cfg().get('ambient_lighting_enabled'))
 
 
-def _resolve_provider() -> str:
+def _resolve_provider(config=None) -> str:
+    values = _config_values(config)
     cfg = _lighting_cfg()
     # Prefer explicit DB provider when set; otherwise env / default.
     raw = cfg.get('lighting_provider')
     if raw is None or str(raw).strip() == '':
-        raw = current_app.config.get('LIGHTING_PROVIDER') or 'off'
+        raw = values.get('LIGHTING_PROVIDER') or 'off'
     provider = str(raw).strip().lower()
     if provider not in _VALID_PROVIDERS:
         provider = 'off'
-    if not ambient_lighting_enabled():
+    if not ambient_lighting_enabled(values):
         return 'off'
     return provider
 
@@ -145,54 +153,55 @@ def _split_entities(raw: str | list | None) -> list[str]:
     return [part.strip() for part in re.split(r'[,\s]+', text) if part.strip()]
 
 
-def get_ambient_config() -> dict[str, Any]:
+def get_ambient_config(config=None) -> dict[str, Any]:
+    values = _config_values(config)
     cfg = _lighting_cfg()
     hyperion_url = (
         (cfg.get('hyperion_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('HYPERION_URL') or '').strip().rstrip('/')
+        or str(values.get('HYPERION_URL') or '').strip().rstrip('/')
     )
     ha_url = (
         (cfg.get('ha_url') or '').strip().rstrip('/')
-        or str(current_app.config.get('HA_URL') or current_app.config.get('HOME_ASSISTANT_URL') or '').strip().rstrip('/')
+        or str(values.get('HA_URL') or values.get('HOME_ASSISTANT_URL') or '').strip().rstrip('/')
     )
-    provider = _resolve_provider() if ambient_lighting_enabled() else (
-        str(cfg.get('lighting_provider') or current_app.config.get('LIGHTING_PROVIDER') or 'off').strip().lower()
+    provider = _resolve_provider(values) if ambient_lighting_enabled(values) else (
+        str(cfg.get('lighting_provider') or values.get('LIGHTING_PROVIDER') or 'off').strip().lower()
     )
     if provider not in _VALID_PROVIDERS:
         provider = 'off'
-    accent = cfg.get('ambient_accent_color') or current_app.config.get('AMBIENT_ACCENT_COLOR') or '255,128,32'
+    accent = cfg.get('ambient_accent_color') or values.get('AMBIENT_ACCENT_COLOR') or '255,128,32'
     entities = cfg.get('ha_light_entities')
     if entities is None:
-        entities = current_app.config.get('HA_LIGHT_ENTITIES') or ''
+        entities = values.get('HA_LIGHT_ENTITIES') or ''
     priority = cfg.get('hyperion_priority')
     if priority is None:
-        priority = current_app.config.get('HYPERION_PRIORITY', 50)
+        priority = values.get('HYPERION_PRIORITY', 50)
     try:
         priority = int(priority)
     except (TypeError, ValueError):
         priority = 50
     ha_play_scene = (
         cfg.get('ha_play_scene')
-        or current_app.config.get('HA_PLAY_SCENE')
+        or values.get('HA_PLAY_SCENE')
         or ''
     )
     ha_stop_scene = (
         cfg.get('ha_stop_scene')
-        or current_app.config.get('HA_STOP_SCENE')
+        or values.get('HA_STOP_SCENE')
         or ''
     )
     token_configured = bool(
         cfg.get('hyperion_token')
-        or current_app.config.get('HYPERION_TOKEN')
+        or values.get('HYPERION_TOKEN')
     )
     ha_token_configured = bool(
         cfg.get('ha_token')
-        or current_app.config.get('HA_TOKEN')
-        or current_app.config.get('HOME_ASSISTANT_TOKEN')
+        or values.get('HA_TOKEN')
+        or values.get('HOME_ASSISTANT_TOKEN')
     )
     return {
-        'enabled': ambient_lighting_enabled(),
-        'env_enabled': _env_bool('ENABLE_AMBIENT_LIGHTING', False),
+        'enabled': ambient_lighting_enabled(values),
+        'env_enabled': _env_bool('ENABLE_AMBIENT_LIGHTING', False, values),
         'db_enabled': bool(cfg.get('ambient_lighting_enabled')),
         'provider': provider,
         'hyperion_url': hyperion_url,
@@ -207,7 +216,7 @@ def get_ambient_config() -> dict[str, Any]:
     }
 
 
-def save_ambient_config(payload: dict[str, Any]) -> dict[str, Any]:
+def save_ambient_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
     row = _settings_row()
     if row is None:
         row = GlobalSettings()
@@ -267,7 +276,7 @@ def save_ambient_config(payload: dict[str, Any]) -> dict[str, Any]:
         current['ha_stop_scene'] = str(payload.get('ha_stop_scene') or '').strip()
     row.arr_settings = current
     db.session.commit()
-    return get_ambient_config()
+    return get_ambient_config(config)
 
 
 class HyperionClient:
@@ -380,7 +389,8 @@ class HomeAssistantClient:
         self._call_service('scene', 'turn_on', {'entity_id': entity_id})
 
 
-def _hyperion_client(cfg: dict[str, Any]) -> HyperionClient | None:
+def _hyperion_client(cfg: dict[str, Any], config=None) -> HyperionClient | None:
+    values = _config_values(config)
     url = cfg.get('hyperion_url') or ''
     if not url:
         return None
@@ -391,7 +401,7 @@ def _hyperion_client(cfg: dict[str, Any]) -> HyperionClient | None:
     arr = _lighting_cfg()
     token = str(
         arr.get('hyperion_token')
-        or current_app.config.get('HYPERION_TOKEN')
+        or values.get('HYPERION_TOKEN')
         or '',
     )
     return HyperionClient(
@@ -401,7 +411,8 @@ def _hyperion_client(cfg: dict[str, Any]) -> HyperionClient | None:
     )
 
 
-def _ha_client(cfg: dict[str, Any]) -> HomeAssistantClient | None:
+def _ha_client(cfg: dict[str, Any], config=None) -> HomeAssistantClient | None:
+    values = _config_values(config)
     url = cfg.get('ha_url') or ''
     if not url:
         return None
@@ -412,8 +423,8 @@ def _ha_client(cfg: dict[str, Any]) -> HomeAssistantClient | None:
     arr = _lighting_cfg()
     token = str(
         arr.get('ha_token')
-        or current_app.config.get('HA_TOKEN')
-        or current_app.config.get('HOME_ASSISTANT_TOKEN')
+        or values.get('HA_TOKEN')
+        or values.get('HOME_ASSISTANT_TOKEN')
         or '',
     )
     if not token:
@@ -465,21 +476,28 @@ def _apply_play_clear(cfg: dict[str, Any]) -> None:
         _set_last_error(None)
 
 
-def _run_async(fn, *args) -> None:
-    """Fire-and-forget worker with Flask app context."""
-    try:
-        app = current_app._get_current_object()
-    except Exception:
-        return
+def _run_async(fn, *args, config=None) -> None:
+    """Run explicit-config workers without Flask; keep legacy app fallback."""
+    app = None
+    if config is None:
+        try:
+            from flask import current_app
+
+            app = current_app._get_current_object()
+        except Exception:
+            return
 
     def worker() -> None:
-        with app.app_context():
-            try:
+        try:
+            if app is None:
                 fn(*args)
-            except Exception as exc:
-                text = _failure_text(exc)
-                _set_last_error(text)
-                logger.warning('Ambient lighting async failed: %s', text)
+            else:
+                with app.app_context():
+                    fn(*args)
+        except Exception as exc:
+            text = _failure_text(exc)
+            _set_last_error(text)
+            logger.warning('Ambient lighting async failed: %s', text)
 
     threading.Thread(target=worker, daemon=True, name='oneirodex-ambient-lighting').start()
 
@@ -490,30 +508,34 @@ def _should_skip_user(user: User | None) -> bool:
     return normalize_role(getattr(user, 'role', None)) == 'child'
 
 
-def notify_play_session_started(user: User | None, game: Any | None = None) -> None:
+def notify_play_session_started(
+    user: User | None, game: Any | None = None, *, config=None,
+) -> None:
     """Hook: play session start — async accent color / scene."""
     if _should_skip_user(user):
         return
-    cfg = get_ambient_config()
+    cfg = get_ambient_config(config)
     if cfg.get('provider') == 'off' or not cfg.get('enabled'):
         return
-    _run_async(_apply_play_accent, cfg)
+    _run_async(_apply_play_accent, cfg, config=config)
 
 
-def notify_play_session_stopped(user_id: int | None = None, *, user: User | None = None) -> None:
+def notify_play_session_stopped(
+    user_id: int | None = None, *, user: User | None = None, config=None,
+) -> None:
     """Hook: play session stop — async clear priority / off scene."""
     if user is None and user_id is not None:
         user = db.session.get(User, user_id)
     if _should_skip_user(user):
         return
-    cfg = get_ambient_config()
+    cfg = get_ambient_config(config)
     if cfg.get('provider') == 'off' or not cfg.get('enabled'):
         return
-    _run_async(_apply_play_clear, cfg)
+    _run_async(_apply_play_clear, cfg, config=config)
 
 
-def ambient_lighting_status(*, probe: bool = False) -> dict[str, Any]:
-    cfg = get_ambient_config()
+def ambient_lighting_status(*, probe: bool = False, config=None) -> dict[str, Any]:
+    cfg = get_ambient_config(config)
     reachable = False
     probe_ok = False
     error = _LAST_ERROR
@@ -524,7 +546,7 @@ def ambient_lighting_status(*, probe: bool = False) -> dict[str, Any]:
             reachable = ok
             if probe and ok:
                 try:
-                    client = _hyperion_client(cfg)
+                    client = _hyperion_client(cfg, config)
                     if client:
                         client.set_color(_parse_rgb(cfg.get('ambient_accent_color')))
                         client.clear_priority()
@@ -538,7 +560,7 @@ def ambient_lighting_status(*, probe: bool = False) -> dict[str, Any]:
             reachable = ok and cfg.get('ha_token_configured')
             if probe and reachable:
                 try:
-                    client = _ha_client(cfg)
+                    client = _ha_client(cfg, config)
                     if client:
                         play_scene = cfg.get('ha_play_scene') or ''
                         if play_scene:

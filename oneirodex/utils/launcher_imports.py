@@ -22,7 +22,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Callable
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.utils.store_ownership_common import EXTERNAL_APP_ID_MAX, upsert_owned_title
 
 __all__ = [

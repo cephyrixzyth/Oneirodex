@@ -1,9 +1,10 @@
 # /oneirodex/routes_admin_ext/images.py
+import logging
 import os
 from datetime import datetime, timezone
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import render_template, request, jsonify, current_app, url_for
+from flask import request, jsonify, current_app, url_for
 from flask_login import login_required
 from sqlalchemy import select
 
@@ -11,6 +12,7 @@ from oneirodex import db
 from oneirodex.models import Game, Image
 from oneirodex.schemas.admin_images import ApplyCoverBody, CoverSearchBody, GenerateArtworkBody
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.cover_art_studio import apply_pack_to_game, save_pack
 from oneirodex.utils.functions import download_stored_image
 from oneirodex.utils.cover_selection import (
@@ -28,13 +30,15 @@ from oneirodex.utils.image_kinds import (
 from oneirodex.utils.validation import validate_body
 from . import admin2_bp
 
+_logger = logging.getLogger(__name__)
+
 
 @admin2_bp.route('/admin/images', methods=['GET'])
 @login_required
 @admin_required
 def images_page():
     """Shell for the React image queue and artwork management page."""
-    return render_template('admin/admin_images.html')
+    return render_admin_spa(title='Images · Oneirodex Admin')
 
 
 # The /admin/api/image_queue_list endpoint below stays — it is what the React
@@ -619,7 +623,8 @@ def images_batch_upload():
         try:
             item.save(_os.path.join(save_dir, file_name))
         except OSError as exc:
-            errors.append({'file': raw, 'error': f'Could not write: {exc}'})
+            _logger.warning('Admin image upload write failed (%s)', type(exc).__name__)
+            errors.append({'file': raw, 'error': 'Could not write image file'})
             continue
 
         if kind in SINGULAR_IMAGE_KINDS:

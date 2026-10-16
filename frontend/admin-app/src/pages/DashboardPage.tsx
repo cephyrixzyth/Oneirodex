@@ -133,14 +133,19 @@ export function DashboardPage() {
 
   const hasErrors = (summary?.recent_errors || []).length > 0
 
-  // Memoised on `summary`: every field below is a pure function of it, so the
-  // object only needs to change when a poll actually lands new data. Without this
-  // it was a fresh literal on every render — every PageStatus ellipsis tick and
-  // every parent re-render rebuilt all ~14 elements and, via DashboardBoard's
-  // effect, re-ran a layout measure + ResizeObserver teardown.
+  // Keep the widget map stable between polls, while allowing the health banner
+  // to reflect the initial loading and failure states before any summary exists.
   const widgets = useMemo(
     () => ({
-      status: <OpsStatusBanner severity={severity} items={issues?.items} ariaLabel="Health" />,
+      status: (
+        <OpsStatusBanner
+          severity={severity}
+          loading={bootLoading && !summary}
+          unavailable={!summary && !bootLoading && Boolean(error)}
+          items={issues?.items}
+          ariaLabel="Health"
+        />
+      ),
       'm-build': <BuildTile build={summary?.build} />,
       'm-libraries': (
         <MetricTile
@@ -330,7 +335,7 @@ export function DashboardPage() {
         </section>
       ) : null,
     }),
-    [summary],
+    [summary, bootLoading, error],
   )
 
   return (

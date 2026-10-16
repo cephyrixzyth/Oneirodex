@@ -1,6 +1,6 @@
 import os
 from urllib.parse import urlparse
-from flask import Blueprint, render_template, flash, redirect, url_for, request, current_app
+from flask import Blueprint, flash, redirect, url_for, request, current_app
 from oneirodex import db
 from sqlalchemy import select
 from oneirodex.forms import SetupForm, IGDBSetupForm
@@ -21,6 +21,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.oidc import is_secure_oidc_issuer
+from oneirodex.utils.member_auth_spa import render_member_auth_spa
 
 setup_bp = Blueprint('setup', __name__)
 
@@ -66,7 +67,7 @@ def setup():
     set_setup_step(1)
 
     form = SetupForm()
-    return render_template('setup/setup.html', form=form, is_setup_mode=True)
+    return render_member_auth_spa()
 
 @setup_bp.route('/setup/submit', methods=['POST'])
 def setup_submit():
@@ -124,7 +125,10 @@ def setup_submit():
     else:
         # Field names only: form.data holds the password and the CSRF token.
         print(f"Setup form validation failed for: {sorted(form.errors)}")
-        return render_template('setup/setup.html', form=form, is_setup_mode=True)
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{getattr(form, field).label.text}: {error}', 'error')
+        return render_member_auth_spa()
 
 @setup_bp.route('/setup/smtp', methods=['GET', 'POST'])
 def setup_smtp():
@@ -168,7 +172,7 @@ def setup_smtp():
         except Exception as e:
             _setup_failed('SMTP settings', e)
 
-    return render_template('setup/setup_smtp.html', is_setup_mode=True)
+    return render_member_auth_spa()
 
 
 @setup_bp.route('/setup/features', methods=['GET', 'POST'])
@@ -212,11 +216,7 @@ def setup_features():
         except Exception as e:
             _setup_failed('Feature preferences', e)
 
-    return render_template(
-        'setup/setup_features.html',
-        is_setup_mode=True,
-        defaults=defaults,
-    )
+    return render_member_auth_spa()
 
 
 @setup_bp.route('/setup/igdb', methods=['GET', 'POST'])
@@ -256,7 +256,11 @@ def setup_igdb():
         except Exception as e:
             _setup_failed('IGDB settings', e)
 
-    return render_template('setup/setup_igdb.html', form=form, is_setup_mode=True)
+    if request.method == 'POST':
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{getattr(form, field).label.text}: {error}', 'error')
+    return render_member_auth_spa()
 
 
 @setup_bp.route('/setup/integrations', methods=['GET', 'POST'])
@@ -322,19 +326,11 @@ def setup_integrations():
         except ValueError:
             db.session.rollback()
             flash('OIDC issuer must use HTTPS; redirect URI must use a valid HTTP or HTTPS URL.', 'error')
-            return render_template(
-                'setup/setup_integrations.html',
-                is_setup_mode=True,
-                settings=global_settings_row_or_create(),
-            )
+            return render_member_auth_spa()
         except Exception as exc:
             _setup_failed('API settings', exc)
 
-    return render_template(
-        'setup/setup_integrations.html',
-        is_setup_mode=True,
-        settings=settings,
-    )
+    return render_member_auth_spa()
 
 
 def _finish_setup(*, library_created=False, scan_status=None):
@@ -428,10 +424,7 @@ def setup_library():
                     db.session.commit()
                 except Exception as exc:
                     _setup_failed('The first library', exc)
-                    return render_template(
-                        'setup/setup_library.html', is_setup_mode=True,
-                        platforms=platforms, errors=[],
-                    )
+                    return render_member_auth_spa()
 
             scan_status = None
             try:
@@ -451,9 +444,6 @@ def setup_library():
                 current_app.logger.warning('First library scan could not be queued (%s)', type(exc).__name__)
             return _finish_setup(library_created=True, scan_status=scan_status)
 
-    return render_template(
-        'setup/setup_library.html',
-        is_setup_mode=True,
-        platforms=platforms,
-        errors=errors,
-    )
+    for error in errors:
+        flash(error, 'error')
+    return render_member_auth_spa()

@@ -329,20 +329,21 @@ export function ExtensionsPage() {
           </p>
           <div className="od-ext-chip-row" role="list">
             {suggestions.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                className="od-ext-chip od-ext-chip--suggest"
-                role="listitem"
-                disabled={busy}
-                onClick={() => addExtension(s.value)}
-                title={`Add .${s.value} (${s.groupLabel})`}
-              >
-                .{s.value}
-                <span className="od-ext-chip__action" aria-hidden="true">
-                  +
-                </span>
-              </button>
+              <span key={s.value} role="listitem">
+                <button
+                  type="button"
+                  className="od-ext-chip od-ext-chip--suggest"
+                  aria-label={`Add .${s.value} (${s.groupLabel})`}
+                  disabled={busy}
+                  onClick={() => addExtension(s.value)}
+                  title={`Add .${s.value} (${s.groupLabel})`}
+                >
+                  .{s.value}
+                  <span className="od-ext-chip__action" aria-hidden="true">
+                    +
+                  </span>
+                </button>
+              </span>
             ))}
           </div>
         </div>

@@ -3,6 +3,7 @@ import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
+import './DetailLayoutPage.css'
 
 /**
  * Install-wide game-details section order and visibility (`/api/layouts/detail`).
@@ -40,14 +41,19 @@ export function DetailLayoutPage() {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [saveError, setSaveError] = useState<unknown>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setLoadError(null)
+    setStatus('')
+    setSaveError(null)
     getJson('/api/layouts/detail')
       .then((data) => {
         if (cancelled) return
+        if (!Array.isArray(data?.sections))
+          throw new Error('Detail layout returned an invalid response.')
         setSections(normalize(data?.sections))
         setStatus('Loaded')
       })
@@ -63,14 +69,18 @@ export function DetailLayoutPage() {
   }, [reloadKey])
 
   async function put(body: { sections: DetailSection[] }, okText: string, failText: string) {
-    if (busy) return
+    if (busy || loading || loadError) return
     setBusy(true)
+    setSaveError(null)
+    setStatus('')
     try {
       const saved = await putJson('/api/layouts/detail', body)
+      if (!Array.isArray(saved?.sections))
+        throw new Error('Detail layout returned an invalid response.')
       setSections(normalize(saved?.sections) || [])
       setStatus(okText)
     } catch (err) {
-      setStatus(errorText(err) || failText)
+      setSaveError(errorText(err) || failText)
     } finally {
       setBusy(false)
     }
@@ -82,18 +92,21 @@ export function DetailLayoutPage() {
       lede={<>Reorder and show/hide sections on the game details page.</>}
     >
       <PageStatus loading={loading} error={loadError} onRetry={() => setReloadKey((k) => k + 1)}>
+        <PageStatus error={saveError} />
         {/* A polite live region without a status role: a transient "Saved" / "Reset"
             line, the shape QualityProfilesPage uses. PageStatus owns loading / error. */}
         <p className="od-admin-lede od-admin-lede--flush" aria-live="polite">
           {status}
         </p>
-        <ul className="list-group mb-3" aria-label="Detail page sections">
+        <ul className="od-detail-layout__list" aria-label="Detail page sections">
           {sections.map((s, i) => (
-            <li key={s.id} className="list-group-item d-flex align-items-center gap-2">
-              <strong style={{ minWidth: 120 }}>{s.id}</strong>
-              <label className="mb-0">
+            <li key={s.id} className="od-detail-layout__row">
+              <strong className="od-detail-layout__name">{s.id}</strong>
+              <label className="od-detail-layout__visibility">
                 <input
                   type="checkbox"
+                  aria-label={`Show ${s.id}`}
+                  disabled={busy}
                   checked={s.visible}
                   onChange={(e) =>
                     setSections((prev) =>
@@ -106,7 +119,7 @@ export function DetailLayoutPage() {
               <Button
                 size="sm"
                 variant="secondary"
-                className="ms-auto"
+                className="od-detail-layout__move"
                 disabled={i === 0 || busy}
                 aria-label={`Move ${s.id} up`}
                 onClick={() => setSections((prev) => swap(prev, i - 1, i))}
@@ -125,7 +138,7 @@ export function DetailLayoutPage() {
             </li>
           ))}
         </ul>
-        <div className="d-flex gap-2">
+        <div className="od-admin-actions-row">
           <Button
             variant="primary"
             disabled={busy}

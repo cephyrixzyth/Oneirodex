@@ -3,9 +3,8 @@
 Bodies moved verbatim from ``oneirodex/utils/game_core.py`` in wave A2.3.
 """
 import uuid
-from flask import flash, abort, has_request_context
 from sqlalchemy import select, delete
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL, game_developer_association
 from oneirodex.utils.helpers.counts import delete_associations_for_game
 from oneirodex.utils.scanning import delete_game_images
@@ -51,7 +50,7 @@ def remove_from_lib(game_uuid):
         return False
     
 
-def delete_game(game_identifier):
+def delete_game(game_identifier, *, config=None):
     """Delete a game by UUID or Game object.""" 
     game_to_delete = None
     if isinstance(game_identifier, Game):
@@ -65,11 +64,13 @@ def delete_game(game_identifier):
             game_uuid_str = str(uuid.UUID(game_identifier))
         except (ValueError, AttributeError, TypeError):
             logger.info(f"Invalid UUID format: {game_identifier}")
-            abort(404)
+            from werkzeug.exceptions import NotFound
+            raise NotFound()
         game_to_delete = db.session.execute(select(Game).filter_by(uuid=game_uuid_str)).scalar_one_or_none()
         if game_to_delete is None:
             logger.info(f"No game found with UUID {game_uuid_str}")
-            abort(404)
+            from werkzeug.exceptions import NotFound
+            raise NotFound()
 
     try:
         logger.info(f"Found game to delete: {game_to_delete}")
@@ -83,15 +84,20 @@ def delete_game(game_identifier):
                 game_developer_association.c.game_id == game_to_delete.id
             )
         )
-        delete_game_images(game_uuid_str)
+        delete_game_images(game_uuid_str, config=config)
         db.session.delete(game_to_delete)
         db.session.commit()
         logger.info(f'Deleted game with UUID: {game_uuid_str}')
     except Exception as e:
         db.session.rollback()
         logger.error(f'Error deleting game with UUID {game_uuid_str}: {e}')
-        if has_request_context():
-            flash(f'Error deleting game: {e}', 'error')
+        try:
+            from flask import flash, has_request_context
+
+            if has_request_context():
+                flash(f'Error deleting game: {e}', 'error')
+        except ImportError:
+            pass
         # Re-raise so the caller reports the real failure. Swallowing this made
         # /delete_game return "success" while the game was still in the library.
         raise

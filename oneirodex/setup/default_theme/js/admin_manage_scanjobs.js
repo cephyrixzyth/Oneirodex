@@ -20,7 +20,21 @@ import {
     unmatchedFoldersSignature,
 } from './scanJobsDom.js';
 
-const fileIcons = importedFileIcons || { default: 'fa-file' };
+const fileIcons = importedFileIcons || { default: 'file' };
+
+function createFileTypeMark(kind) {
+    var iconKind = /^[a-z]+$/.test(kind || '') ? kind : 'file';
+    var glyphs = {
+        folder: '▰', archive: '▤', game: '▣', disc: '◉', audio: '♫',
+        video: '▶', pdf: '¶', document: '▤', spreadsheet: '▦',
+        presentation: '▱', text: '≡', image: '▧', file: '▤',
+    };
+    return $('<span class="scan-file-type-icon" aria-hidden="true">')
+        .addClass('scan-file-type-icon--' + iconKind)
+        .attr('aria-hidden', 'true')
+        .attr('data-kind', iconKind)
+        .text(glyphs[iconKind] || glyphs.file);
+}
 
 var currentPathAuto = '';
 var currentPathManual = '';
@@ -3621,21 +3635,25 @@ function fetchFolders(path, folderContentsId, spinnerId, upButtonId, inputFieldI
                 var itemElement;
                 if (item.isDir) {
                     // Folder and file names come from the filesystem: text, never markup.
-                    itemElement = $('<div>').text('📁 ' + item.name);
+                    itemElement = $('<button type="button" class="folder-item">')
+                        .append(createFileTypeMark(fileIcons.directory || 'folder'))
+                        .append($('<span class="scan-file-name">').text(item.name));
                     var fullPath = path + item.name + "/";
                     $(itemElement).addClass('folder-item').attr('data-path', fullPath);
                 } else {
                     // Get file extension and appropriate icon
-                    var ext = item.ext ? item.ext.toLowerCase() : '';
-                    var iconClass = fileIcons[ext] || fileIcons['default'];
+                    var ext = item.ext ? item.ext.toLowerCase().replace(/^\./, '') : '';
+                    var iconKind = fileIcons[ext] || fileIcons['default'] || 'file';
                     
                     // Format file size
                     var sizeText = formatFileSize(item.size);
                     
                     // Create file element with icon, name, and size
-                    itemElement = $('<div>').text(item.name).append(
+                    itemElement = $('<div>')
+                        .append(createFileTypeMark(iconKind))
+                        .append($('<span class="scan-file-name">').text(item.name)).append(
                         $('<span class="file-size">').text('(' + sizeText + ')')
-                    );
+                        );
                     $(itemElement)
                         .addClass('file-item')
                         .attr('title', item.name + ' - ' + sizeText)

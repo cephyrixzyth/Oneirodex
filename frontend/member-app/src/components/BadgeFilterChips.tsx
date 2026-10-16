@@ -1,5 +1,7 @@
 /** Badge chip toggles for library browse (maps to /browse_games badge params). */
 
+import { FilterChipGroup } from '@oneirodex/ui'
+
 /** Chips shown in the Library LHN panel. VR is tile badge-only — not a filter chip. */
 export const BADGE_FILTER_CHIPS = [
   { param: 'has_updates', label: 'Update', title: 'Updates available' },
@@ -63,23 +65,32 @@ export function BadgeFilterChips({
   cleanFilters,
   t = (key: any) => key,
 }: LooseProps) {
+  const value = BADGE_FILTER_CHIPS.filter((chip) => filters[chip.param] === '1').map(
+    (chip) => chip.param,
+  )
+
+  const applySelection = (nextValue: string[]) => {
+    const selected = new Set(nextValue)
+    const next = { ...filters }
+    for (const chip of BADGE_FILTER_CHIPS) {
+      if (selected.has(chip.param)) next[chip.param] = '1'
+      else delete next[chip.param]
+    }
+    onApply(cleanFilters(next))
+  }
+
   return (
-    <div className="od-badge-filter-chips" role="group" aria-label={t('Badge filters')}>
-      {BADGE_FILTER_CHIPS.map((chip) => {
-        const active = filters[chip.param] === '1'
-        return (
-          <button
-            key={chip.param}
-            type="button"
-            className={`od-badge-filter-chip${active ? ' is-active' : ''}`}
-            aria-pressed={active}
-            title={t(chip.title)}
-            onClick={() => toggleBadgeFilter(filters, chip.param, onApply, cleanFilters)}
-          >
-            {t(chip.label)}
-          </button>
-        )
-      })}
-    </div>
+    <FilterChipGroup
+      label={t('Badge filters')}
+      options={BADGE_FILTER_CHIPS.map((chip) => ({
+        value: chip.param,
+        label: t(chip.label),
+        title: t(chip.title),
+      }))}
+      value={value}
+      onChange={applySelection}
+      size="compact"
+      className="od-badge-filter-chips"
+    />
   )
 }

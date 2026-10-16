@@ -10,38 +10,25 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_, select
 
 from oneirodex import db
-from oneirodex.models import GlobalSettings, User, UserFriendship
+from oneirodex.models import User, UserFriendship
 from oneirodex.utils.activity_feed import list_now_playing
 from oneirodex.utils.notifications import notify_friend_accepted, notify_friend_request
-from oneirodex.utils.presence import list_friend_presence, presence_for_user
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.presence import list_friend_presence
 from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.social_projections import (
+    community_settings as _community_settings_shared,
+    user_public as _user_public_shared,
+)
 
 from . import apis_bp
 
 
 def _community_settings() -> dict:
-    row = db.session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
-    url = (getattr(row, 'community_chat_url', None) or '').strip() if row else ''
-    label = (getattr(row, 'community_chat_label', None) or '').strip() if row else ''
-    return {
-        'community_chat_url': url or None,
-        'community_chat_label': label or ('Open community' if url else None),
-    }
+    return _community_settings_shared()
 
 
 def _user_public(user: User, *, viewer: User | None = None) -> dict:
-    presence = presence_for_user(user.id, viewer=viewer)
-    return {
-        'id': user.id,
-        'name': user.name,
-        'role': normalize_role(getattr(user, 'role', None) or 'user'),
-        'presence': {
-            'status': presence['status'],
-            'game_uuid': presence.get('game_uuid'),
-            'game_name': presence.get('game_name'),
-        },
-    }
+    return _user_public_shared(user, viewer=viewer)
 
 
 @apis_bp.route('/social/status', methods=['GET'])

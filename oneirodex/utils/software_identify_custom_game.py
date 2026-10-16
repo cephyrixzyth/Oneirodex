@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from sqlalchemy import func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL
 from oneirodex.utils.item_kind import (
     DEFAULT_ITEM_KIND,
@@ -215,7 +215,6 @@ def hydrate_steam_for_game(game, steam_app_id, *, fast: bool = False) -> dict:
     if not game or not steam_app_id:
         return {}
     try:
-        from oneirodex import db
         from oneirodex.utils.steam_metadata import hydrate_game_from_steam
 
         with db.session.begin_nested():

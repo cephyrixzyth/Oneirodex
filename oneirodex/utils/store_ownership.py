@@ -23,7 +23,7 @@ import io
 
 from sqlalchemy import func, select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import StoreAccount, UserOwnedTitle
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
 # re-exported here because callers and tests import them from this module.

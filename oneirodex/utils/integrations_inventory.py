@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 
 def _settings_row():
-    from oneirodex import db
+    from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import GlobalSettings
 
     return db.session.execute(
@@ -379,7 +379,7 @@ def build_integrations_inventory() -> list[dict[str, Any]]:
         id='oidc',
         name='OIDC / SSO',
         category='auth',
-        admin_href='/admin/integrations#oidc',
+        admin_href='/admin/integrations/oidc',
         configured=oidc_cfg and (oidc_env or oidc_db),
         enabled=oidc_env and oidc_db,
         notes='Opt-in; needs OIDC_ENABLED env + Integrations toggle',

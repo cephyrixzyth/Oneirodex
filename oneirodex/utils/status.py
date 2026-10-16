@@ -4,11 +4,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from oneirodex.models import User, SystemEvents, GlobalSettings
-from oneirodex import db
+from oneirodex.runtime_native.db_session import current_native_engine, native_db as db
 from oneirodex.utils.global_settings import global_settings_row
 from config import Config
 from urllib.parse import urlparse
-from flask import current_app, has_app_context
+from oneirodex.utils.runtime_config import get_runtime_config
 
 def get_system_info():
     """Get basic system information."""
@@ -53,7 +53,7 @@ def _probe_path(path):
         return {'path': path, 'read': False, 'write': False, 'exists': False}
 
 
-def get_config_values():
+def get_config_values(config=None):
     """Get safe configuration values."""
     whitelist = {
         'BASE_FOLDER_WINDOWS': None,
@@ -67,7 +67,9 @@ def get_config_values():
     # Ops runs against the live application configuration. Config is only the
     # class used to seed Flask at startup; create_app may relocate the library
     # directory or an install/test may override paths after that point.
-    active_config = current_app.config if has_app_context() else None
+    active_config = config
+    if active_config is None:
+        active_config = get_runtime_config()
     for item in whitelist:
         path = active_config.get(item) if active_config is not None else getattr(Config, item, None)
         if path:
@@ -106,11 +108,16 @@ def get_log_info():
         'latest': db.session.execute(select(SystemEvents).order_by(SystemEvents.timestamp.desc())).scalars().first()
     }
 
-def get_database_info():
+def get_database_info(engine=None):
     """Get database connection information."""
     try:
         # Get the current database URI
-        db_uri = db.engine.url
+        active_engine = engine or current_native_engine()
+        if active_engine is None:
+            from oneirodex import db as legacy_database
+
+            active_engine = legacy_database.engine
+        db_uri = active_engine.url
         
         # Parse the database URI to extract components
         parsed = urlparse(str(db_uri))

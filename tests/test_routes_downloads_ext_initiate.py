@@ -166,6 +166,16 @@ def authenticate_user(client, user):
 
 class TestDownloadGameRoute:
     """Test cases for download_game route."""
+
+    def test_get_does_not_create_download_request(self, client, authenticated_user, test_game, db_session):
+        authenticate_user(client, authenticated_user)
+
+        response = client.get(f'/download_game/{test_game.uuid}')
+
+        assert response.status_code == 405
+        assert db_session.query(DownloadRequest).filter_by(
+            user_id=authenticated_user.id, game_uuid=test_game.uuid,
+        ).first() is None
     
     def test_download_game_requires_login(self, client, test_game, configured_install):
         """Test that download_game requires authentication.
@@ -176,7 +186,7 @@ class TestDownloadGameRoute:
         asserted `/login` and got `/setup`. It passed in a full run only because
         an earlier file happened to leave a user row behind.
         """
-        response = client.get(f'/download_game/{test_game.uuid}')
+        response = client.post(f'/download_game/{test_game.uuid}')
         assert response.status_code == 302  # Redirect to login
         assert '/login' in response.location
     
@@ -185,7 +195,7 @@ class TestDownloadGameRoute:
         authenticate_user(client, authenticated_user)
         
         # Test invalid UUID format - should be blocked by our validation
-        response = client.get('/download_game/invalid-uuid')
+        response = client.post('/download_game/invalid-uuid')
         assert response.status_code in [400, 302]  # Either validation error or redirect
     
     def test_download_game_nonexistent_game(self, client, authenticated_user):
@@ -193,7 +203,7 @@ class TestDownloadGameRoute:
         authenticate_user(client, authenticated_user)
         
         fake_uuid = str(uuid4())
-        response = client.get(f'/download_game/{fake_uuid}')
+        response = client.post(f'/download_game/{fake_uuid}')
         assert response.status_code == 404
     
     def test_download_game_existing_request(self, client, authenticated_user, test_game, db_session):
@@ -211,7 +221,7 @@ class TestDownloadGameRoute:
         db_session.add(existing_request)
         db_session.commit()
         
-        response = client.get(f'/download_game/{test_game.uuid}')
+        response = client.post(f'/download_game/{test_game.uuid}')
         assert response.status_code == 302  # Redirect to downloads
         assert '/downloads' in response.location
     
@@ -224,7 +234,7 @@ class TestDownloadGameRoute:
             # Set up app config for security validation
             app.config['DATA_FOLDER_GAMES'] = os.path.dirname(test_game.full_disk_path)
 
-            response = client.get(f'/download_game/{test_game.uuid}')
+            response = client.post(f'/download_game/{test_game.uuid}')
             assert response.status_code == 302  # Redirect to downloads
             assert '/downloads' in response.location
 
@@ -248,7 +258,7 @@ class TestDownloadOtherRoute:
     
     def test_download_other_requires_login(self, client, test_game, configured_install):
         """Test that download_other requires authentication."""
-        response = client.get(f'/download_other/update/{test_game.uuid}/1')
+        response = client.post(f'/download_other/update/{test_game.uuid}/1')
         assert response.status_code == 302  # Redirect to login
         assert '/login' in response.location
     
@@ -256,7 +266,7 @@ class TestDownloadOtherRoute:
         """Test download_other with invalid file type."""
         authenticate_user(client, authenticated_user)
         
-        response = client.get(f'/download_other/invalid/{test_game.uuid}/1')
+        response = client.post(f'/download_other/invalid/{test_game.uuid}/1')
         assert response.status_code == 302
         # Should redirect to game details with error
     
@@ -264,21 +274,21 @@ class TestDownloadOtherRoute:
         """Test download_other with invalid UUID format."""
         authenticate_user(client, authenticated_user)
         
-        response = client.get('/download_other/update/invalid-uuid/1')
+        response = client.post('/download_other/update/invalid-uuid/1')
         assert response.status_code in [400, 302]  # Either validation error or redirect
     
     def test_download_other_invalid_file_id(self, client, authenticated_user, test_game):
         """Test download_other with invalid file ID."""
         authenticate_user(client, authenticated_user)
         
-        response = client.get(f'/download_other/update/{test_game.uuid}/abc')
+        response = client.post(f'/download_other/update/{test_game.uuid}/abc')
         assert response.status_code in [400, 302]  # Either validation error or redirect
     
     def test_download_other_nonexistent_file(self, client, authenticated_user, test_game):
         """Test download_other with nonexistent file ID."""
         authenticate_user(client, authenticated_user)
         
-        response = client.get(f'/download_other/update/{test_game.uuid}/999')
+        response = client.post(f'/download_other/update/{test_game.uuid}/999')
         assert response.status_code == 302
         # Should redirect to game details
     
@@ -291,7 +301,7 @@ class TestDownloadOtherRoute:
             # Set up app config for security validation
             app.config['DATA_FOLDER_GAMES'] = os.path.dirname(test_game_update.file_path)
 
-            response = client.get(f'/download_other/update/{test_game_update.game_uuid}/{test_game_update.id}')
+            response = client.post(f'/download_other/update/{test_game_update.game_uuid}/{test_game_update.id}')
             assert response.status_code == 302
             assert '/downloads' in response.location
 
@@ -324,7 +334,7 @@ class TestSecurityValidation:
         ]
         
         for malicious_uuid in path_traversal_attempts:
-            response = client.get(f'/download_game/{malicious_uuid}')
+            response = client.post(f'/download_game/{malicious_uuid}')
             # Should return 400 for invalid UUID format or 302 redirect for invalid paths
             assert response.status_code in [400, 302, 404]
     
@@ -339,7 +349,7 @@ class TestSecurityValidation:
         ]
         
         for injection in sql_injection_attempts:
-            response = client.get(f'/download_game/{injection}')
+            response = client.post(f'/download_game/{injection}')
             # Should not return 200 - either 400 (validation error) or 302/404 (handled)
             assert response.status_code != 200
     
@@ -349,7 +359,7 @@ class TestSecurityValidation:
         authenticate_user(client, authenticated_user)
         
         # Attempt invalid UUID
-        response = client.get('/download_game/invalid-uuid')
+        response = client.post('/download_game/invalid-uuid')
         
         # Check if logging was called (might be different parameters)
         # Just verify that security violations get logged in some form
@@ -388,7 +398,7 @@ class TestIntegration:
             ).count()
             
             # Make download request
-            response = client.get(f'/download_game/{test_game.uuid}')
+            response = client.post(f'/download_game/{test_game.uuid}')
             assert response.status_code == 302
             assert '/downloads' in response.location
 

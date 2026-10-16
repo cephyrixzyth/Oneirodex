@@ -1,15 +1,14 @@
 """Member-blueprint SPA shells must carry global nav flags.
 
 ``/systems``, ``/chat``, ``/collections`` and the rest of ``member_bp`` used
-to render ``member_spa.html`` without a settings context processor. Jinja then
-treated ``show_trailers`` / ``show_help_button`` as unset (false) and the
+to render ``member_spa.html`` without a settings context processor. The
+Python-built shell now resolves the shared settings contract for every route, so
+``show_trailers`` / ``show_help_button`` cannot silently default false and the
 React rail hid Help and Trailers on a full load of those routes — while
 ``/discover`` and ``/favorites`` (other blueprints) stayed correct.
 """
 
 from uuid import uuid4
-from unittest.mock import patch
-
 import pytest
 
 from oneirodex.models import User
@@ -37,17 +36,6 @@ def _login(client, user):
 
 
 class TestMemberBlueprintSettings:
-    def test_inject_settings_context_processor(self, app):
-        with app.app_context():
-            from oneirodex.routes_member import inject_settings
-
-            with patch(
-                'oneirodex.routes_member.get_global_settings',
-                return_value={'show_trailers': True},
-            ) as mocked:
-                assert inject_settings() == {'show_trailers': True}
-            mocked.assert_called_once()
-
     def test_systems_shell_defaults_help_and_trailers_on(
         self, client, test_user, configured_install,
     ):

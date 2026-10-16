@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 import { isTauriRuntime } from './config-store.js'
 import { joinUrl } from './paths.js'
+import { checkDownloadRedirectUrl } from './transport-policy.js'
 
 const PATCH_EXTS = new Set(['.ips', '.bps', '.ups'])
 
@@ -76,14 +77,45 @@ export async function stagePatchFile(opts: {
     return { ok: false, error: 'Companion runtime required to stage patches' }
   }
   const base = (opts.apiBase || '').replace(/\/$/, '')
-  const url = `${base}/download_other/extra/${encodeURIComponent(opts.gameUuid)}/${encodeURIComponent(opts.patchUuid)}`
   const fetchFn = opts.fetchImpl || fetch
   try {
     const headers: Record<string, string> = {}
     if (opts.authHeader) {
       headers.Authorization = opts.authHeader
     }
-    const response = await fetchFn(url, { credentials: 'include', headers })
+    const initiation = await fetchFn(
+      `${base}/api/downloads/games/${encodeURIComponent(opts.gameUuid)}`,
+      {
+        method: 'POST',
+        credentials: 'omit',
+        redirect: 'error',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'extra', version_uuid: opts.patchUuid }),
+      },
+    )
+    if (initiation.url) {
+      const check = checkDownloadRedirectUrl(initiation.url)
+      if (!check.ok) return { ok: false, error: check.message }
+    }
+    if (!initiation.ok) {
+      return { ok: false, error: `patch request ${initiation.status}` }
+    }
+    const initiated = await initiation.json()
+    if (initiated?.ok !== true) {
+      return { ok: false, error: initiated?.error || 'patch request was rejected' }
+    }
+    const streamPath = initiated?.stream_url
+    if (typeof streamPath !== 'string' || !streamPath.startsWith('/')) {
+      return { ok: false, error: 'patch request returned an invalid stream URL' }
+    }
+    const response = await fetchFn(joinUrl(base, streamPath), {
+      credentials: 'omit',
+      headers,
+    })
+    if (response.url) {
+      const check = checkDownloadRedirectUrl(response.url)
+      if (!check.ok) return { ok: false, error: check.message }
+    }
     if (!response.ok) {
       return { ok: false, error: `patch download ${response.status}` }
     }
@@ -128,9 +160,4 @@ export async function kickoffApplyPatch(opts: {
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
-}
-
-/** Resolve auth-aware absolute download URL (tests / callers). */
-export function patchDownloadUrl(baseUrl: string, gameUuid: string, patchUuid: string): string {
-  return joinUrl(baseUrl, `/download_other/extra/${gameUuid}/${patchUuid}`)
 }

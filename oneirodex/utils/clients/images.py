@@ -2,20 +2,24 @@
 
 Bodies moved verbatim from ``oneirodex/utils/functions.py`` in wave A2.3.
 """
+import logging
 import os
 import requests
 from sqlalchemy import select
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game
 from oneirodex.utils.cover_quality import qualify_downloaded_image
 from oneirodex.utils.http_safe import (
     MAX_OUTBOUND_IMAGE_BYTES,
+    ResponseTooLarge,
     read_response_limited,
     safe_get,
 )
 from oneirodex.utils.security import validate_user_outbound_http_url
 
 __all__ = ["cover_title_for_uuid", "download_image", "download_stored_image"]
+
+_logger = logging.getLogger(__name__)
 
 
 def cover_title_for_uuid(game_uuid: str | None) -> str | None:
@@ -46,9 +50,8 @@ def download_image(url, save_path, *, image_type=None, title=None):
 
     ok, result = validate_user_outbound_http_url(url)
     if not ok:
-        error = f"Blocked outbound URL: {result}"
-        print(f"download_image blocked: {result}")
-        return False, error
+        _logger.warning('Rejected outbound image download by URL policy')
+        return False, 'Image source was rejected by outbound security policy.'
     url = result
 
     try:
@@ -66,7 +69,7 @@ def download_image(url, save_path, *, image_type=None, title=None):
             try:
                 if response.status_code != 200:
                     error = f"HTTP {response.status_code} downloading image."
-                    print(f"Failed to download the image. Status Code: {response.status_code}")
+                    _logger.warning('Image download returned HTTP status %s', response.status_code)
                     return False, error
                 image_bytes = read_response_limited(response, MAX_OUTBOUND_IMAGE_BYTES)
             finally:
@@ -76,14 +79,13 @@ def download_image(url, save_path, *, image_type=None, title=None):
             directory = os.path.dirname(save_path)
 
             if not os.path.exists(directory):
-                print(f"'{directory}' does not exist. Attempting to create it.")
                 try:
                     os.makedirs(directory, exist_ok=True)
-                    print(f"Successfully created the directory '{directory}'.")
-                except Exception as e:
-                    error = f"Failed to create directory '{directory}': {e}"
-                    print(error)
-                    return False, error
+                except OSError as exc:
+                    _logger.warning(
+                        'Could not create image storage directory (%s)', type(exc).__name__,
+                    )
+                    return False, 'Could not create the image storage directory.'
 
             if os.access(directory, os.W_OK):
                 with open(save_path, 'wb') as f:
@@ -92,24 +94,22 @@ def download_image(url, save_path, *, image_type=None, title=None):
                     save_path, image_type=image_type, title=title,
                 )
             else:
-                error = f"Directory '{directory}' is not writable by the Oneirodex process."
-                print(f"Error: {error}")
-                return False, error
+                _logger.warning('Image storage directory is not writable')
+                return False, 'The image storage directory is not writable.'
         else:
             error = 'Downloaded image response was empty.'
             return False, error
-    except requests.exceptions.RequestException as e:
-        error = f"Network error: {e}"
-        print(f"Error downloading image from {url}: {e}")
-        return False, error
-    except OSError as e:
-        error = f"Disk error writing to '{save_path}': {e}"
-        print(f"An error occurred while saving the image to {save_path}: {e}")
-        return False, error
-    except Exception as e:
-        error = f"Unexpected error: {e}"
-        print(f"An error occurred while saving the image to {save_path}: {e}")
-        return False, error
+    except ResponseTooLarge:
+        return False, f'Downloaded image exceeds {MAX_OUTBOUND_IMAGE_BYTES} bytes.'
+    except requests.exceptions.RequestException as exc:
+        _logger.warning('Image download request failed (%s)', type(exc).__name__)
+        return False, 'Network error while downloading the image.'
+    except OSError as exc:
+        _logger.warning('Image storage operation failed (%s)', type(exc).__name__)
+        return False, 'Could not save the downloaded image.'
+    except Exception as exc:
+        _logger.warning('Unexpected image download failure (%s)', type(exc).__name__)
+        return False, 'Unexpected error while downloading the image.'
 
 
 def download_stored_image(image, save_path, *, title=None):

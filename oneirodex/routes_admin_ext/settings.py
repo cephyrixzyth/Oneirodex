@@ -5,17 +5,26 @@ import os
 from datetime import datetime, timezone
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import render_template, request, jsonify, abort, current_app, redirect, url_for, flash
+from flask import request, jsonify, abort, current_app, redirect, url_for, flash
 from flask_login import login_required, current_user
 from sqlalchemy import select
 
 from oneirodex import db, cache
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.global_settings import (
     global_settings_row,
     global_settings_row_or_create,
 )
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.schemas.json_object import JsonObjectBody
+from oneirodex.utils.validation import validate_body
+from oneirodex.utils.server_settings import (
+    FIELD_MAPPINGS, SERVER_BOOLEAN_FIELDS, SERVER_FIELDS,
+    SERVER_NUMBER_BOUNDS, SERVER_TEXT_LIMITS,
+    public_server_settings as _public_server_settings,
+    validate_server_settings as _validate_server_settings,
+)
 from oneirodex.utils.oidc import is_secure_oidc_issuer
 from oneirodex.utils.igdb_api import make_igdb_api_request
 from oneirodex.utils.providers import get_steamgriddb_api_key, mask_api_key
@@ -72,9 +81,7 @@ DEFAULT_SETTINGS = {
     'enableSequelNumeralVariant': True,
 }
 
-# Settings hub sections rendered as one-click cards on /admin/settings.
-# 'icon' is a semantic key for the Jinja SVG macro in templates/partials/icons.html,
-# not a Font Awesome class.
+# Settings-section redirect aliases. The React settings hub owns labels and icons.
 SETTINGS_SHELL_SECTIONS = {
     'server': {
         'label': 'Server Settings',
@@ -168,28 +175,6 @@ SETTINGS_SHELL_SECTIONS = {
     },
 }
 DEFAULT_SETTINGS_SHELL_SECTION = 'server'
-
-# Field mappings for database columns
-FIELD_MAPPINGS = {
-    'enableDeleteGameOnDisk': 'enable_delete_game_on_disk',
-    'enableGameUpdates': 'enable_game_updates',
-    'updateFolderName': 'update_folder_name',
-    'enableGameExtras': 'enable_game_extras',
-    'extrasFolderName': 'extras_folder_name',
-    'siteUrl': 'site_url',
-    'useTurboImageDownloads': 'use_turbo_image_downloads',
-    'turboDownloadThreads': 'turbo_download_threads',
-    'turboDownloadBatchSize': 'turbo_download_batch_size',
-    'scanThreadCount': 'scan_thread_count',
-    'enableHltbIntegration': 'enable_hltb_integration',
-    'hltbRateLimitDelay': 'hltb_rate_limit_delay',
-    'useLocalMetadata': 'use_local_metadata',
-    'writeLocalMetadata': 'write_local_metadata',
-    'useLocalImages': 'use_local_images',
-    'localMetadataFilename': 'local_metadata_filename',
-    'proposeOnlyScan': 'propose_only_scan'
-}
-
 
 def validate_settings_data(settings_data):
     """Validate settings data and return errors if any."""
@@ -335,6 +320,62 @@ def build_current_settings(settings_record):
     return current_settings
 
 
+def public_server_settings(record):
+    return _public_server_settings(record, current=build_current_settings(record))
+
+
+def validate_server_settings(data):
+    return _validate_server_settings(data)
+
+
+def _invalid_server_settings_body(_exc):
+    try:
+        validate_server_settings(None)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    return api_error('Provide only the server settings you want to change', code='bad_request')
+
+
+@admin2_bp.route('/api/admin/server-settings', methods=['GET', 'PUT'])
+@login_required
+@admin_required
+@validate_body(JsonObjectBody, methods={'PUT'}, on_error=_invalid_server_settings_body)
+def server_settings_api(body: JsonObjectBody | None = None):
+    if request.method == 'PUT':
+        try:
+            changes = validate_server_settings(body.root)
+        except ValueError as exc:
+            return api_error(str(exc), code='bad_request')
+        try:
+            record = global_settings_row_or_create()
+            # Merge only the submitted controls, preserving unknown keys and
+            # values administered on other pages. Do not bulk-apply defaults.
+            merged = dict(record.settings or {})
+            merged.update(changes)
+            for key, value in changes.items():
+                if key in FIELD_MAPPINGS:
+                    setattr(record, FIELD_MAPPINGS[key], value)
+            record.settings = merged
+            record.last_updated = datetime.now(timezone.utc)
+            db.session.commit()
+            log_system_event(f'Server settings updated: {", ".join(sorted(changes))}', event_type='audit', event_level='information')
+            cache.delete('global_settings')
+        except Exception:
+            db.session.rollback()
+            return api_error('Could not save server settings', code='internal')
+    else:
+        try:
+            record = global_settings_row()
+        except Exception:
+            return api_error('Could not load server settings', code='internal')
+    try:
+        response = current_app.make_response(api_ok({'settings': public_server_settings(record), 'bounds': SERVER_NUMBER_BOUNDS, 'text_limits': SERVER_TEXT_LIMITS}))
+    except Exception:
+        return api_error('Could not load server settings', code='internal')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 def update_settings():
     """Handle POST requests for updating settings."""
     try:
@@ -394,13 +435,7 @@ def settings():
         section = request.args.get('section')
         if section in SETTINGS_SHELL_SECTIONS:
             return redirect(url_for(SETTINGS_SHELL_SECTIONS[section]['endpoint']))
-        from oneirodex.utils.module_status import settings_hub_module_status
-
-        return render_template(
-            'admin/admin_settings_shell.html',
-            sections=SETTINGS_SHELL_SECTIONS,
-            module_status=settings_hub_module_status(),
-        )
+        return render_admin_spa(title='All settings · Oneirodex Admin')
     else:
         return update_settings()
 
@@ -412,53 +447,15 @@ def new_server_settings():
     """Handle server settings page."""
     if request.method == 'POST':
         return update_settings()
-    else:
-        try:
-            settings_record = global_settings_row()
-            current_settings = build_current_settings(settings_record)
-            return render_template('admin/new_server_settings.html', current_settings=current_settings)
-        except Exception as e:
-            logging.error(f"Error retrieving settings: {str(e)}")
-            abort(500)
+    return render_admin_spa(title='Server settings · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/integrations', methods=['GET'])
 @login_required
 @admin_required
 def integrations():
-    """Handle integrations page with tabbed email, IGDB, community, artwork, and OIDC settings."""
-    try:
-        # Get global settings for all integrations
-        settings_record = global_settings_row()
-
-        # Build current settings for JavaScript consumption
-        current_settings = build_current_settings(settings_record)
-
-        api_key = get_steamgriddb_api_key()
-        env_key = (os.getenv('STEAMGRIDDB_API_KEY') or '').strip()
-        steamgriddb_status = {
-            'enabled': bool(api_key),
-            'source': 'env' if env_key else ('database' if api_key else None),
-            'masked_key': mask_api_key(api_key),
-        }
-
-        community_chat_url = ''
-        community_chat_label = 'Open community'
-        if settings_record is not None:
-            community_chat_url = getattr(settings_record, 'community_chat_url', None) or ''
-            community_chat_label = getattr(settings_record, 'community_chat_label', None) or 'Open community'
-
-        return render_template(
-            'admin/integrations.html',
-            settings=settings_record,
-            current_settings=current_settings,
-            steamgriddb_status=steamgriddb_status,
-            community_chat_url=community_chat_url,
-            community_chat_label=community_chat_label,
-        )
-    except Exception as e:
-        logging.exception('Error retrieving integrations: %s', e)
-        abort(500)
+    """Serve the React integration catalog; page state is loaded through APIs."""
+    return render_admin_spa(title='Integrations · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/integrations/igdb/save', methods=['POST'])
@@ -521,6 +518,13 @@ def integrations_igdb_test():
         # Not str(e): the IGDB request carries the client secret in its URL.
         logging.error("Error testing IGDB from integrations: %s", type(e).__name__)
         return api_error('The IGDB connection test failed.', code='internal')
+
+
+@admin2_bp.route('/admin/integrations/oidc', methods=['GET'])
+@login_required
+@admin_required
+def integrations_oidc_legacy_compat():
+    return redirect(url_for('admin2.integrations') + '#oidc')
 
 
 @admin2_bp.route('/admin/integrations/oidc/save', methods=['POST'])
@@ -613,7 +617,7 @@ def community_chat_settings():
 @admin_required
 def emulator_profiles_page():
     """Admin UI for preferred WebRetro cores per platform."""
-    return render_template('admin/emulator_profiles.html')
+    return render_admin_spa(title='Emulators · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/quality_profiles', methods=['GET'])
@@ -621,38 +625,28 @@ def emulator_profiles_page():
 @admin_required
 def quality_profiles_page():
     """Admin UI for release quality / scene group preferences."""
-    return render_template('admin/quality_profiles.html')
+    return render_admin_spa(title='Quality Profiles · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/detail_layout', methods=['GET'])
 @login_required
 @admin_required
 def detail_layout_page():
-    return render_template('admin/detail_layout.html')
+    return render_admin_spa(title='Detail layout · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/ai', methods=['GET'])
 @login_required
 @admin_required
 def ai_assist_page():
-    from oneirodex.utils.ai_assist import get_ai_config
-
-    return render_template('admin/ai_assist.html', ai_config=get_ai_config())
+    return render_admin_spa(title='AI assist - Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/storage', methods=['GET'])
 @login_required
 @admin_required
 def storage_page():
-    from oneirodex.utils.module_status import hardlink_apply_on, hardlink_helpers_on
-
-    helpers_on = hardlink_helpers_on()
-    allow_apply = hardlink_apply_on()
-    return render_template(
-        'admin/storage.html',
-        helpers_enabled=helpers_on,
-        allow_apply=allow_apply,
-    )
+    return render_admin_spa(title='Storage / hardlinks · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/scan_match', methods=['GET'])
@@ -660,4 +654,4 @@ def storage_page():
 @admin_required
 def scan_match_settings_page():
     """React ScanMatchSettingsPage shell (W20-4). Config via /api/admin/scan-match/config."""
-    return render_template('admin/admin_scan_match_settings.html')
+    return render_admin_spa(title='Scan / match policy · Oneirodex Admin')

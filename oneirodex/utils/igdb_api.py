@@ -4,7 +4,7 @@
 import requests
 import time
 import threading
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.global_settings import global_settings_row
 from sqlalchemy import select

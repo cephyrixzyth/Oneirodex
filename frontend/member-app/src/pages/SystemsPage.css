@@ -236,6 +236,15 @@
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 760px) {
+  .od-systems-tile__name {
+    display: block;
+    overflow: visible;
+    text-overflow: clip;
+    -webkit-line-clamp: unset;
+  }
+}
+
 .od-systems-tile__count {
   font-size: var(--od-font-sm);
   color: var(--od-text-muted);

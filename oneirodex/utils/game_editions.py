@@ -27,7 +27,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, User, UserGameProgress, UserPreference, user_favorites
 from oneirodex.utils.browser_player import browser_play_href
 from oneirodex.utils.play_url import browse_play_fields

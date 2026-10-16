@@ -6,7 +6,7 @@ from uuid import uuid4
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from oneirodex import db
+from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
 ph = PasswordHasher()

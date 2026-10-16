@@ -12,8 +12,8 @@ import time
 
 from sqlalchemy import select
 
-from oneirodex import db
 from oneirodex.models import User
+from oneirodex.runtime_native.db_session import native_db as db
 
 from . import similarity
 from .profile import rebuild_profile

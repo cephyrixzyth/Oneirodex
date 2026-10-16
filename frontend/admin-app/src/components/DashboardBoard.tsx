@@ -18,8 +18,6 @@ import {
   applySizePreset,
   nudgeWidget,
   type SizePreset,
-  DASH_RESIZE_PX_PER_COL,
-  DASH_RESIZE_PX_PER_ROW,
   boardCellMetrics,
   commitMove,
   commitResize,
@@ -34,54 +32,11 @@ import {
   type WidgetItem,
   type WidgetMinsFn,
 } from './dashboardLayout'
-
-interface DragState {
-  mode: 'move' | 'resize'
-  id: string
-  originX: number
-  originY: number
-  lastX: number
-  lastY: number
-  grabX?: number
-  grabY?: number
-  /** Resize axis: edge handles lock one axis, the corner moves both. */
-  axis?: 'x' | 'y' | 'both'
-  start: WidgetItem
-  colPitch: number
-  rowPitch: number
-}
+import { isInteractiveTarget, prettyId, resizeDims, type DragState } from './dashboardBoardHelpers'
 
 type PreviewState =
   | { id: string; mode: 'move'; dx: number; dy: number }
   | { id: string; mode: 'resize'; w: number; h: number; start: WidgetItem }
-
-function prettyId(id: string) {
-  const text = id.replace(/^m-/, '').replace(/[-_]+/g, ' ')
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
-/** Grid steps for a resize drag, honouring the handle's axis. */
-function resizeDims(drag: DragState, x: number, y: number) {
-  const axis = drag.axis ?? 'both'
-  const w =
-    axis === 'y'
-      ? drag.start.w
-      : drag.start.w + Math.round((x - drag.originX) / (drag.colPitch * DASH_RESIZE_PX_PER_COL))
-  const h =
-    axis === 'x'
-      ? drag.start.h
-      : drag.start.h + Math.round((y - drag.originY) / (drag.rowPitch * DASH_RESIZE_PX_PER_ROW))
-  return { w, h }
-}
-
-function isInteractiveTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) return true
-  return Boolean(
-    target.closest(
-      'a, button, input, select, textarea, label, [role="button"], [contenteditable="true"]',
-    ),
-  )
-}
 
 /**
  * Draggable / resizable board shell (12-col grid) — Dashboard + Ops.
@@ -152,6 +107,21 @@ export function DashboardBoard({
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const boardRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
+  const [stackedLayout, setStackedLayout] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 760px)').matches,
+  )
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined
+    const media = window.matchMedia('(max-width: 760px)')
+    const update = () => setStackedLayout(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   const visibleKey = useMemo(
     () =>
@@ -215,7 +185,7 @@ export function DashboardBoard({
   pinnedRef.current = pinned
   useEffect(() => {
     const board = boardRef.current
-    if (!board) return undefined
+    if (!board || stackedLayout) return undefined
     const hosts = Array.from(board.querySelectorAll('[data-fit="true"] > .od-dash__body'))
     if (!hosts.length) return undefined
 
@@ -267,7 +237,7 @@ export function DashboardBoard({
       if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf)
       observer.disconnect()
     }
-  }, [visibleKey, hiddenKey, minsFn])
+  }, [visibleKey, hiddenKey, minsFn, stackedLayout])
 
   const byId = useMemo(() => {
     const map = new Map<string, WidgetItem>()
@@ -335,6 +305,7 @@ export function DashboardBoard({
 
   const beginMove = useCallback(
     (id: string, event: ReactPointerEvent<HTMLDivElement>) => {
+      if (stackedLayout) return
       if (event.button !== 0) return
       if (isInteractiveTarget(event.target)) return
       if (pinnedRef.current.includes(id)) return
@@ -361,7 +332,7 @@ export function DashboardBoard({
       setPreview({ id, dx: 0, dy: 0, mode: 'move' })
       event.preventDefault()
     },
-    [byId],
+    [byId, stackedLayout],
   )
 
   const beginResize = useCallback(
@@ -370,6 +341,7 @@ export function DashboardBoard({
       event: ReactPointerEvent<HTMLButtonElement>,
       axis: 'x' | 'y' | 'both' = 'both',
     ) => {
+      if (stackedLayout) return
       if (event.button !== 0) return
       if (pinnedRef.current.includes(id)) return
       const board = boardRef.current
@@ -393,7 +365,7 @@ export function DashboardBoard({
       event.preventDefault()
       event.stopPropagation()
     },
-    [byId],
+    [byId, stackedLayout],
   )
 
   const defaultSize = useCallback(
@@ -426,7 +398,7 @@ export function DashboardBoard({
   }
 
   function onItemKeyDown(id: string, event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.target !== event.currentTarget) return
+    if (stackedLayout || event.target !== event.currentTarget) return
     const keys: Record<string, [number, number]> = {
       ArrowLeft: [-1, 0],
       ArrowRight: [1, 0],
@@ -468,6 +440,7 @@ export function DashboardBoard({
           onAdd={addWidget}
           open={addOpen}
           onToggle={() => setAddOpen((open) => !open)}
+          onDismiss={() => setAddOpen(false)}
         />
         <button type="button" className="od-cbtn" onClick={resetLayout}>
           Reset layout
@@ -507,10 +480,11 @@ export function DashboardBoard({
 
       <div
         ref={boardRef}
-        className="od-dash__board"
+        className={`od-dash__board${stackedLayout ? ' od-dash__board--stacked' : ''}`}
         aria-label={boardAriaLabel || undefined}
         style={{
-          gridTemplateRows: `repeat(${rowCount}, var(--od-dash-row))`,
+          gridTemplateColumns: stackedLayout ? 'minmax(0, 1fr)' : undefined,
+          gridTemplateRows: stackedLayout ? 'none' : `repeat(${rowCount}, var(--od-dash-row))`,
         }}
       >
         {layout.map((item) => {
@@ -527,8 +501,8 @@ export function DashboardBoard({
               key={item.id}
               className={`od-dash__item${busy ? ' is-dragging' : ''}${isPinned ? ' is-pinned' : ''}`}
               style={{
-                gridColumn: `${item.x + 1} / span ${item.w}`,
-                gridRow: `${item.y + 1} / span ${item.h}`,
+                gridColumn: stackedLayout ? '1 / -1' : `${item.x + 1} / span ${item.w}`,
+                gridRow: stackedLayout ? 'auto' : `${item.y + 1} / span ${item.h}`,
                 ...(movePreview
                   ? {
                       transform: `translate(${movePreview.dx}px, ${movePreview.dy}px)`,
@@ -539,8 +513,12 @@ export function DashboardBoard({
               data-widget={item.id}
               data-fit={item.id === 'status' || item.id.startsWith('m-') ? 'true' : undefined}
               role="group"
-              tabIndex={0}
-              aria-label={`${labelFor(item.id)}${isPinned ? ' (pinned)' : ''}. Arrow keys move, shift and arrow keys resize.`}
+              tabIndex={stackedLayout ? -1 : 0}
+              aria-label={
+                stackedLayout
+                  ? `${labelFor(item.id)}${isPinned ? ' (pinned)' : ''} widget.`
+                  : `${labelFor(item.id)}${isPinned ? ' (pinned)' : ''}. Arrow keys move, shift and arrow keys resize.`
+              }
               onKeyDown={(event) => onItemKeyDown(item.id, event)}
               onPointerDown={(event) => beginMove(item.id, event)}
             >

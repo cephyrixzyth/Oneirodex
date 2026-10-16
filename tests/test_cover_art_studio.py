@@ -238,7 +238,7 @@ def test_art_studio_apply_fallback_surfaces_disk_error(client, db_session, admin
         assert response.status_code == 500
         data = response.get_json()
         assert 'error' in data
-        assert 'Disk full' in data['error']
+        assert data['error'] == 'Failed to write cover art to disk'
 
 
 def test_art_studio_download_surfaces_disk_error(client, db_session, admin_user):
@@ -279,11 +279,11 @@ def test_apply_pack_to_game_rolls_back_and_removes_file_on_db_failure(tmp_path, 
     with patch('oneirodex.utils.cover_art_studio.generated_root', return_value=gen_root):
         manifest = save_pack('Rollback Test', pack_id='rollbackpack01')
 
-        with patch('oneirodex.utils.cover_art_studio.current_app') as mock_app:
-            mock_app.config = {'IMAGE_SAVE_PATH': str(img_root)}
-            with patch('oneirodex.utils.cover_art_studio.db.session.commit', side_effect=RuntimeError('db down')):
-                with pytest.raises(RuntimeError, match='db down'):
-                    apply_pack_to_game(manifest['pack_id'], game_uuid)
+        with patch('oneirodex.utils.cover_art_studio.db.session.commit', side_effect=RuntimeError('db down')):
+            with pytest.raises(RuntimeError, match='db down'):
+                apply_pack_to_game(
+                    manifest['pack_id'], game_uuid, image_save_path=img_root,
+                )
 
     # The written cover file should have been cleaned up after the rollback.
     assert list(img_root.glob(f'{game_uuid}_cover_studio_*')) == []

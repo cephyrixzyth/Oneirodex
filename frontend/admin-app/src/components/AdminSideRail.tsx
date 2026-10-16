@@ -86,9 +86,11 @@ function useCollapsedSections(activeSectionId: string | null) {
  */
 export function AdminSideRail({
   railState = 'expanded',
+  isMobile = false,
   onCloseDrawer,
 }: {
   railState?: string
+  isMobile?: boolean
   onCloseDrawer?: () => void
 }) {
   const { pathname, search, hash } = useLocation()
@@ -157,13 +159,24 @@ export function AdminSideRail({
   }
 
   return (
-    <div className="od-rail">
+    <div
+      className="od-rail"
+      role={isMobile && railState === 'open' ? 'dialog' : undefined}
+      aria-label={isMobile && railState === 'open' ? 'Admin navigation' : undefined}
+      aria-modal={isMobile && railState === 'open' ? true : undefined}
+      aria-hidden={isMobile && railState !== 'open' ? true : undefined}
+      inert={isMobile && railState !== 'open'}
+      tabIndex={-1}
+    >
+      <button type="button" className="od-rail__close" onClick={onCloseDrawer}>
+        Close
+      </button>
       <a className="od-rail__brand od-rail__brand--mark-only" href="/admin/dashboard">
         <span className="od-rail__mark od-brand-mark" aria-hidden="true" />
         <span className="od-rail__brand-text">Oneirodex Admin</span>
       </a>
 
-      <nav className="od-rail__nav" aria-label="Admin">
+      <nav id="od-primary-navigation" className="od-rail__nav" aria-label="Admin">
         {ADMIN_NAV.map((link) => {
           const active = isActiveSection(link)
           const subs = railDestinations(link.id)

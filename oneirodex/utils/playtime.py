@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, PlaySession, User, UserGameProgress
 from oneirodex.utils.ambient_lighting import notify_play_session_started, notify_play_session_stopped
 from oneirodex.utils.event_bus import event_bus
@@ -19,7 +19,9 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
-def start_session(user_id: int, game_uuid: str, client: str | None = None) -> PlaySession:
+def start_session(
+    user_id: int, game_uuid: str, client: str | None = None, *, config=None,
+) -> PlaySession:
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
         raise ValueError('Game not found')
@@ -32,7 +34,7 @@ def start_session(user_id: int, game_uuid: str, client: str | None = None) -> Pl
         select(PlaySession).filter_by(user_id=user_id, game_uuid=game_uuid, status='active')
     ).scalars().all()
     for session in active:
-        end_session(session, orphan=True)
+        end_session(session, orphan=True, config=config)
 
     now = _utcnow()
     session = PlaySession(
@@ -57,7 +59,7 @@ def start_session(user_id: int, game_uuid: str, client: str | None = None) -> Pl
         )
     except Exception:
         pass
-    notify_play_session_started(user, game)
+    notify_play_session_started(user, game, config=config)
     return session
 
 
@@ -74,7 +76,7 @@ def heartbeat_session(session: PlaySession) -> PlaySession:
     return session
 
 
-def end_session(session: PlaySession, *, orphan: bool = False) -> PlaySession:
+def end_session(session: PlaySession, *, orphan: bool = False, config=None) -> PlaySession:
     if session.status != 'active':
         return session
     now = _utcnow()
@@ -102,7 +104,7 @@ def end_session(session: PlaySession, *, orphan: bool = False) -> PlaySession:
         )
     except Exception:
         pass
-    notify_play_session_stopped(user_id=session.user_id)
+    notify_play_session_stopped(user_id=session.user_id, config=config)
     return session
 
 

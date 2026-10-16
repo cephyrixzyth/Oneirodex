@@ -84,7 +84,7 @@ class TestLogSystemEvent:
             assert event.audit_user is None  # 'system' gets converted to None
     
     @patch('oneirodex.utils.event_logging.db')
-    @patch('oneirodex.utils.event_logging.current_user', new_callable=MagicMock)
+    @patch('flask_login.current_user', new_callable=MagicMock)
     def test_log_system_event_with_current_user(self, mock_current_user, mock_db, app):
         """Test logging when current_user is available."""
         # Mock current_user.id
@@ -102,7 +102,7 @@ class TestLogSystemEvent:
             assert added_event.audit_user == 123
             mock_db.session.commit.assert_called_once()
     
-    @patch('oneirodex.utils.event_logging.current_user', new_callable=MagicMock)
+    @patch('flask_login.current_user', new_callable=MagicMock)
     def test_log_system_event_with_current_user_no_id(self, mock_current_user, app, db_session):
         """Test logging when current_user has no id attribute."""
         # Mock current_user without id attribute

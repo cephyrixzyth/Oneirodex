@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL, StoreAccount, UserOwnedTitle
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.http_safe import safe_request

@@ -1,0 +1,14 @@
+.od-library-editor {
+  display: grid;
+  gap: var(--od-space-4, 1rem);
+  max-width: 48rem;
+}
+
+.od-library-editor > img {
+  width: min(100%, 12rem);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--od-border, rgba(255, 255, 255, 0.14));
+  border-radius: var(--od-radius-md, 0.5rem);
+}

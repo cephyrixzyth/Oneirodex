@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { confirmAction } from '@oneirodex/ui'
 import { useSearchParams } from 'react-router-dom'
 import { deleteJson, getJson, postJson } from '../api/adminApi'
@@ -18,6 +18,21 @@ import { ImagesMissingCoversPanel } from './images/ImagesMissingCoversPanel'
 import { ImagesQueuePanel } from './images/ImagesQueuePanel'
 import { ImagesSingleTitlePanel } from './images/ImagesSingleTitlePanel'
 import { AdminPageActions } from '../components/AdminPageActions'
+import { Page } from '../components/Page'
+
+function ImagesShell({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  const lede = 'Pick artwork for one title and manage pending or failed downloads.'
+  return embedded ? (
+    <div className="od-images-embedded">
+      <p className="od-admin-lede">{lede}</p>
+      {children}
+    </div>
+  ) : (
+    <Page title="Art & images" lede={lede}>
+      {children}
+    </Page>
+  )
+}
 
 export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
   const [params, setParams] = useSearchParams()
@@ -340,24 +355,10 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
   }
 
   return (
-    <div className={embedded ? 'od-images-embedded' : 'od-admin-page'}>
-      {!embedded ? (
-        <>
-          <h1>Art &amp; images</h1>
-          <p className="od-admin-lede">
-            Pick artwork for one title and manage pending or failed downloads. The full scan-mgmt
-            image table remains available when you need its legacy review controls. Admin only.
-          </p>
-        </>
-      ) : (
-        <p className="od-admin-lede">
-          Search provider art for one library title, then manage pending/failed downloads in bulk.
-        </p>
-      )}
-
+    <ImagesShell embedded={embedded}>
       <AdminPageActions label="Image page actions">
         <a className="od-cbtn" href="/scan_management?active_tab=image_queue">
-          Full scan-mgmt image table
+          Image review table
         </a>
         {!embedded ? (
           <a className="od-cbtn" href="/admin/art_studio">
@@ -422,6 +423,6 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
         missingError={missingError}
         syncGameParam={syncGameParam}
       />
-    </div>
+    </ImagesShell>
   )
 }

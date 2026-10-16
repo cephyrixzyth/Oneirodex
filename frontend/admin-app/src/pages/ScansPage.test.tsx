@@ -76,6 +76,7 @@ describe('ScansPage queued jobs', () => {
     expect(screen.getByText('PCWIN')).toBeInTheDocument()
     expect(screen.getByText('PS2')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/Scanning/i)
+    expect(screen.getByRole('region', { name: 'Recent scan jobs table' })).toBeInTheDocument()
   })
 
   test('a queue with nothing running does not read as idle', async () => {
@@ -317,5 +318,60 @@ describe('LibrariesPage refresh all', () => {
       const body = JSON.parse(refreshCall![1].body)
       expect(body).toEqual({ queue_policy: 'queue', force_parallel: false })
     })
+  })
+
+  test('preserves the page shell and retries when the library roster fails', async () => {
+    const libraryAttempts: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        const requestUrl = String(url)
+        if (requestUrl.includes('/api/get_libraries')) {
+          libraryAttempts.push(requestUrl)
+        }
+        if (requestUrl.includes('/api/get_libraries') && libraryAttempts.length === 1) {
+          return {
+            ok: false,
+            status: 503,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            text: async () => JSON.stringify({ code: 'service_unavailable', detail: 'Try again.' }),
+            json: async () => ({ code: 'service_unavailable', detail: 'Try again.' }),
+          }
+        }
+        if (requestUrl.includes('/api/get_libraries')) {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            text: async () => JSON.stringify([{ uuid: 'lib-1', name: 'PCWIN' }]),
+            json: async () => [{ uuid: 'lib-1', name: 'PCWIN' }],
+          }
+        }
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: async () => JSON.stringify({ code: 'not_found', detail: 'Not found.' }),
+          json: async () => ({ code: 'not_found', detail: 'Not found.' }),
+        }
+      }),
+    )
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <LibrariesPage />
+      </MemoryRouter>,
+    )
+
+    const retry = await screen.findByRole('button', { name: 'Retry loading libraries' })
+    expect(screen.getByRole('heading', { name: 'Libraries & scans' })).toBeInTheDocument()
+    await user.click(retry)
+    expect(await screen.findByText('PCWIN')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Scan controls' })).toHaveAttribute(
+      'href',
+      '/admin/scan-controls',
+    )
+    expect(libraryAttempts).toHaveLength(2)
   })
 })

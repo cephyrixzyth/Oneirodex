@@ -61,7 +61,7 @@ test('the roster is the editor — no classic-editor dest (W33-11)', async () =>
   render(<UsersPage />)
   expect(await screen.findByText('Ada')).toBeInTheDocument()
   expect(screen.queryByText(/classic/i)).toBeNull()
-  expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit Ada account' })).toBeInTheDocument()
 })
 
 test('Edit saves role through the existing user API', async () => {
@@ -70,7 +70,7 @@ test('Edit saves role through the existing user API', async () => {
   render(<UsersPage />)
   await screen.findByText('Ada')
 
-  await user.click(screen.getByRole('button', { name: 'Edit' }))
+  await user.click(screen.getByRole('button', { name: 'Edit Ada account' }))
   expect(screen.getByRole('heading', { name: 'Edit Ada' })).toBeInTheDocument()
 
   await user.selectOptions(screen.getByLabelText('Role'), 'librarian')
@@ -91,7 +91,7 @@ test('failed save uses PageStatus', async () => {
   render(<UsersPage />)
   await screen.findByText('Ada')
 
-  await user.click(screen.getByRole('button', { name: 'Edit' }))
+  await user.click(screen.getByRole('button', { name: 'Edit Ada account' }))
   await user.click(screen.getByRole('button', { name: 'Save' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Cannot modify your own role')

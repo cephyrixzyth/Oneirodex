@@ -7,6 +7,7 @@
   --od-edit-surface: var(--od-surface);
   --od-edit-surface-2: var(--od-surface-2);
   --od-edit-border: var(--od-border);
+  --od-edit-cover-width: 18.75rem;
   max-width: min(100%, 72rem);
   margin: 0 auto;
   padding: 1rem 1.25rem 2.5rem;
@@ -178,11 +179,16 @@
 }
 
 .image-editor-image img {
-  width: 300px;
+  width: var(--od-edit-cover-width);
   max-width: 100%;
   height: auto;
   border-radius: var(--od-radius-md);
   border: 1px solid color-mix(in srgb, var(--od-edit-border) 80%, transparent);
+}
+
+.cover-image-container .od-cover-fallback {
+  width: var(--od-edit-cover-width);
+  max-width: 100%;
 }
 
 .image-editor-image {
@@ -248,4 +254,13 @@
     max-width: 100%;
     flex: 1 1 100%;
   }
+}
+
+.od-edit-images__feedback {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--od-edit-accent);
+  border-radius: var(--od-radius-md);
+  color: var(--od-edit-text);
+  background: var(--od-edit-surface);
 }

@@ -1,34 +1,88 @@
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import Blueprint, current_app, render_template, request
+from oneirodex.utils.admin_spa import render_admin_spa
+from flask import Blueprint, current_app, request
 from flask_login import login_required
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.global_settings import (
     global_settings_row,
     global_settings_row_or_create,
 )
-from oneirodex.utils.processors import get_global_settings
 from oneirodex.models import GlobalSettings
 from oneirodex import db
-from sqlalchemy import select
 from oneirodex.utils.smtp_test import SMTPTester
 from oneirodex import cache
+from oneirodex.utils.smtp_settings import smtp_public_state, validate_smtp_data
+from oneirodex.schemas.json_object import JsonObjectBody
+from oneirodex.utils.validation import validate_body
 
 smtp_bp = Blueprint('smtp', __name__)
 
-@smtp_bp.context_processor
-@cache.cached(timeout=500, key_prefix='global_settings')
-def inject_settings():
-    """Context processor to inject global settings into templates"""
-    return get_global_settings()
 
+def _invalid_smtp_settings_body(_exc):
+    try:
+        validate_smtp_data(None, None)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    return api_error('A JSON settings object is required', code='bad_request')
+
+
+@smtp_bp.route('/api/admin/smtp/settings', methods=['GET', 'PUT'])
+@login_required
+@admin_required
+@validate_body(JsonObjectBody, methods={'PUT'}, on_error=_invalid_smtp_settings_body)
+def smtp_settings_api(body: JsonObjectBody | None = None):
+    settings = global_settings_row()
+    if request.method == 'GET':
+        response = current_app.make_response(api_ok({'settings': smtp_public_state(settings)}))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    try:
+        data = validate_smtp_data(body.root, settings)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    try:
+        settings = settings or global_settings_row_or_create()
+        for key, value in data.items():
+            if key != 'smtp_password' or value:
+                setattr(settings, key, value)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('SMTP settings API save failed')
+        return api_error('Could not save SMTP settings', code='internal')
+    cache.delete('global_settings')
+    response = current_app.make_response(api_ok({'settings': smtp_public_state(settings)}))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@smtp_bp.route('/api/admin/smtp/test', methods=['POST'])
+@login_required
+@admin_required
+def smtp_test_api():
+    """Connect/authenticate using saved settings; never send a message."""
+    settings = global_settings_row()
+    if not settings or not settings.smtp_enabled:
+        return api_error('Save and enable SMTP before testing the connection', code='bad_request')
+    try:
+        success, _ = SMTPTester(debug=False).test_connection(
+            host=settings.smtp_server, port=settings.smtp_port,
+            username=settings.smtp_username, password=settings.smtp_password,
+            use_tls=settings.smtp_use_tls, timeout=10,
+        )
+    except Exception:
+        current_app.logger.warning('SMTP connection test failed')
+        return api_error('SMTP connection failed. Check the saved settings and provider access.', code='bad_gateway')
+    if not success:
+        return api_error('SMTP connection failed. Check the saved settings and provider access.', code='bad_gateway')
+    return api_ok({'message': 'SMTP connection successful. No email was sent.'})
 
 @smtp_bp.route('/admin/smtp_settings', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def smtp_settings():
-    settings = global_settings_row()
     if request.method == 'POST':
-        data = request.json
+        data = request.json or {}
         settings = global_settings_row_or_create()
         
         # Validate required fields when SMTP is enabled
@@ -95,7 +149,7 @@ def smtp_settings():
             current_app.logger.warning('SMTP settings save failed: %s', e)
         return api_error('Could not save SMTP settings', code='internal')
     
-    return render_template('admin/admin_manage_smtp_settings.html', settings=settings)
+    return render_admin_spa(title='SMTP - Oneirodex Admin')
 
 @smtp_bp.route('/admin/smtp_test', methods=['POST'])
 @login_required

@@ -104,8 +104,8 @@ describe('ScanMatchSettingsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Scan / match policy' })).toBeInTheDocument()
     expect(screen.getByText(/catalog_disagreement/)).toBeInTheDocument()
     expect(
-      await screen.findByText(/Scan\/match settings API is not available yet/i),
-    ).toBeInTheDocument()
+      (await screen.findAllByText(/Scan\/match settings are unavailable/i)).length,
+    ).toBeGreaterThan(0)
     const serverLinks = screen.getAllByRole('link', { name: /Open Server Settings/i })
     expect(serverLinks.length).toBeGreaterThanOrEqual(1)
     expect(serverLinks[0]).toHaveAttribute('href', '/admin/new_server_settings')
@@ -178,5 +178,76 @@ describe('ScanMatchSettingsPage', () => {
     expect(screen.queryByLabelText(/High-confidence threshold/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Ambiguous gap/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Year-drop search variant/i)).not.toBeInTheDocument()
+  })
+
+  test('failed load retries without exposing defaults while the new load is pending', async () => {
+    const user = userEvent.setup()
+    let resolveLoad!: (response: any) => void
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonErr(503, { error: 'Policy unavailable' }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLoad = resolve
+          }),
+      )
+    globalThis.fetch = fetcher as unknown as typeof globalThis.fetch
+    render(<ScanMatchSettingsPage />)
+    await user.click(await screen.findByRole('button', { name: 'Retry loading settings' }))
+    expect(screen.queryByRole('button', { name: 'Retry loading settings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save settings' })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading scan/match settings')
+    resolveLoad(
+      jsonOk({ propose_only_scan: true, peel_profile: 'conservative', match_high_threshold: 0.9 }),
+    )
+    expect(await screen.findByLabelText(/Propose-only scan mode/i)).toBeChecked()
+    expect(screen.getByLabelText(/High-confidence threshold/i)).toHaveClass('od-admin-input')
+    expect(screen.getByLabelText(/High-confidence threshold/i)).toBeRequired()
+    expect(screen.getByLabelText(/Name peel aggressiveness/i)).toHaveClass('od-admin-input')
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('link', { name: 'Libraries' })).toHaveAttribute('href', '/libraries')
+  })
+
+  test('a save failure keeps the draft and pending saves disable editing and resubmission', async () => {
+    const user = userEvent.setup()
+    let resolveSave!: (response: any) => void
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonOk({ propose_only_scan: true, peel_profile: 'conservative' }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSave = resolve
+          }),
+      )
+    globalThis.fetch = fetcher as unknown as typeof globalThis.fetch
+    render(<ScanMatchSettingsPage />)
+    const profile = await screen.findByLabelText(/Name peel aggressiveness/i)
+    await user.selectOptions(profile, 'aggressive')
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    expect(profile).toBeDisabled()
+    const saving = screen.getByRole('button', { name: 'Saving…' })
+    expect(saving).toBeDisabled()
+    await user.click(saving)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    resolveSave(jsonErr(500, { error: 'Could not save policy' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save policy')
+    expect(profile).toHaveValue('aggressive')
+    expect(profile).toBeEnabled()
+  })
+
+  test('empty policy response offers retry and recovers exposed fields', async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonOk({}))
+      .mockResolvedValueOnce(
+        jsonOk({ propose_only_scan: false }),
+      ) as unknown as typeof globalThis.fetch
+    render(<ScanMatchSettingsPage />)
+    await user.click(await screen.findByRole('button', { name: 'Retry loading settings' }))
+    expect(await screen.findByLabelText(/Propose-only scan mode/i)).not.toBeChecked()
+    expect(screen.queryByRole('button', { name: 'Retry loading settings' })).not.toBeInTheDocument()
   })
 })

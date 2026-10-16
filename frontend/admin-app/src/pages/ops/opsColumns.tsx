@@ -106,11 +106,42 @@ export function DetailPanel({
           {entries.map(([key, value]) => (
             <tr key={key}>
               <td>{key}</td>
-              <td>{String(value)}</td>
+              <td>{formatDetailValue(key, value)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </section>
   )
+}
+
+/** Render known Ops structures deliberately; never leak an arbitrary object or secret field. */
+export function formatDetailValue(key: string, value: unknown): string {
+  if (value == null) return '—'
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value !== 'object' || Array.isArray(value)) return 'Details available'
+
+  const row = value as Record<string, unknown>
+  if (
+    typeof row.path === 'string' &&
+    typeof row.exists === 'boolean' &&
+    typeof row.read === 'boolean' &&
+    typeof row.write === 'boolean'
+  ) {
+    return `${row.path} · ${row.exists ? 'exists' : 'missing'} · ${row.read ? 'readable' : 'not readable'} · ${row.write ? 'writable' : 'read-only'}`
+  }
+  if (
+    key === 'latest' &&
+    typeof row.text === 'string' &&
+    typeof row.level === 'string' &&
+    typeof row.type === 'string'
+  ) {
+    return [row.timestamp, row.level, row.type, row.text]
+      .filter(
+        (part): part is string | number => typeof part === 'string' || typeof part === 'number',
+      )
+      .join(' · ')
+  }
+  return 'Details available'
 }

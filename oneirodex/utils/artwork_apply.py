@@ -6,11 +6,10 @@ import os
 import uuid
 from urllib.parse import urlparse
 
-from flask import current_app, url_for
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Image
 from oneirodex.utils.image_kinds import (
     IMAGE_KINDS,
@@ -19,6 +18,7 @@ from oneirodex.utils.image_kinds import (
     parse_image_kind,
 )
 from oneirodex.utils.providers import get_provider
+from oneirodex.utils.runtime_config import get_runtime_config
 
 # Back-compat alias — full locked taxonomy (BE-DET-10).
 VALID_IMAGE_TYPES = IMAGE_KINDS
@@ -46,6 +46,7 @@ def apply_cover_from_url(
     *,
     provider_id: str = 'steamgriddb',
     image_type: str = 'cover',
+    config=None,
 ) -> dict:
     """
     Download an absolute image URL and store it as game artwork.
@@ -77,7 +78,8 @@ def apply_cover_from_url(
     file_name = secure_filename(
         f'{game_uuid}_{image_type}_{provider_id}_{uuid.uuid4().hex[:10]}{ext}'
     )
-    save_dir = current_app.config['IMAGE_SAVE_PATH']
+    runtime_config = config if config is not None else get_runtime_config()
+    save_dir = runtime_config['IMAGE_SAVE_PATH']
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, file_name)
     with open(save_path, 'wb') as handle:
@@ -101,13 +103,16 @@ def apply_cover_from_url(
     db.session.add(image)
     db.session.commit()
 
+    static_url_path = (runtime_config.get('STATIC_URL_PATH') or '/static').rstrip('/')
+    image_url = f'{static_url_path}/library/images/{file_name}'
+
     return {
         'game_uuid': game_uuid,
         'image_id': image.id,
         'image_type': image_type,
         'kind': image_type,
         'filename': file_name,
-        'cover_url': url_for('static', filename=f'library/images/{file_name}'),
-        'url': url_for('static', filename=f'library/images/{file_name}'),
+        'cover_url': image_url,
+        'url': image_url,
         'provider': provider_id,
     }

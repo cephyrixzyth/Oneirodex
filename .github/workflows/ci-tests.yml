@@ -1,4 +1,4 @@
-# Oneirodex CI — PR gate with a *core* pytest subset (+ member-app / desktop vitest).
+# Oneirodex CI — PR gate with the pytest marker set (+ member-app / desktop vitest).
 #
 # Full pytest suite remains local / release-time (needs Unraid-like fixtures,
 # library paths, and heavier integrations). Do not treat this workflow as
@@ -31,7 +31,7 @@ jobs:
   pytest-core:
     name: Pytest (core)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -73,6 +73,28 @@ jobs:
           # branch red with no repo change behind it.
           pip install -r requirements-dev.txt
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build React shells required by Python route tests
+        run: |
+          npm run build --workspace=member-app
+          npm run build:auth-pilot --workspace=member-app
+          npm run build --workspace=admin-app
+          npm run build:pilot --workspace=admin-app
+
+      - name: Verify store sync transaction invariants
+        # Keep this SQLite compatibility slice ahead of the 20+ minute core
+        # suite so transaction regressions fail quickly and with a focused log.
+        run: python -m pytest tests/test_store_connections.py -q
+
       - name: Run pytest (marker set, deselect by exception)
         # Gate = every test not marked `integration`, minus a named exception
         # list. Flipped from a hand-enumerated file list on 2026-09-17 after
@@ -81,8 +103,8 @@ jobs:
         # default; the only way to keep one out is a line below, with its ID.
         #
         # The --deselect list is docs/dev/archive/test-suite-failures-2026-09-16.md's
-        # known failures as they reproduce on the runner (three are runner-
-        # only: the SPA dist is not built in this job, a Windows drive-letter
+        # known failures as they reproduce on the runner (two are runner-
+        # only: a Windows drive-letter
         # case, the font catalogue). Remove a line when its test is fixed;
         # never add one to get a red PR green.
         #
@@ -92,14 +114,12 @@ jobs:
           python -m pytest tests/ -q -m "not integration"
           --cov=oneirodex --cov-report=term-missing
           --cov-fail-under=65
-          --deselect tests/test_admin_spa_assets.py::test_admin_spa_dist_built
           --deselect tests/test_checkout_paths.py::test_operator_docs_checkout_is_oneirodex
           --deselect tests/test_collections_api_wiring.py::test_newsletter_ckeditor_targets_content_field
           --deselect tests/test_collections_api_wiring.py::test_spa_collections_client_covers_new_actions
           --deselect tests/test_library_roots.py::TestParseLibraryRoots::test_windows_drive_letter_is_not_mistaken_for_a_label
           --deselect tests/test_member_chrome_css.py::test_tile_hover_has_no_accent_glow_and_grows_from_center
           --deselect tests/test_member_chrome_css.py::test_topbar_cluster_is_not_a_shared_outline
-          --deselect tests/test_member_spa_assets.py::test_member_spa_links_member_app_css
           --deselect tests/test_routes_admin_ext_settings_shell.py::TestSettingsShellSections::test_every_section_deep_link_is_reachable_from_the_react_hub
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_invalid_request_id_zero
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_database_error

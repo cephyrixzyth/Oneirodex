@@ -1,6 +1,6 @@
 # /oneirodex/routes_admin_ext/attract_mode.py
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import render_template, request, jsonify
+from flask import request, jsonify, current_app
 from flask_login import login_required, current_user
 from oneirodex.models import GlobalSettings, UserAttractModeSettings, Library, Genre, Theme, Game
 from oneirodex.models import LibraryPlatform
@@ -14,29 +14,103 @@ from oneirodex.utils.global_settings import (
     global_settings_row_or_create,
 )
 from oneirodex.utils.auth import admin_required
+from oneirodex.utils.admin_spa import render_admin_spa
+from oneirodex.utils.attract_mode_defaults import DEFAULT_ATTRACT_MODE_SETTINGS
 import json
 import logging
+from copy import deepcopy
+from oneirodex.schemas.attract_mode import AttractModeBody
+from oneirodex.utils.validation import validate_body
 
 # Configuration constants
 MIN_IDLE_TIMEOUT = 10  # seconds
 MAX_IDLE_TIMEOUT = 300  # seconds (5 minutes)
 DEFAULT_IDLE_TIMEOUT = 60  # seconds
 
-# Default attract mode settings
-DEFAULT_ATTRACT_MODE_SETTINGS = {
-    'filters': {
-        'library_uuid': None,
-        'genres': [],
-        'themes': [],
-        'date_from': None,
-        'date_to': None
-    },
-    'autoplay': {
-        'enabled': True,
-        'skipFirst': 0,
-        'skipAfter': 0
+def admin_attract_state(settings):
+    config = deepcopy(DEFAULT_ATTRACT_MODE_SETTINGS)
+    saved = settings.attract_mode_settings if settings else None
+    if isinstance(saved, dict):
+        for key in ('filters', 'autoplay'):
+            if isinstance(saved.get(key), dict):
+                config[key].update(saved[key])
+    return {
+        'enabled': bool(settings and settings.attract_mode_enabled),
+        'idle_timeout': settings.attract_mode_idle_timeout or DEFAULT_IDLE_TIMEOUT if settings else DEFAULT_IDLE_TIMEOUT,
+        'filters': config['filters'], 'autoplay': config['autoplay'],
     }
-}
+
+
+def attract_filter_options():
+    libraries = db.session.execute(select(Library).order_by(Library.display_order, Library.name)).scalars().all()
+    genres = db.session.execute(select(Genre).order_by(Genre.name)).scalars().all()
+    themes = db.session.execute(select(Theme).order_by(Theme.name)).scalars().all()
+    dates = db.session.execute(select(func.min(Game.first_release_date), func.max(Game.first_release_date)).filter(
+        Game.video_urls.isnot(None), Game.video_urls != '', Game.first_release_date.isnot(None))).first()
+    return {
+        'libraries': [{'uuid': str(row.uuid), 'name': row.name} for row in libraries],
+        'genres': [{'id': row.id, 'name': row.name} for row in genres],
+        'themes': [{'id': row.id, 'name': row.name} for row in themes],
+        'date_range': {'min_year': dates[0].year if dates and dates[0] else None,
+                       'max_year': dates[1].year if dates and dates[1] else None},
+    }
+
+
+def persist_admin_attract(data):
+    settings = global_settings_row_or_create()
+    settings.attract_mode_enabled = data.get('enabled', False)
+    settings.attract_mode_idle_timeout = int(data.get('idle_timeout', DEFAULT_IDLE_TIMEOUT))
+    settings.attract_mode_settings = {
+        'filters': data.get('filters', DEFAULT_ATTRACT_MODE_SETTINGS['filters']),
+        'autoplay': data.get('autoplay', DEFAULT_ATTRACT_MODE_SETTINGS['autoplay']),
+    }
+    settings.last_updated = datetime.now(timezone.utc)
+    db.session.commit()
+    cache.clear()
+    log_system_event(f'Attract mode settings updated by {current_user.name}',
+                     event_type='configuration', event_level='information', audit_user=current_user.id)
+    return settings
+
+
+def _invalid_admin_attract_body(exc):
+    fields = [
+        {'field': '.'.join(str(part) for part in error['loc']), 'message': error['msg']}
+        for error in exc.errors(include_input=False, include_context=False, include_url=False)
+    ]
+    return api_error(
+        'Check attract mode settings and try again', code='bad_request', detail=fields
+    )
+
+
+@admin2_bp.route('/api/admin/attract-mode/settings', methods=['GET', 'PUT'])
+@login_required
+@admin_required
+@validate_body(AttractModeBody, methods={'PUT'}, on_error=_invalid_admin_attract_body)
+def admin_attract_settings_api(body: AttractModeBody | None = None):
+    if request.method == 'GET':
+        try:
+            response = current_app.make_response(api_ok({
+                'settings': admin_attract_state(global_settings_row()),
+                'filter_options': attract_filter_options(),
+                'bounds': {'idle_timeout': {'min': MIN_IDLE_TIMEOUT, 'max': MAX_IDLE_TIMEOUT},
+                           'skipFirst': {'min': 0, 'max': 300}, 'skipAfter': {'min': 0, 'max': 600},
+                           'year': {'min': 1, 'max': 9999}},
+            }))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except Exception:
+            current_app.logger.warning('Could not load admin attract mode settings')
+            return api_error('Could not load attract mode settings', code='internal')
+    data = body.model_dump()
+    try:
+        settings = persist_admin_attract(data)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('Could not save admin attract mode settings')
+        return api_error('Could not save attract mode settings', code='internal')
+    response = current_app.make_response(api_ok({'settings': admin_attract_state(settings), 'message': 'Attract mode settings saved.'}))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @admin2_bp.route('/admin/attract_mode_settings', methods=['GET'])
@@ -44,74 +118,7 @@ DEFAULT_ATTRACT_MODE_SETTINGS = {
 @admin_required
 def attract_mode_settings_page():
     """Admin page for configuring attract mode settings"""
-    try:
-        # Get current global settings
-        global_settings = global_settings_row()
-
-        # Prepare settings data
-        settings_data = {
-            'enabled': global_settings.attract_mode_enabled if global_settings else False,
-            'idle_timeout': global_settings.attract_mode_idle_timeout if global_settings else DEFAULT_IDLE_TIMEOUT,
-            'settings': global_settings.attract_mode_settings if global_settings and global_settings.attract_mode_settings else DEFAULT_ATTRACT_MODE_SETTINGS
-        }
-
-        # Get filter options for the form
-        # Get all libraries
-        libraries = db.session.execute(
-            select(Library).order_by(Library.display_order, Library.name)
-        ).scalars().all()
-
-        # Get all genres
-        genres = db.session.execute(
-            select(Genre).order_by(Genre.name)
-        ).scalars().all()
-
-        # Get all themes
-        themes = db.session.execute(
-            select(Theme).order_by(Theme.name)
-        ).scalars().all()
-
-        # Get date range from games with videos
-        date_range = db.session.execute(
-            select(
-                func.min(Game.first_release_date),
-                func.max(Game.first_release_date)
-            ).filter(
-                Game.video_urls.isnot(None),
-                Game.video_urls != '',
-                Game.first_release_date.isnot(None)
-            )
-        ).first()
-
-        min_year = date_range[0].year if date_range and date_range[0] else None
-        max_year = date_range[1].year if date_range and date_range[1] else None
-
-        filter_options = {
-            'libraries': [{'uuid': str(lib.uuid), 'name': lib.name} for lib in libraries],
-            'genres': [{'id': g.id, 'name': g.name} for g in genres],
-            'themes': [{'id': t.id, 'name': t.name} for t in themes],
-            'date_range': {
-                'min_year': min_year,
-                'max_year': max_year
-            }
-        }
-
-        return render_template(
-            'admin/attract_mode_settings.html',
-            settings=settings_data,
-            filter_options=filter_options,
-            min_timeout=MIN_IDLE_TIMEOUT,
-            max_timeout=MAX_IDLE_TIMEOUT
-        )
-
-    except Exception as e:
-        logging.error(f"Error loading attract mode settings page: {e}")
-        return render_template('admin/attract_mode_settings.html',
-                             settings={'enabled': False, 'idle_timeout': DEFAULT_IDLE_TIMEOUT, 'settings': DEFAULT_ATTRACT_MODE_SETTINGS},
-                             filter_options={'libraries': [], 'genres': [], 'themes': [], 'date_range': {}},
-                             min_timeout=MIN_IDLE_TIMEOUT,
-                             max_timeout=MAX_IDLE_TIMEOUT,
-                             error="Failed to load settings")
+    return render_admin_spa(title='Attract mode · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/attract_mode_settings', methods=['POST'])
@@ -130,33 +137,7 @@ def save_attract_mode_settings():
         if errors:
             return api_error('Validation failed', code='bad_request', errors=errors)
 
-        # Get or create global settings
-        global_settings = global_settings_row_or_create()
-
-        # Update settings
-        global_settings.attract_mode_enabled = data.get('enabled', False)
-        global_settings.attract_mode_idle_timeout = int(data.get('idle_timeout', DEFAULT_IDLE_TIMEOUT))
-
-        # Store filter and autoplay settings as JSON
-        settings_json = {
-            'filters': data.get('filters', DEFAULT_ATTRACT_MODE_SETTINGS['filters']),
-            'autoplay': data.get('autoplay', DEFAULT_ATTRACT_MODE_SETTINGS['autoplay'])
-        }
-        global_settings.attract_mode_settings = settings_json
-        global_settings.last_updated = datetime.now(timezone.utc)
-
-        db.session.commit()
-
-        # Clear cache
-        cache.clear()
-
-        # Log the change
-        log_system_event(
-            f'Attract mode settings updated by {current_user.name}',
-            event_type='configuration',
-            event_level='information',
-            audit_user=current_user.id,
-        )
+        persist_admin_attract(data)
 
         return api_ok({'message': 'Attract mode settings saved successfully'})
 

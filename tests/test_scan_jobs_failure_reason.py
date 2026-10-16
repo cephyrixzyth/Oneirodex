@@ -24,6 +24,12 @@ RECLAIM_MESSAGE = (
 )
 
 
+def test_unmatched_compatibility_alias_preserves_classic_destination(admin_client):
+    response = admin_client.get('/admin/unmatched')
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/scan_management?active_tab=unmatched')
+
+
 @pytest.fixture
 def admin_user(db_session):
     unique = uuid4().hex[:8]
@@ -175,18 +181,13 @@ def test_ops_summary_reports_no_reason_as_none_not_empty_string(
 
 
 def test_library_tools_live_on_scan_management(admin_client):
-    """Library tools is its own scan_management page (active_tab=tools)."""
+    """Legacy direct entries share the SPA shell; React routes select the content."""
     auto = admin_client.get('/scan_management').get_data(as_text=True)
-    assert 'id="libraryTools"' not in auto
-    assert 'id="autoScan"' in auto
-    body = admin_client.get('/scan_management?active_tab=tools').get_data(as_text=True)
-    assert 'id="libraryTools"' in body
-    assert 'id="propose-leaf-mount"' in body
-    assert 'id="tab-add-many"' in body
-    assert 'Add many' in body
-    assert 'nav nav-tabs' not in body
-    assert 'od_admin_library_tools.js' in body
-    assert 'id="autoScan"' not in body
+    tools = admin_client.get('/scan_management?active_tab=tools').get_data(as_text=True)
+    assert 'id="admin-app-root"' in auto
+    assert 'id="admin-app-root"' in tools
+    routes = (Path(__file__).resolve().parents[1] / 'frontend' / 'admin-app' / 'src' / 'components' / 'AdminRoutes.tsx').read_text(encoding='utf-8')
+    assert "tab === 'tools' || tab === 'libraries'" in routes
 
 
 def test_libraries_tab_redirects_to_libraries_page(admin_client):

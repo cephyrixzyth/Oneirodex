@@ -1,7 +1,7 @@
 """Artwork provider API routes (search + apply cover — no game downloads)."""
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
@@ -74,8 +74,8 @@ def steamgriddb_search():
         results = provider.search_artwork(query, limit=limit, art_kind=art_kind)
     except ProviderDisabledError as exc:
         return api_error(exc.message, code='unavailable', provider=exc.provider_id)
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway', provider=provider.id)
+    except RuntimeError:
+        return api_error('Artwork provider request failed', code='bad_gateway', provider=provider.id)
 
     return jsonify({
         'provider': provider.id,
@@ -107,8 +107,8 @@ def igdb_cover_search():
         results = provider.search_covers(query, limit=limit)
     except ProviderDisabledError as exc:
         return api_error(exc.message, code='unavailable', provider=exc.provider_id)
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway', provider=provider.id)
+    except RuntimeError:
+        return api_error('Artwork provider request failed', code='bad_gateway', provider=provider.id)
 
     return jsonify({
         'provider': provider.id,
@@ -150,16 +150,28 @@ def steamgriddb_apply_artwork(game_uuid, body: ApplyArtworkBody):
             image_type=image_type,
         )
     except ValueError as exc:
-        return api_error(str(exc), code='bad_request', game_uuid=game_uuid)
+        current_app.logger.info(
+            'Artwork URL rejected for provider %s (%s)',
+            provider_id, type(exc).__name__,
+        )
+        return api_error('Artwork image URL was rejected', code='bad_request', game_uuid=game_uuid)
     except LookupError as exc:
         return api_error(str(exc), code='not_found', game_uuid=game_uuid)
     except ProviderDisabledError as exc:
         return api_error(exc.message, code='unavailable', provider=exc.provider_id)
     except RuntimeError as exc:
-        return api_error(str(exc), code='unavailable', game_uuid=game_uuid)
+        current_app.logger.warning(
+            'Artwork application unavailable for provider %s (%s)',
+            provider_id, type(exc).__name__,
+        )
+        return api_error('Artwork provider unavailable', code='unavailable', game_uuid=game_uuid)
     except Exception as exc:
         db.session.rollback()
-        return api_error(f'Failed to apply artwork: {exc}', code='bad_gateway', game_uuid=game_uuid)
+        current_app.logger.warning(
+            'Artwork application failed for provider %s (%s)',
+            provider_id, type(exc).__name__,
+        )
+        return api_error('Failed to apply artwork', code='bad_gateway', game_uuid=game_uuid)
 
     return jsonify(result), 200
 
@@ -184,8 +196,8 @@ def giantbomb_search():
         results = provider.search_covers(query, limit=limit)
     except ProviderDisabledError as exc:
         return api_error(exc.message, code='unavailable', provider=exc.provider_id)
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway', provider=provider.id)
+    except RuntimeError:
+        return api_error('Artwork provider request failed', code='bad_gateway', provider=provider.id)
 
     return jsonify({
         'provider': provider.id,
@@ -203,8 +215,8 @@ def pcgamingwiki_search():
         return _refuse_no_query()
     try:
         return jsonify(pcgamingwiki_enrichment(query))
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway', provider='pcgamingwiki')
+    except RuntimeError:
+        return api_error('Artwork provider request failed', code='bad_gateway', provider='pcgamingwiki')
 
 
 @apis_bp.route('/providers/meta_quest/search', methods=['GET'])
@@ -232,8 +244,8 @@ def meta_quest_cover_search():
         results = provider.search_covers(query, limit=limit)
     except ProviderDisabledError as exc:
         return api_error(exc.message, code='unavailable', provider=exc.provider_id)
-    except RuntimeError as exc:
-        return api_error(str(exc), code='bad_gateway', provider=provider.id)
+    except RuntimeError:
+        return api_error('Artwork provider request failed', code='bad_gateway', provider=provider.id)
 
     return jsonify({
         'provider': provider.id,

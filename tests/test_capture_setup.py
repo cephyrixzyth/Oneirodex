@@ -15,3 +15,35 @@ def test_capture_environment_disables_background_workers(tmp_path, monkeypatch):
         if "=" in line
     }
     assert settings["ONEIRODEX_ENABLE_BACKGROUND_WORKERS"] == "false"
+
+
+def test_capture_login_waits_for_native_spa_redirect(monkeypatch):
+    from scripts import capture_common
+
+    class Field:
+        def __init__(self, page):
+            self.page = page
+
+        def count(self):
+            return 1
+
+        def fill(self, _value):
+            pass
+
+        def press(self, _key):
+            self.page.url = f"{capture_common.BASE}/discover"
+
+    class Page:
+        url = ""
+
+        def goto(self, url, **_kwargs):
+            self.url = url
+
+        def locator(self, _selector):
+            return Field(self)
+
+        def wait_for_function(self, _predicate, *, timeout):
+            assert timeout == 10_000
+            assert self.url.endswith("/discover")
+
+    assert capture_common.login(Page()) is True

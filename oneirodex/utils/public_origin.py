@@ -10,8 +10,15 @@ to use here.
 
 from __future__ import annotations
 
+import os
+from urllib.parse import urlsplit
+
 from oneirodex.utils.global_settings import global_settings_row
-from oneirodex.utils.trusted_host import trusted_origin_from_request
+from oneirodex.utils.trusted_host import (
+    host_is_trusted,
+    parse_trusted_hosts,
+    trusted_origin_from_request,
+)
 
 _LOCAL_SITE_DEFAULTS = frozenset({
     '',
@@ -50,6 +57,39 @@ def public_origin() -> str:
     if root:
         return root
     return configured or 'http://127.0.0.1'
+
+
+def public_origin_for_request(request, config) -> str:
+    """Resolve a trusted origin from a native ASGI request without Flask hooks."""
+    configured = configured_site_url()
+    if configured and not is_local_site_url(configured):
+        return configured
+
+    raw_origin = str(request.base_url or '').rstrip('/')
+    host = str(request.headers.get('host') or '')
+    try:
+        parsed = urlsplit(raw_origin)
+        port = parsed.port
+    except ValueError:
+        return configured or 'http://127.0.0.1'
+    if (
+        parsed.scheme not in {'http', 'https'}
+        or not parsed.hostname
+        or (port is not None and not 1 <= port <= 65535)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or (parsed.netloc.casefold() != host.casefold())
+    ):
+        return configured or 'http://127.0.0.1'
+
+    allowed = parse_trusted_hosts(config.get('TRUSTED_LINK_HOSTS'))
+    if not allowed:
+        allowed = parse_trusted_hosts(os.getenv('TRUSTED_LINK_HOSTS', ''))
+    if not host_is_trusted(host, allowed):
+        return configured or 'http://127.0.0.1'
+    return raw_origin
 
 
 def invite_url(token: str) -> str:

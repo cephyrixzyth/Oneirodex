@@ -63,6 +63,40 @@ test('size drives both dimensions', () => {
   expect(svg!.getAttribute('height')).toBe('32')
 })
 
+test('ownership rail drawing comes from the neutral icon manifest adapter', () => {
+  const { container } = render(<RailIcon name="ownership" />)
+  const svg = container.querySelector('svg')!
+  expect(svg.querySelector('circle')?.getAttribute('cx')).toBe('8')
+  expect(svg.querySelector('circle')?.getAttribute('fill')).toBe('currentColor')
+  expect([...svg.querySelectorAll('path')].map((path) => path.getAttribute('d'))).toEqual([
+    'm11 11 9 9',
+    'm17.5 17.5 2-2M15 15l2-2',
+  ])
+})
+
+test('discover compass drawing comes from the neutral icon manifest adapter', () => {
+  const { container } = render(<RailIcon name="discover" />)
+  const svg = container.querySelector('svg')!
+  expect(svg.querySelector('circle')?.getAttribute('r')).toBe('10')
+  expect(svg.querySelector('polygon')?.getAttribute('fill')).toBe('currentColor')
+  expect(svg.querySelector('polygon')?.getAttribute('points')).toBe(
+    '16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76',
+  )
+})
+
+test('report and integrations aliases share generated manifest drawings', () => {
+  const renderDrawing = (name: string) => {
+    const { container } = render(<RailIcon name={name} />)
+    return container.querySelector('svg')!.innerHTML
+  }
+  expect(renderDrawing('report')).toBe(renderDrawing('report-issue'))
+  expect(renderDrawing('integrations')).toBe(renderDrawing('plug'))
+  expect(renderDrawing('settings')).toBe(renderDrawing('cogs'))
+  expect(renderDrawing('settings')).toBe(renderDrawing('gear'))
+  const { container } = render(<RailIcon name="plug" />)
+  expect(container.querySelector('svg')).toHaveAttribute('data-icon', 'integrations')
+})
+
 describe('era-drawn glyphs (E4)', () => {
   afterEach(() => {
     document.documentElement.removeAttribute('data-theme')

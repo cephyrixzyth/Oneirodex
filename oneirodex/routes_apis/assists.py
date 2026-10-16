@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
-import re
 from typing import Any
 
-from flask import current_app, jsonify
+from flask import current_app, has_app_context, jsonify
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
@@ -18,110 +16,47 @@ from oneirodex.utils.auth import admin_required
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.schemas.assists import AssistPackBody
 from oneirodex.utils.validation import validate_body
-
-from . import apis_bp
-from oneirodex.utils.library_paths import library_dir
-
-_SAFE_UUID = re.compile(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-    re.I,
+from oneirodex.utils.assist_packs import (
+    assists_enabled as _assists_enabled,
+    assists_root as _assists_root,
+    default_overlay_links,
+    load_assist_pack as _load_assist_pack,
+    overlay_links_for,
+    pack_path as _assist_pack_path,
 )
 
+from . import apis_bp
 
-def assists_enabled() -> bool:
-    return str(current_app.config.get('ENABLE_GAME_ASSISTS', 'true')).lower() in (
-        '1', 'true', 'yes', 'on',
+
+def _package_root(package_root):
+    if package_root is not None:
+        return package_root
+    return current_app.root_path if has_app_context() else None
+
+def assists_enabled(*, config=None) -> bool:
+    return _assists_enabled(config=config if config is not None else current_app.config)
+
+
+def assists_root(*, config=None, package_root=None) -> str:
+    return _assists_root(
+        config=config if config is not None else current_app.config,
+        package_root=_package_root(package_root),
     )
 
 
-def assists_root() -> str:
-    root = current_app.config.get('GAME_ASSISTS_PATH')
-    if root:
-        return root
-    return os.path.join(library_dir(), 'assists')
+def _pack_path(game_uuid: str, *, config=None, package_root=None) -> str:
+    return _assist_pack_path(
+        game_uuid,
+        config=config if config is not None else current_app.config,
+        package_root=_package_root(package_root),
+    )
 
 
-def _pack_path(game_uuid: str) -> str:
-    if not _SAFE_UUID.match(game_uuid or ''):
-        raise ValueError('Invalid game UUID')
-    folder = os.path.join(assists_root(), game_uuid)
-    os.makedirs(folder, exist_ok=True)
-    return os.path.join(folder, 'pack.json')
-
-
-def load_assist_pack(game_uuid: str) -> dict[str, Any] | None:
-    path = _pack_path(game_uuid)
-    if not os.path.isfile(path):
-        return None
-    try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    toggles = data.get('toggles')
-    if not isinstance(toggles, list):
-        toggles = []
-    links = data.get('overlay_links')
-    if not isinstance(links, list):
-        links = []
-    return {
-        'game_uuid': game_uuid,
-        'title': data.get('title') or 'Assists',
-        'policy': data.get('policy') or 'single_player_offline_only',
-        'toggles': [
-            {
-                'id': str(row.get('id') or ''),
-                'label': str(row.get('label') or row.get('id') or 'Toggle'),
-                'description': str(row.get('description') or ''),
-            }
-            for row in toggles
-            if isinstance(row, dict) and row.get('id')
-        ],
-        # INSP-45 -- pages the companion overlay lists beside the game: maps,
-        # guides, clips, a wiki. Links only; nothing reads or touches a process.
-        'overlay_links': [
-            {
-                'label': str(row.get('label') or row.get('url') or '')[:120],
-                'url': str(row.get('url') or '')[:2048],
-                'kind': str(row.get('kind') or 'other')[:16],
-            }
-            for row in links
-            if isinstance(row, dict) and str(row.get('url') or '').lower().startswith(('http://', 'https://'))
-        ],
-    }
-
-
-PC_PLATFORMS = frozenset({'PCWIN', 'PCDOS', 'MAC', 'LINUX', 'OTHER'})
-
-
-def default_overlay_links(game) -> list[dict[str, str]]:
-    """What the overlay can always offer a PC title with no pack: the
-    PCGamingWiki page (a search deep link -- the wiki resolves the title)."""
-    platform = getattr(getattr(getattr(game, 'library', None), 'platform', None), 'name', None)
-    if platform is not None and str(platform).upper() not in PC_PLATFORMS:
-        return []
-    name = (getattr(game, 'name', None) or '').strip()
-    if not name:
-        return []
-    from urllib.parse import quote_plus
-
-    return [{
-        'label': 'PCGamingWiki',
-        'url': f'https://www.pcgamingwiki.com/w/index.php?search={quote_plus(name)}',
-        'kind': 'wiki',
-    }]
-
-
-def overlay_links_for(game, pack: dict | None) -> list[dict[str, str]]:
-    """Pack links first, then the defaults not already covered by kind."""
-    rows = list((pack or {}).get('overlay_links') or [])
-    kinds = {row.get('kind') for row in rows}
-    for row in default_overlay_links(game):
-        if row['kind'] not in kinds:
-            rows.append(row)
-    return rows
+def load_assist_pack(game_uuid: str, *, config=None, package_root=None) -> dict[str, Any] | None:
+    return _load_assist_pack(
+        game_uuid, config=config if config is not None else current_app.config,
+        package_root=_package_root(package_root),
+    )
 
 
 @apis_bp.route('/games/<game_uuid>/assists', methods=['GET'])

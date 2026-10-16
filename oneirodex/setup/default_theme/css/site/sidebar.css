@@ -2,9 +2,9 @@
  *
  * The old comment said this was "the one place the .od-icon defaults live"
  * because base.html links it on every Jinja page — but base_admin.html and
- * base_empty.html do not, so admin pages and the pop-out hosts got no icon
+ * the member shell renderer do not, so admin pages and the pop-out hosts got no icon
  * geometry at all and the --od-icon-* preset tokens never reached them. It is a
- * primitive, not a sidebar concern; od-primitives.css is linked by all three
+ * primitive, not a sidebar concern; od-primitives.css is linked by each active
  * bases and is where the motion rules for the same class now live too. */
 
 .sidebar {

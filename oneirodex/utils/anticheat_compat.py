@@ -34,13 +34,13 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
-from flask import current_app, has_app_context
 
 from oneirodex.utils.http_safe import read_response_limited, safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
@@ -77,9 +77,19 @@ def _truthy(raw: str | None, default: bool) -> bool:
 
 
 def _testing() -> bool:
+    """Read test mode without requiring Flask in the production runtime."""
+    from oneirodex.runtime_native.runtime_context import get_runtime_config
+
+    config = get_runtime_config()
+    if config is not None:
+        return bool(config.get('TESTING'))
+    if 'pytest' in sys.modules or 'PYTEST_CURRENT_TEST' in os.environ:
+        return True
     try:
+        from flask import current_app, has_app_context
+
         return bool(has_app_context() and current_app.config.get('TESTING'))
-    except Exception:  # noqa: BLE001
+    except (ImportError, RuntimeError):
         return False
 
 

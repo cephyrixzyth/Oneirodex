@@ -1,9 +1,11 @@
+@import '../../../oneirodex/setup/default_theme/css/od-tokens.css';
+
 :root {
   color-scheme: dark;
   font-family: 'Segoe UI', system-ui, sans-serif;
   line-height: 1.5;
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--od-bg);
+  color: var(--od-text);
 }
 
 * {
@@ -25,15 +27,15 @@ header h1 {
 }
 
 .muted {
-  color: #9aa7b5;
+  color: var(--od-text-muted);
 }
 
 .panel {
   margin-top: 1.5rem;
   padding: 1rem 1.25rem;
-  border: 1px solid #243041;
+  border: 1px solid var(--od-border);
   border-radius: 12px;
-  background: #151b24;
+  background: var(--od-surface);
 }
 
 .connect-form {
@@ -51,16 +53,16 @@ label {
 input {
   padding: 0.55rem 0.65rem;
   border-radius: 8px;
-  border: 1px solid #314055;
-  background: #0f1419;
+  border: 1px solid var(--od-border);
+  background: var(--od-bg);
   color: inherit;
 }
 
 textarea {
   padding: 0.55rem 0.65rem;
   border-radius: 8px;
-  border: 1px solid #314055;
-  background: #0f1419;
+  border: 1px solid var(--od-border);
+  background: var(--od-bg);
   color: inherit;
   font-family: inherit;
   resize: vertical;
@@ -69,12 +71,31 @@ textarea {
 button,
 .action-btn {
   cursor: pointer;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
   padding: 0.55rem 0.9rem;
-  background: #3b82f6;
-  color: white;
+  background: var(--od-accent);
+  color: var(--od-accent-contrast);
   font-weight: 600;
+}
+
+button.primary {
+  background: var(--od-accent);
+  color: var(--od-accent-contrast);
+}
+
+button.secondary {
+  border-color: var(--od-border);
+  background: var(--od-surface-2);
+  color: var(--od-text);
+}
+
+button:focus-visible,
+.action-btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--od-focus-ring);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -83,11 +104,12 @@ button:disabled {
 }
 
 .action-btn.play-btn {
-  background: #1f7a45;
+  background: #176b42;
+  color: #fff;
 }
 
 .action-btn.play-btn:hover:not(:disabled) {
-  background: #269653;
+  background: #1b784b;
 }
 
 .status {
@@ -96,20 +118,20 @@ button:disabled {
 }
 
 .status[data-tone='error'] {
-  color: #f87171;
+  color: var(--od-danger);
 }
 
 .status[data-tone='success'] {
-  color: #4ade80;
+  color: var(--od-success);
 }
 
 .offline-banner {
   margin: 0 0 0.75rem;
   padding: 0.65rem 0.75rem;
   border-radius: 8px;
-  border: 1px solid #7f1d1d;
+  border: 1px solid var(--od-danger);
   background: #1f1215;
-  color: #fca5a5;
+  color: var(--od-danger);
   font-size: 0.9rem;
 }
 
@@ -122,8 +144,8 @@ button:disabled {
 .game-card {
   padding: 0.85rem;
   border-radius: 10px;
-  border: 1px solid #243041;
-  background: #10161f;
+  border: 1px solid var(--od-border);
+  background: var(--od-surface-2);
 }
 
 .game-card h3 {
@@ -134,7 +156,7 @@ button:disabled {
 .uuid {
   margin: 0;
   font-size: 0.75rem;
-  color: #9aa7b5;
+  color: var(--od-text-muted);
   word-break: break-all;
 }
 
@@ -145,7 +167,7 @@ button:disabled {
 .activity {
   margin: 0.35rem 0;
   font-size: 0.8rem;
-  color: #93c5fd;
+  color: var(--od-info);
 }
 
 .actions {
@@ -157,7 +179,8 @@ button:disabled {
 .action-btn {
   font-size: 0.75rem;
   padding: 0.35rem 0.55rem;
-  background: #1f2937;
+  background: var(--od-surface-2);
+  color: var(--od-text);
 }
 
 .lifecycle-list {
@@ -191,9 +214,9 @@ button:disabled {
 .od-version-panel {
   width: min(420px, 100%);
   padding: 1.1rem 1.25rem 1.25rem;
-  border: 1px solid #243041;
+  border: 1px solid var(--od-border);
   border-radius: 12px;
-  background: #151b24;
+  background: var(--od-surface);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
@@ -219,18 +242,18 @@ button:disabled {
   width: 100%;
   text-align: left;
   font-weight: 500;
-  background: #10161f;
-  border: 1px solid #243041;
+  background: var(--od-surface-2);
+  border: 1px solid var(--od-border);
   color: inherit;
 }
 
 .od-version-option:hover:not(:disabled) {
-  border-color: #3b82f6;
+  border-color: var(--od-accent);
 }
 
 .od-version-option.is-selected {
-  border-color: #3b82f6;
-  background: #16233a;
+  border-color: var(--od-accent);
+  background: var(--od-surface-2);
 }
 
 .od-version-actions {
@@ -241,5 +264,5 @@ button:disabled {
 }
 
 .od-version-cancel {
-  background: #1f2937;
+  background: var(--od-surface-2);
 }

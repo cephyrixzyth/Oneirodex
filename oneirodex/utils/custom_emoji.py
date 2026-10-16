@@ -7,13 +7,13 @@ import re
 from io import BytesIO
 from uuid import uuid4
 
-from flask import current_app
+from oneirodex.utils.runtime_config import get_runtime_config
 from PIL import Image
 from sqlalchemy import func, select
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-from oneirodex import db
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import CustomEmoji, User
 
 SLUG_RE = re.compile(r'^[a-z0-9_-]{2,24}$')
@@ -23,8 +23,8 @@ MAX_EDGE_PX = 128
 ALLOWED_EXT = frozenset({'png', 'webp', 'jpg', 'jpeg'})
 
 
-def emoji_dir() -> str:
-    root = current_app.config.get('UPLOAD_FOLDER') or ''
+def emoji_dir(upload_folder: str | None = None) -> str:
+    root = upload_folder if upload_folder is not None else get_runtime_config().get('UPLOAD_FOLDER') or ''
     path = os.path.join(root, 'chat-emoji')
     os.makedirs(path, exist_ok=True)
     return path
@@ -70,6 +70,7 @@ def upload_custom_emoji(
     label: str,
     file: FileStorage,
     uploader: User | None,
+    upload_folder: str | None = None,
 ) -> CustomEmoji:
     if count_custom_emoji() >= MAX_CUSTOM_EMOJI:
         raise ValueError(f'Custom emoji limit reached ({MAX_CUSTOM_EMOJI})')
@@ -104,7 +105,7 @@ def upload_custom_emoji(
     img.thumbnail((MAX_EDGE_PX, MAX_EDGE_PX), Image.LANCZOS)
 
     out_name = f'{uuid4().hex}.webp'
-    out_path = os.path.join(emoji_dir(), out_name)
+    out_path = os.path.join(emoji_dir(upload_folder), out_name)
     img.save(out_path, format='WEBP', quality=85)
 
     row = CustomEmoji(
@@ -118,11 +119,11 @@ def upload_custom_emoji(
     return row
 
 
-def delete_custom_emoji(slug: str) -> bool:
+def delete_custom_emoji(slug: str, *, upload_folder: str | None = None) -> bool:
     row = get_by_slug(slug)
     if row is None:
         return False
-    path = os.path.join(emoji_dir(), row.file_name)
+    path = os.path.join(emoji_dir(upload_folder), row.file_name)
     db.session.delete(row)
     db.session.commit()
     try:
