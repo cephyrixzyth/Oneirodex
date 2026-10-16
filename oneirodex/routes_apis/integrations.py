@@ -14,6 +14,8 @@ from flask_login import login_required
 
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.integrations_inventory import build_integrations_inventory
+from oneirodex.schemas.admin_integrations import CommunityChatBody, OidcAdminBody
+from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
 
@@ -32,19 +34,6 @@ def integrations_inventory():
 
 
 OIDC_ADMIN_CONFIG = '/admin/integrations/oidc'
-OIDC_ADMIN_FIELDS = {
-    'oidc_enabled', 'oidc_display_name', 'oidc_issuer_url', 'oidc_client_id',
-    'oidc_client_secret', 'oidc_redirect_uri', 'oidc_scopes',
-    'oidc_role_claim', 'oidc_role_map',
-}
-OIDC_TEXT_LIMITS = {
-    'oidc_display_name': 120, 'oidc_issuer_url': 512, 'oidc_client_id': 255,
-    'oidc_client_secret': 512, 'oidc_redirect_uri': 512,
-    'oidc_scopes': 255, 'oidc_role_claim': 64,
-}
-OIDC_ROLES = {'admin', 'librarian', 'user', 'child'}
-
-
 def oidc_admin_settings(row):
     return {
         'oidc_enabled': bool(row and row.oidc_enabled),
@@ -63,6 +52,24 @@ def oidc_admin_settings(row):
             'oneirodex-librarian': 'librarian', 'child': 'child', 'oneirodex-child': 'child',
         },
     }
+
+
+def _invalid_oidc_admin_body(exc):
+    errors = exc.errors(include_input=False, include_context=False, include_url=False)
+    if any(error['type'] in {'missing', 'extra_forbidden', 'dict_type'} for error in errors):
+        return api_error('Provide all OIDC settings fields.', code='bad_request')
+    if any(error['loc'] and error['loc'][0] == 'oidc_enabled' for error in errors):
+        return api_error('OIDC enabled must be a boolean.', code='bad_request')
+    if any(error['loc'] and error['loc'][0] == 'oidc_role_map' for error in errors):
+        return api_error('OIDC role map must map names to supported roles.', code='bad_request')
+    return api_error('OIDC text fields are invalid or too long.', code='bad_request')
+
+
+def _invalid_community_chat_body(exc):
+    errors = exc.errors(include_input=False, include_context=False, include_url=False)
+    if any(error['type'] in {'missing', 'extra_forbidden', 'dict_type'} for error in errors):
+        return api_error('Provide the community URL and link label.', code='bad_request')
+    return api_error('Community settings contain invalid text.', code='bad_request')
 
 
 @apis_bp.route(OIDC_ADMIN_CONFIG, methods=['GET'])
@@ -84,21 +91,10 @@ def oidc_admin_config_get():
 @apis_bp.route(OIDC_ADMIN_CONFIG, methods=['PUT'])
 @login_required
 @admin_required
-def oidc_admin_config_put():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or set(payload) != OIDC_ADMIN_FIELDS:
-        return api_error('Provide all OIDC settings fields.', code='bad_request')
-    if type(payload['oidc_enabled']) is not bool:
-        return api_error('OIDC enabled must be a boolean.', code='bad_request')
-    for field, limit in OIDC_TEXT_LIMITS.items():
-        value = payload[field]
-        if not isinstance(value, str) or len(value) > limit or any(ord(ch) < 32 and ch not in '\t' for ch in value):
-            return api_error('OIDC text fields are invalid or too long.', code='bad_request')
+@validate_body(OidcAdminBody, on_error=_invalid_oidc_admin_body)
+def oidc_admin_config_put(body: OidcAdminBody):
+    payload = body.model_dump()
     role_map = payload['oidc_role_map']
-    if (not isinstance(role_map, dict) or len(role_map) > 128
-            or any(not isinstance(key, str) or not key.strip() or len(key) > 120 for key in role_map)
-            or any(not isinstance(value, str) or value.strip().lower() not in OIDC_ROLES for value in role_map.values())):
-        return api_error('OIDC role map must map names to supported roles.', code='bad_request')
     issuer = payload['oidc_issuer_url'].strip() or None
     if issuer and not is_secure_oidc_issuer(issuer):
         return api_error('OIDC issuer URL must use HTTPS.', code='bad_request')
@@ -137,7 +133,10 @@ def oidc_admin_config_put():
 @apis_bp.route('/admin/integrations/community', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def community_chat_settings_api():
+@validate_body(
+    CommunityChatBody, methods={'PUT'}, on_error=_invalid_community_chat_body
+)
+def community_chat_settings_api(body: CommunityChatBody | None = None):
     """Read or update the optional household community deep-link."""
     from oneirodex.utils.security import validate_community_chat_url
 
@@ -150,13 +149,9 @@ def community_chat_settings_api():
         response.headers['Cache-Control'] = 'no-store'
         return response
 
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or set(data) != {'community_chat_url', 'community_chat_label'}:
-        return api_error('Provide the community URL and link label.', code='bad_request')
-    url = data.get('community_chat_url')
-    label = data.get('community_chat_label')
-    if not isinstance(url, str) or len(url) > 2048 or not isinstance(label, str) or len(label) > 120 or any(ord(ch) < 32 for ch in label):
-        return api_error('Community settings contain invalid text.', code='bad_request')
+    data = body.model_dump()
+    url = data['community_chat_url']
+    label = data['community_chat_label']
     ok, normalized = validate_community_chat_url(url.strip())
     if not ok:
         return api_error(normalized, code='bad_request')

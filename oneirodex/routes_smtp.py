@@ -12,21 +12,32 @@ from oneirodex import db
 from oneirodex.utils.smtp_test import SMTPTester
 from oneirodex import cache
 from oneirodex.utils.smtp_settings import smtp_public_state, validate_smtp_data
+from oneirodex.schemas.json_object import JsonObjectBody
+from oneirodex.utils.validation import validate_body
 
 smtp_bp = Blueprint('smtp', __name__)
+
+
+def _invalid_smtp_settings_body(_exc):
+    try:
+        validate_smtp_data(None, None)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    return api_error('A JSON settings object is required', code='bad_request')
 
 
 @smtp_bp.route('/api/admin/smtp/settings', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def smtp_settings_api():
+@validate_body(JsonObjectBody, methods={'PUT'}, on_error=_invalid_smtp_settings_body)
+def smtp_settings_api(body: JsonObjectBody | None = None):
     settings = global_settings_row()
     if request.method == 'GET':
         response = current_app.make_response(api_ok({'settings': smtp_public_state(settings)}))
         response.headers['Cache-Control'] = 'no-store'
         return response
     try:
-        data = validate_smtp_data(request.get_json(silent=True), settings)
+        data = validate_smtp_data(body.root, settings)
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     try:

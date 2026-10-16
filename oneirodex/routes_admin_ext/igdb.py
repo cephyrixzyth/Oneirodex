@@ -13,12 +13,23 @@ from oneirodex.utils.global_settings import (
 )
 from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.igdb_settings import igdb_public_state, validate_igdb_data
+from oneirodex.schemas.json_object import JsonObjectBody
+from oneirodex.utils.validation import validate_body
+
+
+def _invalid_igdb_settings_body(_exc):
+    try:
+        validate_igdb_data(None)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    return api_error('A JSON object containing only the client ID and secret is required', code='bad_request')
 
 
 @admin2_bp.route('/api/admin/igdb/settings', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def igdb_settings_api():
+@validate_body(JsonObjectBody, methods={'PUT'}, on_error=_invalid_igdb_settings_body)
+def igdb_settings_api(body: JsonObjectBody | None = None):
     try:
         settings = global_settings_row()
     except Exception:
@@ -26,7 +37,7 @@ def igdb_settings_api():
         return api_error('Could not load IGDB settings', code='internal')
     if request.method == 'PUT':
         try:
-            data = validate_igdb_data(request.get_json(silent=True))
+            data = validate_igdb_data(body.root)
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')
         try:

@@ -10,6 +10,8 @@ from oneirodex.utils.auth import admin_required
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.smtp import send_email_quiet
 from oneirodex.utils.admin_spa import render_admin_spa
+from oneirodex.schemas.admin_newsletter import NewsletterSendBody
+from oneirodex.utils.validation import validate_body
 
 @admin2_bp.route('/admin/newsletter', methods=['GET', 'POST'])
 @login_required
@@ -136,20 +138,21 @@ def newsletter_detail_state(newsletter_id):
         return api_error('Could not load newsletter.', code='internal')
 
 
+def _invalid_newsletter_body(exc):
+    errors = exc.errors(include_input=False, include_context=False, include_url=False)
+    if any(error['type'] in {'missing', 'extra_forbidden', 'dict_type'} for error in errors):
+        return api_error(
+            'Provide a subject, content and selected recipients.', code='bad_request'
+        )
+    return api_error('Enter a valid subject, message and recipients.', code='bad_request')
+
+
 @admin2_bp.route('/api/admin/newsletters', methods=['POST'])
 @login_required
 @admin_required
-def newsletter_send():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or set(payload) != {'subject', 'content', 'recipients'}:
-        return api_error('Provide a subject, content and selected recipients.', code='bad_request')
-    subject, content, recipients = (payload[key] for key in ('subject', 'content', 'recipients'))
-    if (not isinstance(subject, str) or not subject.strip() or len(subject) > 255
-            or '\r' in subject or '\n' in subject
-            or not isinstance(content, str) or not content.strip() or len(content) > 1048576
-            or not isinstance(recipients, list) or not recipients
-            or any(not isinstance(value, str) or not value or '\r' in value or '\n' in value for value in recipients)):
-        return api_error('Enter a valid subject, message and recipients.', code='bad_request')
+@validate_body(NewsletterSendBody, on_error=_invalid_newsletter_body)
+def newsletter_send(body: NewsletterSendBody):
+    subject, content, recipients = body.subject, body.content, body.recipients
     try:
         if not newsletter_readiness()['can_send']:
             return api_error('Enable newsletters and configure SMTP before sending.', code='conflict')

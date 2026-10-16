@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from oneirodex.utils.validation import (
     format_validation_errors,
+    read_json_body,
     validate_batch_body,
     validate_body,
 )
@@ -104,6 +105,16 @@ def test_absent_body_is_422_for_required_model(client):
     resp = client.post('/echo')
     assert resp.status_code == 422
     assert 'name' in resp.get_json()['detail']
+
+
+def test_read_json_body_preserves_missing_and_non_object_values():
+    app = Flask(__name__)
+    with app.test_request_context('/body', method='POST'):
+        assert read_json_body() is None
+    with app.test_request_context(
+        '/body', method='POST', data='[]', content_type='application/json'
+    ):
+        assert read_json_body() == []
 
 
 def test_detail_carries_no_input_url_or_ctx(client):

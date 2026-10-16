@@ -1,5 +1,6 @@
 # /oneirodex/routes_apis/library.py
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.validation import read_json_body
 from flask import current_app, jsonify, request, url_for
 from flask_login import login_required, current_user
 from oneirodex import db
@@ -38,7 +39,7 @@ _LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 @admin_required
 def create_library():
     """Create library metadata for the React form; the client queues its first scan."""
-    data = request.form if request.mimetype == 'multipart/form-data' else (request.get_json(silent=True) or {})
+    data = request.form if request.mimetype == 'multipart/form-data' else (read_json_body() or {})
     name = str(data.get('name') or '').strip()
     platform_key = str(data.get('platform') or '').strip()
     try:
@@ -194,7 +195,7 @@ def admin_library_detail(library_uuid):
     if request.method == 'GET':
         return api_ok(_library_public_fields(library))
 
-    data = request.form if request.mimetype == 'multipart/form-data' else (request.get_json(silent=True) or {})
+    data = request.form if request.mimetype == 'multipart/form-data' else (read_json_body() or {})
     if not isinstance(data, dict) and request.mimetype != 'multipart/form-data':
         return api_error('Provide valid library fields.', code='bad_request')
     name = str(data.get('name') or '').strip()

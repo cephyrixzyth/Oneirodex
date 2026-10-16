@@ -19,6 +19,8 @@ from oneirodex.utils.global_settings import (
 from oneirodex.utils.malware_scan import module_status as malware_module_status
 from oneirodex.utils.challenge_solver import challenge_solver_status, get_challenge_config, save_challenge_config
 from oneirodex.utils.feature_catalog import FEATURE_ENV_TOGGLES
+from oneirodex.schemas.admin_features import FeaturePreferencesBody, ChallengeSolverBody
+from oneirodex.utils.validation import validate_body
 
 from . import admin2_bp
 
@@ -76,14 +78,27 @@ def _scanner_public():
     }
 
 
+def _invalid_feature_preferences(_exc):
+    return api_error(
+        'Provide all seven feature preferences as booleans. Process flags cannot be changed here.',
+        code='bad_request',
+    )
+
+
+def _invalid_challenge_settings(_exc):
+    return api_error(
+        'Provide a boolean enable preference, URL, supported provider, and positive integer tier.',
+        code='bad_request',
+    )
+
+
 @admin2_bp.route('/api/admin/features/settings', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def features_settings_api():
-    if request.method == 'PUT':
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict) or set(data) != set(FEATURE_DB_FIELDS) or any(type(data[key]) is not bool for key in FEATURE_DB_FIELDS):
-            return api_error('Provide all seven feature preferences as booleans. Process flags cannot be changed here.', code='bad_request')
+@validate_body(FeaturePreferencesBody, methods={'PUT'}, on_error=_invalid_feature_preferences)
+def features_settings_api(body: FeaturePreferencesBody | None = None):
+    if body is not None:
+        data = body.model_dump()
         try:
             settings = global_settings_row_or_create()
             for key, value in data.items():
@@ -116,14 +131,9 @@ def features_settings_api():
 @admin2_bp.route('/api/admin/features/challenge', methods=['PUT'])
 @login_required
 @admin_required
-def features_challenge_save_api():
-    data = request.get_json(silent=True)
-    if (not isinstance(data, dict) or set(data) != {'enabled', 'url', 'provider', 'max_tier'}
-            or type(data.get('enabled')) is not bool or not isinstance(data.get('url'), str)
-            or len(data['url']) > 2048 or any(ord(c) < 32 for c in data['url'])
-            or data.get('provider') not in ('flaresolverr_compat', 'trawl', 'token_api')
-            or type(data.get('max_tier')) is not int or data['max_tier'] < 1):
-        return api_error('Provide a boolean enable preference, URL, supported provider, and positive integer tier.', code='bad_request')
+@validate_body(ChallengeSolverBody, on_error=_invalid_challenge_settings)
+def features_challenge_save_api(body: ChallengeSolverBody):
+    data = body.model_dump()
     try:
         config = save_challenge_config(data)
         return api_ok({'challenge': _challenge_public(config)})

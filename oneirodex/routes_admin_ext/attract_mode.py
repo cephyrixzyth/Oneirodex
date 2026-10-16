@@ -19,8 +19,8 @@ from oneirodex.utils.attract_mode_defaults import DEFAULT_ATTRACT_MODE_SETTINGS
 import json
 import logging
 from copy import deepcopy
-from pydantic import ValidationError
 from oneirodex.schemas.attract_mode import AttractModeBody
+from oneirodex.utils.validation import validate_body
 
 # Configuration constants
 MIN_IDLE_TIMEOUT = 10  # seconds
@@ -72,10 +72,21 @@ def persist_admin_attract(data):
     return settings
 
 
+def _invalid_admin_attract_body(exc):
+    fields = [
+        {'field': '.'.join(str(part) for part in error['loc']), 'message': error['msg']}
+        for error in exc.errors(include_input=False, include_context=False, include_url=False)
+    ]
+    return api_error(
+        'Check attract mode settings and try again', code='bad_request', detail=fields
+    )
+
+
 @admin2_bp.route('/api/admin/attract-mode/settings', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def admin_attract_settings_api():
+@validate_body(AttractModeBody, methods={'PUT'}, on_error=_invalid_admin_attract_body)
+def admin_attract_settings_api(body: AttractModeBody | None = None):
     if request.method == 'GET':
         try:
             response = current_app.make_response(api_ok({
@@ -90,12 +101,7 @@ def admin_attract_settings_api():
         except Exception:
             current_app.logger.warning('Could not load admin attract mode settings')
             return api_error('Could not load attract mode settings', code='internal')
-    try:
-        data = AttractModeBody.model_validate(request.get_json(silent=True)).model_dump()
-    except ValidationError as exc:
-        fields = [{'field': '.'.join(str(part) for part in error['loc']), 'message': error['msg']}
-                  for error in exc.errors(include_input=False, include_context=False, include_url=False)]
-        return api_error('Check attract mode settings and try again', code='bad_request', detail=fields)
+    data = body.model_dump()
     try:
         settings = persist_admin_attract(data)
     except Exception:

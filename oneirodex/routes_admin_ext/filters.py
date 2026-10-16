@@ -11,6 +11,8 @@ from oneirodex.utils.functions import normalize_case_sensitive
 from . import admin2_bp
 from oneirodex.utils.api_response import api_ok, api_error
 from oneirodex.utils.admin_spa import render_admin_spa
+from oneirodex.schemas.admin_filters import ScanFilterBody
+from oneirodex.utils.validation import validate_body
 
 
 def _filter_row(group):
@@ -25,10 +27,15 @@ def _filter_row(group):
     }
 
 
+def _invalid_scan_filter_body(_exc):
+    return api_error('Send a filter object.', code='bad_request')
+
+
 @admin2_bp.route('/api/admin/scan-filters', methods=['GET', 'POST'])
 @login_required
 @admin_required
-def scan_filters_api():
+@validate_body(ScanFilterBody, methods={'POST'}, on_error=_invalid_scan_filter_body)
+def scan_filters_api(body: ScanFilterBody | None = None):
     if request.method == 'GET':
         rows = db.session.execute(
             select(ReleaseGroup).order_by(ReleaseGroup.filter_pattern.asc(), ReleaseGroup.id.asc())
@@ -37,9 +44,7 @@ def scan_filters_api():
         response.headers['Cache-Control'] = 'no-store'
         return response
 
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return api_error('Send a filter object.', code='bad_request')
+    payload = body.model_dump()
     kind = str(payload.get('kind') or 'name').strip().lower()
     pattern = str(payload.get('pattern') or '').strip()
     if kind not in {'name', 'dir', 'regex'}:

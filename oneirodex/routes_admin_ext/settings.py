@@ -17,6 +17,8 @@ from oneirodex.utils.global_settings import (
     global_settings_row_or_create,
 )
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.schemas.json_object import JsonObjectBody
+from oneirodex.utils.validation import validate_body
 from oneirodex.utils.server_settings import (
     FIELD_MAPPINGS, SERVER_BOOLEAN_FIELDS, SERVER_FIELDS,
     SERVER_NUMBER_BOUNDS, SERVER_TEXT_LIMITS,
@@ -326,13 +328,22 @@ def validate_server_settings(data):
     return _validate_server_settings(data)
 
 
+def _invalid_server_settings_body(_exc):
+    try:
+        validate_server_settings(None)
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
+    return api_error('Provide only the server settings you want to change', code='bad_request')
+
+
 @admin2_bp.route('/api/admin/server-settings', methods=['GET', 'PUT'])
 @login_required
 @admin_required
-def server_settings_api():
+@validate_body(JsonObjectBody, methods={'PUT'}, on_error=_invalid_server_settings_body)
+def server_settings_api(body: JsonObjectBody | None = None):
     if request.method == 'PUT':
         try:
-            changes = validate_server_settings(request.get_json(silent=True))
+            changes = validate_server_settings(body.root)
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')
         try:

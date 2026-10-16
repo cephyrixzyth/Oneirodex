@@ -66,7 +66,9 @@ from pydantic import BaseModel, ValidationError
 
 from oneirodex.utils.api_response import api_error
 
-__all__ = ['validate_body', 'validate_batch_body', 'format_validation_errors']
+__all__ = [
+    'validate_body', 'validate_batch_body', 'format_validation_errors', 'read_json_body'
+]
 
 
 def _loc_to_field(loc: tuple[Any, ...]) -> str:
@@ -110,14 +112,24 @@ def format_validation_errors(exc: ValidationError) -> dict[str, Any]:
     return out
 
 
-def _json_object() -> Any:
-    """``request.get_json(silent=True)`` or ``{}`` when the body is missing."""
+def _json_object(*, empty_if_missing: bool = True) -> Any:
+    """Read JSON, optionally normalizing a missing or malformed body to ``{}``."""
     try:
         from flask import request
     except ImportError:  # Native routes parse their ASGI request explicitly.
         request = None
     payload = request.get_json(silent=True) if request is not None else None
-    return payload if payload is not None else {}
+    return payload if payload is not None or not empty_if_missing else {}
+
+
+def read_json_body() -> Any:
+    """Read raw JSON for authenticated routes that also accept multipart forms.
+
+    These mixed-content routes keep their existing business validation in the
+    view because a JSON-only model decorator cannot validate their form branch.
+    New JSON-only endpoints should use :func:`validate_body` instead.
+    """
+    return _json_object(empty_if_missing=False)
 
 
 def _refuse_unprocessable(
@@ -132,21 +144,33 @@ def _refuse_unprocessable(
     )
 
 
-def validate_body(model: type[BaseModel]) -> Callable:
+def validate_body(
+    model: type[BaseModel], *,
+    methods: set[str] | frozenset[str] | None = None,
+    on_error: Callable[[ValidationError], Any] | None = None,
+) -> Callable:
     """Validate the JSON request body against ``model`` before the view runs.
 
     On success the parsed model instance is injected as the ``body`` keyword
-    argument. On :class:`pydantic.ValidationError` the request never reaches
-    the view — it gets ``api_error('Invalid request.', code='unprocessable',
-    detail=...)`` with HTTP 422.
+    argument. By default, a :class:`pydantic.ValidationError` returns
+    ``api_error('Invalid request.', code='unprocessable', detail=...)`` with
+    HTTP 422. ``on_error`` can preserve a route's established error contract;
+    ``methods`` can limit validation to selected methods on a multi-method view.
     """
 
     def decorator(view: Callable) -> Callable:
         @functools.wraps(view)
         def wrapper(*args: Any, **kwargs: Any):
+            if methods is not None:
+                from flask import request
+
+                if request.method.upper() not in methods:
+                    return view(*args, **kwargs)
             try:
                 validated = model.model_validate(_json_object())
             except ValidationError as exc:
+                if on_error is not None:
+                    return on_error(exc)
                 return _refuse_unprocessable(exc)
             kwargs['body'] = validated
             return view(*args, **kwargs)
