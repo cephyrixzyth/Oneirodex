@@ -26,10 +26,10 @@ class ScanJobReadData:
             'note': 'Server returns path string only; Desktop companion opens host explorer.',
         }
 
-    def drain_if_idle(self, app):
+    def drain_if_idle(self, app, *, database_scope=None):
         from oneirodex.utils.scan_queue import maybe_drain_scan_queue
 
-        maybe_drain_scan_queue(app)
+        maybe_drain_scan_queue(app, database_scope=database_scope)
 
     def list_jobs(self, filters):
         from sqlalchemy import or_, select
@@ -94,7 +94,7 @@ def create_scan_job_reads_router(
             if response is None:
                 try:
                     try:
-                        data.drain_if_idle(flask_app)
+                        data.drain_if_idle(flask_app, database_scope=database_scope)
                     except Exception:  # best-effort safety drain, matching legacy poll
                         pass
                     from oneirodex.utils.scan_job_timing import (

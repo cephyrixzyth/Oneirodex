@@ -824,7 +824,7 @@ def drain_scan_queue(app=None, *, database_scope=None) -> ScanJob | None:
         return None
 
 
-def maybe_drain_scan_queue(app=None) -> ScanJob | None:
+def maybe_drain_scan_queue(app=None, *, database_scope=None) -> ScanJob | None:
     """Safety drain for status / Ops polls — skip while a scan is busy.
 
     Admin Libraries & scans polls ``GET /api/scan_jobs_status`` every few
@@ -836,7 +836,7 @@ def maybe_drain_scan_queue(app=None) -> ScanJob | None:
     """
     if is_scan_busy():
         return None
-    return drain_scan_queue(app)
+    return drain_scan_queue(app, database_scope=database_scope)
 
 
 def enqueue_library_refresh_jobs(libraries_with_folders: list[dict]) -> dict:

@@ -698,17 +698,33 @@ class TestGameDataFunctions:
     @patch('oneirodex.utils.clients.igdb.make_igdb_api_request')
     def test_retrieve_and_save_game_api_failure(self, mock_api, app, db_session, sample_library, sample_global_settings, monkeypatch):
         """Test retrieve_and_save_game handles API failure."""
+        import builtins
+
         from oneirodex.utils.services import scan_identify
         from oneirodex.utils import software_identify
+        from oneirodex.utils.clients import igdb as igdb_client
 
         monkeypatch.setattr(scan_identify, 'try_stage_d_store_identify', lambda **_kwargs: None)
         monkeypatch.setattr(scan_identify, 'fetch_steam_title_by_app_id', lambda *_args, **_kwargs: None)
         monkeypatch.setattr(software_identify, 'search_gog_games', lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(
+            igdb_client, 'get_runtime_config',
+            lambda: {'IGDB_API_ENDPOINT': 'https://example.invalid/igdb'},
+        )
         mock_api.return_value = {'error': 'API Error'}
         
         # Ensure the library exists and is committed to the database
         db_session.add(sample_library)
         db_session.commit()
+
+        original_import = builtins.__import__
+
+        def import_without_flask(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', import_without_flask)
         
         with app.app_context():
             with patch('builtins.print'):

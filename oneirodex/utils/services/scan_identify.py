@@ -1247,10 +1247,12 @@ def retrieve_and_save_game(
         except IntegrityError as e: 
             db.session.rollback()
             logger.error(f"Failed to save game due to a database error: {e}")
-            from flask import flash, has_request_context
+            from oneirodex.utils.gamenames import (
+                _flash_if_request_context, has_request_context,
+            )
 
             if has_request_context():
-                flash("Failed to save game due to a duplicate entry.")
+                _flash_if_request_context("Failed to save game due to a duplicate entry.")
             else:
                 logger.error("Failed to save game due to a duplicate entry.")
         return new_game
@@ -1470,10 +1472,12 @@ def retrieve_and_save_game(
                     pass
         except Exception as proposal_err:
             logger.warning(f"⚠️ Failed to write match proposal for {full_disk_path}: {proposal_err}")
-        from flask import flash, has_request_context
+        from oneirodex.utils.gamenames import (
+            _flash_if_request_context, has_request_context,
+        )
 
         if has_request_context():
-            flash("No game data found for the given name.")
+            _flash_if_request_context("No game data found for the given name.")
         else:
             logger.info("No game data found for the given name.")
         return None

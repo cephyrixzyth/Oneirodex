@@ -7245,7 +7245,9 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
         last_progress_update=None, next_run=None,
     )
     data = SimpleNamespace(
-        drain_if_idle=lambda _app: calls.append(('drain',)),
+        drain_if_idle=lambda _app, *, database_scope=None: calls.append(
+            ('drain', database_scope is not None),
+        ),
         list_jobs=lambda filters: calls.append(('list', filters)) or [job],
         queue_position=lambda job_id: calls.append(('position', job_id)) or 3,
     )
@@ -7270,7 +7272,7 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     assert row['created_at'] is None
     assert head.status_code == 200 and head.content == b''
     assert calls == [
-        ('drain',),
+        ('drain', True),
         ('list', {'statuses': ['Queued'], 'library_uuid': 'lib-1', 'q': 'Shelf'}),
         ('position', 'scan-1'),
     ] * 2

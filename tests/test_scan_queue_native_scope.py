@@ -81,6 +81,26 @@ def test_native_scan_queue_drain_passes_scope_to_promoted_worker(monkeypatch):
     assert calls == [('promote', True, True)]
 
 
+def test_native_scan_status_drain_passes_scope_to_queue_worker(monkeypatch):
+    calls = []
+    app = object()
+    database_scope = object()
+
+    monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
+    monkeypatch.setattr(scan_queue, 'reclaim_stale_busy_jobs', lambda: None)
+    monkeypatch.setattr(
+        scan_queue, 'promote_next_queued_scan',
+        lambda selected_app, *, database_scope: calls.append(
+            (selected_app is app, database_scope is not None),
+        ) or 'promoted',
+    )
+
+    assert scan_queue.maybe_drain_scan_queue(
+        app, database_scope=database_scope,
+    ) == 'promoted'
+    assert calls == [(True, True)]
+
+
 def test_native_scan_start_uses_framework_free_worker_and_preserves_hltb_flags(monkeypatch):
     calls = []
     app = object()
