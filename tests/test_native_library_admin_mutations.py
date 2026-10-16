@@ -217,7 +217,7 @@ def test_legacy_library_edit_missing_record_matches_not_found(native_client):
     assert data.calls == []
 
 
-def test_legacy_library_create_rejects_corrupt_image_without_server_error(native_client):
+def test_legacy_library_create_matches_legacy_server_error_for_corrupt_image(native_client):
     runtime, data = native_client
     response = _request(
         runtime, 'POST', '/admin/library/add',
@@ -227,7 +227,7 @@ def test_legacy_library_create_rejects_corrupt_image_without_server_error(native
         csrf_header=False,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 500
     assert 'Please correct the errors below.' in response.text
     assert data.calls == []
 

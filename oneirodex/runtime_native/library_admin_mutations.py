@@ -434,6 +434,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
 
             message = None
             category = 'error'
+            response_status = 200
             if response is None:
                 if too_large:
                     message = 'Request body is too large.'
@@ -485,6 +486,10 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                                 image = raw_image
                                     except (UnidentifiedImageError, OSError, ValueError):
                                         message = 'Please correct the errors below.'
+                                        # v1.1.8 let corrupt image decoding escape
+                                        # and returned HTTP 500. Keep the generic
+                                        # response body, while matching that status.
+                                        response_status = 500
                             if message is None:
                                 try:
                                     if action == 'create':
@@ -530,7 +535,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                     _set_session_cookie(response, app, auth)
                 else:
                     response = _legacy_library_form_error_response(
-                        app, auth, category, notice,
+                        app, auth, category, notice, status_code=response_status,
                     )
             return response
         finally:
@@ -538,7 +543,9 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                 await form.close()
 
 
-def _legacy_library_form_error_response(app, auth, category: str, message: str):
+def _legacy_library_form_error_response(
+    app, auth, category: str, message: str, *, status_code: int = 200,
+):
     """Render validation flashes inline, as the legacy library form did."""
     from pathlib import Path
     from starlette.responses import HTMLResponse
@@ -560,7 +567,7 @@ def _legacy_library_form_error_response(app, auth, category: str, message: str):
     previous_flashes = list(auth.session_data.pop('_flashes', []) or [])
     response = HTMLResponse(
         _shell_with_admin_flashes(shell, [*previous_flashes, (category, message)]),
-        status_code=200, headers={'Cache-Control': 'no-store'},
+        status_code=status_code, headers={'Cache-Control': 'no-store'},
     )
     if auth.should_set_session_cookie or previous_flashes:
         _set_session_cookie(response, app, auth)
