@@ -114,8 +114,25 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     bad_interval = normalize_schedule_fields(
         'interval', interval_value=0, interval_unit='minutes',
     )
-    assert bad_interval.get('error')
+    assert bad_interval['error'] == 'Number must be between 1 and 10080.'
     assert bad_interval['schedule_kind'] == 'once'
+
+    negative_interval = normalize_schedule_fields(
+        'interval', interval_value=-1, interval_unit='minutes',
+    )
+    assert negative_interval['error'] == 'Number must be between 1 and 10080.'
+
+    malformed_interval = normalize_schedule_fields(
+        'interval', interval_value='abc', interval_unit='minutes',
+    )
+    assert malformed_interval['error'] == (
+        'Not a valid integer value. Number must be between 1 and 10080.'
+    )
+
+    empty_interval = normalize_schedule_fields(
+        'interval', interval_value='', interval_unit='minutes',
+    )
+    assert empty_interval['error'] == 'Interval must be at least 1 minute.'
 
     over_limit = normalize_schedule_fields(
         'interval', interval_value=10081, interval_unit='minutes',
