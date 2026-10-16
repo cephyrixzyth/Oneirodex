@@ -80,7 +80,7 @@ def test_reference_sets_read_requires_admin():
     assert response.headers['location'].startswith('/login')
 
 
-def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract():
+def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract(monkeypatch):
     from oneirodex import db
 
     calls = []
@@ -92,7 +92,7 @@ def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract():
         return 'created', {'id': 17, 'name': 'Sample DAT'}
 
     client = _client(data=SimpleNamespace(read=lambda: {}, upload=upload))
-    db.session.rollback = lambda: None
+    monkeypatch.setattr(db.session, 'rollback', lambda: None)
     form = {'library_platform': 'NES', 'region': 'USA', 'source': 'no-intro'}
     files = {'file': ('game.dat', b'contents')}
     invalid = client.post('/api/admin/reference-sets', data=form, files=files)
