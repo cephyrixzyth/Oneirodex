@@ -824,6 +824,27 @@ class TestGameDataFunctions:
 
 class TestGameManagementFunctions:
     """Test game management functions like remove and delete."""
+
+    def test_remove_from_lib_accepts_native_config_without_flask(
+        self, db_session, sample_game, sample_global_settings,
+    ):
+        """Scan cleanup can delete a missing game in the Flask-free runtime."""
+        import builtins
+
+        game_uuid = sample_game.uuid
+        config = {'IMAGE_SAVE_PATH': '/tmp/oneirodex-test-images'}
+        real_import = builtins.__import__
+
+        def import_without_flask(name, *args, **kwargs):
+            if name == 'flask':
+                raise ModuleNotFoundError("No module named 'flask'")
+            return real_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=import_without_flask):
+            result = remove_from_lib(game_uuid, config=config)
+
+        assert result is True
+        assert db_session.query(Game).filter_by(uuid=game_uuid).first() is None
     
     def test_remove_from_lib_success(self, db_session, sample_game, sample_global_settings):
         """Test successful game removal from library."""

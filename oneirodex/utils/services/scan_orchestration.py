@@ -853,7 +853,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         if not remove_missing:
             continue
         try:
-            remove_from_lib(game.uuid)
+            remove_from_lib(game.uuid, config=app.config)
             scan_job_entry.removed_count += 1
             logger.info(
                 f"Removed game {game.name} as it no longer exists at {game.full_disk_path}"

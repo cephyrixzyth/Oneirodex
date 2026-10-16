@@ -560,6 +560,10 @@ class TestAdvancedScanScenarios:
                                         
                                         # Verify remove_from_lib was called for missing games
                                         assert mock_remove.call_count == 2  # Two missing games
+                                        assert all(
+                                            call.kwargs.get('config') is app.config
+                                            for call in mock_remove.call_args_list
+                                        )
                                         
                                         # Get the UUIDs that were passed to remove_from_lib
                                         removed_uuids = [call[0][0] for call in mock_remove.call_args_list]
