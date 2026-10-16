@@ -13,6 +13,29 @@ from oneirodex.runtime_native.session_compat import (
 )
 
 
+def test_ops_logs_use_native_joinedload_and_return_empty_events(monkeypatch):
+    from types import SimpleNamespace
+
+    class Result:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return []
+
+    class NativeSession:
+        def execute(self, statement):
+            assert statement is not None
+            return Result()
+
+    monkeypatch.setattr(
+        'oneirodex.runtime_native.db_session.native_db',
+        SimpleNamespace(session=NativeSession()),
+    )
+
+    assert admin_ops_reads.AdminOpsReadData().logs(50) == {'events': []}
+
+
 def test_admin_ops_data_uses_injected_configuration_without_flask_context(monkeypatch):
     app = SimpleNamespace(
         config={'SECRET_KEY': 'not-used', 'BASE_FOLDER_POSIX': '/games'},

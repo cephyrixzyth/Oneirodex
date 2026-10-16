@@ -144,6 +144,7 @@ def test_native_api_contract_and_asgi_imports_do_not_load_flask():
                 'import oneirodex.utils.role_catalog; '
                 'import oneirodex.utils.server_settings; '
                 'import oneirodex.utils.setup; '
+                'import oneirodex.utils.game_mods; '
                 'assert "flask" not in sys.modules; '
                 'assert "flask_caching" not in sys.modules; '
                 'assert "jinja2" not in sys.modules; '
@@ -400,6 +401,7 @@ class BlockFrameworkImports(MetaPathFinder):
 sys.meta_path.insert(0, BlockFrameworkImports())
 import oneirodex.utils.arr_hardlink_pipeline
 import oneirodex.utils.rbac
+import oneirodex.utils.bios_install
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
 assert not any(name == 'jinja2' or name.startswith('jinja2.') for name in sys.modules)
 '''

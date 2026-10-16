@@ -12,12 +12,13 @@ from .request_auth import request_auth_context
 class AdminOpsReadData:
     def logs(self, limit):
         from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import SystemEvents
 
         rows = db.session.execute(
-            select(SystemEvents).options(db.joinedload(SystemEvents.user))
+            select(SystemEvents).options(joinedload(SystemEvents.user))
             .order_by(SystemEvents.timestamp.desc()).limit(limit),
         ).scalars().all()
         return {'events': [
