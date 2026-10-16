@@ -130,7 +130,8 @@ class LibraryAdminMutationData:
         )
         return LibraryReadData.public_fields(library)
 
-    def start_scan(self, *, library, folder: str, options: dict, app):
+    def start_scan(self, *, library, folder: str, options: dict, app,
+                   database_scope=None):
         from oneirodex.utils.scan_queue import start_or_queue_scan
 
         return start_or_queue_scan(
@@ -139,6 +140,7 @@ class LibraryAdminMutationData:
             download_missing_images=options['download_missing_images'],
             force_updates_extras_scan=options['force_updates_extras'],
             queue_policy=options['queue_policy'], allow_force=True, app=app,
+            database_scope=database_scope,
             fetch_hltb=options.get('fetch_hltb', False),
             force_hltb_refetch=options.get('force_hltb_refetch', False),
             schedule=options.get('schedule'),
@@ -610,11 +612,17 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             elif action == 'update':
                 response = await _update(request, flask_app, data, auth.user, library_uuid)
             elif action == 'single_scan':
-                response = await _single_scan(request, flask_app, data, auth.user)
+                response = await _single_scan(
+                    request, flask_app, data, auth.user,
+                    database_scope=database_scope,
+                )
             elif action == 'refresh_all':
                 response = await _refresh_all(request, flask_app, data, database_scope=database_scope)
             elif action == 'scan':
-                response = await _scan(request, flask_app, data, auth.user)
+                response = await _scan(
+                    request, flask_app, data, auth.user,
+                    database_scope=database_scope,
+                )
             elif action == 'delete_single':
                 response = await _delete_single(
                     request, flask_app, data, auth.user, library_uuid,
@@ -755,7 +763,7 @@ async def _update(request, app, data, user, library_uuid):
     return JSONResponse(api_ok_payload(result))
 
 
-async def _single_scan(request, app, data, user):
+async def _single_scan(request, app, data, user, *, database_scope=None):
     from oneirodex.utils.scan_queue import (
         FORCE_PARALLEL_RISK, normalize_schedule_fields,
         parse_force_parallel, parse_queue_policy,
@@ -864,7 +872,10 @@ async def _single_scan(request, app, data, user):
         'schedule_fields': schedule_fields,
     }
     try:
-        result = data.start_scan(library=library, folder=resolved, options=options, app=app)
+        result = data.start_scan(
+            library=library, folder=resolved, options=options, app=app,
+            database_scope=database_scope,
+        )
     except Exception:
         data.rollback()
         return _error('Scan request could not be queued.', 'internal', 500,
@@ -944,7 +955,7 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         return _error('Refresh-all could not be queued.', 'internal', 500)
 
 
-async def _scan(request, app, data, user):
+async def _scan(request, app, data, user, *, database_scope=None):
     from oneirodex.utils.library_batch import (
         LIBRARY_BATCH_UUID_CAP, parse_bool_flag, parse_library_uuids,
     )
@@ -980,7 +991,10 @@ async def _scan(request, app, data, user):
             skipped += 1
             continue
         try:
-            outcome = data.start_scan(library=library, folder=folder, options=options, app=app)
+            outcome = data.start_scan(
+                library=library, folder=folder, options=options, app=app,
+                database_scope=database_scope,
+            )
             status = outcome.get('status')
             row = {'uuid': uuid, 'name': library.name, 'ok': status in ('started', 'queued'),
                    'status': status, 'job_id': outcome.get('job_id'), 'position': outcome.get('position'),

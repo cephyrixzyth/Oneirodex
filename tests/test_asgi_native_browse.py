@@ -7181,7 +7181,7 @@ def test_lazy_asgi_dispatches_single_library_scan_natively(monkeypatch):
         allowed_bases=lambda _app: ['/safe/root'],
         safe_path=lambda path, _bases: (path == '/safe/root/one', None),
         scan_mode_for_path=lambda _path, _mode: 'folders',
-        start_scan=lambda *, library, folder, options, app: calls.append((library.uuid, folder, options)) or {
+        start_scan=lambda *, library, folder, options, app, database_scope=None: calls.append((library.uuid, folder, options, database_scope)) or {
             'status': 'queued', 'job_id': 'scan-17', 'position': 1, 'message': 'queued',
         },
     )
@@ -7861,7 +7861,7 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
         def current_step(self):
             return 1
 
-        def transition(self, body, _app):
+        def transition(self, body, _app, *, database_scope=None):
             calls.append(body)
             return {'step': 2, 'next_url': '/setup/smtp'}, None, admin
 

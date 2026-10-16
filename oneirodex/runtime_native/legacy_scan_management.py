@@ -86,7 +86,7 @@ class LegacyScanManagementData:
 
         return is_scan_busy()
 
-    def start_scan(self, *, library, folder, options, app):
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
         from oneirodex.utils.scan_queue import start_or_queue_scan
 
         return start_or_queue_scan(
@@ -97,6 +97,7 @@ class LegacyScanManagementData:
             fetch_hltb=options['fetch_hltb'], force_hltb_refetch=options['force_hltb_refetch'],
             schedule=options.get('schedule'), schedule_fields=options.get('schedule_fields'),
             queue_policy=options['queue_policy'], allow_force=options['allow_force'], app=app,
+            database_scope=database_scope,
         )
 
     def scan_patterns(self):
@@ -209,7 +210,10 @@ def create_legacy_scan_management_router(
                         response = JSONResponse(payload, status_code=status)
 
                 if response is None:
-                    response = await _apply_action(request, form, app, data, auth)
+                    response = await _apply_action(
+                        request, form, app, data, auth,
+                        database_scope=database_scope,
+                    )
                 if auth is not None and auth.should_set_session_cookie:
                     _set_session_cookie(response, app, auth)
                 from oneirodex.utils.security_headers import security_header_values
@@ -222,7 +226,7 @@ def create_legacy_scan_management_router(
     return router
 
 
-async def _apply_action(request, form, app, data, auth):
+async def _apply_action(request, form, app, data, auth, *, database_scope=None):
     from starlette.responses import JSONResponse
 
     action = str(form.get('submit') or '')
@@ -264,7 +268,10 @@ async def _apply_action(request, form, app, data, auth):
         auth.session_data['active_tab'] = 'unmatched'
         location = '/scan_management?active_tab=unmatched'
     elif action in {'AutoScan', 'ManualScan'}:
-        location = await _scan_action(form, app, data, auth, action, library_uuid)
+        location = await _scan_action(
+            form, app, data, auth, action, library_uuid,
+            database_scope=database_scope,
+        )
     else:
         flashes.append(('error', 'Unrecognized action.'))
         location = '/scan_management'
@@ -273,7 +280,7 @@ async def _apply_action(request, form, app, data, auth):
     return response
 
 
-async def _scan_action(form, app, data, auth, action, library_uuid):
+async def _scan_action(form, app, data, auth, action, library_uuid, *, database_scope=None):
     from oneirodex.utils.scan_queue import parse_force_parallel, parse_queue_policy
 
     manual = action == 'ManualScan'
@@ -330,7 +337,10 @@ async def _scan_action(form, app, data, auth, action, library_uuid):
             return redirect
     if not manual or data.busy():
         try:
-            result = data.start_scan(library=library, folder=resolved, options=options, app=app)
+            result = data.start_scan(
+                library=library, folder=resolved, options=options, app=app,
+                database_scope=database_scope,
+            )
         except Exception:
             result = {'status': 'rejected', 'message': 'Scan request could not be queued.'}
         category = 'info' if result.get('status') in {'started', 'queued'} else 'danger'

@@ -42,8 +42,8 @@ class FakeLibraryAdminMutations:
             'scan_depth': values['scan_depth'],
         }
 
-    def start_scan(self, *, library, folder, options, app):
-        self.calls.append(('scan', library.uuid, folder, options))
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
+        self.calls.append(('scan', library.uuid, folder, options, database_scope))
         return {'status': 'queued', 'job_id': 'scan-job', 'position': 2, 'message': 'queued'}
 
     def resolve_scan_path(self, app, folder, library_root):

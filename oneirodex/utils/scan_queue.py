@@ -468,7 +468,8 @@ def _has_older_busy_scan(candidate: ScanJob) -> bool:
 
 
 def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
-                      database_scope=None):
+                      database_scope=None, fetch_hltb: bool = False,
+                      force_hltb_refetch: bool = False):
     """Spawn daemon thread that runs ``scan_and_add_games`` for an existing job."""
     from oneirodex.utils.services.scan_orchestration import scan_and_add_games
 
@@ -497,6 +498,8 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
                 existing_job=existing,
                 download_missing_images=download_missing_images,
                 force_updates_extras_scan=force_updates_extras,
+                fetch_hltb=fetch_hltb,
+                force_hltb_refetch=force_hltb_refetch,
                 schedule=schedule,
                 force_parallel=force_parallel,
                 database_scope=database_scope,
@@ -521,6 +524,7 @@ def start_or_queue_scan(
     queue_policy: str = 'queue',
     allow_force: bool = False,
     app=None,
+    database_scope=None,
 ) -> dict:
     """Accept a scan request: start now, queue, force-parallel, or reject.
 
@@ -636,35 +640,13 @@ def start_or_queue_scan(
     except Exception:
         pass
 
-    # HLTB flags are request-scoped for the worker thread (not ScanJob columns).
-    job_id = job.id
-
-    def _run_with_hltb():
-        with flask_app.app_context():
-            from oneirodex.utilities import scan_and_add_games
-
-            existing = db.session.get(ScanJob, job_id)
-            if not existing:
-                return
-            scan_and_add_games(
-                folder_path,
-                scan_mode=scan_mode,
-                library_uuid=library_uuid,
-                remove_missing=remove_missing,
-                existing_job=existing,
-                download_missing_images=download_missing_images,
-                force_updates_extras_scan=force_updates_extras_scan,
-                fetch_hltb=fetch_hltb,
-                force_hltb_refetch=force_hltb_refetch,
-                schedule=schedule,
-                force_parallel=force,
-            )
-
-    Thread(
-        target=_run_with_hltb,
-        daemon=True,
-        name=f'oneirodex-scan-{job_id[:8]}',
-    ).start()
+    # HLTB flags are request-scoped (not ScanJob columns). Native callers
+    # supply a worker-local DB scope so the thread stays independent of Flask.
+    _start_job_thread(
+        job, flask_app, force_parallel=force,
+        database_scope=database_scope, fetch_hltb=fetch_hltb,
+        force_hltb_refetch=force_hltb_refetch,
+    )
 
     if force and busy:
         message = (

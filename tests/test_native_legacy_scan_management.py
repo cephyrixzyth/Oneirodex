@@ -51,7 +51,7 @@ class FakeScanManagementData:
     def busy(self):
         return False
 
-    def start_scan(self, *, library, folder, options, app):
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
         self.calls.append(('start_scan', library.uuid, folder, options))
         return {'status': 'queued', 'message': 'Scan queued.'}
 

@@ -22,7 +22,7 @@ class SetupTransitionData:
 
         return get_current_setup_step()
 
-    def transition(self, body, flask_app):
+    def transition(self, body, flask_app, *, database_scope=None):
         from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
@@ -216,6 +216,7 @@ class SetupTransitionData:
                 result = start_or_queue_scan(
                     folder_path=folder, library_uuid=library.uuid, scan_mode=body['scan_mode'],
                     queue_policy='queue', force_parallel=False, allow_force=False, app=flask_app,
+                    database_scope=database_scope,
                 )
                 scan_status = result.get('status')
             except Exception as exc:  # noqa: BLE001 — library remains usable without a queued scan
@@ -350,7 +351,9 @@ def create_setup_transition_router(
                 )
             else:
                 try:
-                    result, failure, new_admin = data.transition(body, flask_app)
+                    result, failure, new_admin = data.transition(
+                        body, flask_app, database_scope=database_scope,
+                    )
                 except Exception as exc:  # noqa: BLE001 — do not expose transition details
                     flask_app.logger.error('Setup form transition failed: %s', type(exc).__name__)
                     result, failure, new_admin = None, (
@@ -439,7 +442,9 @@ def create_setup_transition_router(
                         )
                     else:
                         try:
-                            result, failure, new_admin = data.transition(body, flask_app)
+                            result, failure, new_admin = data.transition(
+                                body, flask_app, database_scope=database_scope,
+                            )
                         except Exception as exc:  # noqa: BLE001
                             flask_app.logger.error('Setup transition failed: %s', type(exc).__name__)
                             result, failure, new_admin = None, (

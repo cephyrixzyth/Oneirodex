@@ -194,7 +194,7 @@ async def _manual_identify_list(request, app, data, auth):
             force_updates_extras_scan=body.force_updates_extras_scan,
             fetch_hltb=body.fetch_hltb, force_hltb_refetch=body.force_hltb_refetch,
             schedule=None, queue_policy=body.queue_policy, allow_force=True,
-            app=app,
+            app=app, database_scope=database_scope,
         )
         if result.get('status') not in ('started', 'queued'):
             return _error(409, 'conflict', result.get('message') or 'Manual scan could not be queued')
