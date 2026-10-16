@@ -363,6 +363,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
     from .oidc_status import _login_redirect
     from oneirodex.platform import LibraryPlatform
     from oneirodex.utils.role_catalog import normalize_role
+    from starlette.responses import HTMLResponse
 
     target = '/admin/library/add' if action == 'create' else f'/admin/library/edit/{library_uuid}'
     scope = database_scope(app) if database_scope else nullcontext()
@@ -453,7 +454,9 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                     elif len(name) > 255:
                         message = 'Please correct the errors below.'
                     elif platform is None:
-                        message = f'Invalid platform selected: {platform_key}'
+                        # WTForms rejects values outside the SelectField choices
+                        # before the legacy route reaches its explicit KeyError.
+                        message = 'Please correct the errors below.'
                     elif depth not in (1, 2):
                         message = 'Please correct the errors below.'
                     else:
@@ -492,7 +495,15 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     else:
                                         library = data.library(str(library_uuid))
                                         if library is None:
-                                            message = 'Library not found.'
+                                            response = HTMLResponse(
+                                                '<!doctype html>\n<html lang=en>\n'
+                                                '<title>404 Not Found</title>\n'
+                                                '<h1>Not Found</h1>\n'
+                                                '<p>The requested URL was not found on the server. '
+                                                'If you entered the URL manually please check your spelling '
+                                                'and try again.</p>\n',
+                                                status_code=404,
+                                            )
                                         else:
                                             data.update(
                                                 library, name=name, platform=platform,
@@ -500,7 +511,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                                 image=(filename, image) if image is not None else None,
                                                 app=app, user=auth.user,
                                             )
-                                    if message is None:
+                                    if message is None and response is None:
                                         message, category = 'Library saved successfully!', 'success'
                                 except Exception:
                                     from oneirodex.runtime_native.db_session import native_db as db
@@ -508,17 +519,50 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     db.session.rollback()
                                     message = 'Failed to save library. Please try again.'
             if response is None:
-                flashes = list(auth.session_data.get('_flashes') or [])
-                flashes.append((category, message or 'Please correct the errors below.'))
-                auth.session_data['_flashes'] = flashes
-                response = RedirectResponse(
-                    '/libraries' if category == 'success' else target, status_code=302,
-                )
-                _set_session_cookie(response, app, auth)
+                notice = message or 'Please correct the errors below.'
+                if category == 'success':
+                    flashes = list(auth.session_data.get('_flashes') or [])
+                    flashes.append((category, notice))
+                    auth.session_data['_flashes'] = flashes
+                    response = RedirectResponse('/libraries', status_code=302)
+                    _set_session_cookie(response, app, auth)
+                else:
+                    response = _legacy_library_form_error_response(
+                        app, auth, category, notice,
+                    )
             return response
         finally:
             if form is not None:
                 await form.close()
+
+
+def _legacy_library_form_error_response(app, auth, category: str, message: str):
+    """Render validation flashes inline, as the legacy library form did."""
+    from pathlib import Path
+    from starlette.responses import HTMLResponse
+
+    from .admin_pilot import _shell_with_admin_flashes
+
+    shell_path = (
+        Path(__file__).resolve().parents[1]
+        / 'static' / 'dist' / 'admin-pilot' / 'index.html'
+    )
+    try:
+        shell = shell_path.read_text(encoding='utf-8')
+    except OSError:
+        shell = (
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<title>Libraries · Oneirodex Admin</title></head><body><main>'
+            '<div id="admin-app-root"></div></main></body></html>'
+        )
+    previous_flashes = list(auth.session_data.pop('_flashes', []) or [])
+    response = HTMLResponse(
+        _shell_with_admin_flashes(shell, [*previous_flashes, (category, message)]),
+        status_code=200, headers={'Cache-Control': 'no-store'},
+    )
+    if auth.should_set_session_cookie or previous_flashes:
+        _set_session_cookie(response, app, auth)
+    return response
 
 
 async def _handle(request, flask_app, data, *, action, find_user, find_token,

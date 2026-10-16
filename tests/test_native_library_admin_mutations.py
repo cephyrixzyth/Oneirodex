@@ -169,6 +169,54 @@ def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client
     assert [call[0] for call in data.calls] == ['create']
 
 
+@pytest.mark.parametrize(
+    ('form', 'message'),
+    [
+        ({'platform': 'PCWIN', 'scan_depth': '1', 'watch_enabled': 'default'},
+         'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'NOT_A_PLATFORM', 'scan_depth': '1',
+          'watch_enabled': 'default'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '9',
+          'watch_enabled': 'default'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '1',
+          'watch_enabled': 'invalid'}, 'Please correct the errors below.'),
+    ],
+)
+def test_legacy_library_invalid_create_form_renders_matching_error_page(native_client, form, message):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', **form},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 200
+    assert 'id="admin-app-root"' in response.text
+    assert message in response.text
+    assert data.calls == []
+
+
+def test_legacy_library_edit_missing_record_matches_not_found(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/edit/not-present',
+        data={'csrf_token': '__csrf__', 'name': 'Updated library',
+              'platform': 'PCWIN', 'scan_depth': '2', 'watch_enabled': 'off'},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 404
+    assert response.headers['content-type'].startswith('text/html')
+    assert response.text == (
+        '<!doctype html>\n<html lang=en>\n'
+        '<title>404 Not Found</title>\n'
+        '<h1>Not Found</h1>\n'
+        '<p>The requested URL was not found on the server. If you entered the URL manually '
+        'please check your spelling and try again.</p>\n'
+    )
+    assert data.calls == []
+
+
 def test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter(native_client):
     runtime, data = native_client
     response = _request(
