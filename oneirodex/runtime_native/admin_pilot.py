@@ -7,6 +7,7 @@ zero-Flask runtime.
 """
 from __future__ import annotations
 
+from html import escape
 import inspect
 from pathlib import Path
 from typing import Callable
@@ -159,6 +160,7 @@ def create_admin_pilot(
                 find_token=find_token, commit_token_touch=commit_token_touch,
                 login_manager=manager,
             )
+            flashes = []
             if auth.user is None:
                 response = _login_redirect(flask_app, request, manager, auth)
             elif normalize_role(getattr(auth.user, 'role', None) or '') != 'admin':
@@ -171,8 +173,10 @@ def create_admin_pilot(
                     'This token does not have the admin scope', 'forbidden', 403,
                 )
             else:
-                response = Response(shell, media_type='text/html')
-            if auth.should_set_session_cookie:
+                flashes = list(auth.session_data.pop('_flashes', []) or [])
+                response_shell = _shell_with_admin_flashes(shell, flashes)
+                response = Response(response_shell, media_type='text/html')
+            if auth.should_set_session_cookie or flashes:
                 _set_session_cookie(response, flask_app, auth)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'
@@ -390,6 +394,31 @@ def create_admin_pilot(
         return response
 
     return app
+
+
+def _shell_with_admin_flashes(shell: str, flashes) -> str:
+    """Render queued legacy flash notices into the React-owned admin shell."""
+    if not flashes:
+        return shell
+    notices = []
+    for item in flashes:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            continue
+        category, message = item
+        category = str(category or 'info').lower()
+        is_error = category in {'danger', 'error', 'warning'}
+        class_name = 'od-page-status--error' if is_error else 'od-page-status--empty'
+        role = 'alert' if is_error else 'status'
+        notices.append(
+            f'<div class="od-page-status {class_name}" role="{role}">'
+            f'<p class="od-page-status__message">{escape(str(message))}</p></div>'
+        )
+    root_marker = '<div id="admin-app-root"'
+    root_offset = shell.find(root_marker)
+    if root_offset < 0 or not notices:
+        return shell
+    container = '<div class="od-admin-session-flashes">' + ''.join(notices) + '</div>\n'
+    return shell[:root_offset] + container + shell[root_offset:]
 
 
 def _native_json_error(message: str, code: str, status: int) -> Response:

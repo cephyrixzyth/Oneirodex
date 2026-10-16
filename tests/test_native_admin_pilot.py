@@ -110,6 +110,39 @@ def test_admin_shell_head_matches_get_without_body(pilot):
     assert head_response.headers['cache-control'] == 'no-store'
 
 
+def test_admin_shell_consumes_and_escapes_queued_flash_messages(pilot):
+    flask_app, app = pilot
+    user = flask_app._native_users[7]
+    serializer = flask_app.session_interface.get_signing_serializer(flask_app)
+    cookie = serializer.dumps({
+        '_user_id': user.get_id(), '_fresh': True,
+        '_flashes': [
+            ('success', 'Invite quota updated.'),
+            ('danger', '<script>alert(1)</script>'),
+        ],
+    })
+
+    response = fetch(app, '/admin/manage_invites', cookie)
+    assert response.status_code == 200
+    assert 'Invite quota updated.' in response.text
+    assert '&lt;script&gt;alert(1)&lt;/script&gt;' in response.text
+    assert '<script>alert(1)</script>' not in response.text
+    updated_cookie = response.cookies.get('session')
+    assert updated_cookie
+    assert '_flashes' not in serializer.loads(updated_cookie)
+
+    next_page = fetch(app, '/admin/manage_invites', updated_cookie)
+    assert 'Invite quota updated.' not in next_page.text
+
+
+@pytest.mark.parametrize('path', ['/admin/help', '/admin/smtp_settings', '/admin/igdb_settings'])
+def test_admin_page_paths_render_the_shell_when_compatibility_posts_share_the_path(pilot, path):
+    flask_app, app = pilot
+    response = fetch(app, path, signed_cookie(flask_app, 'admin'))
+    assert response.status_code == 200
+    assert 'id="admin-app-root"' in response.text
+
+
 def test_native_admin_bootstrap_does_not_call_flask_login_user_loader(pilot):
     flask_app, app = pilot
     flask_app.login_manager._user_callback = lambda _identity: (_ for _ in ()).throw(

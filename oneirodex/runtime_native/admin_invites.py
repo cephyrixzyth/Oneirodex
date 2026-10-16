@@ -154,6 +154,7 @@ async def _adjust(request, data):
 async def _adjust_form(request, form, data, auth):
     from html import escape
     from pathlib import Path
+    from .account_avatar_upload import _flash
     from pydantic import ValidationError
     from starlette.responses import HTMLResponse, RedirectResponse, Response
     from oneirodex.schemas.invites import AdjustInviteQuotaBody
@@ -164,11 +165,13 @@ async def _adjust_form(request, form, data, auth):
     page_message = None
     page_category = 'success'
     if not user_id:
+        _flash(auth.session_data, 'error', 'User ID is required.')
         return RedirectResponse('/admin/manage_invites', status_code=302)
     else:
         try:
             number = int(form.get('invites_number') or '0')
         except (TypeError, ValueError):
+            _flash(auth.session_data, 'error', 'Invalid invite number provided. Please enter a valid number.')
             return RedirectResponse('/admin/manage_invites', status_code=302)
         else:
             try:
@@ -176,6 +179,11 @@ async def _adjust_form(request, form, data, auth):
                     'user_id': user_id, 'invites_number': number,
                 })
             except ValidationError:
+                message = (
+                    'Invalid user ID format.' if not _valid_uuid(user_id)
+                    else 'Invite number must be between -1000 and 1000.'
+                )
+                _flash(auth.session_data, 'error', message)
                 return RedirectResponse('/admin/manage_invites', status_code=302)
             else:
                 try:
