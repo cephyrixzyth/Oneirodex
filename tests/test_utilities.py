@@ -536,10 +536,10 @@ class TestAdvancedScanScenarios:
                             {'name': 'Dummy Game 1', 'full_path': '/dummy/game1'},
                             {'name': 'Dummy Game 2', 'full_path': '/dummy/game2'}
                         ]
-                        with patch('oneirodex.utils.services.scan_orchestration.get_game_names_from_folder', return_value=dummy_games):
-                            with patch('oneirodex.utils.services.scan_orchestration.load_scanning_filter_patterns', return_value=([], [])):
+                        with patch('oneirodex.utils.gamenames.get_game_names_from_folder', return_value=dummy_games):
+                            with patch('oneirodex.utils.helpers.scan_filters.load_scanning_filter_patterns', return_value=([], [])):
                                 with patch('oneirodex.utils.scanning.process_game_with_fallback', return_value=True):  # Mock successful processing
-                                    with patch('oneirodex.utils.services.scan_orchestration.remove_from_lib') as mock_remove:
+                                    with patch('oneirodex.utils.game_core.remove_from_lib') as mock_remove:
                                         
                                         # Configure path existence - only first game exists
                                         def exists_side_effect(path):
@@ -627,8 +627,8 @@ class TestAdvancedScanScenarios:
             with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists', return_value=True):
                     with patch('os.access', return_value=True):
-                        with patch('oneirodex.utils.services.scan_orchestration.get_game_names_from_folder', return_value=[]):
-                            with patch('oneirodex.utils.services.scan_orchestration.load_scanning_filter_patterns', return_value=([], [])):
+                        with patch('oneirodex.utils.gamenames.get_game_names_from_folder', return_value=[]):
+                            with patch('oneirodex.utils.helpers.scan_filters.load_scanning_filter_patterns', return_value=([], [])):
                                 real_commit = db_session.commit
                                 with patch('oneirodex.utils.services.scan_orchestration.db.session.commit') as mock_commit:
                                     from sqlalchemy.exc import SQLAlchemyError

@@ -1,6 +1,6 @@
 """Store connection status, sync jobs and repair routes (LIB-04).
 
-Bare Flask app, never the app factory: runs on in-memory SQLite, or on a
+Bare Flask app, never the app factory: runs on per-test SQLite, or on a
 dedicated loopback PostgreSQL given as P04_TEST_DATABASE_URL (validated by the
 shared test-database guard). Provider calls are replaced by fakes; nothing here
 reaches a network.
@@ -9,13 +9,14 @@ import contextvars
 import json
 import os
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import requests
 from flask import Blueprint, Flask, g
 from flask_login import LoginManager, UserMixin
-from sqlalchemy import delete as sa_delete, func, select, text, update
+from sqlalchemy import delete as sa_delete, event, func, select, text, update
 
 from oneirodex import db
 from oneirodex.models import StoreAccount, StoreSyncJob, UserOwnedTitle
@@ -30,16 +31,41 @@ MEMBER, OTHER, ADMIN = 1, 2, 3
 EPIC_DEVICE = json.dumps({'account_id': 'a', 'device_id': 'd', 'secret': 's'})
 
 
-def test_database_url():
+def test_database_url(sqlite_path=None):
     value = os.environ.get('P04_TEST_DATABASE_URL')
     if value:
         from database_test_guard import validate_test_database_url
         from sqlalchemy.engine import make_url
         validate_test_database_url(value)
         assert make_url(value).host == '127.0.0.1'
-    return value or 'sqlite://'
+    if value:
+        return value
+    if sqlite_path is not None:
+        return f"sqlite:///{Path(sqlite_path).as_posix()}"
+    return 'sqlite://'
 
 test_database_url.__test__ = False
+
+
+def _use_explicit_sqlite_transactions(engine):
+    """Give SQLite the same transaction boundaries this suite expects.
+
+    Python 3.12+ exposes sqlite3's legacy transaction mode by default, where
+    SELECT does not begin a transaction. These tests exercise independent
+    Flask/native sessions against the same test database; force SQLAlchemy
+    to issue BEGIN so rollbacks and sync fencing have consistent semantics on
+    every supported Python/SQLite combination.
+    """
+    if engine.dialect.name != 'sqlite':
+        return
+
+    @event.listens_for(engine, 'connect')
+    def disable_driver_transaction_control(dbapi_connection, _record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, 'begin')
+    def begin_sqlite_transaction(connection):
+        connection.exec_driver_sql('BEGIN')
 
 
 class Person(UserMixin):
@@ -60,10 +86,14 @@ def settings(monkeypatch):
 
 
 @pytest.fixture
-def app(settings):
+def app(settings, tmp_path):
     from oneirodex.routes_apis import ownership, ownership_admin
     flask_app = Flask(__name__)
-    flask_app.config.update(TESTING=True, SECRET_KEY='test-only', SQLALCHEMY_DATABASE_URI=test_database_url())
+    flask_app.config.update(
+        TESTING=True,
+        SECRET_KEY='test-only',
+        SQLALCHEMY_DATABASE_URI=test_database_url(tmp_path / 'store-sync.sqlite'),
+    )
     db.init_app(flask_app)
     people = {str(MEMBER): Person(MEMBER, 'user'), str(OTHER): Person(OTHER, 'user'), str(ADMIN): Person(ADMIN, 'admin')}
     login = LoginManager(flask_app)
@@ -88,6 +118,8 @@ def app(settings):
     for path, view, methods in routes:
         flask_app.add_url_rule(path, view_func=view, methods=methods)
     with flask_app.app_context():
+        _use_explicit_sqlite_transactions(db.engine)
+        engine = db.engine
         with db.engine.begin() as conn:
             conn.exec_driver_sql('CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR(64))')
             conn.exec_driver_sql('CREATE TABLE games (uuid VARCHAR(36) PRIMARY KEY, name TEXT, library_uuid VARCHAR(36), steam_app_id INTEGER)')
@@ -99,6 +131,7 @@ def app(settings):
         with db.engine.begin() as conn:
             for name in ('store_sync_jobs', 'user_owned_titles', 'store_accounts', 'games', 'users'):
                 conn.exec_driver_sql('DROP TABLE ' + name)
+        engine.dispose()
 
 
 def _client(app, uid):
