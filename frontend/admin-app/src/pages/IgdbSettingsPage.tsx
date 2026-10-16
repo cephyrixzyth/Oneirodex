@@ -63,6 +63,11 @@ export function IgdbSettingsPage() {
   async function save(event: FormEvent) {
     event.preventDefault()
     if (loading || loadFailed || busy) return
+    const keepSavedSecret = secret === '' && secretPresent
+    if (clientId.length < 20 || (!keepSavedSecret && secret.length < 20)) {
+      setError('Client ID and secret must be at least 20 characters long.')
+      return
+    }
     setBusy(true)
     setError('')
     setMessage('')
@@ -117,6 +122,8 @@ export function IgdbSettingsPage() {
                 className="od-admin-input"
                 autoComplete="off"
                 maxLength={255}
+                minLength={20}
+                required
                 value={clientId}
                 onChange={(e) => {
                   setClientId(e.target.value)
@@ -133,6 +140,8 @@ export function IgdbSettingsPage() {
               type={showSecret ? 'text' : 'password'}
               autoComplete="new-password"
               maxLength={255}
+              minLength={20}
+              required={!secretPresent}
               aria-describedby="igdb-secret-help"
               value={secret}
               onChange={(e) => {
