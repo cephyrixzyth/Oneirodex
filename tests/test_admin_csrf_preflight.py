@@ -7,6 +7,7 @@ import asgi
 from oneirodex.runtime_native.admin_csrf_preflight import (
     admin_request_wants_json,
     empty_admin_mutation_csrf_error,
+    inspect_multipart_csrf_body,
     inspect_urlencoded_csrf_body,
 )
 
@@ -111,6 +112,43 @@ def test_urlencoded_form_csrf_inspection_replays_request_body():
     asyncio.run(run())
 
 
+def test_multipart_form_csrf_inspection_replays_request_body():
+    async def run():
+        boundary = b'parity-boundary'
+        body = (
+            b'--parity-boundary\r\n'
+            b'Content-Disposition: form-data; name="csrf_token"\r\n\r\n'
+            b'token-value\r\n'
+            b'--parity-boundary\r\n'
+            b'Content-Disposition: form-data; name="field"\r\n\r\n'
+            b'value\r\n'
+            b'--parity-boundary--\r\n'
+        )
+        sent = False
+
+        async def receive():
+            nonlocal sent
+            if sent:
+                return {'type': 'http.disconnect'}
+            sent = True
+            return {'type': 'http.request', 'body': body, 'more_body': False}
+
+        scope = _scope(headers=[
+            (b'content-type', b'multipart/form-data; boundary=parity-boundary'),
+            (b'content-length', str(len(body)).encode()),
+        ])
+        token, replay, inspected = await inspect_multipart_csrf_body(
+            scope, receive, {},
+        )
+        assert token == 'token-value'
+        assert inspected
+        assert await replay() == {
+            'type': 'http.request', 'body': body, 'more_body': False,
+        }
+
+    asyncio.run(run())
+
+
 def test_admin_error_format_matches_legacy_negotiation():
     assert not admin_request_wants_json(_scope(path='/admin/api/action'))
     assert admin_request_wants_json(_scope(path='/api/admin/action'))
@@ -176,3 +214,18 @@ def test_lazy_asgi_returns_legacy_csrf_failure_before_route_auth(monkeypatch):
     form = asyncio.run(run_urlencoded_form())
     assert form.status_code == 400
     assert '<p>The CSRF token is missing.</p>' in form.text
+
+    async def run_multipart_form():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+            follow_redirects=False,
+        ) as client:
+            return await client.post(
+                '/admin/api/art-studio/apply',
+                files={'parity_probe': ('probe.txt', b'x', 'text/plain')},
+            )
+
+    multipart = asyncio.run(run_multipart_form())
+    assert multipart.status_code == 400
+    assert '<p>The CSRF token is missing.</p>' in multipart.text

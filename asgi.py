@@ -2999,6 +2999,7 @@ class LazyASGIApp:
             from oneirodex.runtime_native.admin_csrf_preflight import (
                 admin_request_wants_json,
                 empty_admin_mutation_csrf_error,
+                inspect_multipart_csrf_body,
                 inspect_urlencoded_csrf_body,
             )
 
@@ -3013,6 +3014,10 @@ class LazyASGIApp:
                 form_token, replay_receive, form_inspected = await inspect_urlencoded_csrf_body(
                     scope, receive, self._flask_app.config,
                 )
+                if not form_inspected:
+                    form_token, replay_receive, form_inspected = await inspect_multipart_csrf_body(
+                        scope, receive, self._flask_app.config,
+                    )
                 if form_inspected:
                     receive = replay_receive
                     csrf_error = empty_admin_mutation_csrf_error(
@@ -3172,6 +3177,18 @@ class LazyASGIApp:
                 and scope.get('method') == 'GET'
             ):
                 await self._native_read_api_app(scope, receive, send)
+                return
+
+            # Admin pages can share a path with their legacy POST compatibility
+            # handler (for example GET /admin/smtp_settings and POST to the
+            # same path). Resolve page GETs to the React shell before the API
+            # router sees the POST-only route and turns the request into 405.
+            if (
+                self._native_admin_pilot is not None
+                and path in self._native_admin_routes
+                and scope.get('method') in ('GET', 'HEAD')
+            ):
+                await self._native_admin_pilot(scope, receive, send)
                 return
 
             if (

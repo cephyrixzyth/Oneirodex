@@ -9,6 +9,7 @@ from urllib.parse import parse_qs
 
 _UNSAFE_METHODS = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
 _URLENCODED_BODY_LIMIT = 64 * 1024
+_MULTIPART_BODY_LIMIT = 64 * 1024
 
 
 async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping):
@@ -49,6 +50,64 @@ async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping)
     values = parse_qs(bytes(body).decode('utf-8', 'replace'), keep_blank_values=True)
     token = values.get(field_name, [''])
     return (token[0] or None), replay, True
+
+
+async def inspect_multipart_csrf_body(scope: Mapping, receive, config: Mapping):
+    """Read and replay a small multipart body to recover its CSRF field.
+
+    Use Starlette's multipart parser and a strict body ceiling. Oversized or
+    malformed bodies remain the selected route's responsibility.
+    """
+    headers = {key.lower(): value for key, value in scope.get('headers', ())}
+    content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
+    if content_type != b'multipart/form-data':
+        return None, receive, False
+    raw_length = headers.get(b'content-length')
+    if raw_length:
+        try:
+            if int(raw_length) > _MULTIPART_BODY_LIMIT:
+                return None, receive, False
+        except ValueError:
+            return None, receive, False
+
+    messages = []
+    body = bytearray()
+    while True:
+        message = await receive()
+        messages.append(message)
+        if message.get('type') != 'http.request':
+            return None, _replay_receive(messages, receive), False
+        body.extend(message.get('body', b''))
+        if len(body) > _MULTIPART_BODY_LIMIT:
+            return None, _replay_receive(messages, receive), False
+        if not message.get('more_body', False):
+            break
+
+    replay = _replay_receive(messages, receive)
+    from starlette.datastructures import Headers
+    from starlette.formparsers import MultiPartException, MultiPartParser
+
+    async def stream():
+        yield bytes(body)
+
+    try:
+        form = await MultiPartParser(
+            Headers(scope=scope),
+            stream(),
+            max_files=16,
+            max_fields=128,
+            max_part_size=_MULTIPART_BODY_LIMIT,
+        ).parse()
+    except (MultiPartException, ValueError):
+        return None, replay, False
+    field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+    value = form.get(field_name)
+    token = value if isinstance(value, str) else None
+    for _, item in form.multi_items():
+        close = getattr(item, 'close', None)
+        if close is not None:
+            await close()
+    return token or None, replay, True
 
 
 def _replay_receive(messages, receive):
