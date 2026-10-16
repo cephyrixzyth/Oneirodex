@@ -42,8 +42,6 @@ import ipaddress
 import os
 from typing import Iterable
 
-from flask import current_app, has_request_context, request
-
 __all__ = [
     'parse_trusted_hosts',
     'split_host_port',
@@ -155,9 +153,12 @@ def configured_trusted_hosts() -> tuple[str, ...]:
     """``TRUSTED_LINK_HOSTS`` from app config, falling back to the environment."""
     raw: object = None
     try:
+        from flask import current_app
+
         raw = current_app.config.get('TRUSTED_LINK_HOSTS')
-    except RuntimeError:
-        # No application context — background worker, CLI script, import time.
+    except (ImportError, RuntimeError):
+        # Flask is optional in the native ASGI runtime. Without an app context,
+        # the CLI, or Flask installed, use the environment fallback.
         raw = None
     if not raw:
         raw = os.getenv('TRUSTED_LINK_HOSTS', '')
@@ -170,6 +171,12 @@ def trusted_origin_from_request() -> str | None:
     ``None`` is the signal to fall back to configured Site URL rather than to
     quietly use an origin an attacker chose.
     """
+    try:
+        from flask import has_request_context, request
+    except ImportError:
+        # Native ASGI callers resolve request origins explicitly in
+        # public_origin_for_request(); this helper serves Flask request paths.
+        return None
     if not has_request_context():
         return None
     if not host_is_trusted(request.host, configured_trusted_hosts()):

@@ -16,6 +16,25 @@ from oneirodex.utils.trusted_host import (
 )
 
 
+def test_native_host_helpers_are_usable_without_flask(monkeypatch):
+    """The FastAPI runtime deliberately ships without Flask installed."""
+    import builtins
+
+    from oneirodex.utils import trusted_host
+
+    real_import = builtins.__import__
+
+    def without_flask(name, *args, **kwargs):
+        if name == 'flask':
+            raise ImportError('Flask is not installed in the native runtime')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', without_flask)
+    assert trusted_host.configured_trusted_hosts() == ()
+    assert trusted_host.trusted_origin_from_request() is None
+    assert trusted_host.host_is_trusted('192.168.50.116:5006')
+
+
 class TestParseTrustedHosts:
     def test_empty_is_empty(self):
         assert parse_trusted_hosts(None) == ()
