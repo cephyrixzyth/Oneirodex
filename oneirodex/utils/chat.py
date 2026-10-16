@@ -20,12 +20,11 @@ from oneirodex.utils.chat_attachments import (
     attachments_for_messages,
     bind_attachments_to_message,
 )
-from oneirodex.utils.custom_emoji import custom_reaction_keys
+from oneirodex.utils.custom_emoji import ALLOWED_REACTIONS, custom_reaction_keys
 from oneirodex.utils.notifications import notify_user
 from oneirodex.utils.role_catalog import normalize_role, role_at_least
 
 MENTION_RE = re.compile(r'@([A-Za-z0-9_.-]{2,64})')
-ALLOWED_REACTIONS = frozenset({'👍', '❤️', '😂', '🎉', '👀'})
 PROTECTED_CHANNEL_SLUGS = frozenset({'general', 'looking-for-players'})
 
 

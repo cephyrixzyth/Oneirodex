@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
-from oneirodex.runtime_native.chat_emoji_read import create_chat_emoji_router
+from oneirodex.runtime_native.chat_emoji_read import ChatEmojiData, create_chat_emoji_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
@@ -49,6 +49,16 @@ def _client(*, role='admin', data=None):
         'session', dump_session_cookie(session_data, flask_app.config['SECRET_KEY'])
     )
     return client
+
+
+def test_member_emoji_catalog_uses_shared_reactions(monkeypatch):
+    from oneirodex.utils import custom_emoji
+
+    monkeypatch.setattr(custom_emoji, 'list_custom_emoji', lambda: [])
+    result = ChatEmojiData().member_read()
+
+    assert result['fixed'] == ['❤️', '🎉', '👀', '👍', '😂']
+    assert result['custom'] == []
 
 
 def test_chat_emoji_read_keeps_envelope_no_store_and_head():

@@ -145,6 +145,7 @@ def test_native_api_contract_and_asgi_imports_do_not_load_flask():
                 'import oneirodex.utils.server_settings; '
                 'import oneirodex.utils.setup; '
                 'import oneirodex.utils.game_mods; '
+                'import oneirodex.utils.api_tokens; '
                 'assert "flask" not in sys.modules; '
                 'assert "flask_caching" not in sys.modules; '
                 'assert "jinja2" not in sys.modules; '

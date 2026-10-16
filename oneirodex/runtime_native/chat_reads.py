@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
@@ -812,6 +812,12 @@ def create_chat_reads_router(
             for key, value in security_header_values(flask_app.config).items():
                 response.headers.setdefault(key, value)
             return response
+
+    @router.options('/api/chat/channels/{channel_id}/attachments')
+    async def chat_attachment_upload_options(channel_id: int):
+        # Flask automatically exposes OPTIONS for the legacy POST endpoint.
+        # Chat probes this route to decide whether to show attachment controls.
+        return Response(status_code=200, headers={'Allow': 'OPTIONS, POST'})
 
     @router.post('/api/chat/channels/{channel_id}/attachments')
     async def chat_attachment_upload(request: Request, channel_id: int):

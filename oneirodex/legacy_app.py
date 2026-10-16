@@ -88,6 +88,8 @@ def create_app(config_object=None):
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'login.login'
+    from oneirodex.utils.api_tokens import load_user_from_request
+    login_manager.request_loader(load_user_from_request)
     cache.init_app(app)
 
     from werkzeug.exceptions import HTTPException

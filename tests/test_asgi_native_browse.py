@@ -6168,6 +6168,21 @@ def test_native_chat_attachment_upload_preserves_limits_and_csrf(monkeypatch):
     assert calls == [(7, 29, 'asset.webp', b'fixture bytes', None)]
 
 
+def test_native_chat_attachment_options_probe_matches_legacy_contract(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    async def options():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.options('/api/chat/channels/29/attachments')
+
+    response = asyncio.run(options())
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == 'OPTIONS, POST'
+
+
 def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
     calls = []

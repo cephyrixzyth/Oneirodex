@@ -9,14 +9,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import current_app, g, has_app_context
-from flask_login import current_user
 from sqlalchemy import select
 
-from oneirodex import db, login_manager
 from oneirodex.models import ApiToken, User
 from oneirodex.utils.api_response import api_error
-from oneirodex.utils.rbac import normalize_role
+from oneirodex.utils.role_catalog import normalize_role
 
 VALID_SCOPES = frozenset({
     'read:library',
@@ -129,12 +126,16 @@ def generate_api_token(
         scopes=cleaned,
         expires_at=expires_at,
     )
+    from oneirodex.runtime_native.db_session import native_db as db
+
     db.session.add(row)
     db.session.commit()
     return row, raw
 
 
 def revoke_api_token(token_id: int, user_id: int | None = None) -> bool:
+    from oneirodex.runtime_native.db_session import native_db as db
+
     query = select(ApiToken).filter_by(id=token_id)
     if user_id is not None:
         query = query.filter_by(user_id=user_id)
@@ -175,6 +176,8 @@ def verify_bearer_token_detailed(
     if not prefix or not secret:
         return None, None, 'malformed'
 
+    from oneirodex.runtime_native.db_session import native_db as db
+
     row = db.session.execute(
         select(ApiToken).filter_by(token_prefix=prefix, revoked_at=None)
     ).scalars().first()
@@ -203,13 +206,19 @@ def _log_api_token_auth_failed(reason: str, raw: str) -> None:
     message = f'api_token_auth_failed reason={reason} prefix={prefix}'
     # Module logger always (pytest-friendly); mirror to Flask app logger for ops.
     _logger.warning(message)
-    if has_app_context():
-        current_app.logger.warning(message)
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            current_app.logger.warning(message)
+    except ImportError:
+        pass
 
 
-@login_manager.request_loader
 def load_user_from_request(req):
     """Authenticate via Authorization: Bearer gt_… for API clients."""
+    from flask import g
+
     auth = req.headers.get('Authorization', '')
     if not auth.lower().startswith('bearer '):
         g.api_token = None
@@ -226,6 +235,9 @@ def load_user_from_request(req):
 
 
 def user_has_scope(scope: str) -> bool:
+    from flask import g
+    from flask_login import current_user
+
     if not current_user.is_authenticated:
         return False
     role = normalize_role(getattr(current_user, 'role', None))
@@ -251,6 +263,9 @@ def require_browser_session(fn):
     """Keep account invitation secrets outside delegated bearer authority."""
     @wraps(fn)
     def wrapped(*args, **kwargs):
+        from flask import g
+        from flask_login import current_user
+
         # Resolve Flask-Login before inspecting g: request_loader sets api_token.
         if not current_user.is_authenticated:
             return api_error('Unauthorized', code='unauthorized')
@@ -267,6 +282,8 @@ def require_api_scope(scope: str):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args, **kwargs):
+            from flask_login import current_user
+
             if not current_user.is_authenticated:
                 # api_error, not a bare jsonify: the frontend branches on
                 # error_code, and these two were the only auth failures in the
@@ -291,6 +308,8 @@ def require_api_token_scope(scope: str):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args, **kwargs):
+            from flask import g
+
             if getattr(g, 'api_token', None) is not None and not user_has_scope(scope):
                 return api_error(
                     f'Missing scope: {scope}',

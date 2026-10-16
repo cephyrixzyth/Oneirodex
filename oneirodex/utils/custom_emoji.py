@@ -21,6 +21,7 @@ MAX_CUSTOM_EMOJI = 20
 MAX_UPLOAD_BYTES = 256 * 1024
 MAX_EDGE_PX = 128
 ALLOWED_EXT = frozenset({'png', 'webp', 'jpg', 'jpeg'})
+ALLOWED_REACTIONS = frozenset({'👍', '❤️', '😂', '🎉', '👀'})
 
 
 def emoji_dir(upload_folder: str | None = None) -> str:
