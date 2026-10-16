@@ -540,12 +540,17 @@ class TestImageProcessingFunctions:
         db_session.commit()
 
         with app.app_context():
+            database_scope = object()
+            allowed_bases = ('/test',)
             result = retrieve_and_save_game(
                 'Test Game',
                 '/test/path',
                 scan_job_id=job.id,
                 library_uuid=sample_library.uuid,
                 fetch_hltb=True,
+                app=app,
+                database_scope=database_scope,
+                allowed_bases=allowed_bases,
             )
 
         assert result == mock_game
@@ -554,6 +559,9 @@ class TestImageProcessingFunctions:
         mock_folder_size.assert_not_called()
         mock_queue.assert_called_once()
         assert mock_queue.call_args.kwargs.get('fetch_hltb') is True
+        assert mock_queue.call_args.kwargs.get('app') is app
+        assert mock_queue.call_args.kwargs.get('database_scope') is database_scope
+        assert mock_queue.call_args.kwargs.get('allowed_bases') == allowed_bases
 
 
 class TestDownloadFunctions:

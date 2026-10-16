@@ -1202,6 +1202,7 @@ def retrieve_and_save_game(
                 fetch_hltb=fetch_hltb,
                 cover_data=cover_data,
                 screenshots_data=screenshots_data,
+                **worker_scope_kwargs,
             )
         else:
             smart_process_images_for_game(new_game.uuid, cover_data, screenshots_data)
