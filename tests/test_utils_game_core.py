@@ -583,13 +583,25 @@ class TestDownloadFunctions:
     
     @patch('oneirodex.utils.clients.igdb.make_igdb_api_request')
     @patch('oneirodex.utils.services.image_pipeline.download_image')
-    def test_process_and_save_image_success(self, mock_download, mock_api, app, sample_game, sample_global_settings):
-        """Test successful image processing and saving."""
+    def test_process_and_save_image_success(self, mock_download, mock_api, app, sample_game,
+                                           sample_global_settings, monkeypatch):
+        """Native image processing uses the supplied app without importing Flask."""
+        import builtins
+
         mock_api.return_value = [{'url': '//images.igdb.com/igdb/image/upload/t_thumb/test.jpg'}]
         mock_download.return_value = (True, None)
+
+        original_import = builtins.__import__
+
+        def no_flask_import(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', no_flask_import)
         
         with app.app_context():
-            process_and_save_image(sample_game.uuid, 12345, 'cover')
+            process_and_save_image(sample_game.uuid, 12345, 'cover', app=app)
         
         # Should call API and download exactly once (previously this double-downloaded for covers)
         mock_api.assert_called_once()

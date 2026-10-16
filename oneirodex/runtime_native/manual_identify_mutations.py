@@ -128,7 +128,7 @@ class ManualIdentifyMutationData:
         if igdb_changed:
             from oneirodex.utils.background import run_in_background
             from oneirodex.utils.scanning import refresh_images_in_background
-            run_in_background(app, refresh_images_in_background, game_uuid, name=f'oneirodex-refresh-images-{game_uuid[:8]}')
+            run_in_background(app, refresh_images_in_background, game_uuid, app=app, name=f'oneirodex-refresh-images-{game_uuid[:8]}')
         return {'game_uuid': game_uuid, 'redirect_url': '/libraries'}
 
     def create(self, app, body, actor, *, from_unmatched: bool):
@@ -263,7 +263,7 @@ class ManualIdentifyMutationData:
         game_uuid = game.uuid
         from oneirodex.utils.background import run_in_background
         from oneirodex.utils.scanning import refresh_images_in_background
-        run_in_background(app, refresh_images_in_background, game_uuid,
+        run_in_background(app, refresh_images_in_background, game_uuid, app=app,
                           name=f'oneirodex-refresh-images-{str(game_uuid)[:8]}')
         log_system_event(
             f"Game '{body.name}' added manually by admin {actor.name}",

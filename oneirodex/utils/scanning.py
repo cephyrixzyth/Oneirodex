@@ -523,11 +523,28 @@ def process_pc_dlc_and_extra_roots(
             db.session.rollback()
 
 
-def refresh_images_in_background(game_uuid):
-    from flask import current_app, flash, has_request_context
+def refresh_images_in_background(game_uuid, *, app=None):
+    if app is None:
+        # Legacy WSGI callers rely on the active Flask application. Native
+        # FastAPI workers pass their runtime app explicitly so this path stays
+        # usable in the Flask-free image.
+        from flask import current_app
+
+        app = current_app._get_current_object()
+
+    def flash_if_request_context(message, category):
+        try:
+            from flask import flash, has_request_context
+        except ImportError:
+            return False
+        if not has_request_context():
+            return False
+        flash(message, category)
+        return True
+
     from oneirodex import cache
     from oneirodex.utils.igdb_api import make_igdb_api_request
-    with current_app.app_context():
+    with app.app_context():
         from oneirodex.utils.game_core import (
             process_and_save_image
         )
@@ -543,7 +560,7 @@ def refresh_images_in_background(game_uuid):
         try:
             cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 20}, timeout=300)
 
-            response_json = make_igdb_api_request(current_app.config['IGDB_API_ENDPOINT'],
+            response_json = make_igdb_api_request(app.config['IGDB_API_ENDPOINT'],
                 f"""fields id, cover.url, screenshots.url;
                     where id = {game.igdb_id}; limit 1;""")
 
@@ -558,7 +575,7 @@ def refresh_images_in_background(game_uuid):
                 if cover_data:
                     # Pass the full cover object (id+url) so process_and_save_image
                     # can reuse the URL without a second covers lookup.
-                    process_and_save_image(game.uuid, cover_data, image_type='cover')
+                    process_and_save_image(game.uuid, cover_data, image_type='cover', app=app)
 
                 screenshots_data = response_json[0].get('screenshots', [])
                 total_images = len(screenshots_data) + (1 if cover_data else 0)
@@ -566,7 +583,7 @@ def refresh_images_in_background(game_uuid):
 
                 if total_images > 0:
                     for screenshot in screenshots_data:
-                        process_and_save_image(game.uuid, screenshot, image_type='screenshot')
+                        process_and_save_image(game.uuid, screenshot, image_type='screenshot', app=app)
                         processed += 1
                         progress = 60 + int((processed / total_images) * 30)
                         cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': progress}, timeout=300)
@@ -577,23 +594,17 @@ def refresh_images_in_background(game_uuid):
                 db.session.commit()
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'complete', 'progress': 100}, timeout=300)
 
-                if has_request_context():
-                    flash("Game images refreshed successfully.", "success")
-                else:
+                if not flash_if_request_context("Game images refreshed successfully.", "success"):
                     print("Game images refreshed successfully.")
             else:
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'error', 'progress': 0}, timeout=300)
-                if has_request_context():
-                    flash("Failed to retrieve game images from IGDB API.", "error")
-                else:
+                if not flash_if_request_context("Failed to retrieve game images from IGDB API.", "error"):
                     print("Failed to retrieve game images from IGDB API.")
 
         except Exception as e:
             db.session.rollback()
             cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'error', 'progress': 0}, timeout=300)
-            if has_request_context():
-                flash(f"Failed to refresh game images: {str(e)}", "error")
-            else:
+            if not flash_if_request_context(f"Failed to refresh game images: {str(e)}", "error"):
                 print(f"Failed to refresh game images: {str(e)}")
             
 def delete_game_images(game_uuid, *, config=None):

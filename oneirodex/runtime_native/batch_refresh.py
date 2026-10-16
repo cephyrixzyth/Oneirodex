@@ -65,7 +65,7 @@ class BatchRefreshData:
         from oneirodex.utils.scanning import refresh_images_in_background
 
         run_in_background(
-            flask_app, refresh_images_in_background, uuid,
+            flask_app, refresh_images_in_background, uuid, app=flask_app,
             name=f'oneirodex-refresh-images-{str(uuid)[:8]}',
         )
 

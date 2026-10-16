@@ -518,10 +518,13 @@ class TestRefreshImagesInBackground:
     
     @patch('oneirodex.utils.scanning.delete_game_images')
     @patch('oneirodex.utils.game_core.process_and_save_image')
-    @patch('oneirodex.utils.scanning.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_refresh_images_in_background_success(self, mock_api, mock_process_image, mock_delete_images,
-                                                app, db_session, sample_game, mock_igdb_response):
-        """Test successful image refresh."""
+                                                app, db_session, sample_game, mock_igdb_response,
+                                                monkeypatch):
+        """Test successful image refresh in the Flask-free native runtime."""
+        import builtins
+
         mock_api.return_value = mock_igdb_response
         
         # Commit the game to database so it's visible in other sessions
@@ -529,8 +532,17 @@ class TestRefreshImagesInBackground:
         
         # Set the config on the app before calling the function
         app.config['IGDB_API_ENDPOINT'] = 'https://api.igdb.com/v4'
+
+        original_import = builtins.__import__
+
+        def no_flask_import(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', no_flask_import)
         
-        refresh_images_in_background(sample_game.uuid)
+        refresh_images_in_background(sample_game.uuid, app=app)
         
         mock_delete_images.assert_called_once_with(sample_game.uuid)
         mock_api.assert_called_once()
@@ -539,7 +551,7 @@ class TestRefreshImagesInBackground:
         expected_calls = 3  # 1 cover + 2 screenshots
         assert mock_process_image.call_count == expected_calls
     
-    @patch('oneirodex.utils.scanning.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_refresh_images_in_background_api_error(self, mock_api, app, db_session, sample_game):
         """Test image refresh when API returns error."""
         mock_api.return_value = {'error': 'API Error'}
@@ -555,12 +567,22 @@ class TestRefreshImagesInBackground:
         
         mock_api.assert_called_once()
     
-    def test_refresh_images_in_background_game_not_found(self, app, db_session):
-        """Test image refresh when game doesn't exist."""
+    def test_refresh_images_in_background_game_not_found_without_flask(self, app, db_session, monkeypatch):
+        """Native image workers must not import Flask when given their app."""
+        import builtins
+
         fake_uuid = str(uuid4())
+        original_import = builtins.__import__
+
+        def no_flask_import(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', no_flask_import)
         
-        # Should not raise exception
-        refresh_images_in_background(fake_uuid)
+        # Should not raise even though the native image contains no Flask.
+        refresh_images_in_background(fake_uuid, app=app)
 
 
 class TestDeleteGameImages:

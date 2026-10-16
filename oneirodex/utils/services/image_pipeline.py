@@ -266,7 +266,7 @@ def download_images_for_game_turbo(game_uuid, app=None, max_workers=5, database_
         return 0
 
 
-def process_and_save_image(game_uuid, image_data, image_type='cover'):
+def process_and_save_image(game_uuid, image_data, image_type='cover', *, app=None):
     """Fetch (or reuse) an IGDB image URL, download it, and persist an Image row.
 
     ``image_data`` may be a bare id or an expanded ``{id, url}`` dict. When the
@@ -274,6 +274,9 @@ def process_and_save_image(game_uuid, image_data, image_type='cover'):
     dropped under rate limits while screenshots still land.
     """
     from oneirodex.utils.cover_selection import image_save_path_status
+
+    if app is None:
+        app = _current_app()._get_current_object()
 
     image_id, known_url = normalize_igdb_image_ref(image_data)
     if image_type not in IGDB_DOWNLOAD_KINDS:
@@ -287,9 +290,9 @@ def process_and_save_image(game_uuid, image_data, image_type='cover'):
 
     id_part = image_id if image_id is not None else 'url'
     file_name = secure_filename(f"{game_uuid}_{image_type}_{id_part}.jpg")
-    save_path = os.path.join(_current_app().config['IMAGE_SAVE_PATH'], file_name)
+    save_path = os.path.join(app.config['IMAGE_SAVE_PATH'], file_name)
 
-    path_status = image_save_path_status()
+    path_status = image_save_path_status(app.config)
     if not path_status.get('writable'):
         error = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
         image = Image(
