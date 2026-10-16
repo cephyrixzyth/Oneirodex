@@ -190,7 +190,9 @@ def create_admin_ops_reads_router(
                             payload = data.logs(limit)
                         elif handler == 'devices':
                             limit = _bounded_limit(request.query_params.get('limit'), 200, 1000)
-                            payload = data.devices(limit, flask_app)
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            payload = api_ok_payload(data.devices(limit, flask_app))
                         elif handler == 'summary':
                             payload = data.summary(flask_app)
                         elif handler == 'image_refresh_progress':

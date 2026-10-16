@@ -8413,7 +8413,10 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
     assert system.status_code == 200 and 'theme_assets' in system.json()
     assert logs.json() == {'events': []}
     assert summary.json() == {'health': 'ok'}
-    assert devices.json() == {'devices': []}
+    assert devices.json() == {
+        'devices': [], 'ok': True, 'success': True,
+        'error': None, 'error_code': None,
+    }
     assert health.content == b''
     assert image_progress.json() == {'status': 'error', 'game_uuid': 'game-1'}
     assert deletion_progress.json() == {'status': 'error', 'job_id': 'job-1'}
