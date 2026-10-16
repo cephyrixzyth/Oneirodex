@@ -117,6 +117,18 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     assert bad_interval.get('error')
     assert bad_interval['schedule_kind'] == 'once'
 
+    over_limit = normalize_schedule_fields(
+        'interval', interval_value=10081, interval_unit='minutes',
+    )
+    assert over_limit['error'] == 'Number must be between 1 and 10080.'
+    assert over_limit['schedule_kind'] == 'once'
+
+    boundary = normalize_schedule_fields(
+        'interval', interval_value=10080, interval_unit='minutes',
+    )
+    assert boundary['error'] is None
+    assert boundary['schedule_interval_minutes'] == 10080
+
 
 def test_validate_cron_expression_rejects_impossible_dom():
     assert validate_cron_expression('0 0 31 2 *') is not None

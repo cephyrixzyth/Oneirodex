@@ -247,6 +247,12 @@ def normalize_schedule_fields(
         except (TypeError, ValueError):
             value = 0
         unit = (interval_unit or 'hours').strip().lower()
+        # Match AutoScanForm.schedule_interval_value's WTForms range. The
+        # current SPA API bypasses that form, so enforce the same raw input cap
+        # here instead of accepting schedules the v1.1.8 form rejected.
+        if value > 10080:
+            out['error'] = 'Number must be between 1 and 10080.'
+            return out
         minutes = value * 60 if unit == 'hours' else value
         if minutes < 1:
             out['error'] = 'Interval must be at least 1 minute.'
