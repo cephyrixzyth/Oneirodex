@@ -334,7 +334,7 @@ class TestNewsletterIntegration:
     
     @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
     def test_newsletter_workflow_complete(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test complete newsletter workflow from creation to viewing."""
+        """Create, deliver and read newsletter data through the SPA API."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
@@ -343,36 +343,37 @@ class TestNewsletterIntegration:
         db_session.query(Newsletter).delete()
         db_session.commit()
 
-        # Step 1: Create and send newsletter
+        # The JSON contract only sends to existing household members.
         data = {
             'subject': 'Integration Test Newsletter',
             'content': '<h1>Integration Test</h1><p>Testing complete workflow</p>',
-            'recipients': 'user1@test.com,user2@test.com,user3@test.com',
-            'send': 'Send'
+            'recipients': [admin_user.email],
         }
 
-        response = client.post('/admin/newsletter', data=data, follow_redirects=True)
-        assert response.status_code == 200
-        assert b'Newsletter sent successfully!' in response.data
+        response = client.post('/api/admin/newsletters', json=data)
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()['newsletter']['status'] == 'sent'
 
         # Step 2: Verify newsletter exists in database
         newsletter = db_session.query(Newsletter).filter_by(subject='Integration Test Newsletter').first()
         assert newsletter is not None
         assert newsletter.status == 'sent'
-        assert newsletter.recipient_count == 3
-        assert mock_send_email.call_count == 3
+        assert newsletter.recipient_count == 1
+        assert mock_send_email.call_count == 1
 
         # Step 3: View the created newsletter
-        response = client.get(f'/admin/newsletter/{newsletter.id}')
+        response = client.get(f'/api/admin/newsletters/{newsletter.id}')
         assert response.status_code == 200
-        assert b'Integration Test Newsletter' in response.data
-        assert b'Integration Test' in response.data
-        assert b'Testing complete workflow' in response.data
+        assert response.get_json()['newsletter']['subject'] == 'Integration Test Newsletter'
+        assert response.get_json()['newsletter']['content'] == data['content']
 
         # Step 4: Verify it appears in newsletter list
-        response = client.get('/admin/newsletter')
+        response = client.get('/api/admin/newsletters')
         assert response.status_code == 200
-        assert b'Integration Test Newsletter' in response.data
+        assert any(
+            row['subject'] == 'Integration Test Newsletter'
+            for row in response.get_json()['newsletters']
+        )
 
     def test_newsletter_recipients_parsing(self, client, admin_user, global_settings_smtp_enabled, db_session):
         """Test that recipients are properly parsed from comma-separated string."""

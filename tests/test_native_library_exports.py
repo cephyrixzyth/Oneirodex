@@ -96,7 +96,7 @@ def test_exports_dispatch_through_outer_lazy_asgi_selector():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime), base_url='http://localhost',
         ) as request_client:
-            request_client.cookies.update(client.cookies)
+            request_client.cookies.set('session', client.cookies.get('session'), path='/')
             return await request_client.get('/api/export/esde')
 
     response = asyncio.run(run())

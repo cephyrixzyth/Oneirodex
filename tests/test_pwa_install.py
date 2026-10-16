@@ -63,7 +63,9 @@ def test_python_shells_link_the_manifest_and_load_the_installer():
         assert 'name="theme-color"' in html, name
 
     renderer = (ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py').read_text(encoding='utf-8')
-    assert 'member.app_manifest' in renderer
+    # The style guide is a static document renderer; it links the canonical
+    # manifest route directly instead of resolving the Flask endpoint.
+    assert 'href="/manifest.webmanifest"' in renderer
     assert 'od_pwa_install.js' in renderer
     assert 'name="theme-color"' in renderer
 

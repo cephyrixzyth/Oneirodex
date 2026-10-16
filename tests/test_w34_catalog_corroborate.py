@@ -109,8 +109,13 @@ def test_corroborate_remaster_subtitle_is_noise_not_veto(mock_gather):
     assert result['disagreed'] == []
 
 
-@patch('oneirodex.utils.software_identify.db.session')
-def test_apply_catalog_identity_stamps_steam_and_moby(mock_session):
+def test_apply_catalog_identity_stamps_steam_and_moby(monkeypatch):
+    from types import SimpleNamespace
+    mock_session = MagicMock()
+    monkeypatch.setattr(
+        'oneirodex.utils.software_identify.db',
+        SimpleNamespace(session=mock_session),
+    )
     game = MagicMock()
     game.uuid = 'game-uuid'
     game.steam_app_id = None

@@ -64,12 +64,14 @@ def cleanup_after_each_test(db_session):
 class TestScanAndAddGamesCore:
     """Test core functionality of scan_and_add_games with comprehensive assertions."""
     
-    @patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running')
-    def test_early_return_when_scan_running(self, mock_is_running, app):
-        """Test that function returns early if scan is already running with no side effects."""
-        mock_is_running.return_value = True
-        
+    def test_early_return_when_scan_running(self, app, db_session):
+        """A persisted running job makes the worker entry point return early."""
         with app.app_context():
+            db_session.add(ScanJob(
+                folders={}, content_type='Games', status='Running', is_enabled=True,
+                last_run=datetime.now(), scan_folder='/fake/path',
+            ))
+            db_session.commit()
             # Ensure clean database state before test
             initial_scan_jobs = db.session.execute(select(ScanJob)).scalars().all()
             initial_count = len(initial_scan_jobs)
@@ -78,9 +80,6 @@ class TestScanAndAddGamesCore:
             
             # Verify function returns None
             assert result is None
-            
-            # Verify running check was called exactly once
-            mock_is_running.assert_called_once()
             
             # Critical assertion: No scan job should be created when one is running
             final_scan_jobs = db.session.execute(select(ScanJob)).scalars().all()
@@ -91,24 +90,23 @@ class TestScanAndAddGamesCore:
         nonexistent_uuid = str(uuid4())
         
         with app.app_context():
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
-                initial_jobs = db_session.execute(select(ScanJob)).scalars().all()
-                initial_count = len(initial_jobs)
-                
-                result = scan_and_add_games("/fake/path", library_uuid=nonexistent_uuid)
-                
-                # Verify function returns None
-                assert result is None
-                
-                # Critical assertion: No scan job created for nonexistent library
-                final_jobs = db_session.execute(select(ScanJob)).scalars().all()
-                assert len(final_jobs) == initial_count, "No scan job should be created for nonexistent library"
-                
-                # Verify no scan job exists for the nonexistent UUID
-                uuid_specific_jobs = db_session.execute(
-                    select(ScanJob).filter_by(library_uuid=nonexistent_uuid)
-                ).scalars().all()
-                assert len(uuid_specific_jobs) == 0, f"No scan jobs should exist for UUID {nonexistent_uuid}"
+            initial_jobs = db_session.execute(select(ScanJob)).scalars().all()
+            initial_count = len(initial_jobs)
+
+            result = scan_and_add_games("/fake/path", library_uuid=nonexistent_uuid)
+
+            # Verify function returns None
+            assert result is None
+
+            # Critical assertion: No scan job created for nonexistent library
+            final_jobs = db_session.execute(select(ScanJob)).scalars().all()
+            assert len(final_jobs) == initial_count, "No scan job should be created for nonexistent library"
+
+            # Verify no scan job exists for the nonexistent UUID
+            uuid_specific_jobs = db_session.execute(
+                select(ScanJob).filter_by(library_uuid=nonexistent_uuid)
+            ).scalars().all()
+            assert len(uuid_specific_jobs) == 0, f"No scan jobs should exist for UUID {nonexistent_uuid}"
 
 
 class TestHandleAutoScanCore:
@@ -128,11 +126,11 @@ class TestHandleAutoScanCore:
                 initial_scan_jobs = db_session.execute(select(ScanJob)).scalars().all()
                 initial_count = len(initial_scan_jobs)
                 
-                with patch('oneirodex.utils.services.scan_orchestration.flash') as mock_flash:
-                    with patch('oneirodex.utils.services.scan_orchestration.redirect') as mock_redirect:
-                        with patch('oneirodex.utils.services.scan_orchestration.url_for') as mock_url_for:
+                with patch('flask.flash') as mock_flash:
+                    with patch('flask.redirect') as mock_redirect:
+                        with patch('flask.url_for') as mock_url_for:
                             mock_session = {}
-                            with patch('oneirodex.utils.services.scan_orchestration.session', mock_session):
+                            with patch('flask.session', mock_session):
                                 mock_url_for.return_value = '/scan'
                                 mock_redirect.return_value = 'redirected_response'
                                 
@@ -207,23 +205,23 @@ class TestHandleAutoScanCore:
 
         with app.app_context():
             with app.test_request_context():
-                with patch('oneirodex.utils.services.scan_orchestration.flash') as mock_flash:
-                    with patch('oneirodex.utils.services.scan_orchestration.redirect') as mock_redirect:
-                        with patch('oneirodex.utils.services.scan_orchestration.url_for') as mock_url_for:
+                with patch('flask.flash') as mock_flash:
+                    with patch('flask.redirect') as mock_redirect:
+                        with patch('flask.url_for') as mock_url_for:
                             mock_session = {}
-                            with patch('oneirodex.utils.services.scan_orchestration.session', mock_session):
+                            with patch('flask.session', mock_session):
                                 with patch(
-                                    'oneirodex.utils.services.scan_orchestration.get_allowed_base_directories',
+                                    'oneirodex.utils.security.get_allowed_base_directories',
                                     return_value=['/base'],
                                 ):
                                     with patch(
-                                        'oneirodex.utils.services.scan_orchestration.is_safe_path',
+                                        'oneirodex.utils.security.is_safe_path',
                                         return_value=(True, None),
                                     ):
                                         with patch('oneirodex.utils.services.scan_orchestration.os.path.exists', return_value=True):
                                             with patch('oneirodex.utils.services.scan_orchestration.os.access', return_value=True):
                                                 with patch.dict(
-                                                    'oneirodex.utils.services.scan_orchestration.current_app.config',
+                                                    'flask.current_app.config',
                                                     {'BASE_FOLDER_POSIX': '/base', 'BASE_FOLDER_WINDOWS': '/base'},
                                                     clear=False,
                                                 ):
@@ -265,10 +263,10 @@ class TestHandleManualScanCore:
         with app.app_context():
             with app.test_request_context():
                 mock_session = {}
-                with patch('oneirodex.utils.services.scan_orchestration.session', mock_session):
-                    with patch('oneirodex.utils.services.scan_orchestration.flash') as mock_flash:
-                        with patch('oneirodex.utils.services.scan_orchestration.redirect'):
-                            with patch('oneirodex.utils.services.scan_orchestration.url_for'):
+                with patch('flask.session', mock_session):
+                    with patch('flask.flash') as mock_flash:
+                        with patch('flask.redirect'):
+                            with patch('flask.url_for'):
                                 handle_manual_scan(mock_form)
                                 
                                 mock_flash.assert_called_with('Manual scan form validation failed.', 'danger')
@@ -313,22 +311,22 @@ class TestHandleManualScanCore:
         with app.app_context():
             with app.test_request_context():
                 mock_session = {}
-                with patch('oneirodex.utils.services.scan_orchestration.session', mock_session):
-                    with patch('oneirodex.utils.services.scan_orchestration.flash') as mock_flash:
-                        with patch('oneirodex.utils.services.scan_orchestration.redirect') as mock_redirect:
-                            with patch('oneirodex.utils.services.scan_orchestration.url_for') as mock_url_for:
+                with patch('flask.session', mock_session):
+                    with patch('flask.flash') as mock_flash:
+                        with patch('flask.redirect') as mock_redirect:
+                            with patch('flask.url_for') as mock_url_for:
                                 with patch(
-                                    'oneirodex.utils.services.scan_orchestration.get_allowed_base_directories',
+                                    'oneirodex.utils.security.get_allowed_base_directories',
                                     return_value=['/base'],
                                 ):
                                     with patch(
-                                        'oneirodex.utils.services.scan_orchestration.is_safe_path',
+                                        'oneirodex.utils.security.is_safe_path',
                                         return_value=(True, None),
                                     ):
                                         with patch('oneirodex.utils.services.scan_orchestration.os.path.exists', return_value=True):
                                             with patch('oneirodex.utils.services.scan_orchestration.os.access', return_value=True):
                                                 with patch.dict(
-                                                    'oneirodex.utils.services.scan_orchestration.current_app.config',
+                                                    'flask.current_app.config',
                                                     {
                                                         'BASE_FOLDER_POSIX': '/base',
                                                         'BASE_FOLDER_WINDOWS': '/base',
@@ -384,7 +382,7 @@ class TestUtilitiesWithRealDatabase:
         db_session.commit()
         
         with app.app_context():
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
+            with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists', return_value=False):  # Force folder access failure
                     with patch('os.access', return_value=False):
                         scan_and_add_games("/nonexistent/path", library_uuid=library.uuid)
@@ -398,7 +396,7 @@ class TestUtilitiesWithRealDatabase:
     def test_library_validation(self, app, db_session):
         """Test that function handles missing library gracefully."""
         with app.app_context():
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
+            with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 result = scan_and_add_games("/fake/path", library_uuid="nonexistent-uuid")
                 assert result is None
 
@@ -530,7 +528,7 @@ class TestAdvancedScanScenarios:
         assert len(initial_games) == 3
         
         with app.app_context():
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
+            with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists') as mock_exists:
                     with patch('os.access', return_value=True):
                         # Mock to return some dummy games so scan doesn't return early
@@ -610,7 +608,7 @@ class TestAdvancedScanScenarios:
         
         with app.app_context():
             # Test 1: Database error during initial ScanJob creation
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
+            with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists', return_value=True):
                     with patch('os.access', return_value=True):
                         with patch('oneirodex.utils.services.scan_orchestration.db.session.commit') as mock_commit:
@@ -626,7 +624,7 @@ class TestAdvancedScanScenarios:
                             mock_commit.assert_called_once()
             
             # Test 2: Database error during final commit  
-            with patch('oneirodex.utils.services.scan_orchestration.is_scan_job_running', return_value=False):
+            with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists', return_value=True):
                     with patch('os.access', return_value=True):
                         with patch('oneirodex.utils.services.scan_orchestration.get_game_names_from_folder', return_value=[]):
