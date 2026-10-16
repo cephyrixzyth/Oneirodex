@@ -941,6 +941,7 @@ class TestMissingImageProcessing:
             # Should return a dictionary with statistics and list of missing images
             assert isinstance(result, dict)
             assert 'missing_images' in result or isinstance(result, list)
+            assert 'error' not in result
     
     def test_find_missing_images_all_libraries(self, app, sample_global_settings):
         """Test find_missing_images_for_library for all libraries."""
@@ -949,6 +950,7 @@ class TestMissingImageProcessing:
             # Should return a dictionary with statistics and list of missing images across all libraries
             assert isinstance(result, dict)
             assert 'missing_images' in result or isinstance(result, list)
+            assert 'error' not in result
     
     @patch('oneirodex.utils.services.image_pipeline.store_image_url_for_download')
     def test_queue_missing_images_for_download(self, mock_store_image, app, sample_game, sample_global_settings):

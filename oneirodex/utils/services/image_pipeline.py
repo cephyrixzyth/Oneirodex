@@ -644,9 +644,7 @@ def find_missing_images_for_library(library_uuid=None, app=None):
         app = _current_app()._get_current_object()
     
     try:
-        from contextlib import nullcontext
-        scope = app.app_context() if use_app_context else nullcontext()
-        with scope:
+        with app.app_context():
             # Build query based on library filter
             if library_uuid:
                 images_query = select(Image).join(Game).filter(Game.library_uuid == library_uuid)
