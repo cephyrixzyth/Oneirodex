@@ -49,20 +49,11 @@ test_database_url.__test__ = False
 
 
 def _use_explicit_sqlite_transactions(engine):
-    """Use real transactions for SQLite across Python's driver modes.
-
-    Python 3.12 added sqlite3.Connection.autocommit, defaulting to legacy
-    transaction control. Disable that legacy mode where the property exists;
-    on older Python versions use SQLAlchemy's explicit-BEGIN recipe.
-    """
+    """Use real transactions for SQLite when Python lacks its autocommit API."""
     if engine.dialect.name != 'sqlite':
         return
 
-    if hasattr(sqlite3.Connection, 'autocommit'):
-        @event.listens_for(engine, 'connect')
-        def disable_legacy_transaction_control(dbapi_connection, _record):
-            dbapi_connection.autocommit = False
-    else:
+    if not hasattr(sqlite3.Connection, 'autocommit'):
         @event.listens_for(engine, 'connect')
         def disable_driver_transaction_control(dbapi_connection, _record):
             dbapi_connection.isolation_level = None
@@ -93,11 +84,17 @@ def settings(monkeypatch):
 def app(settings, tmp_path):
     from oneirodex.routes_apis import ownership, ownership_admin
     flask_app = Flask(__name__)
+    sqlite_url = test_database_url(tmp_path / 'store-sync.sqlite')
     flask_app.config.update(
         TESTING=True,
         SECRET_KEY='test-only',
-        SQLALCHEMY_DATABASE_URI=test_database_url(tmp_path / 'store-sync.sqlite'),
+        SQLALCHEMY_DATABASE_URI=sqlite_url,
     )
+    # SQLAlchemy's sqlite3 dialect supports this since Python 3.12. Passing it
+    # at connection creation avoids inheriting sqlite3's legacy transaction
+    # mode. Older Python versions use the explicit-BEGIN event recipe below.
+    if sqlite_url.startswith('sqlite') and hasattr(sqlite3.Connection, 'autocommit'):
+        flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'connect_args': {'autocommit': False}}
     db.init_app(flask_app)
     people = {str(MEMBER): Person(MEMBER, 'user'), str(OTHER): Person(OTHER, 'user'), str(ADMIN): Person(ADMIN, 'admin')}
     login = LoginManager(flask_app)

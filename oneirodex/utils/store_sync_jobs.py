@@ -188,6 +188,14 @@ LINK_TRIGGERS = frozenset({'connect', 'disconnect'})
 
 def _start(user_id: int, store: str, trigger: str, actor_id: int | None) -> StoreSyncJob:
     _expire_stale(user_id, store)
+    # Avoid the common duplicate-running insert entirely. The unique partial
+    # index below remains the cross-process race guard, but its IntegrityError
+    # path is only for a true simultaneous start and must not be the normal way
+    # an already-visible slot is detected.
+    holder = running_job(user_id, store)
+    if holder is not None:
+        busy = 'store_busy' if holder.trigger in LINK_TRIGGERS else 'sync_in_progress'
+        raise SyncOutcomeError(busy, job=holder if busy == 'sync_in_progress' else None)
     now = utcnow()
     job = StoreSyncJob(
         user_id=user_id, store=store, trigger=trigger, actor_id=actor_id,
