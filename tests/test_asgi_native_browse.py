@@ -7805,7 +7805,7 @@ def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(m
     admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
     data = SimpleNamespace(
         current_step=lambda: 1,
-        transition=lambda body, app: calls.append((body['step'], app)) or (
+        transition=lambda body, app, *, database_scope=None: calls.append((body['step'], app)) or (
             {'step': 2, 'next_url': '/setup/smtp'}, None, admin,
         ),
     )
@@ -7901,7 +7901,7 @@ def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(mo
     calls = []
     data = SimpleNamespace(
         current_step=lambda: 3,
-        transition=lambda body, _app: calls.append(body) or (
+        transition=lambda body, _app, *, database_scope=None: calls.append(body) or (
             {'step': 4, 'next_url': '/setup/igdb'}, None, None,
         ),
     )
