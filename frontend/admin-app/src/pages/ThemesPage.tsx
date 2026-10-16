@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
+import { Button, PageStatus, confirmAction, openPreferencesModal } from '@oneirodex/ui'
 import { deleteJson, getJson, postForm, postJson, putJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
@@ -182,9 +182,9 @@ export function ThemesPage() {
                 account.
               </p>
             </div>
-            <a className="od-btn" href="/preferences#themes">
+            <Button variant="secondary" onClick={() => void openPreferencesModal()}>
               Choose your theme in Preferences
-            </a>
+            </Button>
           </section>
 
           <section

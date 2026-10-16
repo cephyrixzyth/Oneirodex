@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { confirmAction } from '@oneirodex/ui'
+import { confirmAction, openPreferencesModal } from '@oneirodex/ui'
 import { deleteJson, getJson, postForm, postJson, putJson } from '../api/adminApi'
 import { ThemesPage } from './ThemesPage'
 
@@ -11,7 +11,11 @@ vi.mock('../api/adminApi', () => ({
   postJson: vi.fn(),
   putJson: vi.fn(),
 }))
-vi.mock('@oneirodex/ui', async (original) => ({ ...(await original()), confirmAction: vi.fn() }))
+vi.mock('@oneirodex/ui', async (original) => ({
+  ...(await original()),
+  confirmAction: vi.fn(),
+  openPreferencesModal: vi.fn(),
+}))
 
 const themes = {
   active_theme: 'default',
@@ -51,10 +55,9 @@ describe('ThemesPage', () => {
       'href',
       '/admin/themes/readme',
     )
-    expect(screen.getByRole('link', { name: 'Choose your theme in Preferences' })).toHaveAttribute(
-      'href',
-      '/preferences#themes',
-    )
+    const preferences = screen.getByRole('button', { name: 'Choose your theme in Preferences' })
+    fireEvent.click(preferences)
+    expect(openPreferencesModal).toHaveBeenCalledOnce()
   })
 
   it('saves the selected loading motif and exposes a locked picker', async () => {
