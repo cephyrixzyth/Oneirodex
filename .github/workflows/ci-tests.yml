@@ -90,6 +90,11 @@ jobs:
           npm run build --workspace=admin-app
           npm run build:pilot --workspace=admin-app
 
+      - name: Verify store sync transaction invariants
+        # Keep this SQLite compatibility slice ahead of the 20+ minute core
+        # suite so transaction regressions fail quickly and with a focused log.
+        run: python -m pytest tests/test_store_connections.py -q
+
       - name: Run pytest (marker set, deselect by exception)
         # Gate = every test not marked `integration`, minus a named exception
         # list. Flipped from a hand-enumerated file list on 2026-09-17 after
