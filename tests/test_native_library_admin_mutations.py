@@ -217,6 +217,21 @@ def test_legacy_library_edit_missing_record_matches_not_found(native_client):
     assert data.calls == []
 
 
+def test_legacy_library_create_rejects_corrupt_image_without_server_error(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', 'name': 'Library', 'platform': 'PCWIN',
+              'scan_depth': '1', 'watch_enabled': 'default'},
+        files={'image': ('broken.png', b'not an image', 'image/png')},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 200
+    assert 'Please correct the errors below.' in response.text
+    assert data.calls == []
+
+
 def test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter(native_client):
     runtime, data = native_client
     response = _request(
