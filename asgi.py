@@ -3027,6 +3027,9 @@ class LazyASGIApp:
                         form_inspected=True,
                     )
             if csrf_error is not None:
+                close_replay = getattr(receive, 'close', None)
+                if close_replay is not None:
+                    close_replay()
                 from starlette.responses import HTMLResponse, JSONResponse
                 from oneirodex.utils.security_headers import security_header_values
 
@@ -3049,6 +3052,19 @@ class LazyASGIApp:
                 response.headers.setdefault('Vary', 'Cookie')
                 await response(scope, receive, send)
                 return
+            close_replay = getattr(receive, 'close', None)
+            if close_replay is not None:
+                downstream_send = send
+
+                async def send_with_replay_cleanup(message):
+                    await downstream_send(message)
+                    if (
+                        message.get('type') == 'http.response.body'
+                        and not message.get('more_body', False)
+                    ):
+                        close_replay()
+
+                send = send_with_replay_cleanup
 
             from oneirodex.runtime_native.member_shell import member_shell_route
 

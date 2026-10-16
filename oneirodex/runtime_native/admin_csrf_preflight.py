@@ -4,12 +4,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import timedelta
 from http.cookies import SimpleCookie
+from tempfile import SpooledTemporaryFile
 from urllib.parse import parse_qs
 
 
 _UNSAFE_METHODS = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
-_URLENCODED_BODY_LIMIT = 64 * 1024
-_MULTIPART_BODY_LIMIT = 64 * 1024
+_URLENCODED_BODY_LIMIT = 1024 * 1024
+_MULTIPART_BODY_DEFAULT_LIMIT = 128 * 1024 * 1024
 
 
 async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping):
@@ -53,53 +54,63 @@ async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping)
 
 
 async def inspect_multipart_csrf_body(scope: Mapping, receive, config: Mapping):
-    """Read and replay a small multipart body to recover its CSRF field.
+    """Read and replay a multipart body to recover its CSRF field.
 
-    Use Starlette's multipart parser and a strict body ceiling. Oversized or
-    malformed bodies remain the selected route's responsibility.
+    Starlette's parser spools uploaded files. The captured request is also
+    spooled to disk beyond 1 MiB and bounded by the runtime body-size limit.
     """
     headers = {key.lower(): value for key, value in scope.get('headers', ())}
     content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
     if content_type != b'multipart/form-data':
         return None, receive, False
+    try:
+        body_limit = int(config.get('MAX_CONTENT_LENGTH') or _MULTIPART_BODY_DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        body_limit = _MULTIPART_BODY_DEFAULT_LIMIT
+    body_limit = max(0, body_limit)
     raw_length = headers.get(b'content-length')
     if raw_length:
         try:
-            if int(raw_length) > _MULTIPART_BODY_LIMIT:
+            if int(raw_length) > body_limit:
                 return None, receive, False
         except ValueError:
             return None, receive, False
 
+    body_file = SpooledTemporaryFile(max_size=1024 * 1024, mode='w+b')
     messages = []
-    body = bytearray()
-    while True:
-        message = await receive()
-        messages.append(message)
-        if message.get('type') != 'http.request':
-            return None, _replay_receive(messages, receive), False
-        body.extend(message.get('body', b''))
-        if len(body) > _MULTIPART_BODY_LIMIT:
-            return None, _replay_receive(messages, receive), False
-        if not message.get('more_body', False):
-            break
-
-    replay = _replay_receive(messages, receive)
+    received = 0
     from starlette.datastructures import Headers
     from starlette.formparsers import MultiPartException, MultiPartParser
 
     async def stream():
-        yield bytes(body)
+        nonlocal received
+        while True:
+            message = await receive()
+            if message.get('type') != 'http.request':
+                messages.append((dict(message), None, 0))
+                return
+            chunk = message.get('body', b'')
+            received += len(chunk)
+            offset = body_file.tell()
+            body_file.write(chunk)
+            replay_meta = {key: value for key, value in message.items() if key != 'body'}
+            messages.append((replay_meta, offset, len(chunk)))
+            if received > body_limit:
+                raise MultiPartException('Request body exceeded the configured limit.')
+            yield chunk
+            if not message.get('more_body', False):
+                return
 
     try:
         form = await MultiPartParser(
             Headers(scope=scope),
             stream(),
-            max_files=16,
-            max_fields=128,
-            max_part_size=_MULTIPART_BODY_LIMIT,
+            max_files=int(config.get('MAX_FORM_PARTS') or 1000),
+            max_fields=int(config.get('MAX_FORM_PARTS') or 1000),
+            max_part_size=body_limit,
         ).parse()
     except (MultiPartException, ValueError):
-        return None, replay, False
+        return None, _replay_spooled_receive(messages, body_file, receive), False
     field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
     value = form.get(field_name)
     token = value if isinstance(value, str) else None
@@ -107,6 +118,8 @@ async def inspect_multipart_csrf_body(scope: Mapping, receive, config: Mapping):
         close = getattr(item, 'close', None)
         if close is not None:
             await close()
+    replay = _replay_spooled_receive(messages, body_file, receive)
+    replay.close = body_file.close
     return token or None, replay, True
 
 
@@ -118,6 +131,25 @@ def _replay_receive(messages, receive):
             return queue.pop(0)
         return await receive()
 
+    return replay
+
+
+def _replay_spooled_receive(messages, body_file, receive):
+    queue = list(messages)
+
+    async def replay():
+        if queue:
+            message, offset, size = queue.pop(0)
+            if offset is not None:
+                body_file.seek(offset)
+                message['body'] = body_file.read(size)
+            if not queue:
+                body_file.close()
+            return message
+        body_file.close()
+        return await receive()
+
+    replay.close = body_file.close
     return replay
 
 

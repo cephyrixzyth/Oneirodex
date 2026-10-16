@@ -82,6 +82,7 @@ def test_valid_header_token_uses_signed_flask_session():
 def test_urlencoded_form_csrf_inspection_replays_request_body():
     async def run():
         sent = False
+        body = b'csrf_token=token-value&field=' + (b'x' * (70 * 1024))
 
         async def receive():
             nonlocal sent
@@ -90,13 +91,13 @@ def test_urlencoded_form_csrf_inspection_replays_request_body():
             sent = True
             return {
                 'type': 'http.request',
-                'body': b'csrf_token=token-value&field=value',
+                'body': body,
                 'more_body': False,
             }
 
         scope = _scope(headers=[
             (b'content-type', b'application/x-www-form-urlencoded'),
-            (b'content-length', b'34'),
+            (b'content-length', str(len(body)).encode()),
         ])
         token, replay, inspected = await inspect_urlencoded_csrf_body(
             scope, receive, {},
@@ -105,7 +106,7 @@ def test_urlencoded_form_csrf_inspection_replays_request_body():
         assert inspected
         assert await replay() == {
             'type': 'http.request',
-            'body': b'csrf_token=token-value&field=value',
+            'body': body,
             'more_body': False,
         }
 
@@ -120,8 +121,10 @@ def test_multipart_form_csrf_inspection_replays_request_body():
             b'Content-Disposition: form-data; name="csrf_token"\r\n\r\n'
             b'token-value\r\n'
             b'--parity-boundary\r\n'
-            b'Content-Disposition: form-data; name="field"\r\n\r\n'
-            b'value\r\n'
+            b'Content-Disposition: form-data; name="upload"; filename="probe.bin"\r\n'
+            b'Content-Type: application/octet-stream\r\n\r\n'
+            + (b'x' * (2 * 1024 * 1024))
+            + b'\r\n'
             b'--parity-boundary--\r\n'
         )
         sent = False
@@ -145,6 +148,31 @@ def test_multipart_form_csrf_inspection_replays_request_body():
         assert await replay() == {
             'type': 'http.request', 'body': body, 'more_body': False,
         }
+
+    asyncio.run(run())
+
+
+def test_multipart_preflight_over_limit_replays_unconsumed_body_tail():
+    async def run():
+        messages = [
+            {'type': 'http.request', 'body': b'--boundary', 'more_body': True},
+            {'type': 'http.request', 'body': b'--\r\n', 'more_body': False},
+        ]
+
+        async def receive():
+            return messages.pop(0)
+
+        scope = _scope(headers=[
+            (b'content-type', b'multipart/form-data; boundary=boundary'),
+            (b'transfer-encoding', b'chunked'),
+        ])
+        token, replay, inspected = await inspect_multipart_csrf_body(
+            scope, receive, {'MAX_CONTENT_LENGTH': 3},
+        )
+        assert token is None
+        assert not inspected
+        assert (await replay())['body'] == b'--boundary'
+        assert (await replay())['body'] == b'--\r\n'
 
     asyncio.run(run())
 
@@ -208,7 +236,8 @@ def test_lazy_asgi_returns_legacy_csrf_failure_before_route_auth(monkeypatch):
             follow_redirects=False,
         ) as client:
             return await client.post(
-                '/admin/api/art-studio/apply', data={'parity_probe': '1'},
+                '/admin/api/art-studio/apply',
+                data={'parity_probe': 'x' * (70 * 1024)},
             )
 
     form = asyncio.run(run_urlencoded_form())
