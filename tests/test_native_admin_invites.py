@@ -112,8 +112,11 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
         },
         follow_redirects=False,
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/admin/manage_invites'
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    assert 'id="admin-app-root"' in response.text
+    assert 'role="status"' in response.text
+    assert 'Invites updated successfully.' in response.text
     assert data.calls == [('4c2c4a64-6096-4e0c-b5a3-fd8583c43a64', -1)]
 
     invalid, invalid_data, invalid_csrf = _client()
@@ -124,3 +127,21 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
     )
     assert denied.status_code == 302
     assert invalid_data.calls == []
+
+
+def test_legacy_invite_form_renders_updated_shell_when_user_is_missing():
+    client, data, csrf = _client()
+    data.quota_result = None
+    response = client.post(
+        '/admin/manage_invites',
+        data={
+            'csrf_token': csrf,
+            'user_id': '4c2c4a64-6096-4e0c-b5a3-fd8583c43a64',
+            'invites_number': '1',
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert 'role="alert"' in response.text
+    assert 'User not found.' in response.text
+    assert data.calls == [('4c2c4a64-6096-4e0c-b5a3-fd8583c43a64', 1)]

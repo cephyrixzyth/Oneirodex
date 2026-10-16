@@ -152,43 +152,71 @@ async def _adjust(request, data):
 
 
 async def _adjust_form(request, form, data, auth):
-    from .account_avatar_upload import _flash
+    from html import escape
+    from pathlib import Path
     from pydantic import ValidationError
-    from starlette.responses import RedirectResponse, Response
+    from starlette.responses import HTMLResponse, RedirectResponse, Response
     from oneirodex.schemas.invites import AdjustInviteQuotaBody
 
     if int(request.headers.get('content-length') or '0') > 64 * 1024:
         return Response(status_code=413)
     user_id = (form.get('user_id') or '').strip()
+    page_message = None
+    page_category = 'success'
     if not user_id:
-        _flash(auth.session_data, 'error', 'User ID is required.')
+        return RedirectResponse('/admin/manage_invites', status_code=302)
     else:
         try:
             number = int(form.get('invites_number') or '0')
         except (TypeError, ValueError):
-            _flash(auth.session_data, 'error', 'Invalid invite number provided. Please enter a valid number.')
+            return RedirectResponse('/admin/manage_invites', status_code=302)
         else:
             try:
                 body = AdjustInviteQuotaBody.model_validate({
                     'user_id': user_id, 'invites_number': number,
                 })
             except ValidationError:
-                if not _valid_uuid(user_id):
-                    message = 'Invalid user ID format.'
-                else:
-                    message = 'Invite number must be between -1000 and 1000.'
-                _flash(auth.session_data, 'error', message)
+                return RedirectResponse('/admin/manage_invites', status_code=302)
             else:
                 try:
                     result = data.adjust_quota(body)
                     if result is None:
-                        _flash(auth.session_data, 'error', 'User not found.')
+                        page_message = 'User not found.'
+                        page_category = 'danger'
                     else:
-                        _flash(auth.session_data, 'success', f"Invites updated successfully. User {getattr(auth.user, 'name', '')} now has {result['invite_quota']} invite quota.")
+                        page_message = (
+                            f"Invites updated successfully. User "
+                            f"{getattr(auth.user, 'name', '')} now has "
+                            f"{result['invite_quota']} invite quota."
+                        )
                 except Exception:
                     data.rollback()
-                    _flash(auth.session_data, 'error', 'Error updating invites.')
-    return RedirectResponse('/admin/manage_invites', status_code=302)
+                    return RedirectResponse('/admin/manage_invites', status_code=302)
+
+    shell_path = (
+        Path(__file__).resolve().parents[1]
+        / 'static' / 'dist' / 'admin-pilot' / 'index.html'
+    )
+    try:
+        shell = shell_path.read_text(encoding='utf-8')
+    except OSError:
+        shell = (
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<title>Invites · Oneirodex Admin</title></head>'
+            '<body><main><h1>Invites</h1><a href="/admin/manage_invites">Continue</a></main></body></html>'
+        )
+    if page_message:
+        role = 'status' if page_category == 'success' else 'alert'
+        notice = (
+            f'<div class="container-flash-messages"><div '
+            f'class="alert alert-{page_category}" role="{role}">'
+            f'{escape(page_message)}</div></div>\n'
+        )
+        root_marker = '<div id="admin-app-root"'
+        root_offset = shell.find(root_marker)
+        if root_offset >= 0:
+            shell = shell[:root_offset] + notice + shell[root_offset:]
+    return HTMLResponse(shell, status_code=200, headers={'Cache-Control': 'no-store'})
 
 
 async def _legacy_form(request):
