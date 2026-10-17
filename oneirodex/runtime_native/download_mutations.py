@@ -183,9 +183,10 @@ class DownloadMutationData:
         )).scalars().first()
         if existing:
             return existing
+        download_size = game.size if kind == 'base' else self.path_size(file_location)
         row = DownloadRequest(
             user_id=user.id, game_uuid=game.uuid, status='available',
-            download_size=game.size if file_location == game.full_disk_path else 0,
+            download_size=download_size,
             file_location=file_location, zip_file_path=zip_file_path,
         )
         db.session.add(row)

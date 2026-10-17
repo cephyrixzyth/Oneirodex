@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -288,3 +289,68 @@ def test_legacy_other_download_rejects_invalid_type_and_file_id():
     assert invalid_type.headers['location'] == '/game_details/12345678-1234-1234-1234-123456789abc'
     assert invalid_id.status_code == 400
     assert data.created is None
+
+
+def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch):
+    from oneirodex.runtime_native.download_mutations import DownloadMutationData
+
+    class ScalarResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None
+
+    class Session:
+        def __init__(self):
+            self.added = []
+            self.commits = 0
+
+        def execute(self, _statement):
+            return ScalarResult()
+
+        def add(self, row):
+            self.added.append(row)
+
+        def commit(self):
+            self.commits += 1
+
+    session = Session()
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.runtime_native.db_session',
+        SimpleNamespace(native_db=SimpleNamespace(session=session)),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.utils.event_bus',
+        SimpleNamespace(publish_download_event=lambda *_args, **_kwargs: None),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.utils.event_logging',
+        SimpleNamespace(log_system_event=lambda *_args, **_kwargs: None),
+    )
+
+    update_file = tmp_path / 'update.bin'
+    update_file.write_bytes(b'legacy-sized-update')
+    game = SimpleNamespace(
+        uuid='12345678-1234-1234-1234-123456789abc',
+        name='Fixture', full_disk_path='/storage/base', size=999,
+        times_downloaded=0,
+    )
+    user = SimpleNamespace(id=7)
+
+    DownloadMutationData().create_request(
+        game,
+        user,
+        file_location=str(update_file),
+        zip_file_path=str(update_file),
+        kind='update',
+        version_uuid='22345678-1234-1234-1234-123456789abc',
+    )
+
+    assert len(session.added) == 1
+    assert session.added[0].download_size == len(b'legacy-sized-update')
+    assert session.commits == 1
+    assert game.times_downloaded == 0

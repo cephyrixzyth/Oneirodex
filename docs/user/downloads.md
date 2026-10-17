@@ -11,6 +11,7 @@
 
 - Download is server-side streaming; large titles depend on disk and network to the Oneirodex host.
 - Download actions create or reuse a request in your Downloads queue. Opening or previewing a download link does not create a request.
+- The Downloads queue reports the measured file or folder size for selected updates and extras, and the catalog's stored size for the base install.
 - Legacy direct download URLs no longer create requests with `GET`; browser sessions must use the app's CSRF-protected action, and integrations should create a request with `POST /api/downloads/games/{game_uuid}` (`kind` and optional `version_uuid`). API tokens need the `write:download` scope.
 - Version list honesty: `path_missing` / `downloadable` / measured `size` · **Default** chip on the base install · librarians/admins can **Remove missing versions** (orphan cleanup).
 - Web UI does not install/extract on your PC — that needs the optional desktop companion (**Install / Update / Uninstall**). See [desktop-companion.md](desktop-companion.md).
