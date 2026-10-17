@@ -30,6 +30,38 @@ def test_runtime_requirements_exclude_legacy_framework_packages():
     assert 'itsdangerous' in runtime, (
         'native session compatibility needs an explicit runtime serializer dependency'
     )
+    assert 'httpx2' in runtime, (
+        'Authlib Starlette OIDC needs its HTTPX2 client in the Flask-free runtime'
+    )
+
+
+def test_hash_identify_imports_without_flask():
+    script = r'''
+import sys
+from importlib.abc import MetaPathFinder
+
+class BlockFlask(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'flask' or fullname.startswith('flask.'):
+            raise ModuleNotFoundError('Flask is intentionally unavailable')
+        return None
+
+sys.meta_path.insert(0, BlockFlask())
+from oneirodex.utils import hash_identify
+from oneirodex.utils import mod_catalog
+assert hash_identify._testing() is False
+assert hash_identify.base_url() == hash_identify.DEFAULT_BASE_URL
+assert mod_catalog.catalog_enabled()
+assert set(mod_catalog.source_ids()) == {'thunderstore', 'modrinth', 'gamebanana', 'nexus'}
+'''
+    result = subprocess.run(
+        [sys.executable, '-c', script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_native_runtime_source_does_not_import_flask_or_jinja():

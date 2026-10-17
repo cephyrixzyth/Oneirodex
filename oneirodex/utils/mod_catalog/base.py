@@ -28,8 +28,6 @@ import os
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from flask import current_app, has_app_context
-
 TIMEOUT_SECONDS = 10
 USER_AGENT = 'Oneirodex/1.0 (+https://github.com/cephyrixzyth/Oneirodex; mod catalogue, read-only)'
 DEFAULT_LIMIT = 20
@@ -64,6 +62,8 @@ def _truthy(raw: str | None, default: bool) -> bool:
 
 def _testing() -> bool:
     try:
+        from flask import current_app, has_app_context
+
         return bool(has_app_context() and current_app.config.get('TESTING'))
     except Exception:  # noqa: BLE001
         return False

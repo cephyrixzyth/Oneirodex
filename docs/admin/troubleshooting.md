@@ -83,6 +83,7 @@ sent and need no configuration. CSP **enforces** by default (`CSP_ENFORCE=true`)
 | Ownership poller skipped GOG, Epic, or Amazon | No per-account credential and no household env | Save a token on Ownership, or set `GOG_REFRESH_TOKEN` / `EPIC_DEVICE_AUTH` / `AMAZON_REFRESH_TOKEN` |
 | Connector or provider calls fail only behind `HTTP(S)_PROXY` | A proxy applies by the **host name** in the URL, and the name (not a pinned IP) goes to the proxy. Add LAN connector hosts (`nas.lan`, `.lan`, or an IP/CIDR) to `NO_PROXY`; see [settings-modules.md](settings-modules.md#outbound-proxies-and-url-forms). Through a proxy, DNS-rebinding protection rests with the proxy |
 | Connector URL refused as `Invalid URL` | Backslash, space or other characters RFC 3986 does not allow in the host part, or an impossible port. Percent-encode special characters in an embedded password (`@` → `%40`) or use the username/password fields |
+| Plugins or Integration inventory is missing a built-in connector | Rebuild and restart from the current image so its native runtime modules are present. The registry reports local capability/configuration; it does not call providers to verify credentials. |
 | Community chat | BYO Stoat/Matrix URL only |
 | Discord | **Removed** — use Support inbox + in-app admin alerts |
 | LiveKit | [livekit-unraid.md](../runbooks/livekit-unraid.md) · Plugins → `rtc.livekit` |
