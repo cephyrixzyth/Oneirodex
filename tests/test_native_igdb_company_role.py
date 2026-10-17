@@ -98,6 +98,9 @@ def test_company_role_rejects_non_numeric_ids_before_provider_call():
 
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['error'] == (
+        'Invalid input. Both game_igdb_id and company_id must be provided and numeric.'
+    )
     assert data.calls == []
 
 
