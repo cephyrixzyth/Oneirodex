@@ -12,7 +12,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 from oneirodex.utils.igdb_settings import igdb_public_state
 
 
-def _client(*, role='admin', legacy_save=None):
+def _client(*, role='admin', legacy_save=None, legacy_test=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-igdb-read-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -42,6 +42,9 @@ def _client(*, role='admin', legacy_save=None):
     )
     if legacy_save is not None:
         data_access.save_legacy = legacy_save
+    data_access.test_connection_legacy = legacy_test or (lambda: {
+        'status': 'success', 'message': 'IGDB API test successful',
+    })
 
     router = create_igdb_settings_router(
         flask_app,
@@ -191,13 +194,31 @@ def test_legacy_igdb_save_preserves_blank_secret_and_accepts_empty_client_id(mon
     assert session.commits == 1
 
 
-def test_legacy_igdb_test_path_uses_native_safe_connection_projection():
+def test_legacy_igdb_test_path_preserves_v118_success_body():
     client = _client()
     tested = client.post('/admin/test_igdb', headers={'X-CSRFToken': client.csrf_token})
 
     assert tested.status_code == 200
-    assert tested.json()['message'] == 'IGDB connection successful.'
-    assert 'igdb_client_secret' not in tested.text
+    assert tested.json() == {
+        'ok': True,
+        'error': None,
+        'error_code': None,
+        'success': True,
+        'status': 'success',
+        'message': 'IGDB API test successful',
+    }
+
+
+def test_legacy_igdb_test_path_preserves_v118_missing_and_invalid_results():
+    missing = _client(legacy_test=lambda: None)
+    response = missing.post('/admin/test_igdb', headers={'X-CSRFToken': missing.csrf_token})
+    assert response.status_code == 400
+    assert response.json()['message'] == 'IGDB settings not configured'
+
+    invalid = _client(legacy_test=lambda: False)
+    response = invalid.post('/admin/test_igdb', headers={'X-CSRFToken': invalid.csrf_token})
+    assert response.status_code == 500
+    assert response.json()['message'] == 'Invalid API response'
 
 
 def test_legacy_integrations_igdb_aliases_use_native_save_and_test():

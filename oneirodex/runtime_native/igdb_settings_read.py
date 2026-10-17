@@ -63,6 +63,29 @@ class IgdbSettingsData:
         db.session.commit()
         return {'settings': igdb_public_state(settings)}
 
+    def test_connection_legacy(self) -> dict | bool | None:
+        """Preserve the response contract of the v1.1.8 connection button."""
+        from datetime import datetime, timezone
+
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.igdb_api import make_igdb_api_request
+
+        settings = global_settings_row()
+        if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+            return None
+        result = make_igdb_api_request(
+            'https://api.igdb.com/v4/games', 'fields name; limit 1;'
+        )
+        if not isinstance(result, list):
+            return False
+        settings.igdb_last_tested = datetime.now(timezone.utc)
+        db.session.commit()
+        return {
+            'status': 'success',
+            'message': 'IGDB API test successful',
+        }
+
 
 def create_igdb_settings_router(
     flask_app,
@@ -192,31 +215,43 @@ def create_igdb_settings_router(
                         response = JSONResponse(payload, status_code=status)
                 elif request.method == 'POST':
                     try:
-                        result = data.test_connection()
+                        legacy_test = request.url.path == '/admin/test_igdb'
+                        test_connection = (
+                            getattr(data, 'test_connection_legacy', data.test_connection)
+                            if legacy_test else data.test_connection
+                        )
+                        result = test_connection()
                         if result is None:
                             payload, status = api_error_payload(
+                                'IGDB settings not configured' if legacy_test else
                                 'Save a client ID and secret before testing the connection',
                                 code='bad_request',
                             )
                             response = JSONResponse(payload, status_code=status)
                         elif result is False:
                             payload, status = api_error_payload(
+                                'Invalid API response' if legacy_test else
                                 'IGDB connection failed. Check the saved credentials and provider access.',
-                                code='bad_gateway',
+                                code='internal' if legacy_test else 'bad_gateway',
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            response = JSONResponse(api_ok_payload({
-                                **result, 'message': 'IGDB connection successful.',
-                            }))
+                            if legacy_test:
+                                response = JSONResponse(api_ok_payload(result))
+                            else:
+                                response = JSONResponse(api_ok_payload({
+                                    **result, 'message': 'IGDB connection successful.',
+                                }))
                     except Exception:
                         from oneirodex.runtime_native.db_session import native_db as db
                         import logging
 
                         db.session.rollback()
                         logging.getLogger(__name__).warning('IGDB connection test failed')
+                        legacy_test = request.url.path == '/admin/test_igdb'
                         payload, status = api_error_payload(
-                            'IGDB connection test failed', code='bad_gateway'
+                            'IGDB API test failed' if legacy_test else 'IGDB connection test failed',
+                            code='internal' if legacy_test else 'bad_gateway',
                         )
                         response = JSONResponse(payload, status_code=status)
                 elif request.method == 'PUT':
