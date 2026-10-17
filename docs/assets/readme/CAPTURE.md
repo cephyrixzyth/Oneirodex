@@ -14,7 +14,7 @@ honestly it is skipped and the run says so.
 
 ## Recipe
 
-**Latest full still capture:** 2026-10-17 — all 52 member/admin surfaces passed
+**Latest full still capture:** 2026-10-17 — all 55 member/admin surfaces passed
 the health gate against the throwaway `oneirodexcapture` instance. README
 screenshot slots were refreshed, then the hero, section art, feature cards,
 and how-to poster tiles were regenerated. How-to clips and narration were not
@@ -69,6 +69,7 @@ hits a store, an AI endpoint or the core CDN.
 | `screenshot-big-picture.png` | `/big-picture` | |
 | `screenshot-preferences.png` | account menu → Preferences (modal) | `/settings_panel` is a fragment, not a page |
 | `screenshot-admin-ops.png` · `screenshot-admin-libraries.png` · `screenshot-art-studio.png` | admin surfaces | Ops waits for the LiveKit tile; every other admin page is in `docs/media/screenshots/` |
+| `admin-smtp-settings.png` · `admin-smtp-setup-help.png` · `admin-igdb-settings.png` | SMTP and IGDB settings forms, with SMTP setup help expanded | Credentials are synthetic in the capture fixture; provider calls are disabled |
 | `command-palette.png` | Ctrl-K on `/library` | |
 | `poster-*.png` | the clip's poster frame + play badge + title strip | one per how-to |
 

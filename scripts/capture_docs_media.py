@@ -52,6 +52,7 @@ class Shot:
     full_page: bool = False
     readme: tuple[str, ...] = field(default_factory=tuple)  # README slot filenames
     settle_ms: int = 1_200
+    viewport: dict[str, int] | None = None
 
 
 # --------------------------------------------------------------------------
@@ -125,6 +126,14 @@ def prep_ops(page) -> None:
         page.wait_for_timeout(600)
     except Exception as exc:  # noqa: BLE001
         print("    ops wait:", type(exc).__name__)
+
+
+def prep_smtp_help(page) -> None:
+    try:
+        page.locator("summary").filter(has_text="SMTP setup help").click(timeout=8_000)
+        page.wait_for_timeout(500)
+    except Exception as exc:  # noqa: BLE001
+        print("    SMTP help:", type(exc).__name__)
 
 
 def prep_art(page) -> None:
@@ -219,6 +228,16 @@ SHOTS: list[Shot] = [
     Shot("admin-discovery-sections", "/admin/discovery_sections", settle_ms=2_000),
     Shot("admin-discovery-add-shelf", "/admin/discovery_sections", prep_add_shelf, settle_ms=2_000),
     Shot("admin-settings", "/admin/settings", full_page=True, settle_ms=1_800),
+    Shot("admin-smtp-settings", "/admin/smtp_settings", full_page=True, settle_ms=1_800),
+    Shot(
+        "admin-smtp-setup-help",
+        "/admin/smtp_settings",
+        prep_smtp_help,
+        full_page=True,
+        settle_ms=1_800,
+        viewport={"width": 1600, "height": 1800},
+    ),
+    Shot("admin-igdb-settings", "/admin/igdb_settings", full_page=True, settle_ms=1_800),
     Shot("admin-scan-match", "/admin/scan_match", full_page=True, settle_ms=1_800),
     Shot("admin-features", "/admin/features", full_page=True, settle_ms=1_800),
     Shot(
@@ -251,9 +270,14 @@ def capture(page, shots: list[Shot]) -> list[str]:
     failures: list[str] = []
     for shot in shots:
         print(f"[{shot.name}] {shot.path}")
+        original_viewport = page.viewport_size
+        if shot.viewport is not None:
+            page.set_viewport_size(shot.viewport)
         close_overlays(page)
         if not goto(page, shot.path, settle_ms=shot.settle_ms):
             failures.append(f"{shot.name} (navigation)")
+            if original_viewport is not None and shot.viewport is not None:
+                page.set_viewport_size(original_viewport)
             continue
         # Global panels survive navigation; a page must not be photographed
         # under one that an earlier shot opened.
@@ -267,6 +291,8 @@ def capture(page, shots: list[Shot]) -> list[str]:
         if not healthy:
             print(f"    SKIP: {why} — existing {shot.name}.png left untouched")
             failures.append(f"{shot.name} ({why})")
+            if original_viewport is not None and shot.viewport is not None:
+                page.set_viewport_size(original_viewport)
             continue
         try:
             SHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -282,6 +308,8 @@ def capture(page, shots: list[Shot]) -> list[str]:
         # Leave modals and menus closed for the next surface.
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
+        if original_viewport is not None and shot.viewport is not None:
+            page.set_viewport_size(original_viewport)
     return failures
 
 
