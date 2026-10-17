@@ -9382,6 +9382,26 @@ def test_lazy_asgi_dispatches_legacy_reference_set_delete_form(monkeypatch):
     assert 'session=' in response.headers.get('set-cookie', '')
 
 
+def test_native_reference_sets_head_matches_get_representation(monkeypatch):
+    from oneirodex.runtime_native import reference_sets_read as native_reference_sets
+
+    monkeypatch.setattr(
+        native_reference_sets, 'ReferenceSetsData',
+        lambda: SimpleNamespace(read_sets=lambda: {'sets': []}),
+    )
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie = _signed_session()
+
+    get = _run(runtime, '/api/reference-sets', cookie=cookie)
+    head = _run(runtime, '/api/reference-sets', cookie=cookie, method='HEAD')
+
+    assert get.status_code == 200
+    assert get.content == b'{"sets":[]}\n'
+    assert head.status_code == get.status_code
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(get.content))
+
+
 def test_lazy_asgi_dispatches_legacy_chat_emoji_delete_form(monkeypatch):
     from oneirodex.runtime_native import chat_emoji_read as native_chat_emoji
 

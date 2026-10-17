@@ -354,9 +354,14 @@ def create_reference_sets_router(
             elif request.method in ('POST', 'DELETE') and auth.token is not None and not auth.has_scope('admin'):
                 payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                 response = JSONResponse(payload, status_code=status)
-            elif request.method == 'GET':
+            elif request.method in ('GET', 'HEAD'):
                 try:
-                    response = JSONResponse(data.read_sets())
+                    from .runtime_context import NativeJSONProvider
+                    from starlette.responses import Response
+
+                    provider = NativeJSONProvider(flask_app.config)
+                    body = (provider.dumps(data.read_sets(), separators=(',', ':')) + '\n').encode('utf-8')
+                    response = Response(body, media_type=provider.mimetype)
                 except Exception:
                     payload, status = api_error_payload('Could not load reference sets', code='internal')
                     response = JSONResponse(payload, status_code=status)
