@@ -17,7 +17,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  *   is replaced so the non-passive wheel listener rebinds (refs alone do not
  *   re-run an effect).
  */
-export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: LooseProps = {}) {
+export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0, wrapAround = false }: LooseProps = {}) {
   const ref = useRef<any>(null)
   /** Outer hover zone (viewport / scroller). Wheel binds here so the lane under
    *  the custom scrollbar and the arrow fades do not become accidental row scroll. */
@@ -121,13 +121,25 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
       const reduced =
         typeof window !== 'undefined' &&
         window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      const atStart = node.scrollLeft <= 1
+      const atEnd = node.scrollLeft >= max - 1
+      if (wrapAround && max > 1 && ((direction < 0 && atStart) || (direction > 0 && atEnd))) {
+        const target = direction < 0 ? max : 0
+        node.scrollBy({
+          left: target - node.scrollLeft,
+          behavior: reduced ? 'auto' : 'smooth',
+        })
+        measure()
+        return
+      }
       node.scrollBy({
         left: direction * node.clientWidth * step,
         behavior: reduced ? 'auto' : 'smooth',
       })
       measure()
     },
-    [measure, step, stopEdgeScroll],
+    [measure, step, stopEdgeScroll, wrapAround],
   )
 
   const wheelDeltaPx = useCallback((event: any, fallbackPage: any) => {

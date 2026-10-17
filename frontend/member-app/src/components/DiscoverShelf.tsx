@@ -77,7 +77,7 @@ export function DiscoverShelf({
     scrollByPage,
     startEdgeScroll,
     stopEdgeScroll,
-  } = useRowScroll({ bindKey: games.length })
+  } = useRowScroll({ bindKey: games.length, wrapAround: true })
 
   const syncHbar = useCallback(() => {
     const track = trackRef.current
@@ -329,7 +329,7 @@ export function DiscoverShelf({
             type="button"
             className="od-shelf__arrow od-shelf__arrow--start"
             aria-label={`Scroll ${section.title} left`}
-            disabled={!overflow.start}
+            disabled={!overflow.start && !overflow.end}
             onClick={() => scrollByPage(-1)}
             onPointerEnter={() => {
               if (overflow.start) startEdgeScroll(-1)
@@ -384,7 +384,7 @@ export function DiscoverShelf({
             type="button"
             className="od-shelf__arrow od-shelf__arrow--end"
             aria-label={`Scroll ${section.title} right`}
-            disabled={!overflow.end}
+            disabled={!overflow.start && !overflow.end}
             onClick={() => scrollByPage(1)}
             onPointerEnter={() => {
               if (overflow.end) startEdgeScroll(1)

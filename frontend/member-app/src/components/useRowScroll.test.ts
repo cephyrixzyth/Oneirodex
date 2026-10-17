@@ -302,6 +302,25 @@ describe('useRowScroll arrow hover', () => {
     result.current.scrollByPage(1)
     expect(track.scrollLeft).toBe(10)
   })
+
+  test('Discover can wrap left from the first tile to the last', () => {
+    const { result } = renderHook(() => useRowScroll({ wrapAround: true }))
+    result.current.ref.current = track
+
+    act(() => result.current.scrollByPage(-1))
+
+    expect(track.scrollLeft).toBe(800)
+  })
+
+  test('Discover can wrap right from the last tile to the first', () => {
+    const { result } = renderHook(() => useRowScroll({ wrapAround: true }))
+    result.current.ref.current = track
+    track.scrollLeft = 800
+
+    act(() => result.current.scrollByPage(1))
+
+    expect(track.scrollLeft).toBe(0)
+  })
 })
 
 describe('useRowScroll grab-to-scroll', () => {

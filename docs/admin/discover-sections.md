@@ -162,6 +162,11 @@ every tile twice for no reader's benefit. On the client, `rowItems(section)` in
 Expired giveaways are dropped from the news row rather than shown — a "free now"
 row advertising a finished giveaway is worse than a shorter row.
 
+Discover shelves scroll horizontally with the row arrows or scrollbar. The arrows
+wrap at the edges: left from the first tile goes to the last, and right from the
+last tile returns to the first. Horizontal wheel and drag continue to stop at
+the row ends.
+
 ## Row depth and the "see all" tile
 
 A shelf ships a **window** of `ROW_WINDOW` (12) tiles and fills itself in as the
