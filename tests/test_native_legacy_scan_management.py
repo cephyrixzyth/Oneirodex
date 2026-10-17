@@ -167,6 +167,18 @@ def test_legacy_scan_management_rejects_padded_schedule_choice(native_client):
     assert not any(call[0] == 'start_scan' for call in data.calls)
 
 
+def test_legacy_scan_management_uses_six_hour_interval_default(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'AutoScan', fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'folders', 'schedule': 'interval',
+    })
+
+    assert response.status_code == 302
+    queued = next(call for call in data.calls if call[0] == 'start_scan')
+    assert queued[3]['schedule_fields']['schedule_interval_minutes'] == 360
+
+
 def test_legacy_scan_management_rejects_unknown_libraries_and_unsafe_paths(native_client):
     runtime, data = native_client
     unknown = _request(runtime, 'AutoScan', fields={'library_uuid': 'missing'})

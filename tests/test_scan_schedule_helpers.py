@@ -65,6 +65,10 @@ def test_normalize_schedule_fields_presets_interval_cron():
     once = normalize_schedule_fields('')
     assert once['schedule_kind'] == 'once'
 
+    default_interval = normalize_schedule_fields('interval')
+    assert default_interval['schedule_kind'] == 'interval'
+    assert default_interval['schedule_interval_minutes'] == 360
+
 
 def test_apply_schedule_and_job_next_run_from_row():
     fields = normalize_schedule_fields(

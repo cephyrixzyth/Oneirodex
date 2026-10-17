@@ -245,13 +245,16 @@ def normalize_schedule_fields(
         out['next_run'] = compute_next_run(choice)
         return out
     if choice == 'interval':
-        raw_interval_value = interval_value
+        # AutoScanForm's IntegerField defaults to six when omitted. An
+        # explicitly submitted empty string remains empty and is rejected
+        # below, matching WTForms Optional + the legacy normalizer.
+        raw_interval_value = 6 if interval_value is None else interval_value
         try:
             # WTForms IntegerField rejects booleans and JSON floats; Python's
             # int() would otherwise coerce True to 1 and 1.5 to 1.
-            if isinstance(interval_value, (bool, float)):
+            if isinstance(raw_interval_value, (bool, float)):
                 raise ValueError
-            value = int(interval_value or 0)
+            value = int(raw_interval_value or 0)
         except (TypeError, ValueError):
             out['error'] = (
                 'Not a valid integer value. Number must be between 1 and 10080.'

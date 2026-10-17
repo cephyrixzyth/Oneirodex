@@ -311,6 +311,17 @@ def test_single_scan_rejects_padded_schedule_choice(native_client):
     assert not any(call[0] == 'scan' for call in data.calls)
 
 
+def test_single_scan_uses_legacy_six_hour_default_when_interval_is_omitted(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'schedule': 'interval',
+    })
+
+    assert response.status_code == 200
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[3]['schedule_fields']['schedule_interval_minutes'] == 360
+
+
 def test_single_scan_missing_folder_matches_legacy_rejection(native_client):
     runtime, data = native_client
     data.items['lib-no-folder'] = SimpleNamespace(
