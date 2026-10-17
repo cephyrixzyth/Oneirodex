@@ -34,6 +34,50 @@ class SmtpSettingsData:
         cache.delete('global_settings')
         return {'settings': smtp_public_state(settings)}
 
+    def save_legacy(self, payload):
+        """Preserve v1.1.8 POST semantics for the legacy admin endpoint.
+
+        The current JSON API uses ``save`` and its stricter validation. The
+        compatibility POST historically required the full SMTP fields only
+        when enabled, did not validate disabled settings, and left the stored
+        port untouched while disabled.
+        """
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.cache import cache
+        from oneirodex.utils.global_settings import global_settings_row_or_create
+
+        values = payload or {}
+        settings = global_settings_row_or_create()
+        if values.get('smtp_enabled'):
+            for key, message in (
+                ('smtp_server', 'SMTP server is required when SMTP is enabled'),
+                ('smtp_port', 'SMTP port is required when SMTP is enabled'),
+                ('smtp_username', 'SMTP username is required when SMTP is enabled'),
+            ):
+                if not values.get(key):
+                    raise ValueError(message)
+            if not values.get('smtp_password') and not settings.smtp_password:
+                raise ValueError('SMTP password is required when SMTP is enabled')
+            if not values.get('smtp_default_sender'):
+                raise ValueError('Default sender email is required when SMTP is enabled')
+            try:
+                port = int(values.get('smtp_port', 587))
+            except ValueError:
+                raise ValueError('SMTP port must be a valid number') from None
+            if port <= 0 or port > 65535:
+                raise ValueError('Invalid port number. Must be between 1 and 65535')
+            settings.smtp_port = port
+
+        settings.smtp_enabled = values.get('smtp_enabled', False)
+        settings.smtp_server = values.get('smtp_server')
+        settings.smtp_username = values.get('smtp_username')
+        if values.get('smtp_password'):
+            settings.smtp_password = values.get('smtp_password')
+        settings.smtp_use_tls = values.get('smtp_use_tls', True)
+        settings.smtp_default_sender = values.get('smtp_default_sender')
+        db.session.commit()
+        cache.delete('global_settings')
+
     def test_connection(self) -> bool | None:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.smtp_test import SMTPTester
@@ -131,8 +175,12 @@ def create_smtp_settings_router(
                 elif request.method == 'POST':
                     if request.url.path == '/admin/smtp_settings':
                         try:
-                            body = await _json_body(request)
-                            saved = data.save(body)
+                            body = await _legacy_json_body(request)
+                            legacy_save = getattr(data, 'save_legacy', None)
+                            if legacy_save is None:
+                                data.save(body)
+                            else:
+                                legacy_save(body)
                         except ValueError as exc:
                             payload, status = api_error_payload(str(exc), code='bad_request')
                             response = JSONResponse(payload, status_code=status)
@@ -148,7 +196,6 @@ def create_smtp_settings_router(
                             response = JSONResponse(api_ok_payload({
                                 'status': 'success',
                                 'message': 'SMTP settings updated successfully',
-                                **saved,
                             }))
                             if auth.should_set_session_cookie:
                                 from .oidc_status import _set_session_cookie
@@ -258,3 +305,15 @@ async def _json_body(request: Request):
     if not isinstance(value, dict):
         raise ValueError('SMTP settings must be a JSON object')
     return value
+
+
+async def _legacy_json_body(request: Request):
+    """Read the v1.1.8-compatible JSON value for the old POST path."""
+    import json
+
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 16 * 1024:
+            raise ValueError('SMTP settings request is too large')
+    return json.loads(raw or b'{}') or {}

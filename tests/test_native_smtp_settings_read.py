@@ -13,7 +13,7 @@ from oneirodex.utils.smtp_settings import validate_smtp_data
 from oneirodex.utils.smtp_settings import smtp_public_state
 
 
-def _client(*, role='admin', test_result=True):
+def _client(*, role='admin', test_result=True, legacy_save=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-smtp-read-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -38,6 +38,16 @@ def _client(*, role='admin', test_result=True):
             'password_saved': bool(validated['smtp_password']),
         }}
 
+    data_access = SimpleNamespace(
+        read=lambda: {'settings': {
+            'smtp_server': 'mail.example', 'password_saved': True,
+        }},
+        save=save,
+        test_connection=lambda: test_result,
+    )
+    if legacy_save is not None:
+        data_access.save_legacy = legacy_save
+
     router = create_smtp_settings_router(
         flask_app,
         find_user=lambda user_id: user if user_id == 71 else None,
@@ -45,13 +55,7 @@ def _client(*, role='admin', test_result=True):
         commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '71' else None,
         login_manager=login_manager,
-        data_access=SimpleNamespace(
-            read=lambda: {'settings': {
-                'smtp_server': 'mail.example', 'password_saved': True,
-            }},
-            save=save,
-            test_connection=lambda: test_result,
-        ),
+        data_access=data_access,
         database_scope=lambda _app: nullcontext(),
     )
     app = FastAPI()
@@ -157,6 +161,96 @@ def test_legacy_smtp_save_path_preserves_status_and_hides_password():
     assert response.json()['status'] == 'success'
     assert response.json()['message'] == 'SMTP settings updated successfully'
     assert 'private-password' not in response.text
+
+
+def test_legacy_smtp_post_uses_compatibility_save_and_exact_response():
+    calls = []
+    client = _client(legacy_save=lambda payload: calls.append(payload))
+    payload = {
+        'smtp_enabled': False,
+        'smtp_server': ' invalid hostname ',
+        'smtp_port': 'not-a-number',
+        'smtp_username': ' user ',
+        'smtp_use_tls': 'unchecked',
+        'smtp_default_sender': 'not-an-email',
+    }
+
+    response = client.post(
+        '/admin/smtp_settings', json=payload,
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert calls == [payload]
+    assert client.saved == []  # strict modern PUT validator was bypassed
+    assert response.json() == {
+        'ok': True,
+        'error': None,
+        'error_code': None,
+        'success': True,
+        'status': 'success',
+        'message': 'SMTP settings updated successfully',
+    }
+
+
+def test_legacy_smtp_disabled_save_preserves_v118_field_semantics(monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import global_settings
+    from oneirodex.utils.cache import cache
+    from oneirodex.runtime_native.smtp_settings_read import SmtpSettingsData
+
+    settings = SimpleNamespace(
+        smtp_enabled=True, smtp_server='old.example', smtp_port=2525,
+        smtp_username='old-user', smtp_password='saved-secret',
+        smtp_use_tls=True, smtp_default_sender='old@example.com',
+    )
+    session = SimpleNamespace(commits=0)
+    session.commit = lambda: setattr(session, 'commits', session.commits + 1)
+    deleted = []
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+    monkeypatch.setattr(cache, 'delete', lambda key: deleted.append(key))
+
+    SmtpSettingsData().save_legacy({
+        'smtp_enabled': False,
+        'smtp_server': ' invalid hostname ',
+        'smtp_port': 'not-a-number',
+        'smtp_username': ' user ',
+        'smtp_password': '',
+        'smtp_use_tls': 'unchecked',
+        'smtp_default_sender': 'not-an-email',
+    })
+
+    assert settings.smtp_enabled is False
+    assert settings.smtp_port == 2525
+    assert settings.smtp_server == ' invalid hostname '
+    assert settings.smtp_username == ' user '
+    assert settings.smtp_password == 'saved-secret'
+    assert settings.smtp_use_tls == 'unchecked'
+    assert settings.smtp_default_sender == 'not-an-email'
+    assert session.commits == 1
+    assert deleted == ['global_settings']
+
+
+def test_legacy_smtp_enabled_validation_keeps_v118_error_order(monkeypatch):
+    import pytest
+
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import global_settings
+    from oneirodex.runtime_native.smtp_settings_read import SmtpSettingsData
+
+    settings = SimpleNamespace(smtp_password='')
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=SimpleNamespace()))
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+
+    with pytest.raises(ValueError, match='SMTP password is required when SMTP is enabled'):
+        SmtpSettingsData().save_legacy({
+            'smtp_enabled': True,
+            'smtp_server': 'smtp.example.com',
+            'smtp_port': 587,
+            'smtp_username': 'mailer',
+            'smtp_default_sender': '',
+        })
 
 
 def test_legacy_smtp_test_path_keeps_failure_at_http_200():
