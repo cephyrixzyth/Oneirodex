@@ -38,12 +38,23 @@ def _client(*, role='admin', test_result=True, legacy_save=None):
             'password_saved': bool(validated['smtp_password']),
         }}
 
+    def legacy_test():
+        if test_result is None:
+            return None
+        if isinstance(test_result, tuple):
+            return test_result
+        return bool(test_result), (
+            'Connection successful' if test_result
+            else 'Connection failed: Authentication error'
+        )
+
     data_access = SimpleNamespace(
         read=lambda: {'settings': {
             'smtp_server': 'mail.example', 'password_saved': True,
         }},
         save=save,
         test_connection=lambda: test_result,
+        test_connection_legacy=legacy_test,
     )
     if legacy_save is not None:
         data_access.save_legacy = legacy_save
@@ -255,4 +266,24 @@ def test_legacy_smtp_test_path_keeps_failure_at_http_200():
 
     assert response.status_code == 200
     assert response.json()['success'] is False
-    assert 'password' not in response.text.lower()
+    assert response.json()['message'] == 'Connection failed: Authentication error'
+
+
+def test_legacy_smtp_test_path_preserves_success_result_and_missing_settings():
+    client = _client(test_result=(True, {'status': 'Connection successful'}))
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+    assert response.status_code == 200
+    assert response.json()['result'] == {'status': 'Connection successful'}
+
+    client = _client(test_result=None)
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+    assert response.status_code == 400
+    assert response.json()['message'] == 'SMTP settings not configured'
+
+
+def test_legacy_smtp_test_result_redacts_saved_secret():
+    from oneirodex.runtime_native.smtp_settings_read import _redact_smtp_result
+
+    assert _redact_smtp_result(
+        {'message': 'server echoed private-token'}, 'private-token'
+    ) == {'message': 'server echoed [redacted]'}

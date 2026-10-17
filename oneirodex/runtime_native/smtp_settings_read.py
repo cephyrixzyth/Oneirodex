@@ -93,6 +93,38 @@ class SmtpSettingsData:
         )
         return bool(success)
 
+    def test_connection_legacy(self):
+        """Preserve the v1.1.8 SMTP form test result while redacting secrets."""
+        from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.smtp_test import SMTPTester
+
+        settings = global_settings_row()
+        if not settings:
+            return None
+        success, result = SMTPTester(debug=False).test_connection(
+            host=settings.smtp_server,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            use_tls=settings.smtp_use_tls,
+            timeout=10,
+        )
+        return bool(success), _redact_smtp_result(result, settings.smtp_password)
+
+
+def _redact_smtp_result(value, secret):
+    if not secret:
+        return value
+    if isinstance(value, str):
+        return value.replace(secret, '[redacted]')
+    if isinstance(value, dict):
+        return {key: _redact_smtp_result(item, secret) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_smtp_result(item, secret) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_smtp_result(item, secret) for item in value)
+    return value
+
 
 def create_smtp_settings_router(
     flask_app,
@@ -200,18 +232,23 @@ def create_smtp_settings_router(
                                 _set_session_cookie(response, flask_app, auth)
                     else:
                         try:
-                            result = data.test_connection()
-                            if request.url.path == '/admin/smtp_test':
+                            legacy_test = request.url.path == '/admin/smtp_test'
+                            test_connection = (
+                                getattr(data, 'test_connection_legacy', data.test_connection)
+                                if legacy_test else data.test_connection
+                            )
+                            result = test_connection()
+                            if legacy_test:
                                 if result is None:
                                     payload, status = api_error_payload(
                                         'SMTP settings not configured', code='bad_request',
                                     )
                                     response = JSONResponse(payload, status_code=status)
-                                elif result:
-                                    response = JSONResponse(api_ok_payload({'result': 'SMTP connection successful'}))
+                                elif result[0]:
+                                    response = JSONResponse(api_ok_payload({'result': result[1]}))
                                 else:
                                     payload, status = api_error_payload(
-                                        'SMTP connection failed. Check the saved settings and provider access.',
+                                        str(result[1] or 'SMTP connection failed'),
                                         code='bad_request', status=200,
                                     )
                                     response = JSONResponse(payload, status_code=status)
