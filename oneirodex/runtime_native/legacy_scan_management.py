@@ -310,6 +310,8 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
         return f'{redirect}&library_uuid={library_uuid}'
     requested_mode = str(form.get('scan_mode') or 'auto')
     scan_mode = data.scan_mode(resolved, requested_mode)
+    raw_schedule = form.get('schedule')
+    schedule = raw_schedule if raw_schedule and str(raw_schedule).strip() else None
     options = {
         'scan_mode': scan_mode,
         'remove_missing': not manual and _flag(form.get('remove_missing')),
@@ -317,7 +319,7 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
         'force_updates_extras': _flag(form.get('force_updates_extras_scan')),
         'fetch_hltb': _flag(form.get('fetch_hltb')),
         'force_hltb_refetch': _flag(form.get('force_hltb_refetch')),
-        'schedule': str(form.get('schedule') or '').strip() or None,
+        'schedule': schedule,
         'queue_policy': parse_queue_policy(
             form.get('queue_policy'), force_parallel=form.get('force_parallel'),
         ),
