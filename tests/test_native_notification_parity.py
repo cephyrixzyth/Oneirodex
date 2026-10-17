@@ -19,7 +19,7 @@ from oneirodex.models import User
     ],
     ids=['unexpected-runtime-error', 'sqlalchemy-operational-error'],
 )
-def test_notification_list_database_failure_matches_wsgi_and_native_asgi(
+def test_notification_database_failure_matches_wsgi_and_native_asgi(
     app, client, db_session, failure, monkeypatch,
 ):
     import asyncio
@@ -51,10 +51,12 @@ def test_notification_list_database_failure_matches_wsgi_and_native_asgi(
         raise failure
 
     monkeypatch.setattr(notification_routes, 'list_notifications', fail_list)
+    monkeypatch.setattr(notification_routes, 'mark_read', fail_list)
     with client.session_transaction() as session:
         session['_user_id'] = str(flask_user.id)
         session['_fresh'] = True
-    wsgi_response = client.get('/api/notifications')
+    wsgi_list_response = client.get('/api/notifications')
+    wsgi_write_response = client.post('/api/notifications/read', json={'ids': []})
 
     native_user = SimpleNamespace(
         id=flask_user.id,
@@ -67,6 +69,9 @@ def test_notification_list_database_failure_matches_wsgi_and_native_asgi(
 
     class FailingNotificationData:
         def list(self, *_args, **_kwargs):
+            raise failure
+
+        def mark_read(self, *_args, **_kwargs):
             raise failure
 
     native_app = FastAPI()
@@ -93,7 +98,7 @@ def test_notification_list_database_failure_matches_wsgi_and_native_asgi(
         app.config['SECRET_KEY'],
     )
 
-    async def get_native_response():
+    async def get_native_responses():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(
                 app=native_app,
@@ -102,11 +107,19 @@ def test_notification_list_database_failure_matches_wsgi_and_native_asgi(
             base_url='http://localhost',
         ) as native_client:
             native_client.cookies.set('session', native_cookie)
-            return await native_client.get('/api/notifications')
+            list_response = await native_client.get('/api/notifications')
+            write_response = await native_client.post(
+                '/api/notifications/read', json={'ids': []},
+            )
+            return list_response, write_response
 
-    native_response = asyncio.run(get_native_response())
+    native_list_response, native_write_response = asyncio.run(get_native_responses())
 
-    assert wsgi_response.status_code == native_response.status_code == 500
-    assert wsgi_response.get_json() == native_response.json()
-    assert 'synthetic-secret-db-detail' not in wsgi_response.get_data(as_text=True)
-    assert 'synthetic-secret-db-detail' not in native_response.text
+    assert wsgi_list_response.status_code == native_list_response.status_code == 500
+    assert wsgi_list_response.get_json() == native_list_response.json()
+    assert wsgi_write_response.status_code == native_write_response.status_code == 500
+    assert wsgi_write_response.get_json() == native_write_response.json()
+    for response in (wsgi_list_response, wsgi_write_response):
+        assert 'synthetic-secret-db-detail' not in response.get_data(as_text=True)
+    for response in (native_list_response, native_write_response):
+        assert 'synthetic-secret-db-detail' not in response.text
