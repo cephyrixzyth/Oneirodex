@@ -244,6 +244,10 @@ def normalize_schedule_fields(
     if choice == 'interval':
         raw_interval_value = interval_value
         try:
+            # WTForms IntegerField rejects booleans and JSON floats; Python's
+            # int() would otherwise coerce True to 1 and 1.5 to 1.
+            if isinstance(interval_value, (bool, float)):
+                raise ValueError
             value = int(interval_value or 0)
         except (TypeError, ValueError):
             out['error'] = (

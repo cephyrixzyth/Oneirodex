@@ -134,6 +134,14 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
         'Not a valid integer value. Number must be between 1 and 10080.'
     )
 
+    for non_integer in (1.5, True):
+        invalid_numeric_type = normalize_schedule_fields(
+            'interval', interval_value=non_integer, interval_unit='minutes',
+        )
+        assert invalid_numeric_type['error'] == (
+            'Not a valid integer value. Number must be between 1 and 10080.'
+        )
+
     empty_interval = normalize_schedule_fields(
         'interval', interval_value='', interval_unit='minutes',
     )
