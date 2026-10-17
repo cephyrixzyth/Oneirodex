@@ -144,14 +144,18 @@ def create_admin_whitelist_router(
                             response = _result(payload, error, status=201)
                     else:
                         payload, error = data.delete(whitelist_id or 0, user)
-                        if error and error[1] == 'not_found' and not _wants_json_error(request):
+                        if error and error[1] == 'not_found':
                             from werkzeug.exceptions import NotFound
-                            legacy = NotFound().get_response()
-                            response = Response(
-                                content=legacy.get_data(),
-                                status_code=legacy.status_code,
-                                headers=dict(legacy.headers),
-                            )
+                            missing = NotFound()
+                            if _wants_json_error(request):
+                                response = _error(missing.description, 'not_found', 404)
+                            else:
+                                legacy = missing.get_response()
+                                response = Response(
+                                    content=legacy.get_data(),
+                                    status_code=legacy.status_code,
+                                    headers=dict(legacy.headers),
+                                )
                         else:
                             response = _result(payload, error)
                 except Exception:  # noqa: BLE001 — do not expose persistence diagnostics

@@ -121,6 +121,8 @@ def test_whitelist_conflict_and_missing_delete_use_error_contracts():
     )
     assert duplicate.status_code == 409 and duplicate.json()['error_code'] == 'conflict'
     assert missing.status_code == 404 and missing.json()['error_code'] == 'not_found'
+    assert missing.json()['error'] == NotFound().description
+    assert missing.json()['message'] == NotFound().description
 
 
 def test_missing_whitelist_delete_keeps_legacy_html_for_browser_requests():
@@ -151,6 +153,8 @@ def test_missing_whitelist_delete_matches_legacy_error_negotiation(extra_headers
     if expects_json:
         assert response.headers['content-type'].startswith('application/json')
         assert response.json()['error_code'] == 'not_found'
+        assert response.json()['error'] == NotFound().description
+        assert response.json()['message'] == NotFound().description
     else:
         assert response.headers['content-type'].startswith('text/html')
         assert response.content == NotFound().get_response().get_data()
