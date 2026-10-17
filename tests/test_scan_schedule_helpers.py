@@ -155,6 +155,12 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     unknown_schedule = normalize_schedule_fields('not-a-schedule')
     assert unknown_schedule['error'] == 'Not a valid choice.'
 
+    padded_schedule = normalize_schedule_fields(' interval ')
+    assert padded_schedule['error'] == 'Not a valid choice.'
+    whitespace_schedule = normalize_schedule_fields('   ')
+    assert whitespace_schedule['error'] is None
+    assert whitespace_schedule['schedule_kind'] == 'once'
+
     empty_unit = normalize_schedule_fields(
         'interval', interval_value=15, interval_unit='',
     )

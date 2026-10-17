@@ -298,6 +298,19 @@ def test_single_scan_rejects_non_choice_interval_unit(native_client, interval_un
     assert not any(call[0] == 'scan' for call in data.calls)
 
 
+def test_single_scan_rejects_padded_schedule_choice(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one',
+        'schedule': ' interval ', 'schedule_interval_value': 15,
+        'schedule_interval_unit': 'minutes',
+    })
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Not a valid choice.'
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
 def test_single_scan_missing_folder_matches_legacy_rejection(native_client):
     runtime, data = native_client
     data.items['lib-no-folder'] = SimpleNamespace(

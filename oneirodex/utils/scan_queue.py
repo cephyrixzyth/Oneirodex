@@ -225,7 +225,7 @@ def normalize_schedule_fields(
         compute_next_run,
     )
 
-    choice = (schedule_choice or '').strip()
+    choice = '' if schedule_choice is None else schedule_choice
     out = {
         'schedule': None,
         'schedule_kind': 'once',
@@ -234,7 +234,10 @@ def normalize_schedule_fields(
         'next_run': None,
         'error': None,
     }
-    if not choice:
+    if not isinstance(choice, str):
+        out['error'] = 'Not a valid choice.'
+        return out
+    if not choice.strip():
         return out
     if choice in SCHEDULE_HOURS:
         out['schedule'] = choice

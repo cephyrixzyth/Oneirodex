@@ -844,7 +844,9 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
     if schedule is not None and not isinstance(schedule, str):
         return _error('schedule must be a string', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
-    schedule = (schedule or '').strip() or None
+    # Preserve non-empty SelectField values exactly so padded choices are
+    # rejected like v1.1.8. Whitespace-only is still the optional "once" value.
+    schedule = schedule if schedule and schedule.strip() else None
     interval_unit = payload.get('schedule_interval_unit')
     cron_expr = payload.get('schedule_cron')
     if interval_unit is not None and not isinstance(interval_unit, str):
