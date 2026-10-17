@@ -252,7 +252,10 @@ export function App() {
     >
       <header className="catalog__header">
         <div>
-          <p className="catalog__eyebrow">Oneirodex · local developer tooling</p>
+          <p className="catalog__eyebrow">
+            Oneirodex · local developer tooling ·{' '}
+            <a href="http://127.0.0.1:6128/">Project hub</a>
+          </p>
           <h1>UI catalog</h1>
           <p className="catalog__lede">
             Live specimens from the private <code>@oneirodex/ui</code> workspace and canonical theme
