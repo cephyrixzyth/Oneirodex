@@ -1,17 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { IgdbSettingsPage } from './IgdbSettingsPage'
-import { getJson, putJson, postJson } from '../api/adminApi'
-vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), putJson: vi.fn(), postJson: vi.fn() }))
+import { getJson, postJson } from '../api/adminApi'
+vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
 afterEach(() => vi.resetAllMocks())
-const settings = { igdb_client_id: 'review-client-01234567', secret_present: true, last_tested: null }
+const settings = {
+  igdb_client_id: 'review-client-01234567',
+  secret_present: true,
+  last_tested: null,
+}
 
-test('saved secret is never populated; dirty drafts cannot test and save clears new secret', async () => {
+test('saved secret is never populated; dirty drafts can test saved settings and save clears new secret', async () => {
   vi.mocked(getJson).mockResolvedValue({ settings })
-  vi.mocked(putJson).mockResolvedValue({ settings })
-  vi.mocked(postJson).mockResolvedValue({
-    settings: { ...settings, last_tested: '2026-10-10T00:00:00Z' },
-  })
+  vi.mocked(postJson).mockResolvedValue({ status: 'success', message: 'saved' })
   render(<IgdbSettingsPage />)
   const secret = await screen.findByLabelText('Client secret')
   expect(secret).toHaveValue('')
@@ -23,19 +24,18 @@ test('saved secret is never populated; dirty drafts cannot test and save clears 
     'aria-pressed',
     'true',
   )
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-  expect(await screen.findByText('IGDB settings saved.')).toBeInTheDocument()
-  expect(putJson).toHaveBeenCalledWith('/api/admin/igdb/settings', {
+  expect((await screen.findAllByText('IGDB settings saved successfully')).length).toBeGreaterThan(0)
+  expect(postJson).toHaveBeenCalledWith('/admin/igdb_settings', {
     igdb_client_id: 'review-client-01234567',
     igdb_client_secret: 'new-test-secret-value',
   })
   expect(secret).toHaveValue('')
   expect(secret).toHaveAttribute('type', 'password')
   fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
-  expect(await screen.findByText('IGDB connection successful.')).toBeInTheDocument()
-  expect(postJson).toHaveBeenCalledWith('/api/admin/igdb/test')
-  expect(screen.getByText(/Last connection test:/)).toBeInTheDocument()
+  expect(await screen.findByText('IGDB API test successful')).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith('/admin/test_igdb')
 })
 
 test('load failure guards saving and retry restores safe state', async () => {
@@ -50,12 +50,16 @@ test('load failure guards saving and retry restores safe state', async () => {
   expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled()
 })
 
-test('failed save retains draft; missing saved secret prevents test', async () => {
+test('failed save retains draft; missing credentials reach the legacy test endpoint', async () => {
   vi.mocked(getJson).mockResolvedValue({ settings: { ...settings, secret_present: false } })
-  vi.mocked(putJson).mockRejectedValue(new Error('Save unavailable'))
+  vi.mocked(postJson).mockRejectedValue(new Error('Save unavailable'))
   render(<IgdbSettingsPage />)
   const secret = await screen.findByLabelText('Client secret')
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
+  vi.mocked(postJson).mockRejectedValueOnce(new Error('IGDB settings not configured'))
+  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('IGDB settings not configured')
+  expect(postJson).toHaveBeenCalledWith('/admin/test_igdb')
   fireEvent.change(secret, { target: { value: 'draft-test-secret-value' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Save unavailable')
@@ -77,23 +81,38 @@ test('blocks credentials under the legacy minimum before saving', async () => {
   fireEvent.change(secret, { target: { value: 's'.repeat(19) } })
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Client ID and secret must be at least 20 characters long.',
+    'Client ID and Secret must be at least 20 characters long',
   )
-  expect(putJson).not.toHaveBeenCalled()
+  expect(postJson).not.toHaveBeenCalled()
 })
 
 test('allows a blank replacement when the saved secret is being retained', async () => {
   vi.mocked(getJson).mockResolvedValue({ settings })
-  vi.mocked(putJson).mockResolvedValue({ settings })
+  vi.mocked(postJson).mockResolvedValue({ status: 'success', message: 'saved' })
   render(<IgdbSettingsPage />)
   await screen.findByLabelText('Client ID')
   expect(screen.getByLabelText('Client secret')).toHaveValue('')
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-  expect(await screen.findByText('IGDB settings saved.')).toBeInTheDocument()
+  expect(await screen.findByText('IGDB settings saved successfully')).toBeInTheDocument()
   await waitFor(() =>
-    expect(putJson).toHaveBeenCalledWith('/api/admin/igdb/settings', {
+    expect(postJson).toHaveBeenCalledWith('/admin/igdb_settings', {
       igdb_client_id: settings.igdb_client_id,
       igdb_client_secret: '',
     }),
   )
+})
+
+test('legacy save preserves whitespace in an otherwise valid client ID', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings })
+  vi.mocked(postJson).mockResolvedValue({ status: 'success', message: 'saved' })
+  render(<IgdbSettingsPage />)
+  const clientId = await screen.findByLabelText('Client ID')
+  const submittedId = ` ${'x'.repeat(20)} `
+  fireEvent.change(clientId, { target: { value: submittedId } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  expect((await screen.findAllByText('IGDB settings saved successfully')).length).toBeGreaterThan(0)
+  expect(postJson).toHaveBeenCalledWith('/admin/igdb_settings', {
+    igdb_client_id: submittedId,
+    igdb_client_secret: '',
+  })
 })

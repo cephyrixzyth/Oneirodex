@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
-import { getJson, putJson, postJson } from '../api/adminApi'
+import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
@@ -9,7 +9,6 @@ const API = '/api/admin/igdb/settings'
 export function IgdbSettingsPage() {
   const [clientId, setClientId] = useState('')
   const [secret, setSecret] = useState('')
-  const [savedId, setSavedId] = useState('')
   const [secretPresent, setSecretPresent] = useState(false)
   const [lastTested, setLastTested] = useState<string | null>(null)
   const [showSecret, setShowSecret] = useState(false)
@@ -19,7 +18,6 @@ export function IgdbSettingsPage() {
   const [reload, setReload] = useState(0)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const dirty = clientId !== savedId || Boolean(secret)
   function accept(data: {
     igdb_client_id?: unknown
     secret_present?: unknown
@@ -32,7 +30,6 @@ export function IgdbSettingsPage() {
     )
       throw new Error('IGDB settings returned an invalid response.')
     setClientId(data.igdb_client_id)
-    setSavedId(data.igdb_client_id)
     setSecretPresent(data.secret_present)
     setLastTested(data.last_tested || null)
     setSecret('')
@@ -65,17 +62,24 @@ export function IgdbSettingsPage() {
     if (loading || loadFailed || busy) return
     const keepSavedSecret = secret === '' && secretPresent
     if (clientId.length < 20 || (!keepSavedSecret && secret.length < 20)) {
-      setError('Client ID and secret must be at least 20 characters long.')
+      setError('Client ID and Secret must be at least 20 characters long')
       return
     }
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      const data = await putJson(API, { igdb_client_id: clientId, igdb_client_secret: secret })
-      accept(data.settings)
-      setMessage('IGDB settings saved.')
-      showToast('IGDB settings saved.', 'success')
+      const data = await postJson('/admin/igdb_settings', {
+        igdb_client_id: clientId,
+        igdb_client_secret: secret,
+      })
+      if (data.status !== 'success')
+        throw new Error(data.message || 'Could not save IGDB settings.')
+      setSecretPresent(secretPresent || Boolean(secret))
+      setSecret('')
+      setShowSecret(false)
+      setMessage('IGDB settings saved successfully')
+      showToast('IGDB settings saved successfully', 'success')
     } catch (err) {
       const text = errorText(err) || 'Could not save IGDB settings.'
       setError(text)
@@ -85,15 +89,21 @@ export function IgdbSettingsPage() {
     }
   }
   async function testConnection() {
-    if (loading || loadFailed || busy || dirty || !savedId || !secretPresent) return
+    if (loading || loadFailed || busy) return
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      const data = await postJson('/api/admin/igdb/test')
-      accept(data.settings)
-      setMessage('IGDB connection successful.')
-      showToast('IGDB connection successful.', 'success')
+      const data = await postJson('/admin/test_igdb')
+      if (data.status !== 'success') throw new Error(data.message || 'IGDB connection failed.')
+      // Refresh the timestamp and secret-presence projection after the legacy
+      // test endpoint succeeds; a read failure must not turn a successful
+      // provider test into a reported failure.
+      void getJson(API)
+        .then((settings) => accept(settings.settings))
+        .catch(() => {})
+      setMessage('IGDB API test successful')
+      showToast('IGDB API test successful', 'success')
     } catch (err) {
       const text = errorText(err) || 'IGDB connection failed.'
       setError(text)
@@ -122,8 +132,7 @@ export function IgdbSettingsPage() {
                 className="od-admin-input"
                 autoComplete="off"
                 maxLength={255}
-                minLength={20}
-                required
+                id="igdb_client_id"
                 value={clientId}
                 onChange={(e) => {
                   setClientId(e.target.value)
@@ -131,17 +140,16 @@ export function IgdbSettingsPage() {
                 }}
               />
             </label>
-            <label className="od-admin-field" htmlFor="igdb-new-secret">
+            <label className="od-admin-field" htmlFor="igdb_client_secret">
               Client secret
             </label>
             <input
-              id="igdb-new-secret"
+              id="igdb_client_secret"
               className="od-admin-input"
               type={showSecret ? 'text' : 'password'}
               autoComplete="new-password"
               maxLength={255}
-              minLength={20}
-              required={!secretPresent}
+              data-saved={secretPresent ? '1' : '0'}
               aria-describedby="igdb-secret-help"
               value={secret}
               onChange={(e) => {
@@ -150,7 +158,7 @@ export function IgdbSettingsPage() {
               }}
             />
             <Button
-              aria-controls="igdb-new-secret"
+              aria-controls="igdb_client_secret"
               aria-pressed={showSecret}
               onClick={() => setShowSecret((value) => !value)}
             >
@@ -163,16 +171,13 @@ export function IgdbSettingsPage() {
           </fieldset>
           {lastTested ? <p className="od-admin-hint">Last connection test: {lastTested}</p> : null}
           <p className="od-admin-hint">
-            Save changes before testing. Testing contacts IGDB using the saved credentials.
+            Testing contacts IGDB using the saved credentials; unsaved edits are not included.
           </p>
           <div className="od-admin-actions-row">
             <Button variant="primary" type="submit" disabled={disabled}>
               {busy ? 'Working…' : 'Save settings'}
             </Button>
-            <Button
-              disabled={disabled || dirty || !savedId || !secretPresent}
-              onClick={testConnection}
-            >
+            <Button disabled={disabled} onClick={testConnection}>
               Test connection
             </Button>
           </div>
