@@ -36,6 +36,12 @@ class AdminInvitesData:
         } for user in users]}
 
     def adjust_quota(self, body):
+        return self._adjust_quota(body, include_name=False)
+
+    def adjust_quota_legacy(self, body):
+        return self._adjust_quota(body, include_name=True)
+
+    def _adjust_quota(self, body, *, include_name):
         from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
@@ -47,7 +53,10 @@ class AdminInvitesData:
             return None
         user.invite_quota = int(user.invite_quota or 0) + body.invites_number
         db.session.commit()
-        return {'user_id': user.user_id, 'invite_quota': user.invite_quota}
+        result = {'user_id': user.user_id, 'invite_quota': user.invite_quota}
+        if include_name:
+            result['user_name'] = user.name
+        return result
 
     def rollback(self):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -156,7 +165,7 @@ async def _adjust_form(request, form, data, auth):
     from pathlib import Path
     from .account_avatar_upload import _flash
     from pydantic import ValidationError
-    from starlette.responses import HTMLResponse, RedirectResponse, Response
+    from starlette.responses import HTMLResponse, Response
     from oneirodex.schemas.invites import AdjustInviteQuotaBody
 
     if int(request.headers.get('content-length') or '0') > 64 * 1024:
@@ -166,13 +175,13 @@ async def _adjust_form(request, form, data, auth):
     page_category = 'success'
     if not user_id:
         _flash(auth.session_data, 'error', 'User ID is required.')
-        return RedirectResponse('/admin/manage_invites', status_code=302)
+        return _manage_invites_redirect()
     else:
         try:
             number = int(form.get('invites_number') or '0')
         except (TypeError, ValueError):
             _flash(auth.session_data, 'error', 'Invalid invite number provided. Please enter a valid number.')
-            return RedirectResponse('/admin/manage_invites', status_code=302)
+            return _manage_invites_redirect()
         else:
             try:
                 body = AdjustInviteQuotaBody.model_validate({
@@ -184,22 +193,24 @@ async def _adjust_form(request, form, data, auth):
                     else 'Invite number must be between -1000 and 1000.'
                 )
                 _flash(auth.session_data, 'error', message)
-                return RedirectResponse('/admin/manage_invites', status_code=302)
+                return _manage_invites_redirect()
             else:
                 try:
-                    result = data.adjust_quota(body)
+                    legacy_adjust = getattr(data, 'adjust_quota_legacy', data.adjust_quota)
+                    result = legacy_adjust(body)
                     if result is None:
                         page_message = 'User not found.'
                         page_category = 'danger'
                     else:
                         page_message = (
                             f"Invites updated successfully. User "
-                            f"{getattr(auth.user, 'name', '')} now has "
+                            f"{result.get('user_name') or getattr(auth.user, 'name', '')} now has "
                             f"{result['invite_quota']} invite quota."
                         )
                 except Exception:
                     data.rollback()
-                    return RedirectResponse('/admin/manage_invites', status_code=302)
+                    _flash(auth.session_data, 'error', 'Error updating invites.')
+                    return _manage_invites_redirect()
 
     shell_path = (
         Path(__file__).resolve().parents[1]
@@ -225,6 +236,12 @@ async def _adjust_form(request, form, data, auth):
         if root_offset >= 0:
             shell = shell[:root_offset] + notice + shell[root_offset:]
     return HTMLResponse(shell, status_code=200, headers={'Cache-Control': 'no-store'})
+
+
+def _manage_invites_redirect():
+    from oneirodex.runtime_native.response_compat import flask_redirect_response
+
+    return flask_redirect_response('/admin/manage_invites')
 
 
 async def _legacy_form(request):

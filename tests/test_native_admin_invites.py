@@ -23,6 +23,10 @@ class FakeInvites:
         self.calls.append((str(body.user_id), body.invites_number))
         return self.quota_result
 
+    def adjust_quota_legacy(self, body):
+        result = self.adjust_quota(body)
+        return None if result is None else {**result, 'user_name': 'Target member'}
+
     def rollback(self):
         self.calls.append(('rollback',))
 
@@ -117,6 +121,7 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
     assert 'id="admin-app-root"' in response.text
     assert 'role="status"' in response.text
     assert 'Invites updated successfully.' in response.text
+    assert 'User Target member now has 4 invite quota.' in response.text
     assert data.calls == [('4c2c4a64-6096-4e0c-b5a3-fd8583c43a64', -1)]
 
     invalid, invalid_data, invalid_csrf = _client()
@@ -126,6 +131,11 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
         follow_redirects=False,
     )
     assert denied.status_code == 302
+    from werkzeug.utils import redirect
+    legacy_redirect = redirect('/admin/manage_invites')
+    assert denied.headers['content-type'] == legacy_redirect.headers['Content-Type']
+    assert denied.headers['content-length'] == legacy_redirect.headers['Content-Length']
+    assert denied.content == legacy_redirect.get_data()
     assert invalid_data.calls == []
 
 

@@ -251,6 +251,7 @@ class TestManageInvitesPost:
         })
         
         assert response.status_code == 200  # Renders template after processing
+        assert f'User {regular_user.name} now has {original_quota + 10} invite quota.' in response.get_data(as_text=True)
         
         # Check that the user's invite quota was updated
         db_session.refresh(regular_user)
@@ -367,6 +368,11 @@ class TestManageInvitesPost:
         
         assert response.status_code == 302  # Redirect due to error
         assert 'manage_invites' in response.location
+        from werkzeug.utils import redirect
+        expected = redirect('/admin/manage_invites')
+        assert response.headers['Content-Type'] == expected.headers['Content-Type']
+        assert response.headers['Content-Length'] == expected.headers['Content-Length']
+        assert response.get_data() == expected.get_data()
 
 
 class TestManageInvitesEdgeCases:
