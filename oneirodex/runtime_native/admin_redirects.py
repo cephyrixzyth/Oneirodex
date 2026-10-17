@@ -9,7 +9,6 @@ from starlette.responses import RedirectResponse
 
 
 ADMIN_REDIRECTS = {
-    '/admin/help': '/help',
     '/admin/library_tools': '/scan_management?active_tab=tools',
     '/admin/server_logs': '/admin/ops?open=full-log',
     '/admin/system_logs': '/admin/ops?open=full-log',
@@ -78,7 +77,7 @@ def create_admin_redirect_router(
                     if query:
                         target += '?' + urlencode(query)
                 response = RedirectResponse(target, status_code=302)
-            if auth.should_set_session_cookie:
+            if auth.user is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'
@@ -129,7 +128,9 @@ def create_admin_redirect_router(
                 flashes.append(('warning', 'Open Scan Filters and confirm removal there.'))
                 auth.session_data['_flashes'] = flashes
                 response = RedirectResponse('/admin/edit_filters', status_code=302)
-            if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
+            if auth.user is not None and (
+                auth.should_set_session_cookie or auth.session_data.get('_flashes')
+            ):
                 _set_session_cookie(response, flask_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'

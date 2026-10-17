@@ -176,7 +176,7 @@ def create_admin_pilot(
                 flashes = list(auth.session_data.pop('_flashes', []) or [])
                 response_shell = _shell_with_admin_flashes(shell, flashes)
                 response = Response(response_shell, media_type='text/html')
-            if auth.should_set_session_cookie or flashes:
+            if auth.user is not None and (auth.should_set_session_cookie or flashes):
                 _set_session_cookie(response, flask_app, auth)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'

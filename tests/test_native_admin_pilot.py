@@ -185,6 +185,9 @@ def test_shell_uses_login_redirect(pilot):
     response = fetch(app, '/admin/users')
     assert response.status_code == 302
     assert response.headers['location'].startswith('/login')
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text.startswith('<!doctype html>\n<html lang=en>\n<title>Redirecting...</title>')
+    assert len(response.headers.get_list('set-cookie')) == 1
 
 
 def test_admin_shell_page_skips_flask_request_context(pilot, monkeypatch):

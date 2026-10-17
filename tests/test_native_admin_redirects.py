@@ -1,7 +1,7 @@
 """DB-free route compatibility checks for native admin redirects."""
 import asyncio
 from contextlib import nullcontext
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 from flask import Flask
@@ -68,7 +68,6 @@ def test_admin_redirect_targets_and_query_compatibility():
     flask_app, app, users = make_app()
     cookie = signed_cookie(flask_app, users[7])
     cases = {
-        '/admin/help': '/help',
         '/admin/library_tools': '/scan_management?active_tab=tools',
         '/admin/server_logs': '/admin/ops?open=full-log',
         '/admin/system_logs': '/admin/ops?open=full-log',
@@ -82,21 +81,6 @@ def test_admin_redirect_targets_and_query_compatibility():
         assert response.headers['location'] == expected
         assert response.headers['cache-control'] == 'no-store'
         assert response.headers['vary'] == 'Cookie'
-
-
-def test_admin_redirect_login_and_member_guards():
-    flask_app, app, users = make_app()
-    anonymous = fetch(app, '/admin/help')
-    assert anonymous.status_code == 302
-    assert urlsplit(anonymous.headers['location']).path == '/login'
-    assert parse_qs(urlsplit(anonymous.headers['location']).query)['next'] == ['/admin/help']
-    assert anonymous.headers.get('set-cookie')
-
-    member_cookie = signed_cookie(flask_app, users[8])
-    member = fetch(app, '/admin/help', member_cookie)
-    assert member.status_code == 302
-    assert member.headers['location'] == '/login'
-    assert member.headers.get('set-cookie')
 
 
 def test_admin_redirect_head_has_empty_body():
@@ -125,6 +109,8 @@ def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():
     anonymous = fetch(app, '/delete_filter/42')
     assert anonymous.status_code == 302
     assert urlsplit(anonymous.headers['location']).path == '/login'
+    assert anonymous.headers['content-type'] == 'text/html; charset=utf-8'
+    assert len(anonymous.headers.get_list('set-cookie')) == 1
     member = fetch(app, '/delete_filter/42', signed_cookie(flask_app, users[8]))
     assert member.status_code == 302
     assert member.headers['location'] == '/login'
