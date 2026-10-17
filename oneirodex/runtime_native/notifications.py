@@ -183,6 +183,14 @@ def create_notifications_router(
                         from oneirodex.utils.api_contract import api_ok_payload
 
                         response = JSONResponse(api_ok_payload())
+                elif request.method == 'HEAD':
+                    # Flask's legacy handler only selected the preference
+                    # projection for GET. Automatic HEAD called the view with
+                    # method=HEAD, fell through the empty update branch, and
+                    # returned the standard success envelope.
+                    from oneirodex.utils.api_contract import api_ok_payload
+
+                    response = JSONResponse(api_ok_payload())
                 else:
                     prefs = data.preferences(auth.user)
                     response = JSONResponse({

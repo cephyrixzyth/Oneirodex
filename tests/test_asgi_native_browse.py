@@ -5530,6 +5530,7 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError('Flask app context used')),
     )
     read = _run(runtime, '/api/notifications/preferences', cookie=_signed_session())
+    head = _run(runtime, '/api/notifications/preferences', cookie=_signed_session(), method='HEAD')
     cookie, csrf = _signed_session_with_csrf()
 
     async def save():
@@ -5545,6 +5546,12 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
     written = asyncio.run(save())
     assert read.status_code == 200
     assert read.json()['email_digest_daily'] is False
+    assert head.status_code == 200
+    assert head.content == b''
+    expected_head_body = flask_app.json.response({
+        'ok': True, 'error': None, 'error_code': None, 'success': True,
+    }).get_data()
+    assert head.headers['content-length'] == str(len(expected_head_body))
     assert written.status_code == 200
     assert written.json()['ok'] is True
     assert runtime._fake_notifications.calls == [('preferences', {'notify_chat': False})]

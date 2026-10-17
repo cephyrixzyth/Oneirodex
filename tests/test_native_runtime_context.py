@@ -18,6 +18,7 @@ from oneirodex.runtime_native.runtime_context import (
     NativeRuntimeContext,
     get_runtime_config,
     install_flask_json_response_compat,
+    runtime_config_scope,
 )
 
 
@@ -64,14 +65,21 @@ def test_native_json_provider_matches_flask_default_json_contract(tmp_path):
     assert actual == expected
 
 
-def test_starlette_json_response_matches_flask_trailing_newline():
+def test_starlette_json_response_matches_flask_default_encoding():
     from starlette.responses import JSONResponse
 
-    install_flask_json_response_compat()
-    install_flask_json_response_compat()
-    response = JSONResponse({'ok': True})
+    flask_app = Flask('starlette-json-response-compat')
+    config = NativeRuntimeContext({}, package_root=Path.cwd()).config
+    flask_app.config.update(config)
+    payload = {'z': 'café', 'a': {'value': True}}
 
-    assert response.body == b'{"ok":true}\n'
+    install_flask_json_response_compat()
+    install_flask_json_response_compat()
+    with runtime_config_scope(config):
+        response = JSONResponse(payload)
+
+    assert response.body == flask_app.json.response(payload).get_data()
+    assert response.body == b'{"a":{"value":true},"z":"caf\\u00e9"}\n'
     assert response.headers['content-length'] == str(len(response.body))
 
 

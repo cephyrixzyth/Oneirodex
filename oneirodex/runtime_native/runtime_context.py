@@ -41,25 +41,25 @@ def get_runtime_config():
 
 
 def install_flask_json_response_compat():
-    """Match Flask's trailing newline for native Starlette JSON responses.
+    """Match Flask's JSON encoding for native Starlette JSON responses.
 
-    Flask's JSON provider terminates JSON response bodies with a newline.
-    Native routes use Starlette's JSONResponse directly in many adapters, so
-    install this once at the ASGI boundary to keep their GET bytes and HEAD
-    Content-Length consistent with the former runtime.
+    Flask's JSON provider sorts object keys, applies its configured ASCII
+    behavior, uses compact separators, and terminates response bodies with a
+    newline. Native routes use Starlette's JSONResponse directly in many
+    adapters, so install this once at the ASGI boundary to preserve the old
+    GET bytes and HEAD Content-Length contract.
     """
     from starlette.responses import JSONResponse
 
     if getattr(JSONResponse, '_oneirodex_flask_json_compat', False):
         return
 
-    original_render = JSONResponse.render
+    def render_with_flask_json(self, content):
+        config = get_runtime_config() or {}
+        provider = NativeJSONProvider(config)
+        return (provider.dumps(content, separators=(',', ':')) + '\n').encode('utf-8')
 
-    def render_with_flask_newline(self, content):
-        body = original_render(self, content)
-        return body if body.endswith(b'\n') else body + b'\n'
-
-    JSONResponse.render = render_with_flask_newline
+    JSONResponse.render = render_with_flask_json
     JSONResponse._oneirodex_flask_json_compat = True
 
 
