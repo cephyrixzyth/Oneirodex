@@ -1479,13 +1479,13 @@ class FakeLocaleData:
         self.value = locale
 
 
-def _run(app, path, *, cookie=None, extra_cookies=None, method='GET', json_body=None, form_body=None, headers=None):
+def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies=None, method='GET', json_body=None, form_body=None, headers=None):
     async def perform():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://testserver'
         ) as client:
             if cookie:
-                client.cookies.set('session', cookie)
+                client.cookies.set(session_cookie_name, cookie)
             for name, value in (extra_cookies or {}).items():
                 client.cookies.set(name, value)
             return await client.request(
@@ -7940,8 +7940,23 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
 
 
 @pytest.mark.parametrize('has_remember_cookie', [True, False])
+@pytest.mark.parametrize('cookie_overrides', [
+    {},
+    {
+        'SESSION_COOKIE_NAME': 'oneirodex_session',
+        'SESSION_COOKIE_PATH': '/',
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_HTTPONLY': False,
+        'SESSION_COOKIE_SAMESITE': 'Lax',
+        'REMEMBER_COOKIE_NAME': 'oneirodex_remember',
+        'REMEMBER_COOKIE_PATH': '/admin',
+        'REMEMBER_COOKIE_SECURE': True,
+        'REMEMBER_COOKIE_HTTPONLY': True,
+        'REMEMBER_COOKIE_SAMESITE': 'Strict',
+    },
+])
 def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
-    monkeypatch, has_remember_cookie,
+    monkeypatch, has_remember_cookie, cookie_overrides,
 ):
     from flask import redirect
     from flask_login import logout_user
@@ -7949,11 +7964,13 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
     from oneirodex.runtime_native.session_compat import load_session_cookie
 
     _flask_app, runtime = _runtime(monkeypatch)
+    _flask_app.config.update(cookie_overrides)
+    session_cookie_name = _flask_app.config['SESSION_COOKIE_NAME']
+    remember_cookie_name = _flask_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token')
     legacy_app = Flask(__name__)
     legacy_app.config.update(
         SECRET_KEY='native-asgi-browse-secret',
-        SESSION_COOKIE_NAME='session',
-        REMEMBER_COOKIE_NAME='remember_token',
+        **cookie_overrides,
     )
     manager = LoginManager(legacy_app)
     manager.login_view = 'login'
@@ -7973,13 +7990,14 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
             else:
                 session['_remember'] = 'set'
         if has_remember_cookie:
-            client.set_cookie('remember_token', 'remember-cookie')
-        incoming_session = client.get_cookie('session').value
+            client.set_cookie(remember_cookie_name, 'remember-cookie')
+        incoming_session = client.get_cookie(session_cookie_name, path='/').value
         legacy = client.get('/logout', follow_redirects=False)
 
     current = _run(
         runtime, '/logout', cookie=incoming_session,
-        extra_cookies={'remember_token': 'remember-cookie'} if has_remember_cookie else None,
+        session_cookie_name=session_cookie_name,
+        extra_cookies={remember_cookie_name: 'remember-cookie'} if has_remember_cookie else None,
     )
     assert (current.status_code, current.headers['location'], current.content) == (
         legacy.status_code, legacy.headers['Location'], legacy.get_data(),
@@ -7997,7 +8015,7 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
         result = {}
         for name, morsel in jar.items():
             payload = morsel.value
-            if name == 'session':
+            if name == session_cookie_name:
                 payload = load_session_cookie(
                     payload, 'native-asgi-browse-secret', max_age=31_536_000,
                 )
