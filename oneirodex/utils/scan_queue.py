@@ -291,11 +291,10 @@ def normalize_schedule_fields(
         out['schedule_cron'] = expr[:64]
         out['next_run'] = compute_next_run(schedule_kind='cron', cron_expr=expr)
         return out
-    # Unknown choice: fail closed like the cron/interval branches above. Falling
-    # through to `once` with no error armed nothing while the caller flashed
-    # success — a select option added to the template but not here would look
-    # like it worked.
-    out['error'] = f'Unknown schedule option: {choice}'
+    # Keep the SelectField choice-validation message for legacy form callers.
+    # Falling through to `once` would arm nothing while the caller flashed
+    # success, so unsupported schedule values must still fail closed.
+    out['error'] = 'Not a valid choice.'
     return out
 
 

@@ -144,6 +144,9 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     )
     assert invalid_unit['error'] == 'Not a valid choice.'
 
+    unknown_schedule = normalize_schedule_fields('not-a-schedule')
+    assert unknown_schedule['error'] == 'Not a valid choice.'
+
     empty_unit = normalize_schedule_fields(
         'interval', interval_value=15, interval_unit='',
     )
@@ -199,8 +202,7 @@ def test_unknown_schedule_choice_fails_closed():
     success for a schedule that would never repeat.
     """
     fields = normalize_schedule_fields('weekly')
-    assert fields['error']
-    assert 'weekly' in fields['error']
+    assert fields['error'] == 'Not a valid choice.'
     assert fields['next_run'] is None
 
 
