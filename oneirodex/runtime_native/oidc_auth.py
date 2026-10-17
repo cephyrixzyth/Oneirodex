@@ -73,7 +73,7 @@ def create_oidc_auth_router(
 async def _start(request, app, data, find_user, find_token, commit_token_touch,
                  load_user_id, login_manager, database_scope, client_factory):
     from oneirodex.utils.oidc import (
-        AUTHLIB_AVAILABLE, OIDC_SESSION_STATE_KEY, OIDC_SESSION_VERIFIER_KEY,
+        AUTHLIB_NATIVE_AVAILABLE, OIDC_SESSION_STATE_KEY, OIDC_SESSION_VERIFIER_KEY,
         build_oidc_config, generate_pkce_pair,
     )
 
@@ -86,7 +86,7 @@ async def _start(request, app, data, find_user, find_token, commit_token_touch,
         if not config:
             _flash(auth, 'warning', 'Single sign-on is not enabled.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
-        if not AUTHLIB_AVAILABLE:
+        if not AUTHLIB_NATIVE_AVAILABLE:
             _flash(auth, 'error', 'SSO is configured but authlib is not installed. Contact an administrator.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
         try:
@@ -115,7 +115,7 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
     from oneirodex.runtime_native.auth_resolver import session_identifier
     from oneirodex.utils.trusted_proxy import trusted_forwarded_for
     from oneirodex.utils.oidc import (
-        AUTHLIB_AVAILABLE, build_oidc_config, format_oidc_callback_error,
+        AUTHLIB_NATIVE_AVAILABLE, build_oidc_config, format_oidc_callback_error,
         format_oidc_idp_error,
     )
 
@@ -128,7 +128,7 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         if not config:
             _flash(auth, 'warning', 'Single sign-on is not enabled.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
-        if not AUTHLIB_AVAILABLE:
+        if not AUTHLIB_NATIVE_AVAILABLE:
             _flash(auth, 'error', 'SSO is configured but authlib is not installed.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
         idp_error = request.query_params.get('error')

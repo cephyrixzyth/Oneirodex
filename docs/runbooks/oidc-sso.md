@@ -201,7 +201,7 @@ JIT provisioning creates users with role `user` unless a mapped claim is present
 | No SSO button | `OIDC_ENABLED=true` **and** admin toggle enabled; restart after env change |
 | Redirect URI mismatch | IdP client redirect must match `OIDC_REDIRECT_URI` exactly |
 | Callback uses `http://` behind TLS | Set `TRUSTED_PROXIES=1`, allowlist the immediate proxy peer in `TRUSTED_PROXY_CIDRS`, and ensure the proxy sends `X-Forwarded-Proto: https` |
-| 503 on SSO click | Install `authlib` (`pip install authlib`) and restart |
+| SSO reports Authlib unavailable | Rebuild the image from the repository's pinned `requirements.txt` and confirm the runtime includes `authlib==1.8.0` and `httpx2==2.13.1`. The FastAPI runtime uses Authlib's Starlette integration; it does not require Flask. |
 | Login succeeds but instant logout | `SESSION_COOKIE_SECURE` vs HTTP; fix proxy or cookie settings |
 | Wrong role | `OIDC_ROLE_CLAIM` and `OIDC_ROLE_MAP`; verify IdP group claims in token/userinfo |
 | SSO session expired flash | User took too long or retried callback; start SSO again from `/login` |

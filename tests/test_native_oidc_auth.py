@@ -116,6 +116,24 @@ def test_native_oidc_pkce_flow_sets_state_nonce_and_remember_session(native_clie
     assert 'remember_token=' in callback.headers.get('set-cookie', '')
 
 
+def test_native_oidc_client_does_not_require_flask_authlib(monkeypatch):
+    from oneirodex.runtime_native.oidc_auth import _make_oidc_client
+    from oneirodex.utils import oidc
+
+    monkeypatch.setattr(oidc, 'OAuth', None)
+    monkeypatch.setattr(oidc, 'AUTHLIB_FLASK_AVAILABLE', False)
+    assert oidc.AUTHLIB_NATIVE_AVAILABLE
+    config = SimpleNamespace(
+        scopes='openid email', client_secret='secret', client_id='client',
+        issuer_url='https://idp.example',
+    )
+
+    client = _make_oidc_client(config)
+
+    assert client is not None
+    assert client.client_id == 'client'
+
+
 def test_native_oidc_rejects_state_mismatch_and_clears_state(native_client):
     runtime, data = native_client
 

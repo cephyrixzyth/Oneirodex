@@ -29,6 +29,23 @@ def test_env_flag_required_for_enable():
             os.environ['OIDC_ENABLED'] = original
 
 
+def test_oidc_readiness_uses_native_authlib_without_flask(monkeypatch):
+    monkeypatch.setenv('OIDC_ENABLED', 'true')
+    monkeypatch.setattr(oidc, 'AUTHLIB_FLASK_AVAILABLE', False)
+    monkeypatch.setattr(oidc, 'AUTHLIB_NATIVE_AVAILABLE', True)
+    settings = SimpleNamespace(
+        oidc_enabled=True,
+        oidc_issuer_url='https://sso.example.test',
+        oidc_client_id='client',
+        oidc_redirect_uri='https://app.example.test/login/oidc/callback',
+    )
+
+    report = oidc.oidc_readiness_report(settings)
+
+    assert report['authlib_available'] is True
+    assert 'authlib package' not in report['missing']
+
+
 def test_map_claims_to_role_defaults_to_user():
     claims = {'email': 'user@example.com'}
     assert oidc.map_claims_to_role(claims) == 'user'

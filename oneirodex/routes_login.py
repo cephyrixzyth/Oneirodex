@@ -23,7 +23,7 @@ from oneirodex.utils.validation import validate_body
 from oneirodex.utils.smtp import send_email, send_password_reset_email, send_invite_email
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.oidc import (
-    AUTHLIB_AVAILABLE,
+    AUTHLIB_FLASK_AVAILABLE,
     build_oidc_config,
     format_oidc_callback_error,
     format_oidc_idp_error,
@@ -436,7 +436,7 @@ def oidc_start():
         flash('Single sign-on is not enabled.', 'warning')
         return redirect(url_for('login.login'))
 
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         flash('SSO is configured but authlib is not installed. Contact an administrator.', 'error')
         return redirect(url_for('login.login'))
 
@@ -472,7 +472,7 @@ def oidc_callback():
         flash('Single sign-on is not enabled.', 'warning')
         return redirect(url_for('login.login'))
 
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         flash('SSO is configured but authlib is not installed.', 'error')
         return redirect(url_for('login.login'))
 

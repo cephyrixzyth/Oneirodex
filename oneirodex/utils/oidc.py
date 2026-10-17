@@ -18,13 +18,26 @@ from oneirodex.utils.admin_invariant import lock_admin_mutation
 
 try:
     from authlib.integrations.flask_client import OAuth
-    from authlib.oauth2.rfc7636 import create_s256_code_challenge
-
-    AUTHLIB_AVAILABLE = True
-except ImportError:  # pragma: no cover - exercised when authlib missing
-    AUTHLIB_AVAILABLE = False
+except ImportError:  # pragma: no cover - runtime image intentionally has no Flask
     OAuth = None  # type: ignore[misc, assignment]
+
+try:
+    from authlib.integrations.starlette_client import OAuth as StarletteOAuth
+except ImportError:  # pragma: no cover - exercised when Authlib is unavailable
+    StarletteOAuth = None  # type: ignore[misc, assignment]
+
+try:
+    from authlib.oauth2.rfc7636 import create_s256_code_challenge
+except ImportError:  # pragma: no cover - exercised when Authlib is unavailable
     create_s256_code_challenge = None  # type: ignore[misc, assignment]
+
+AUTHLIB_FLASK_AVAILABLE = OAuth is not None
+AUTHLIB_NATIVE_AVAILABLE = (
+    StarletteOAuth is not None and create_s256_code_challenge is not None
+)
+# Keep the historical public flag for readiness callers, while each runtime
+# checks the integration it actually uses.
+AUTHLIB_AVAILABLE = AUTHLIB_NATIVE_AVAILABLE or AUTHLIB_FLASK_AVAILABLE
 
 OIDC_SESSION_STATE_KEY = 'oidc_auth_state'
 OIDC_SESSION_VERIFIER_KEY = 'oidc_code_verifier'
@@ -176,7 +189,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
         missing.append('client_id')
     if not redirect_uri:
         missing.append('redirect_uri')
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_NATIVE_AVAILABLE:
         missing.append('authlib package')
 
     ready = len(missing) == 0
@@ -185,7 +198,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
         'live_verified': False,
         'env_enabled': env_enabled,
         'db_enabled': db_enabled,
-        'authlib_available': AUTHLIB_AVAILABLE,
+        'authlib_available': AUTHLIB_NATIVE_AVAILABLE,
         'has_issuer': bool(issuer),
         'has_client_id': bool(client_id),
         'has_redirect_uri': bool(redirect_uri),
@@ -270,7 +283,7 @@ def extract_user_identity(claims: dict[str, Any]) -> tuple[str, str]:
 
 def generate_pkce_pair() -> tuple[str, str]:
     code_verifier = secrets.token_urlsafe(64)
-    if AUTHLIB_AVAILABLE and create_s256_code_challenge is not None:
+    if create_s256_code_challenge is not None:
         code_challenge = create_s256_code_challenge(code_verifier)
     else:
         # Fallback stub when authlib is unavailable (tests / partial installs).
@@ -354,7 +367,7 @@ def get_oauth_client():
 def init_oauth(app) -> Any | None:
     """Register the OIDC client with Flask. Returns OAuth instance or None."""
     global _oauth
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         app.logger.warning('authlib is not installed; OIDC routes will return 503 until authlib is added.')
         return None
 
