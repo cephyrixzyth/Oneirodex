@@ -760,6 +760,8 @@ The legacy `/restricted` page now uses FastAPI redirect handling. Anonymous requ
 
 The `/downloads` URL now resolves to the authenticated member shell directly, where the existing React Downloads page already owns the view. The legacy `/playromtest` URL also uses the member shell and retains its informational flash message.
 
+Legacy GET download links no longer create queue requests. The native compatibility route can still return the v1.1.8 missing-update warning and game-details redirect after read-only checks; valid download creation remains behind POST and CSRF or scoped bearer authorization.
+
 `/play_game/<uuid>` now uses FastAPI for the existing browser-play decision. The native route retains the library ACL check, browser-play URL, missing/inaccessible-game redirects, and user-facing flash messages.
 
 `/game_details/<game_uuid>` now uses the native authenticated member shell. It validates the UUID, checks game existence and the user’s library/content ACL before serving the React shell, preserving the legacy 404 and 403 outcomes.
