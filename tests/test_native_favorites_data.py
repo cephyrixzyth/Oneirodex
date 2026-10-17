@@ -99,3 +99,54 @@ def test_favorites_adapter_filters_denied_child_library_and_total(
         key: value for key, value in payload.items() if key != 'games'
     }
     assert not differences, differences
+
+
+def test_favorites_adapter_multi_page_projection_matches_wsgi_route(
+    app, client, db_session, configured_install, monkeypatch,
+):
+    from oneirodex.utils import client_lifecycle, global_settings
+    from oneirodex.runtime_native.runtime_context import runtime_config_scope
+
+    user_key = str(uuid4())
+    user = User(
+        name=f'fav-pages-{user_key[:8]}',
+        email=f'fav-pages-{user_key[:8]}@example.com',
+        password_hash='unused', role='user', user_id=user_key,
+        avatarpath='newstyle/avatar_default.jpg', state=True,
+    )
+    library = Library(name=f'Fav pages {user_key[:8]}', platform=LibraryPlatform.PCWIN)
+    games = [
+        Game(
+            name=f'Page Boundary Favorite {index}',
+            full_disk_path=f'/tmp/fav-page-boundary-{user_key}-{index}',
+            library=library,
+        )
+        for index in range(3)
+    ]
+    user.favorites.extend(games)
+    db_session.add(user)
+    db_session.commit()
+
+    monkeypatch.setattr(global_settings, 'global_settings_row', lambda: None)
+    monkeypatch.setattr(client_lifecycle, 'load_lifecycle_map', lambda _user_id: {})
+    with client.session_transaction() as session:
+        session['_user_id'] = str(user.id)
+        session['_fresh'] = True
+
+    with app.app_context(), runtime_config_scope(app.config):
+        page_one = FavoritesData().payload(
+            user, MultiDict([('page', '1'), ('per_page', '2')]),
+        )
+        page_two = FavoritesData().payload(
+            user, MultiDict([('page', '2'), ('per_page', '2')]),
+        )
+    wsgi_page_one = client.get('/api/favorites?page=1&per_page=2')
+    wsgi_page_two = client.get('/api/favorites?page=2&per_page=2')
+
+    assert page_one['total'] == 3 and page_one['pages'] == 2
+    assert page_one['current_page'] == 1 and len(page_one['games']) == 2
+    assert page_two['total'] == 3 and page_two['pages'] == 2
+    assert page_two['current_page'] == 2 and len(page_two['games']) == 1
+    assert wsgi_page_one.status_code == wsgi_page_two.status_code == 200
+    assert wsgi_page_one.get_json() == page_one
+    assert wsgi_page_two.get_json() == page_two
