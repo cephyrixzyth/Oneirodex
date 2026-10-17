@@ -16,9 +16,10 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import flask_redirect_response
 
 
 @dataclass(frozen=True)
@@ -313,7 +314,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context):
     if force_host:
         parsed_target = parsed_target._replace(netloc=force_host)
     location = urlunsplit(parsed_target._replace(query=query))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     # Flask-Login's default unauthorized handler flashes before redirecting.
     login_message = getattr(login_manager, 'login_message', None)
