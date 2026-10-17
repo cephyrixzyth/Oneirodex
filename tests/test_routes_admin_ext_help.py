@@ -52,16 +52,16 @@ class TestAdminHelpRoute:
         assert response.status_code == 302
         assert 'login' in response.location
 
-    def test_admin_help_redirects_to_member_help(self, client, admin_user):
+    def test_admin_help_opens_admin_shell(self, client, admin_user):
         login_as(client, admin_user)
         response = client.get('/admin/help')
-        assert response.status_code == 302
-        assert response.location == '/help'
+        assert response.status_code == 200
         assert 'text/html' in response.content_type
+        assert 'admin-app-root' in response.text
 
     def test_admin_help_route_is_get_only(self, client, admin_user):
         login_as(client, admin_user)
-        assert client.get('/admin/help').status_code == 302
+        assert client.get('/admin/help').status_code == 200
         assert client.post('/admin/help').status_code == 405
         assert client.put('/admin/help').status_code == 405
         assert client.delete('/admin/help').status_code == 405

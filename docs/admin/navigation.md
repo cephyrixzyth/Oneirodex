@@ -24,7 +24,9 @@ Each page has one home. The Support inbox is under Users; ES-DE / Pegasus export
 is part of Plugins & exports.
 
 The **System** rail section holds Ops glance, Statistics, Downloads admin, Danger
-zone, and Admin help. Statistics is read-only and summarizes library totals,
+zone, and Admin help. Admin help is its own operator guide with links to the
+admin sections and troubleshooting; the member guide remains at `/help`.
+Statistics is read-only and summarizes library totals,
 download activity, invitations, and favourites. Downloads admin lists queued zip
 requests; deleting a request requires confirmation and removes the request record.
 
@@ -35,7 +37,8 @@ sub-section's pages as icon buttons (the current page is highlighted) plus a way
 back to the section's overview (**All settings** / **Overview**). The
 `/admin/settings` and `/admin/integrations` overview pages list each group as
 rows; Integrations keeps its artwork tab controls in one place to avoid
-duplicating them in the top bar.
+duplicating them in the top bar. Automatic scan, Manual scan, and Scan jobs share
+one top-bar page switcher under Libraries & scans.
 
 ## Page layout
 

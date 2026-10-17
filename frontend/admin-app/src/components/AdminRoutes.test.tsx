@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { AdminRoutes } from './AdminRoutes'
@@ -36,11 +36,13 @@ const CASES = [
   ['/admin', 'Dashboard'],
   ['/admin/dashboard', 'Dashboard'],
   ['/admin/support', 'Support inbox'],
+  ['/admin/help', 'Admin help'],
   ['/admin/invites', 'Invites'],
   ['/admin/whitelist', 'Whitelist'],
   ['/admin/manage_invites', 'Invites'],
   ['/admin/settings', 'Settings'],
   ['/admin/storage', 'Storage / hardlinks'],
+  ['/admin/smtp_settings', 'SMTP'],
   ['/admin/scan_match', 'Scan / match policy'],
   ['/admin/remote_play', 'Remote play'],
   ['/admin/quality_profiles', 'Quality Profiles'],
@@ -87,5 +89,11 @@ describe('AdminRoutes path -> page', () => {
   test('catch-all lede matches the old switch default', () => {
     mountAt('/admin/nope')
     expect(screen.getByText('Pick a section from the rail on the left.')).toBeInTheDocument()
+  })
+
+  test('Admin Help internal navigation stays in the SPA', () => {
+    mountAt('/admin/help')
+    fireEvent.click(screen.getByRole('link', { name: /Libraries and scans/i }))
+    expect(screen.getByRole('heading', { name: 'Libraries', level: 1 })).toBeInTheDocument()
   })
 })

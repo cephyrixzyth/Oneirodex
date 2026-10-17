@@ -45,6 +45,7 @@ import { DetailLayoutPage } from '../pages/DetailLayoutPage'
 import { EmulatorsPage } from '../pages/EmulatorsPage'
 import { AiAssistPage } from '../pages/AiAssistPage'
 import { ArrPage } from '../pages/ArrPage'
+import { AdminHelpPage } from '../pages/AdminHelpPage'
 import { LibraryEditorPage } from '../pages/LibraryEditorPage'
 import { SETTINGS_CARDS, railDestinations } from './navConfig'
 
@@ -132,6 +133,7 @@ export function AdminRoutes() {
       <Route path="/admin/dashboard" element={<DashboardPage />} />
 
       <Route path="/admin/support" element={<SupportInboxPage />} />
+      <Route path="/admin/help" element={<AdminHelpPage />} />
       <Route path="/admin/whitelist" element={<WhitelistPage />} />
       <Route path="/admin/invites" element={<InvitesPage />} />
       <Route path="/admin/manage_invites" element={<InvitesPage />} />

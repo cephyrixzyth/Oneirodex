@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { AdminPageActions } from './AdminPageActions'
 import { findSubSection } from './navConfig'
@@ -17,7 +17,7 @@ const SECTION_HUBS: Record<string, { href: string; label: string }> = {
  * sections — including Jinja-backed ones — gets the same bar.
  */
 export function SectionTopNav() {
-  const { pathname, hash } = useLocation()
+  const { pathname, search, hash } = useLocation()
   const [activeLink, setActiveLink] = useState<HTMLAnchorElement | null>(null)
   useEffect(() => {
     if (!activeLink) return
@@ -45,6 +45,35 @@ export function SectionTopNav() {
       observer?.disconnect()
     }
   }, [activeLink, pathname, hash])
+  const scanView =
+    pathname === '/admin/scan-controls'
+      ? 'auto'
+      : pathname === '/admin/scan-jobs'
+        ? 'jobs'
+        : pathname.startsWith('/scan_management')
+          ? new URLSearchParams(search).get('active_tab') || 'auto'
+          : ''
+  if (['auto', 'manual', 'jobs'].includes(scanView)) {
+    const scanPages = [
+      { id: 'auto', href: '/scan_management?active_tab=auto', label: 'Automatic scan' },
+      { id: 'manual', href: '/scan_management?active_tab=manual', label: 'Manual scan' },
+      { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
+    ]
+    return (
+      <AdminPageActions label="Scan pages">
+        {scanPages.map((item) => (
+          <Link
+            key={item.id}
+            className={`od-cbtn od-cbtn--section${scanView === item.id ? ' is-active' : ''}`}
+            to={item.href}
+            aria-current={scanView === item.id ? 'page' : undefined}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </AdminPageActions>
+    )
+  }
   // The Integrations overview already lists every destination as grouped rows.
   // Adding the same links to the top bar when a row's hash is active duplicates
   // the Metadata & art buttons on that page.
@@ -56,24 +85,24 @@ export function SectionTopNav() {
   return (
     <AdminPageActions label={`${here.sub.title} pages`}>
       {hub ? (
-        <a className="od-cbtn od-cbtn--section" href={hub.href}>
+        <Link className="od-cbtn od-cbtn--section" to={hub.href}>
           {hub.label}
-        </a>
+        </Link>
       ) : null}
       {here.sub.items.map((item) => {
         const active = item.to === here.item.to
         return (
-          <a
+          <Link
             ref={active ? setActiveLink : undefined}
             key={item.to}
             className={`od-cbtn od-cbtn--section${active ? ' is-active' : ''}`}
-            href={item.to}
+            to={item.to}
             aria-current={active ? 'page' : undefined}
             title={item.blurb}
           >
             <RailIcon name={item.icon} size={16} />
             <span>{item.title}</span>
-          </a>
+          </Link>
         )
       })}
     </AdminPageActions>

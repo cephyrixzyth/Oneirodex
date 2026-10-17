@@ -63,6 +63,22 @@ test('pages outside Settings and Integrations get no section bar', () => {
   expect(container.querySelector('a')).toBeNull()
 })
 
+test.each([
+  ['/scan_management?active_tab=auto', 'Automatic scan'],
+  ['/scan_management?active_tab=manual', 'Manual scan'],
+  ['/scan_management?active_tab=jobs', 'Scan jobs'],
+])('scan view %s has one in-app page switcher with the current view active', (path, active) => {
+  at(path)
+  const links = screen.getAllByRole('link')
+  expect(links.map((link) => link.textContent?.trim())).toEqual([
+    'Automatic scan',
+    'Manual scan',
+    'Scan jobs',
+  ])
+  expect(screen.getByRole('link', { name: active })).toHaveAttribute('aria-current', 'page')
+  expect(links.every((link) => link.getAttribute('href'))).toBe(true)
+})
+
 test('every destination has exactly one home across Settings and Integrations', () => {
   const seen = new Map<string, string>()
   for (const sub of [...SETTINGS_GROUPS, ...INTEGRATION_SECTIONS]) {
