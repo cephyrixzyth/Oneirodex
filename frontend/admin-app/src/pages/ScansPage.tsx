@@ -2,8 +2,6 @@ import { useRef, useState, type ReactNode } from 'react'
 import { PageStatus, Button } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { DataTable } from '../components/DataTable'
-import { DupeGlance } from '../components/DupeGlance'
-import { OpenPathModal } from '../components/OpenPathModal'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import {
@@ -20,17 +18,10 @@ import { useLibraryScan } from '../hooks/useLibraryScan'
 import { useVisibilityPoll } from '../hooks/useVisibilityPoll'
 import './ScansPage.css'
 
-interface PathModalState {
-  path?: string
-  label?: string
-  matchReason?: string
-}
-
 export function ScansPage() {
   const [status, setStatus] = useState<ScanJobsPayload>(null)
   const [error, setError] = useState<unknown>(null)
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
-  const [pathModal, setPathModal] = useState<PathModalState | null>(null)
   const { conflictOpen, refreshing, startRefreshAll, onConflictChoose, onConflictClose } =
     useLibraryRefreshAll()
   const {
@@ -50,9 +41,7 @@ export function ScansPage() {
       const jobs = normalizeScanJobsList(data)
       const busy = jobs.some((job) => isScanBusyStatus(job?.status))
       // scanJobsProgressSignature folds processed / percentage / elapsed / eta —
-      // all of which tick every few seconds while a scan runs, so it re-rendered
-      // the (non-virtualized) job tables + DupeGlance every 4s and made a
-      // password-manager extension re-scan that subtree each tick. Bucket
+      // all of which tick every few seconds while a scan runs. Bucket
       // progress to 5% so a 41%→43% step is a no-op, but a ≥5% step, a stall, a
       // status change or a structure change still lands. When nothing is busy,
       // drop progress entirely — the structure signature already covers
@@ -315,22 +304,9 @@ export function ScansPage() {
               <strong>Queue</strong> (default) or <strong>Force parallel</strong> with an Unraid/NAS
               load warning.
             </p>
-            <p className="od-admin-lede">
-              <a href="/admin/scan-controls">Start or schedule a scan</a>
-              {' · '}
-              <a href="/scan_management?active_tab=manual">Open manual scan and identify</a>
-            </p>
           </>
         )}
       </div>
-      <DupeGlance onOpenPath={setPathModal} />
-      <OpenPathModal
-        open={Boolean(pathModal)}
-        path={pathModal?.path || ''}
-        label={pathModal?.label || 'Path'}
-        matchReason={pathModal?.matchReason || ''}
-        onClose={() => setPathModal(null)}
-      />
       <ScanConflictModal
         open={conflictOpen}
         busy={refreshing}

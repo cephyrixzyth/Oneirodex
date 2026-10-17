@@ -77,6 +77,7 @@ describe('ScansPage queued jobs', () => {
     expect(screen.getByText('PS2')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/Scanning/i)
     expect(screen.getByRole('region', { name: 'Recent scan jobs table' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
   })
 
   test('a queue with nothing running does not read as idle', async () => {
