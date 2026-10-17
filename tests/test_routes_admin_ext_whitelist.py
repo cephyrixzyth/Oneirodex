@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 from flask import url_for
 from uuid import uuid4
 from sqlalchemy import select
+from werkzeug.exceptions import NotFound
 
 from oneirodex.models import Whitelist, User
 
@@ -363,7 +364,11 @@ class TestDeleteWhitelistRoute:
             sess['_fresh'] = True
         
         response = client.delete('/admin/whitelist/99999')
+        expected = NotFound().get_response()
         assert response.status_code == 404
+        assert response.headers['Content-Type'] == expected.headers['Content-Type']
+        assert response.headers['Content-Length'] == expected.headers['Content-Length']
+        assert response.get_data() == expected.get_data()
 
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
     def test_delete_whitelist_successful(self, mock_log, client, db_session, admin_user, whitelist_entries):
