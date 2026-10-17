@@ -133,20 +133,25 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 else:
-                    payload = _json_object(await request.body())
-                    all_read = bool(payload.get('all'))
-                    ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
-                    cleaned = []
-                    for value in ids:
-                        try:
-                            cleaned.append(int(value))
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    payload = _notification_write_json_object(await request.body())
+                    if payload is None:
+                        response = _api_error(
+                            'Request body must be a JSON object.', 'bad_request',
+                        )
+                    else:
+                        all_read = bool(payload.get('all'))
+                        ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
+                        cleaned = []
+                        for value in ids:
+                            try:
+                                cleaned.append(int(value))
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                        from oneirodex.utils.api_contract import api_ok_payload
 
-                    response = JSONResponse(api_ok_payload(data.mark_read(
-                        auth.user.id, cleaned, all_read=all_read
-                    )))
+                        response = JSONResponse(api_ok_payload(data.mark_read(
+                            auth.user.id, cleaned, all_read=all_read
+                        )))
             _finish(response, flask_app, request, auth)
             return response
 
@@ -168,7 +173,7 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 elif request.method == 'POST':
-                    payload = _preference_json_object(await request.body())
+                    payload = _notification_write_json_object(await request.body())
                     if payload is None:
                         response = _api_error(
                             'Request body must be a JSON object.', 'bad_request',
@@ -299,13 +304,13 @@ def _json_object(raw_body: bytes) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def _preference_json_object(raw_body: bytes) -> dict | None:
+def _notification_write_json_object(raw_body: bytes) -> dict | None:
     """Keep legacy empty/malformed no-op forms but reject truthy scalar JSON.
 
-    The old route silently accepted an empty body and malformed JSON. A truthy
-    scalar such as ``1`` instead raised during membership tests and produced a
-    500. Returning a clear client error avoids reporting a successful update
-    when the caller supplied no preference object.
+    The old routes silently accepted an empty body and malformed JSON. A
+    truthy scalar such as ``1`` instead raised during object access and
+    produced a 500. A clear client error avoids reporting a successful
+    notification mutation when the caller supplied no object.
     """
     import json
 
