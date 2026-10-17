@@ -203,7 +203,8 @@ def create_admin_whitelist_router(
                         _flash(auth.session_data, 'danger', 'The email is already in the whitelist!')
                     else:
                         _flash(auth.session_data, 'danger', 'An error occurred while adding the email to the whitelist')
-                response = RedirectResponse('/admin/whitelist', status_code=302)
+                from .response_compat import flask_redirect_response
+                response = flask_redirect_response('/admin/whitelist')
             if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
