@@ -57,6 +57,7 @@ class SocialWriteData:
         )
         db.session.add(row)
         db.session.commit()
+        db.session.refresh(row)
         try:
             notify_friend_request(target, user)
         except Exception:
