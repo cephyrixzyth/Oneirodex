@@ -238,11 +238,11 @@ def create_download_mutation_router(
     async def create_download(game_uuid: str, request: Request):
         return await _run_download(request, **opts, game_uuid=game_uuid)
 
-    @router.api_route('/download_game/{game_uuid}', methods=['GET', 'HEAD', 'POST'])
+    @router.api_route('/download_game/{game_uuid}', methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
     def legacy_download_game(game_uuid: str, request: Request):
         return _run_legacy_download_game(request, **opts, game_uuid=game_uuid)
 
-    @router.api_route('/download_other/{file_type}/{game_uuid}/{file_id}', methods=['GET', 'HEAD', 'POST'])
+    @router.api_route('/download_other/{file_type}/{game_uuid}/{file_id}', methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
     def legacy_download_other(file_type: str, game_uuid: str, file_id: str, request: Request):
         return _run_legacy_download_other(
             request, **opts, file_type=file_type, game_uuid=game_uuid, file_id=file_id,
@@ -425,6 +425,27 @@ def _finish(response, request, flask_app):
     return response
 
 
+def _legacy_post_only_method_response(request):
+    from starlette.responses import Response
+
+    if request.method == 'OPTIONS':
+        return Response(
+            status_code=200,
+            headers={'Allow': 'POST, OPTIONS', 'Content-Type': 'text/html; charset=utf-8'},
+        )
+    from werkzeug.exceptions import MethodNotAllowed
+    legacy_response = MethodNotAllowed(valid_methods=['POST', 'OPTIONS']).get_response()
+    response = Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers={key: value for key, value in legacy_response.headers.items()},
+        media_type=None,
+    )
+    if request.method == 'HEAD':
+        response.body = b''
+    return response
+
+
 def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token,
                               commit_token_touch, load_user_id, login_manager,
                               database_scope, game_uuid):
@@ -436,7 +457,7 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
         if request.method != 'POST':
-            response = Response(status_code=405, headers={'Allow': 'POST'})
+            response = _legacy_post_only_method_response(request)
             for key, value in security_header_values(flask_app.config).items():
                 response.headers.setdefault(key, value)
             response.headers.setdefault('Cache-Control', 'no-store')
@@ -527,7 +548,7 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
         if request.method != 'POST':
-            response = Response(status_code=405, headers={'Allow': 'POST'})
+            response = _legacy_post_only_method_response(request)
             for key, value in security_header_values(flask_app.config).items():
                 response.headers.setdefault(key, value)
             response.headers.setdefault('Cache-Control', 'no-store')

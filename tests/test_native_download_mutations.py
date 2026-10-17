@@ -157,18 +157,37 @@ def test_legacy_game_download_creates_request_and_redirects_to_downloads():
 def test_legacy_download_get_and_head_never_create_requests():
     data = FakeDownloads()
     client = make_client(data=data, role='user')
-    path = '/download_game/12345678-1234-1234-1234-123456789abc'
+    game_path = '/download_game/12345678-1234-1234-1234-123456789abc'
 
-    get_response = client.get(path, follow_redirects=False)
-    head_response = client.head(path, follow_redirects=False)
-    other_response = client.get(
-        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
-        follow_redirects=False,
-    )
+    get_response = client.get(game_path, follow_redirects=False)
+    head_response = client.head(game_path, follow_redirects=False)
 
     assert get_response.status_code == 405
     assert head_response.status_code == 405
-    assert other_response.status_code == 405
+    assert data.created is None
+
+
+@pytest.mark.parametrize('method', ['GET', 'HEAD', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+@pytest.mark.parametrize(('rule', 'path'), [
+    ('/download_game/<game_uuid>', '/download_game/12345678-1234-1234-1234-123456789abc'),
+    ('/download_other/<file_type>/<game_uuid>/<file_id>',
+     '/download_other/update/12345678-1234-1234-1234-123456789abc/42'),
+])
+def test_native_post_only_download_methods_match_current_flask_bridge(method, rule, path):
+    legacy = Flask(__name__)
+    legacy.add_url_rule(
+        rule, endpoint='download', view_func=lambda **_kwargs: 'ok', methods=['POST'],
+    )
+    expected = legacy.test_client().open(path, method=method)
+
+    data = FakeDownloads()
+    response = make_client(data=data, role='user').request(method, path, follow_redirects=False)
+
+    assert response.status_code == expected.status_code
+    assert set(response.headers.get('allow', '').split(', ')) == set(expected.headers.get('Allow', '').split(', '))
+    assert response.headers.get('content-type') == expected.headers.get('Content-Type')
+    assert response.headers.get('content-length') == expected.headers.get('Content-Length')
+    assert response.content == expected.get_data()
     assert data.created is None
 
 
