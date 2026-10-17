@@ -66,3 +66,37 @@ def test_friend_request_refreshes_committed_timestamp_before_serializing(monkeyp
     assert refusal is None
     assert result['friendship']['created_at']
     assert not result['friendship']['created_at'].endswith('+00:00')
+
+
+def test_repeat_friend_request_to_blocked_user_is_opaque_and_read_only(monkeypatch):
+    from oneirodex.runtime_native import db_session
+
+    class BlockedSession(_Session):
+        def __init__(self):
+            super().__init__()
+            self.commits = 0
+            self.block = SimpleNamespace(status='blocked', user_id=7, friend_user_id=8)
+
+        def execute(self, _statement):
+            self.query_count += 1
+            if self.query_count == 1:
+                return _ResultWithFriend(SimpleNamespace(id=8, name='Friend'))
+            return _ResultWithFriend(self.block)
+
+        def commit(self):
+            self.commits += 1
+
+    session = BlockedSession()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+
+    result, status, refusal = SocialWriteData().request(
+        SimpleNamespace(id=7), {'username': 'Friend'},
+    )
+
+    assert status == 200
+    assert refusal is None
+    assert result == {
+        'sent': False,
+        'message': 'If that username exists, a friend request was sent.',
+    }
+    assert session.commits == 0
