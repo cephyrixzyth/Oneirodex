@@ -7,9 +7,10 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import flask_redirect_response
 
 
 def create_release_calendar_router(
@@ -155,7 +156,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth: RequestAut
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
     location = urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     message = getattr(login_manager, 'login_message', None)
     if message:
