@@ -150,8 +150,11 @@ def create_social_writes_router(
                 response = _scope_error(auth, 'write:social')
                 if response is None:
                     payload = _json_object(await request.body())
-                    result, status, refusal = data.request(auth.user, payload)
-                    response = _error(*refusal) if refusal else _success(result, status=status)
+                    if payload is None:
+                        response = _error(400, 'bad_request', 'Expected a JSON object')
+                    else:
+                        result, status, refusal = data.request(auth.user, payload)
+                        response = _error(*refusal) if refusal else _success(result, status=status)
             _finish(response, flask_app, request, auth)
             return response
 
@@ -230,14 +233,18 @@ def _auth(request, flask_app, find_user, find_token, commit_token_touch, load_us
     )
 
 
-def _json_object(raw_body: bytes) -> dict:
+def _json_object(raw_body: bytes) -> dict | None:
     import json
 
     try:
         payload = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if isinstance(payload, dict):
+        return payload
+    # Preserve the legacy endpoint's empty-input behavior, but avoid claiming
+    # success for a truthy scalar/array that cannot express a friend request.
+    return None if payload else {}
 
 
 def _error(status, code, message):

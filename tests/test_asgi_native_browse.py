@@ -3964,6 +3964,24 @@ def test_native_social_mutations_dispatch_with_browser_csrf(
     assert repeated.status_code == 200
 
 
+def test_native_social_request_rejects_truthy_non_object_json(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime,
+        '/api/social/friends',
+        cookie=cookie,
+        method='POST',
+        json_body=1,
+        headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Expected a JSON object'
+    assert runtime._fake_social_writes.calls == []
+
+
 def test_native_social_mutations_require_write_scope_for_bearer(monkeypatch):
     runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
 
