@@ -190,10 +190,16 @@ def create_admin_whitelist_router(
                 from .account_avatar_upload import _flash
                 from oneirodex.schemas.whitelist import AddWhitelistBody
                 from pydantic import ValidationError
-                email = (form.get('email') or '').strip().lower()
+                from email_validator import EmailNotValidError, validate_email
+                raw_email = form.get('email') or ''
                 try:
-                    body = AddWhitelistBody.model_validate({'email': email})
-                except ValidationError:
+                    # The legacy WTForms Email validator checks the submitted
+                    # value before the route strips and lowercases it. Validate
+                    # that raw value first so whitespace/control characters
+                    # cannot be silently accepted by the normalized API schema.
+                    validate_email(raw_email, check_deliverability=False)
+                    body = AddWhitelistBody.model_validate({'email': raw_email})
+                except (EmailNotValidError, ValidationError):
                     _flash(auth.session_data, 'danger', 'Please enter a valid email address.')
                 else:
                     payload, error = data.add(body, auth.user)

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+import pytest
 from werkzeug.utils import redirect
 
 from oneirodex.runtime_native.admin_whitelist import create_admin_whitelist_router
@@ -119,7 +120,7 @@ def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
     client, data, csrf = _client()
     response = client.post(
         '/admin/whitelist',
-        data={'csrf_token': csrf, 'email': ' Person@Example.org '},
+        data={'csrf_token': csrf, 'email': 'Person@Example.org'},
         follow_redirects=False,
     )
 
@@ -130,3 +131,16 @@ def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
     assert response.headers['content-length'] == expected.headers['Content-Length']
     assert response.content == expected.get_data()
     assert data.calls == [('add', 'person@example.org', 18)]
+
+
+@pytest.mark.parametrize('email', [' person@example.org ', 'person@example.org\n'])
+def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(email):
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/whitelist'
+    assert data.calls == []
