@@ -204,32 +204,46 @@ def create_smtp_settings_router(
                     response = JSONResponse(payload, status_code=status)
                 elif request.method == 'POST':
                     if request.url.path == '/admin/smtp_settings':
-                        try:
-                            body = await _legacy_json_body(request)
-                            legacy_save = getattr(data, 'save_legacy', None)
-                            if legacy_save is None:
-                                data.save(body)
-                            else:
-                                legacy_save(body)
-                        except ValueError as exc:
-                            payload, status = api_error_payload(str(exc), code='bad_request')
-                            response = JSONResponse(payload, status_code=status)
-                        except Exception:
-                            from oneirodex.runtime_native.db_session import native_db as db
-                            import logging
+                        from .legacy_json_compat import (
+                            LegacyJSONError,
+                            legacy_json_error_response,
+                            legacy_unexpected_error_response,
+                            parse_legacy_json,
+                        )
 
-                            db.session.rollback()
-                            logging.getLogger(__name__).warning('SMTP settings form save failed')
-                            payload, status = api_error_payload('Could not save SMTP settings', code='internal')
-                            response = JSONResponse(payload, status_code=status)
+                        try:
+                            body = await parse_legacy_json(request)
+                        except LegacyJSONError as exc:
+                            response = legacy_json_error_response(request, exc)
                         else:
-                            response = JSONResponse(api_ok_payload({
-                                'status': 'success',
-                                'message': 'SMTP settings updated successfully',
-                            }))
-                            if auth.should_set_session_cookie:
-                                from .oidc_status import _set_session_cookie
-                                _set_session_cookie(response, flask_app, auth)
+                            if not isinstance(body, dict):
+                                response = legacy_unexpected_error_response(request)
+                            else:
+                                try:
+                                    legacy_save = getattr(data, 'save_legacy', None)
+                                    if legacy_save is None:
+                                        data.save(body)
+                                    else:
+                                        legacy_save(body)
+                                except ValueError as exc:
+                                    payload, status = api_error_payload(str(exc), code='bad_request')
+                                    response = JSONResponse(payload, status_code=status)
+                                except Exception:
+                                    from oneirodex.runtime_native.db_session import native_db as db
+                                    import logging
+
+                                    db.session.rollback()
+                                    logging.getLogger(__name__).warning('SMTP settings form save failed')
+                                    payload, status = api_error_payload('Could not save SMTP settings', code='internal')
+                                    response = JSONResponse(payload, status_code=status)
+                                else:
+                                    response = JSONResponse(api_ok_payload({
+                                        'status': 'success',
+                                        'message': 'SMTP settings updated successfully',
+                                    }))
+                                    if auth.should_set_session_cookie:
+                                        from .oidc_status import _set_session_cookie
+                                        _set_session_cookie(response, flask_app, auth)
                     else:
                         try:
                             legacy_test = request.url.path == '/admin/smtp_test'
@@ -341,15 +355,3 @@ async def _json_body(request: Request):
     if not isinstance(value, dict):
         raise ValueError('SMTP settings must be a JSON object')
     return value
-
-
-async def _legacy_json_body(request: Request):
-    """Read the v1.1.8-compatible JSON value for the old POST path."""
-    import json
-
-    raw = bytearray()
-    async for chunk in request.stream():
-        raw.extend(chunk)
-        if len(raw) > 16 * 1024:
-            raise ValueError('SMTP settings request is too large')
-    return json.loads(raw or b'{}') or {}

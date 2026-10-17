@@ -194,6 +194,34 @@ def test_legacy_igdb_save_preserves_blank_secret_and_accepts_empty_client_id(mon
     assert session.commits == 1
 
 
+def test_legacy_igdb_post_matches_flask_json_parse_edges():
+    client = _client()
+    malformed = client.post(
+        '/admin/igdb_settings', data='not-json',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'application/json'},
+    )
+    assert malformed.status_code == 400
+    assert malformed.text == (
+        '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n'
+        '<p>The browser (or proxy) sent a request that this server could not understand.</p>\n'
+    )
+
+    wrong_type = client.post(
+        '/admin/igdb_settings', data='{}',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'text/plain'},
+    )
+    assert wrong_type.status_code == 415
+    assert 'The server does not support the media type transmitted in the request.' in wrong_type.text
+
+    null_value = client.post(
+        '/admin/igdb_settings', content='null',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'application/json'},
+    )
+    assert null_value.status_code == 500
+    assert '500 Internal Server Error' in null_value.text
+
+
 def test_legacy_igdb_test_path_preserves_v118_success_body():
     client = _client()
     tested = client.post('/admin/test_igdb', headers={'X-CSRFToken': client.csrf_token})

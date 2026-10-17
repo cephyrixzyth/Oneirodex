@@ -239,8 +239,12 @@ class TestIGDBSettingsRoute:
                              data='invalid json',
                              content_type='application/json')
         
-        # Should handle the error gracefully
-        assert response.status_code in [400, 500]
+        assert response.status_code == 400
+        assert response.get_data(as_text=True) == (
+            '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+            '<h1>Bad Request</h1>\n'
+            '<p>The browser (or proxy) sent a request that this server could not understand.</p>\n'
+        )
 
 
 class TestIGDBTestRoute:

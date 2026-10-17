@@ -67,6 +67,22 @@ def create_test_settings(db_session):
 
 class TestSmtpSettings:
     """Test the smtp_settings route."""
+
+    def test_post_invalid_json_preserves_bad_request(self, client, admin_user):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        response = client.post(
+            '/admin/smtp_settings', data='not-json',
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert response.get_data(as_text=True) == (
+            '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+            '<h1>Bad Request</h1>\n'
+            '<p>The browser (or proxy) sent a request that this server could not understand.</p>\n'
+        )
     
     def test_get_requires_login(self, client, admin_user):
         """Test that GET request requires login."""

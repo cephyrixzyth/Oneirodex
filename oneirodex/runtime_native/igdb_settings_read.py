@@ -166,28 +166,39 @@ def create_igdb_settings_router(
                     )
                     response = JSONResponse(payload, status_code=status)
                 elif request.url.path == '/admin/igdb_settings':
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = None
-                    try:
-                        legacy_save = getattr(data, 'save_legacy', None)
-                        if legacy_save is None:
-                            data.save(body)
-                        else:
-                            legacy_save(body)
-                        response = JSONResponse(api_ok_payload({
-                            'status': 'success',
-                            'message': 'IGDB settings updated successfully',
-                        }))
-                    except Exception:
-                        from oneirodex.runtime_native.db_session import native_db as db
-                        import logging
+                    from .legacy_json_compat import (
+                        LegacyJSONError,
+                        legacy_json_error_response,
+                        legacy_unexpected_error_response,
+                        parse_legacy_json,
+                    )
 
-                        db.session.rollback()
-                        logging.getLogger(__name__).warning('IGDB settings form save failed')
-                        payload, status = api_error_payload('Could not save IGDB settings', code='internal')
-                        response = JSONResponse(payload, status_code=status)
+                    try:
+                        body = await parse_legacy_json(request)
+                    except LegacyJSONError as exc:
+                        response = legacy_json_error_response(request, exc)
+                    else:
+                        if not isinstance(body, dict):
+                            response = legacy_unexpected_error_response(request)
+                        else:
+                            try:
+                                legacy_save = getattr(data, 'save_legacy', None)
+                                if legacy_save is None:
+                                    data.save(body)
+                                else:
+                                    legacy_save(body)
+                                response = JSONResponse(api_ok_payload({
+                                    'status': 'success',
+                                    'message': 'IGDB settings updated successfully',
+                                }))
+                            except Exception:
+                                from oneirodex.runtime_native.db_session import native_db as db
+                                import logging
+
+                                db.session.rollback()
+                                logging.getLogger(__name__).warning('IGDB settings form save failed')
+                                payload, status = api_error_payload('Could not save IGDB settings', code='internal')
+                                response = JSONResponse(payload, status_code=status)
                 elif request.url.path == '/admin/integrations/igdb/save':
                     try:
                         body = await request.json()
