@@ -118,7 +118,10 @@ def create_admin_themes_read_router(
             )
             csrf_response = None
             compat_form = None
-            if request.method not in ('GET', 'HEAD') and auth.token is None:
+            can_parse_form = is_admin and (
+                auth.token is None or auth.has_scope('admin')
+            )
+            if request.method not in ('GET', 'HEAD') and auth.token is None and can_parse_form:
                 from .csrf_compat import csrf_error_response
 
                 form_csrf_token = None
@@ -128,13 +131,40 @@ def create_admin_themes_read_router(
                     content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
                     if content_type in {'application/x-www-form-urlencoded', 'multipart/form-data'}:
                         try:
-                            compat_form = await request.form()
+                            from .bounded_multipart import (
+                                InvalidContentLength, RequestBodyTooLarge,
+                                bounded_multipart_form,
+                            )
+
+                            max_bytes = int(
+                                flask_app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024
+                            )
+                            compat_form = await bounded_multipart_form(
+                                request, max_body_bytes=max_bytes + 64 * 1024,
+                                max_files=1, max_fields=12, max_part_size=max_bytes,
+                            )
                             form_csrf_token = compat_form.get('csrf_token')
+                        except RequestBodyTooLarge:
+                            from oneirodex.utils.api_contract import api_error_payload
+
+                            payload, status = api_error_payload(
+                                'Theme upload exceeds the maximum request size.',
+                                code='payload_too_large',
+                            )
+                            csrf_response = JSONResponse(payload, status_code=status)
+                        except InvalidContentLength:
+                            from oneirodex.utils.api_contract import api_error_payload
+
+                            payload, status = api_error_payload(
+                                'Invalid request size.', code='bad_request',
+                            )
+                            csrf_response = JSONResponse(payload, status_code=status)
                         except Exception:
                             form_csrf_token = None
-                csrf_response = csrf_error_response(
-                    request, auth.session_data, flask_app.config, token=form_csrf_token,
-                )
+                if csrf_response is None:
+                    csrf_response = csrf_error_response(
+                        request, auth.session_data, flask_app.config, token=form_csrf_token,
+                    )
             if csrf_response is not None:
                 response = csrf_response
             elif user is None:
@@ -225,7 +255,24 @@ def create_admin_themes_read_router(
                         'Theme upload exceeds the maximum request size.', code='bad_request',
                     )
                     return JSONResponse(payload, status_code=status)
-                form = await request.form()
+                from .bounded_multipart import (
+                    InvalidContentLength, RequestBodyTooLarge, bounded_multipart_form,
+                )
+
+                try:
+                    form = await bounded_multipart_form(
+                        request, max_body_bytes=max_bytes + 64 * 1024,
+                        max_files=1, max_fields=12, max_part_size=max_bytes,
+                    )
+                except RequestBodyTooLarge:
+                    payload, status = api_error(
+                        'Theme upload exceeds the maximum request size.',
+                        code='payload_too_large',
+                    )
+                    return JSONResponse(payload, status_code=status)
+                except InvalidContentLength:
+                    payload, status = api_error('Invalid request size.', code='bad_request')
+                    return JSONResponse(payload, status_code=status)
                 try:
                     upload = form.get('theme_zip')
                     if upload is None:

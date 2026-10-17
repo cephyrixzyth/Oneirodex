@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from starlette.requests import Request
 
 from oneirodex.runtime_native.admin_image_mutations import create_admin_image_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -53,7 +54,7 @@ def _client():
         is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
     )
     manager = SimpleNamespace(
-        login_view='login.login', blueprint_login_views={},
+        login_view='/login', blueprint_login_views={},
         login_message='Please log in to access this page.',
         login_message_category='message', localize_callback=None,
         session_protection='basic',
@@ -158,3 +159,38 @@ def test_single_game_image_upload_preserves_csrf_and_payload(monkeypatch):
     assert accepted.json()['image_id'] == 11
     assert accepted.json()['image_type'] == 'cover'
     assert data.single_upload == ('game-1', 'cover.jpg', 'cover', b'image-bytes')
+
+
+def test_unauthenticated_single_image_upload_is_denied_before_form_parsing(monkeypatch):
+    client, _data = _client()
+    client.cookies.clear()
+    client.headers.pop('X-CSRFToken', None)
+    parse_calls = 0
+    original_form = Request.form
+
+    async def observe_form(self, *args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return await original_form(self, *args, **kwargs)
+
+    monkeypatch.setattr(Request, 'form', observe_form)
+    response = client.post(
+        '/upload_image/game-1',
+        files={'file': ('oversized.bin', b'x' * (2 * 1024 * 1024), 'application/octet-stream')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in {302, 303, 307, 308}
+    assert parse_calls == 0
+
+
+def test_single_image_upload_rejects_oversized_body():
+    client, data = _client()
+    response = client.post(
+        '/upload_image/game-1',
+        files={'file': ('cover.jpg', b'x' * (3 * 1024 * 1024 + 128 * 1024), 'image/jpeg')},
+        data={'image_type': 'cover'},
+    )
+
+    assert response.status_code == 413
+    assert not hasattr(data, 'single_upload')

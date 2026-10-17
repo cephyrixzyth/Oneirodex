@@ -346,7 +346,7 @@ def create_chat_emoji_router(
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            form = await request.form(max_files=1, max_fields=12, max_part_size=64 * 1024)
+            form = None
             try:
                 cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
                 session_data = load_session_cookie(
@@ -356,38 +356,70 @@ def create_chat_emoji_router(
                     ),
                     fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
                 )
-                response = csrf_error_response(
-                    request, session_data, flask_app.config,
-                    token=str(form.get('csrf_token') or ''),
+                auth = request_auth_context(
+                    request, flask_app.config, find_user=find_user, find_token=find_token,
+                    commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                    login_manager=login_manager,
                 )
-                auth = None
-                if response is None:
-                    auth = request_auth_context(
-                        request, flask_app.config, find_user=find_user, find_token=find_token,
-                        commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                        login_manager=login_manager,
+                user = auth.user
+                response = None
+                if user is None:
+                    response = _login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message=getattr(login_manager, 'login_message', None),
+                        category=getattr(login_manager, 'login_message_category', 'message'),
+                        include_next=True,
                     )
-                    user = auth.user
-                    if user is None:
-                        response = _login_redirect(
-                            flask_app, request, login_manager, auth,
-                            message=getattr(login_manager, 'login_message', None),
-                            category=getattr(login_manager, 'login_message_category', 'message'),
-                            include_next=True,
+                elif normalize_role(getattr(user, 'role', None) or '') != 'admin':
+                    response = _login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message='You must be an admin to access this page.',
+                        category='danger', include_next=False,
+                    )
+                elif auth.token is not None and not auth.has_scope('admin'):
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    body, status = api_error_payload(
+                        'This token does not have the admin scope', code='forbidden',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                if response is None:
+                    from .bounded_multipart import (
+                        InvalidContentLength, RequestBodyTooLarge,
+                        bounded_multipart_form,
+                    )
+
+                    try:
+                        form = await bounded_multipart_form(
+                            request, max_body_bytes=MAX_UPLOAD_BYTES + 64 * 1024,
+                            max_files=1, max_fields=12, max_part_size=64 * 1024,
                         )
-                    elif normalize_role(getattr(user, 'role', None) or '') != 'admin':
-                        response = _login_redirect(
-                            flask_app, request, login_manager, auth,
-                            message='You must be an admin to access this page.',
-                            category='danger', include_next=False,
-                        )
-                    elif auth.token is not None and not auth.has_scope('admin'):
+                    except RequestBodyTooLarge:
                         from oneirodex.utils.api_contract import api_error_payload
 
                         body, status = api_error_payload(
-                            'This token does not have the admin scope', code='forbidden',
+                            'Emoji upload exceeds the size limit.', code='payload_too_large',
                         )
                         response = JSONResponse(body, status_code=status)
+                    except InvalidContentLength:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Invalid request size.', code='bad_request',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    except Exception:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Invalid multipart form data.', code='bad_request',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                if response is None:
+                    response = csrf_error_response(
+                        request, session_data, flask_app.config,
+                        token=str(form.get('csrf_token') or ''),
+                    )
                 if response is None:
                     action = str(form.get('action') or 'upload').strip()
                     if action == 'delete':
@@ -434,7 +466,8 @@ def create_chat_emoji_router(
                     _set_session_cookie(response, flask_app, auth)
                 return response
             finally:
-                await form.close()
+                if form is not None:
+                    await form.close()
 
     return router
 

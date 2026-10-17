@@ -336,6 +336,7 @@ def create_reference_sets_router(
             is_admin = user is not None and bool(getattr(user, 'is_authenticated', True)) and (
                 normalize_role(getattr(user, 'role', None) or '') == 'admin'
             )
+            response = None
             if csrf_response is not None:
                 response = csrf_response
             elif user is None:
@@ -439,16 +440,13 @@ def create_reference_sets_router(
         with scope:
             legacy_form = request.url.path == '/admin/reference_sets'
             parsed_form = None
+            form = None
             csrf_response = None
             if request.method in ('POST', 'DELETE'):
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
 
-                if legacy_form:
-                    parsed_form = await request.form(
-                        max_files=1, max_fields=10, max_part_size=64 * 1024,
-                    )
                 cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
                 session_data = load_session_cookie(
                     request.cookies.get(cookie_name),
@@ -458,10 +456,10 @@ def create_reference_sets_router(
                     ),
                     fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
                 )
-                csrf_response = csrf_error_response(
-                    request, session_data, flask_app.config,
-                    token=str(parsed_form.get('csrf_token') or '') if parsed_form is not None else None,
-                )
+                if csrf_response is None and not legacy_form:
+                    csrf_response = csrf_error_response(
+                        request, session_data, flask_app.config,
+                    )
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
@@ -474,6 +472,36 @@ def create_reference_sets_router(
             is_admin = user is not None and bool(getattr(user, 'is_authenticated', True)) and (
                 normalize_role(getattr(user, 'role', None) or '') == 'admin'
             )
+            response = None
+            if (
+                legacy_form and request.method in ('POST', 'DELETE')
+                and is_admin and auth is not None
+                and (auth.token is None or auth.has_scope('admin'))
+            ):
+                from .bounded_multipart import (
+                    InvalidContentLength, RequestBodyTooLarge,
+                    bounded_multipart_form,
+                )
+
+                try:
+                    parsed_form = await bounded_multipart_form(
+                        request, max_body_bytes=MAX_DAT_BYTES + 64 * 1024,
+                        max_files=1, max_fields=10, max_part_size=64 * 1024,
+                    )
+                    csrf_response = csrf_error_response(
+                        request, auth.session_data, flask_app.config,
+                        token=str(parsed_form.get('csrf_token') or ''),
+                    )
+                except RequestBodyTooLarge:
+                    payload, status = api_error_payload(
+                        'DAT too large (max 32 MiB)', code='payload_too_large',
+                    )
+                    csrf_response = JSONResponse(payload, status_code=status)
+                except InvalidContentLength:
+                    payload, status = api_error_payload(
+                        'Invalid request size.', code='bad_request',
+                    )
+                    csrf_response = JSONResponse(payload, status_code=status)
             if csrf_response is not None:
                 response = csrf_response
             elif user is None:
@@ -495,8 +523,33 @@ def create_reference_sets_router(
                 )
                 response = JSONResponse(payload, status_code=status)
             elif request.method == 'POST':
-                form = parsed_form or await request.form(max_files=1, max_fields=10, max_part_size=64 * 1024)
-                if legacy_form and str(form.get('action') or 'upload').strip() == 'delete':
+                form = parsed_form
+                if form is None:
+                    from .bounded_multipart import (
+                        InvalidContentLength, RequestBodyTooLarge,
+                        bounded_multipart_form,
+                    )
+
+                    try:
+                        form = await bounded_multipart_form(
+                            request, max_body_bytes=MAX_DAT_BYTES + 64 * 1024,
+                            max_files=1, max_fields=10, max_part_size=64 * 1024,
+                        )
+                    except RequestBodyTooLarge:
+                        payload, status = api_error_payload(
+                            'DAT too large (max 32 MiB)', code='payload_too_large',
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                    except InvalidContentLength:
+                        payload, status = api_error_payload(
+                            'Invalid request size.', code='bad_request',
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                if form is None:
+                    form = {}
+                if response is not None:
+                    pass
+                elif legacy_form and str(form.get('action') or 'upload').strip() == 'delete':
                     try:
                         target_id = int(form.get('set_id') or '0')
                         deleted = target_id > 0 and data.delete(target_id)
@@ -619,6 +672,10 @@ def create_reference_sets_router(
                     close_upload = getattr(value, 'close', None)
                     if callable(close_upload):
                         await close_upload()
+            if form is not None and form is not parsed_form:
+                close_form = getattr(form, 'close', None)
+                if callable(close_form):
+                    await close_form()
 
         from oneirodex.utils.security_headers import security_header_values
 

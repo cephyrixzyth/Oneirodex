@@ -274,23 +274,31 @@ def create_admin_image_mutation_router(
                 login_manager=login_manager,
             )
             form = None
-            response = None
+            response = _admin_denial(flask_app, request, auth, login_manager)
             content_type = request.headers.get('content-type', '').lower()
-            if content_type.startswith('multipart/form-data'):
-                form = await request.form(max_files=1, max_fields=12, max_part_size=64 * 1024)
+            if response is None and content_type.startswith('multipart/form-data'):
+                from .bounded_multipart import (
+                    InvalidContentLength, RequestBodyTooLarge, bounded_multipart_form,
+                )
+
+                try:
+                    form = await bounded_multipart_form(
+                        request, max_body_bytes=3 * 1024 * 1024 + 64 * 1024,
+                        max_files=1, max_fields=12, max_part_size=64 * 1024,
+                    )
+                except RequestBodyTooLarge:
+                    payload, status = _error('Upload exceeds the 3MB limit.', 'payload_too_large')
+                    response = JSONResponse(payload, status_code=status)
+                except InvalidContentLength:
+                    payload, status = _error('Invalid request size.', 'bad_request')
+                    response = JSONResponse(payload, status_code=status)
+            if response is None:
                 csrf = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get('csrf_token'),
+                    token=form.get('csrf_token') if form is not None else None,
                 ) if auth.token is None else None
-            else:
-                csrf = csrf_error_response(request, auth.session_data, flask_app.config) \
-                    if auth.token is None else None
-            if csrf is not None:
-                response = csrf
-            else:
-                denied = _admin_denial(flask_app, request, auth, login_manager)
-                if denied is not None:
-                    response = denied
+                if csrf is not None:
+                    response = csrf
             try:
                 if response is None and is_scan_job_running():
                     payload, status = _error(
