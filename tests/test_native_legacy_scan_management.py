@@ -137,7 +137,7 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
     runtime, data = native_client
     auto = _request(runtime, 'AutoScan', fields={
         'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
-        'scan_mode': 'folders', 'remove_missing': 'on', 'fetch_hltb': 'true',
+        'scan_mode': 'folders', 'remove_missing': 'y', 'fetch_hltb': 'y',
     })
     assert auto.status_code == 302
     assert auto.headers['location'] == '/scan_management?active_tab=auto&library_uuid=lib-1'

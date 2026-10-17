@@ -378,7 +378,10 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
 
 
 def _flag(value):
-    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    # WTForms BooleanField treats only False, 'false', and '' as unchecked.
+    # In particular its default checked value is 'y'; retain that meaning for
+    # direct compatibility posts from the v1.1.8 form.
+    return value not in (None, False, 'false', '')
 
 
 def _body_receive(raw):
