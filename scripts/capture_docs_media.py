@@ -17,7 +17,10 @@ Treat non-zero as "pixels are stale", never as "done".
 """
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,6 +109,12 @@ def prep_preferences(page) -> None:
         _click(page, 'a[href="/settings_panel"]', after_ms=1_800)
 
 
+def prep_discover(page) -> None:
+    # Use the populated local-library shelf rather than provider-dependent
+    # store artwork, which is intentionally unavailable in capture mode.
+    _role(page, "button", "New & updated", after_ms=1_500)
+
+
 def prep_tile_menu(page) -> None:
     _click(page, 'button[aria-label^="Open actions for"]', after_ms=900)
 
@@ -138,6 +147,31 @@ def prep_integrations_artwork(page) -> None:
         print("    integrations artwork:", type(exc).__name__)
 
 
+def _write_screenshot_atomically(path: Path, image: bytes) -> None:
+    """Replace a capture only after its PNG has been written successfully."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(3):
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=f".{path.stem}.", suffix=".tmp",
+                dir=path.parent, delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(image)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            return
+        except OSError:
+            if attempt == 2:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+
 # --------------------------------------------------------------------------
 # the surfaces
 # --------------------------------------------------------------------------
@@ -149,7 +183,7 @@ SHOTS: list[Shot] = [
     Shot("library-tile-menu", "/library", prep_tile_menu),
     Shot("game-details", "/library", prep_game, readme=("screenshot-game.png",), settle_ms=1_500),
     Shot("game-details-full", "/library", prep_game, full_page=True, settle_ms=1_500),
-    Shot("discover", "/discover", readme=("screenshot-discover.png",), settle_ms=5_000),
+    Shot("discover", "/discover", prep_discover, readme=("screenshot-discover.png",), settle_ms=5_000),
     Shot("systems-platforms", "/systems", readme=("screenshot-systems.png",), settle_ms=1_800),
     Shot("systems-completion", "/systems/completion", settle_ms=1_800),
     Shot("chat-channels", "/library", prep_chat, readme=("screenshot-chat.png",)),
@@ -209,7 +243,7 @@ SHOTS: list[Shot] = [
 def _sync_readme(src: Path, dest_name: str) -> None:
     README_ASSETS.mkdir(parents=True, exist_ok=True)
     dest = README_ASSETS / dest_name
-    dest.write_bytes(src.read_bytes())
+    _write_screenshot_atomically(dest, src.read_bytes())
     print("    readme:", dest.relative_to(ROOT))
 
 
@@ -238,7 +272,7 @@ def capture(page, shots: list[Shot]) -> list[str]:
             SHOT_DIR.mkdir(parents=True, exist_ok=True)
             out = SHOT_DIR / f"{shot.name}.png"
             image = page.screenshot(full_page=shot.full_page, timeout=20_000)
-            out.write_bytes(image)
+            _write_screenshot_atomically(out, image)
             print("    shot:", out.relative_to(ROOT))
             for slot in shot.readme:
                 _sync_readme(out, slot)

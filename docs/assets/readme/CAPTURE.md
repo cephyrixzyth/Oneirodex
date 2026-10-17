@@ -14,6 +14,18 @@ honestly it is skipped and the run says so.
 
 ## Recipe
 
+**Latest full still capture:** 2026-10-17 — all 52 member/admin surfaces passed
+the health gate against the throwaway `oneirodexcapture` instance. README
+screenshot slots were refreshed, then the hero, section art, feature cards,
+and how-to poster tiles were regenerated. How-to clips and narration were not
+changed; clips were last generated 2026-10-14. Screenshots and README slot
+copies use atomic replacement with retries so a transient file-write error
+preserves the last good image.
+
+The Discover screenshot selects **New & updated**, which uses the seeded local
+game artwork and avoids provider-dependent store images that are unavailable
+in the offline capture environment.
+
 ```bash
 # 0. Build what will be photographed — a stale dist silently captures old UI.
 npm ci

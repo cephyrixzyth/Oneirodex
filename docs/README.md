@@ -38,7 +38,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Maintainers / database evaluation | [adr/0012-evaluate-mariadb-before-engine-change.md](adr/0012-evaluate-mariadb-before-engine-change.md) — cost and compatibility gates; proposal only |
 | CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — current marker selection, explicit exclusions and coverage gate. Replaces `ci-wishlist.md` |
 | Support triage (maintainers) | [dev/ui-debt-log.md](dev/ui-debt-log.md) · [dev/api-envelope-keeps.md](dev/api-envelope-keeps.md) |
-| UI system (maintainers) | [dev/ui-style-guide.md](dev/ui-style-guide.md) — tokens, controls, icons, theme layers, contribution workflow, and private shared-package contract; the local catalog is `frontend/ui-catalog` (commands and limits in the guide) |
+| UI system (maintainers) | [dev/ui-style-guide.md](dev/ui-style-guide.md) — tokens, controls, icons, theme layers, contribution workflow, and private shared-package contract; the local catalog is `frontend/ui-catalog` and is served inside the loopback Project hub after build |
 | Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers. Older harness notes and the 2026-09-16 failure list are in [dev/archive/](dev/archive/README.md) |
 | Template retirement and runtime migration (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — template/render census and runtime dependency boundary |
 | Writing an API route (maintainers) | [dev/pydantic-adoption.md](dev/pydantic-adoption.md) — `@validate_body` request models · which routes are migrated · adoption backlog |
