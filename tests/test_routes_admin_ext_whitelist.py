@@ -370,6 +370,13 @@ class TestDeleteWhitelistRoute:
         assert response.headers['Content-Length'] == expected.headers['Content-Length']
         assert response.get_data() == expected.get_data()
 
+        xhr_response = client.delete(
+            '/admin/whitelist/99999', headers={'X-Requested-With': 'XMLHttpRequest'},
+        )
+        xhr_data = json.loads(xhr_response.get_data(as_text=True))
+        assert xhr_response.status_code == 404
+        assert xhr_data['error_code'] == 'not_found'
+
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
     def test_delete_whitelist_successful(self, mock_log, client, db_session, admin_user, whitelist_entries):
         """Test DELETE /admin/whitelist/<id> successfully deletes entry."""

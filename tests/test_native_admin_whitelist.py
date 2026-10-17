@@ -135,6 +135,27 @@ def test_missing_whitelist_delete_keeps_legacy_html_for_browser_requests():
     assert response.content == expected.get_data()
 
 
+@pytest.mark.parametrize(('extra_headers', 'expects_json'), [
+    ({'X-Requested-With': 'XMLHttpRequest'}, True),
+    ({'Accept': 'text/html, application/json;q=0.9'}, False),
+    ({'Accept': 'application/json, text/html;q=0.5'}, True),
+    ({'Accept': 'application/json;q=0, text/html'}, False),
+])
+def test_missing_whitelist_delete_matches_legacy_error_negotiation(extra_headers, expects_json):
+    client, data, csrf = _client()
+    data.delete_error = ('Not found', 'not_found', 404)
+    headers = {'X-CSRFToken': csrf, **extra_headers}
+    response = client.delete('/admin/whitelist/55', headers=headers)
+
+    assert response.status_code == 404
+    if expects_json:
+        assert response.headers['content-type'].startswith('application/json')
+        assert response.json()['error_code'] == 'not_found'
+    else:
+        assert response.headers['content-type'].startswith('text/html')
+        assert response.content == NotFound().get_response().get_data()
+
+
 def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
     client, data, csrf = _client()
     response = client.post(
