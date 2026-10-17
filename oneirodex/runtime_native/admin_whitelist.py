@@ -143,7 +143,16 @@ def create_admin_whitelist_router(
                             response = _result(payload, error, status=201)
                     else:
                         payload, error = data.delete(whitelist_id or 0, user)
-                        response = _result(payload, error)
+                        if error and error[1] == 'not_found' and not _wants_json_error(request):
+                            from werkzeug.exceptions import NotFound
+                            legacy = NotFound().get_response()
+                            response = Response(
+                                content=legacy.get_data(),
+                                status_code=legacy.status_code,
+                                headers=dict(legacy.headers),
+                            )
+                        else:
+                            response = _result(payload, error)
                 except Exception:  # noqa: BLE001 — do not expose persistence diagnostics
                     data.rollback()
                     response = _error('Internal server error', 'internal')
@@ -253,6 +262,19 @@ async def _legacy_form(request):
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
     return {name: values[-1] for name, values in fields.items() if values}, None
+
+
+def _wants_json_error(request):
+    """Mirror the legacy Flask error handler's XHR/content-negotiation test."""
+    from werkzeug.datastructures import MIMEAccept
+    from werkzeug.http import parse_accept_header
+
+    accept = parse_accept_header(request.headers.get('accept', ''), MIMEAccept)
+    return (
+        request.url.path.startswith('/api/')
+        or accept.best == 'application/json'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
 
 
 def _ok(payload):

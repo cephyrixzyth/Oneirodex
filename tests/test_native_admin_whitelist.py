@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 import pytest
+from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
 
 from oneirodex.runtime_native.admin_whitelist import create_admin_whitelist_router
@@ -111,9 +112,24 @@ def test_whitelist_conflict_and_missing_delete_use_error_contracts():
         headers={'X-CSRFToken': csrf},
     )
     data.delete_error = ('Not found', 'not_found', 404)
-    missing = client.delete('/admin/whitelist/55', headers={'X-CSRFToken': csrf})
+    missing = client.delete(
+        '/admin/whitelist/55',
+        headers={'X-CSRFToken': csrf, 'Accept': 'application/json'},
+    )
     assert duplicate.status_code == 409 and duplicate.json()['error_code'] == 'conflict'
     assert missing.status_code == 404 and missing.json()['error_code'] == 'not_found'
+
+
+def test_missing_whitelist_delete_keeps_legacy_html_for_browser_requests():
+    client, data, csrf = _client()
+    data.delete_error = ('Not found', 'not_found', 404)
+    response = client.delete('/admin/whitelist/55', headers={'X-CSRFToken': csrf})
+    expected = NotFound().get_response()
+
+    assert response.status_code == expected.status_code == 404
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.headers['content-length'] == expected.headers['Content-Length']
+    assert response.content == expected.get_data()
 
 
 def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
