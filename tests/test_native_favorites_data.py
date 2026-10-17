@@ -8,6 +8,84 @@ from oneirodex.platform import LibraryPlatform
 from oneirodex.runtime_native.favorites import FavoritesData
 
 
+def test_favorites_database_failure_matches_wsgi_and_native_asgi(
+    app, client, db_session, configured_install, monkeypatch,
+):
+    import asyncio
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    import httpx
+    from fastapi import FastAPI
+
+    import asgi
+    from oneirodex.routes_apis import user as user_routes
+    from oneirodex.runtime_native.favorites import create_favorites_router
+    from oneirodex.runtime_native.session_compat import dump_session_cookie
+    from oneirodex import login_manager
+
+    user_key = str(uuid4())
+    user = User(
+        name=f'fav-db-failure-{user_key[:8]}',
+        email=f'fav-db-failure-{user_key[:8]}@example.com',
+        password_hash='unused', role='user', user_id=user_key,
+        avatarpath='newstyle/avatar_default.jpg', state=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    def fail_with_sensitive_database_detail(*_args, **_kwargs):
+        raise RuntimeError('synthetic-secret-db-detail')
+
+    monkeypatch.setattr(user_routes.db, 'paginate', fail_with_sensitive_database_detail)
+
+    with client.session_transaction() as session:
+        session['_user_id'] = str(user.id)
+        session['_fresh'] = True
+    wsgi_response = client.get('/api/favorites')
+
+    user = SimpleNamespace(
+        id=37, role='user', state=True, is_active=True, is_authenticated=True,
+        session_fingerprint=lambda: 'favorites-failure-fingerprint',
+    )
+    native_app = FastAPI()
+    native_app.include_router(create_favorites_router(
+        app,
+        find_user=lambda user_id: user if user_id == user.id else None,
+        find_token=lambda _prefix: None,
+        commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: user if value.split(':', 1)[0] == str(user.id) else None,
+        login_manager=login_manager,
+        data_access=SimpleNamespace(payload=fail_with_sensitive_database_detail),
+        database_scope=lambda _flask_app: nullcontext(),
+    ))
+    asgi._install_native_api_error_handlers(native_app, app.config, app.logger)
+    native_cookie = dump_session_cookie(
+        {
+            '_user_id': f'{user.id}:{user.session_fingerprint()}',
+            '_fresh': True,
+        },
+        app.config['SECRET_KEY'],
+    )
+
+    async def get_native_response():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=native_app, raise_app_exceptions=False,
+            ),
+            base_url='http://localhost',
+        ) as native_client:
+            native_client.cookies.set('session', native_cookie)
+            return await native_client.get('/api/favorites')
+
+    native_response = asyncio.run(get_native_response())
+
+    assert wsgi_response.status_code == native_response.status_code == 500
+    assert wsgi_response.get_json() == native_response.json()
+    assert 'synthetic-secret-db-detail' not in wsgi_response.get_data(as_text=True)
+    assert 'synthetic-secret-db-detail' not in native_response.text
+
+
 def test_empty_favorites_payload_is_a_normal_empty_page(monkeypatch):
     from oneirodex.utils import browse_query, global_settings, client_lifecycle
 
