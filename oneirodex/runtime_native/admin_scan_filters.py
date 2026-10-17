@@ -142,14 +142,15 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
             response = JSONResponse(payload, status_code=status)
         elif legacy_form and filter_id is None and request.method == 'POST':
             from starlette.responses import RedirectResponse
-            pattern = str(legacy_form_values.get('filter_pattern') or '').strip()
-            case_value = str(legacy_form_values.get('case_sensitive') or 'no')
+            pattern = str(legacy_form_values.get('filter_pattern') or '')
+            case_raw = legacy_form_values.get('case_sensitive')
+            case_value = str(case_raw if case_raw is not None else 'no')
             message = None
             category = 'message'
-            if not pattern:
-                message, category = 'Enter a valid scanning filter.', 'danger'
+            if not pattern.strip():
+                message, category = 'This field is required.', 'danger'
             elif case_value not in {'yes', 'no'}:
-                message, category = 'Choose a valid case-sensitivity option.', 'danger'
+                message, category = 'Not a valid choice.', 'danger'
             else:
                 try:
                     data.add(pattern, case_value == 'yes')

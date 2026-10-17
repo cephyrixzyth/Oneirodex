@@ -153,11 +153,28 @@ class TestEditFiltersRoute:
             'filter_pattern': '',  # Empty filter_pattern should fail validation
             'case_sensitive': 'no',
             'submit': 'Add'
-        }, follow_redirects=True)
+        }, follow_redirects=False)
         
-        # Invalid legacy form submissions return to the shared React page with a flash.
-        assert response.status_code == 200
-        assert b'required' in response.data.lower() or b'valid scanning filter' in response.data.lower()
+        assert response.status_code == 302
+        assert response.location.endswith('/admin/edit_filters')
+        with client.session_transaction() as sess:
+            assert sess['_flashes'] == [('danger', 'This field is required.')]
+
+    def test_edit_filters_post_invalid_case_choice_flashes_wtforms_message(
+        self, client, admin_user,
+    ):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        response = client.post('/admin/edit_filters', data={
+            'filter_pattern': 'Some Filter',
+            'case_sensitive': '',
+        }, follow_redirects=False)
+
+        assert response.status_code == 302
+        with client.session_transaction() as sess:
+            assert sess['_flashes'] == [('danger', 'Not a valid choice.')]
     
     def test_edit_filters_post_flash_message(self, client, admin_user):
         """Test that flash message is shown after successful add."""

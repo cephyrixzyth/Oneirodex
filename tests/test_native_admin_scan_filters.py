@@ -116,3 +116,60 @@ def test_legacy_scan_filter_add_redirects_and_flashes(monkeypatch):
         response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
     )
     assert session['_flashes'] == [('message', 'New scanning filter added.')]
+
+
+def test_legacy_scan_filter_blank_validation_matches_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': '   ', 'case_sensitive': 'no'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    session = load_session_cookie(
+        response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
+    )
+    assert session['_flashes'] == [('danger', 'This field is required.')]
+    assert len(data.rows) == 1
+
+
+def test_legacy_scan_filter_invalid_choice_matches_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': 'Scene', 'case_sensitive': ''},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    session = load_session_cookie(
+        response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
+    )
+    assert session['_flashes'] == [('danger', 'Not a valid choice.')]
+    assert len(data.rows) == 1
+
+
+def test_legacy_scan_filter_preserves_whitespace_accepted_by_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': ' Scene Release ', 'case_sensitive': 'yes'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/edit_filters'
+    assert data.rows[-1].filter_pattern == ' Scene Release '

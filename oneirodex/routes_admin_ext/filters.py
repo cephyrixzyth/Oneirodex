@@ -113,7 +113,9 @@ def edit_filters():
         flash('New scanning filter added.')
         return redirect(url_for('admin2.edit_filters'))
 
-    errors = form.filter_pattern.errors or ['Enter a valid scanning filter.']
+    errors = [*form.filter_pattern.errors, *form.case_sensitive.errors]
+    if not errors:
+        errors = ['Enter a valid scanning filter.']
     for error in errors:
         flash(error, 'danger')
     return redirect(url_for('admin2.edit_filters'))
