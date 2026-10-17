@@ -284,13 +284,30 @@ def test_legacy_update_download_creates_request_and_redirects_to_downloads():
         '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
         follow_redirects=False,
     )
-
     assert response.status_code == 302
     assert response.headers['location'] == '/downloads'
     assert data.created == (
         '12345678-1234-1234-1234-123456789abc', 7,
         '/storage/fixture/update.zip', '/storage/fixture/update.zip',
     )
+
+
+def test_legacy_other_missing_disk_get_keeps_warning_without_queueing():
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    data = FakeDownloads()
+    data.exists = lambda _path: False
+    response = make_client(data=data, role='user').get(
+        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/game_details/12345678-1234-1234-1234-123456789abc'
+    cookie = response.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    session = load_session_cookie(cookie, 'native-download-mutations-secret', max_age=3600)
+    assert session['_flashes'][-1] == ('error', 'File not found on disk')
+    assert data.created is None
 
 
 def test_legacy_other_download_rejects_invalid_type_and_file_id():
