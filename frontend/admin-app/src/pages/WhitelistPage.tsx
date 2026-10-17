@@ -18,12 +18,6 @@ export function WhitelistPage() {
     setEntries(Array.isArray(data.entries) ? data.entries : [])
   }
   useEffect(() => {
-    const legacyFormState = document.getElementById('od-whitelist-form-state')
-    if (legacyFormState) {
-      setEmail(legacyFormState.getAttribute('data-email') ?? '')
-      setError(legacyFormState.getAttribute('data-error') ?? '')
-      legacyFormState.remove()
-    }
     reload()
       .catch((err) => setError(errorText(err)))
       .finally(() => setLoading(false))
