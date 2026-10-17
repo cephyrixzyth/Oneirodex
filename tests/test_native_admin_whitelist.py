@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -13,7 +12,7 @@ from werkzeug.utils import redirect
 
 from oneirodex.runtime_native.admin_whitelist import create_admin_whitelist_router
 from oneirodex.runtime_native.session_compat import (
-    dump_session_cookie, generate_csrf_token, load_session_cookie,
+    dump_session_cookie, generate_csrf_token,
 )
 
 
@@ -40,7 +39,7 @@ class FakeWhitelist:
         self.calls.append(('rollback',))
 
 
-def _client():
+def _client(shell_path=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-whitelist-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -64,6 +63,7 @@ def _client():
         load_user_id=lambda value: user if value.split(':', 1)[0] == '18' else None,
         login_manager=manager, data_access=data,
         database_scope=lambda _app: nullcontext(),
+        shell_path=shell_path,
     )
     app = FastAPI()
     app.include_router(router)
@@ -174,15 +174,17 @@ def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
 
 
 @pytest.mark.parametrize('email', [' person@example.org ', 'person@example.org\n'])
-def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(email):
-    client, data, csrf = _client()
+def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(email, tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
     response = client.post(
         '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
         follow_redirects=False,
     )
 
-    assert response.status_code == 302
-    assert response.headers['location'] == '/admin/whitelist'
+    assert response.status_code == 200
+    assert 'data-error="Invalid email address."' in response.text
     assert data.calls == []
 
 
@@ -192,18 +194,36 @@ def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(ema
     ('person@' + 'a' * 60 + '.' + 'b' * 60 + '.com',
      'Email address is too long (maximum 120 characters)'),
 ])
-def test_legacy_whitelist_form_preserves_field_validation_messages(email, message):
-    client, data, csrf = _client()
+def test_legacy_whitelist_form_preserves_field_validation_messages(email, message, tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
     response = client.post(
         '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
         follow_redirects=False,
     )
-    cookies = SimpleCookie()
-    cookies.load(response.headers['set-cookie'])
-    session = load_session_cookie(
-        cookies['session'].value, 'native-whitelist-secret', max_age=3600,
+    assert response.status_code == 200
+    assert f'data-error="{message}"' in response.text
+    assert f'data-email="{email}"' in response.text
+    assert data.calls == []
+
+
+def test_legacy_whitelist_form_escapes_invalid_value_in_react_shell(tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
+    malicious_value = '" autofocus onfocus="alert(1)'
+    response = client.post(
+        '/admin/whitelist',
+        data={'csrf_token': csrf, 'email': malicious_value},
+        follow_redirects=False,
     )
 
-    assert response.status_code == 302
-    assert session['_flashes'] == [('danger', message)]
+    assert response.status_code == 200
+    assert 'data-email="&quot; autofocus onfocus=&quot;alert(1)"' in response.text
+    assert 'data-email="" autofocus' not in response.text
+    assert response.headers['cache-control'] == 'no-store'
+    assert 'cookie' in {
+        value.strip().lower() for value in response.headers['vary'].split(',')
+    }
     assert data.calls == []

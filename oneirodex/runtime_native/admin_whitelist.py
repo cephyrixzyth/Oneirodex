@@ -93,6 +93,7 @@ def create_admin_whitelist_router(
     flask_app, *, find_user: Callable[[int], Any | None],
     find_token: Callable[[str], Any | None], commit_token_touch: Callable[[Any], None],
     load_user_id=None, login_manager=None, data_access=None, database_scope=None,
+    shell_path=None,
 ) -> APIRouter:
     router = APIRouter()
     data = data_access or AdminWhitelistData()
@@ -176,6 +177,7 @@ def create_admin_whitelist_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
+            consumed_flashes = False
             form, body_error = await _legacy_form(request)
             response = body_error
             if response is None:
@@ -201,6 +203,7 @@ def create_admin_whitelist_router(
                 from pydantic import ValidationError
                 from email_validator import EmailNotValidError, validate_email
                 raw_email = form.get('email') or ''
+                invalid_form_error = None
                 try:
                     # The legacy WTForms Email validator checks the submitted
                     # value before the route strips and lowercases it. Validate
@@ -208,19 +211,18 @@ def create_admin_whitelist_router(
                     # cannot be silently accepted by the normalized API schema.
                     validate_email(raw_email, check_deliverability=False)
                 except EmailNotValidError:
-                    message = 'This field is required.' if not raw_email.strip() else 'Invalid email address.'
-                    _flash(auth.session_data, 'danger', message)
+                    invalid_form_error = (
+                        'This field is required.' if not raw_email.strip()
+                        else 'Invalid email address.'
+                    )
                 else:
                     if len(raw_email.strip()) > 120:
-                        _flash(
-                            auth.session_data, 'danger',
-                            'Email address is too long (maximum 120 characters)',
-                        )
+                        invalid_form_error = 'Email address is too long (maximum 120 characters)'
                     else:
                         try:
                             body = AddWhitelistBody.model_validate({'email': raw_email})
                         except ValidationError:
-                            _flash(auth.session_data, 'danger', 'Invalid email address.')
+                            invalid_form_error = 'Invalid email address.'
                         else:
                             payload, error = data.add(body, auth.user)
                             if error is None:
@@ -229,9 +231,21 @@ def create_admin_whitelist_router(
                                 _flash(auth.session_data, 'danger', 'The email is already in the whitelist!')
                             else:
                                 _flash(auth.session_data, 'danger', 'An error occurred while adding the email to the whitelist')
-                from .response_compat import flask_redirect_response
-                response = flask_redirect_response('/admin/whitelist')
-            if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
+                if invalid_form_error and shell_path:
+                    pending_flashes = list(auth.session_data.get('_flashes') or [])
+                    response = _legacy_invalid_form_shell(
+                        shell_path, raw_email, invalid_form_error,
+                        pending_flashes,
+                    )
+                    if response is not None and pending_flashes:
+                        auth.session_data.pop('_flashes', None)
+                        consumed_flashes = True
+                if response is None:
+                    if invalid_form_error:
+                        _flash(auth.session_data, 'danger', invalid_form_error)
+                    from .response_compat import flask_redirect_response
+                    response = flask_redirect_response('/admin/whitelist')
+            if auth.should_set_session_cookie or auth.session_data.get('_flashes') or consumed_flashes:
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
             for key, value in security_header_values(flask_app.config).items():
@@ -309,3 +323,31 @@ def _error(message, code, status=None, *, detail=None):
 def mount_admin_whitelist_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_admin_whitelist_router(flask_app, **kwargs))
     return app
+
+
+def _legacy_invalid_form_shell(shell_path, email, message, flashes):
+    """Render the React admin page with the legacy form's field-error state."""
+    from html import escape
+    from pathlib import Path
+    from .admin_pilot import _shell_with_admin_flashes
+
+    try:
+        shell = Path(shell_path).read_text(encoding='utf-8')
+    except OSError:
+        return None
+    marker = '<div id="admin-app-root"'
+    if shell.count(marker) != 1:
+        return None
+    shell = _shell_with_admin_flashes(shell, flashes)
+    state = (
+        '<div id="od-whitelist-form-state" hidden'
+        f' data-email="{escape(str(email), quote=True)}"'
+        f' data-error="{escape(str(message), quote=True)}"></div>\n'
+    )
+    response = Response(
+        shell.replace(marker, state + marker, 1),
+        status_code=200, media_type='text/html',
+    )
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Vary'] = 'Cookie'
+    return response

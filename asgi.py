@@ -2606,6 +2606,7 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
+            admin_shell_path = self._static_root / 'dist' / 'admin-pilot' / 'index.html'
             mount_admin_whitelist_routes(
                 self._native_read_api_app,
                 self._flask_app,
@@ -2615,6 +2616,7 @@ class LazyASGIApp:
                 load_user_id=load_user_id,
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
+                shell_path=admin_shell_path,
             )
             mount_admin_plugins_routes(
                 self._native_read_api_app,
@@ -2883,7 +2885,6 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
-            admin_shell_path = self._static_root / 'dist' / 'admin-pilot' / 'index.html'
             if not admin_shell_path.is_file() and not compatibility_app_injected:
                 raise RuntimeError('Required built admin React shell is missing from the application static tree.')
             from oneirodex.runtime_native import (
@@ -2942,10 +2943,10 @@ class LazyASGIApp:
         elif scope["type"] == "http":
             path = scope["path"]
             if _vary_cookie_required(path):
-                downstream_send = send
+                cookie_downstream_send = send
 
                 async def send_with_cookie_vary(message):
-                    await downstream_send(_ensure_cookie_vary(message))
+                    await cookie_downstream_send(_ensure_cookie_vary(message))
 
                 send = send_with_cookie_vary
 
@@ -3092,10 +3093,10 @@ class LazyASGIApp:
                 return
             close_replay = getattr(receive, 'close', None)
             if close_replay is not None:
-                downstream_send = send
+                replay_downstream_send = send
 
                 async def send_with_replay_cleanup(message):
-                    await downstream_send(message)
+                    await replay_downstream_send(message)
                     if (
                         message.get('type') == 'http.response.body'
                         and not message.get('more_body', False)
