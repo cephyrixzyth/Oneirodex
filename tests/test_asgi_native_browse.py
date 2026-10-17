@@ -8326,6 +8326,63 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
+    from flask import Flask, session as flask_session
+    from http.cookies import SimpleCookie
+
+    user = SimpleNamespace(get_id=lambda: '7:fp')
+    monkeypatch.setattr(
+        native_auth_login, 'AuthLoginData',
+        lambda: SimpleNamespace(authenticate=lambda *_args: (user, None)),
+    )
+    flask_app, runtime = _runtime(monkeypatch)
+    cookie_config = {
+        'SESSION_COOKIE_NAME': 'session',
+        'SESSION_COOKIE_DOMAIN': 'example.test',
+        'SESSION_COOKIE_PATH': '/',
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_HTTPONLY': True,
+        'SESSION_COOKIE_SAMESITE': 'Lax',
+        'SESSION_COOKIE_PARTITIONED': True,
+    }
+    flask_app.config.update(cookie_config)
+    session_data = {}
+    csrf = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
+    current = _run(
+        runtime, '/login', method='POST',
+        cookie=dump_session_cookie(session_data, flask_app.config['SECRET_KEY']),
+        form_body={'csrf_token': csrf, 'username': 'player', 'password': 'secret'},
+        base_url='https://example.test',
+    )
+
+    legacy_app = Flask(__name__)
+    legacy_app.config.update(SECRET_KEY=flask_app.config['SECRET_KEY'], **cookie_config)
+
+    @legacy_app.get('/set-session')
+    def legacy_set_session():
+        flask_session['_user_id'] = '7:fp'
+        flask_session['_fresh'] = True
+        return 'ok'
+
+    legacy = legacy_app.test_client().get('/set-session')
+
+    def cookie_attributes(values):
+        jar = SimpleCookie()
+        for value in values:
+            jar.load(value)
+        cookie = jar['session']
+        return (
+            cookie['path'], cookie['domain'], cookie['secure'],
+            cookie['httponly'], cookie['samesite'].lower(), cookie['partitioned'],
+        )
+
+    assert current.status_code == 302
+    assert cookie_attributes(current.headers.get_list('set-cookie')) == cookie_attributes(
+        [legacy.headers['Set-Cookie']],
+    )
+    assert cookie_attributes(current.headers.get_list('set-cookie'))[-1] is True
+
+
 def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
     calls = []
 
