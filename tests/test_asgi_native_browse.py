@@ -4020,6 +4020,43 @@ def test_native_social_request_matches_legacy_internal_error_for_truthy_non_obje
     assert runtime._fake_social_writes.calls == []
 
 
+def test_native_social_persistence_failure_uses_safe_api_error(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    def fail_request(*_args, **_kwargs):
+        raise RuntimeError('synthetic persistence failure')
+
+    monkeypatch.setattr(runtime._fake_social_writes, 'request', fail_request)
+
+    async def post_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=runtime, raise_app_exceptions=False,
+            ),
+            base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/social/friends',
+                json={'username': 'friend'},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(post_request())
+
+    assert response.status_code == 500
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json() == {
+        'ok': False,
+        'error': 'Something went wrong on our end. The error has been logged.',
+        'error_code': 'internal',
+        'message': 'Something went wrong on our end. The error has been logged.',
+        'success': False,
+    }
+    assert 'synthetic persistence failure' not in response.text
+
+
 def test_native_social_mutations_require_write_scope_for_bearer(monkeypatch):
     runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
 
