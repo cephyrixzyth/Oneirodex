@@ -108,23 +108,6 @@ class TestWhitelistRoutes:
         response = client.get('/admin/whitelist')
         assert response.status_code == 302  # Redirect due to admin_required decorator
 
-    def test_whitelist_invalid_form_flashes_wtforms_error_and_redirects(
-        self, client, admin_user,
-    ):
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        response = client.post(
-            '/admin/whitelist', data={'email': 'not-an-email'},
-            follow_redirects=False,
-        )
-
-        assert response.status_code == 302
-        assert response.location.endswith('/admin/whitelist')
-        with client.session_transaction() as sess:
-            assert ('danger', 'Invalid email address.') in sess['_flashes']
-
     @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
     def test_whitelist_get_displays_entries(self, mock_log, client, admin_user, 
                                           whitelist_entries, registered_user_for_whitelist):

@@ -2616,6 +2616,7 @@ class LazyASGIApp:
                 load_user_id=load_user_id,
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
+                shell_path=admin_shell_path,
             )
             mount_admin_plugins_routes(
                 self._native_read_api_app,
