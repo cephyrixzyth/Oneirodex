@@ -6,6 +6,20 @@ from html import escape
 from starlette.responses import Response
 
 
+def add_vary_header(response, name: str) -> None:
+    """Merge a Vary dimension across Starlette and Werkzeug responses."""
+    headers = response.headers
+    getlist = getattr(headers, 'getlist', None)
+    existing = getlist('vary') if callable(getlist) else [headers.get('Vary', '')]
+    values = [part.strip() for value in existing for part in value.split(',') if part.strip()]
+    if any(value == '*' for value in values):
+        return
+    if name.casefold() not in {value.casefold() for value in values}:
+        values.append(name)
+    if values:
+        headers['Vary'] = ', '.join(values)
+
+
 def flask_redirect_response(location: str, *, status_code: int = 302) -> Response:
     """Build the small HTML body Werkzeug emits for ``flask.redirect``."""
     location = str(location)

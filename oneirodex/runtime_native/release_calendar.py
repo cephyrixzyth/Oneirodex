@@ -10,7 +10,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import Response
 
 from .request_auth import RequestAuthContext, request_auth_context
-from .response_compat import flask_redirect_response
+from .response_compat import add_vary_header, flask_redirect_response
 
 
 def create_release_calendar_router(
@@ -118,7 +118,7 @@ def _secure_response(response: Response, flask_app, request: Request):
         response.headers.setdefault(key, value)
     # Flask-Login reads the signed session for every protected route, and the
     # Flask session interface adds this even when it does not rewrite a cookie.
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')
     if request.method == 'HEAD':
         response.body = b''
     return response
@@ -200,4 +200,4 @@ def _set_session_cookie(response, flask_app, auth: RequestAuthContext):
         samesite=str(samesite).lower() if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')

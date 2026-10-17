@@ -137,7 +137,7 @@ def test_session_cookie_is_not_written_twice_by_mixed_compatibility_adapters():
         session_data={'_flashes': [('message', 'Please log in to access this page.')]},
         should_set_session_cookie=True,
     )
-    response = Response(status_code=302)
+    response = Response(status_code=302, headers={'Vary': 'Accept-Encoding'})
 
     set_oidc_session_cookie(response, flask_app, auth)
     _set_session_cookie(response, flask_app, auth)
@@ -145,4 +145,28 @@ def test_session_cookie_is_not_written_twice_by_mixed_compatibility_adapters():
     cookies = response.headers.getlist('set-cookie')
     assert len(cookies) == 1
     assert cookies[0].startswith('session=')
+    assert response.headers['Vary'] == 'Accept-Encoding, Cookie'
+
+
+def test_vary_header_merge_supports_starlette_and_werkzeug_responses():
+    from werkzeug.wrappers import Response as WerkzeugResponse
+
+    from oneirodex.runtime_native.response_compat import add_vary_header
+
+    starlette_response = Response(headers={'Vary': 'Origin, cookie'})
+    add_vary_header(starlette_response, 'Cookie')
+    add_vary_header(starlette_response, 'Accept-Encoding')
+    assert starlette_response.headers['Vary'] == 'Origin, cookie, Accept-Encoding'
+
+    werkzeug_response = WerkzeugResponse(
+        'ok', headers=[('Vary', 'Origin'), ('Vary', 'Accept-Encoding')],
+    )
+    add_vary_header(werkzeug_response, 'Cookie')
+    assert werkzeug_response.headers.getlist('Vary') == [
+        'Origin, Accept-Encoding, Cookie',
+    ]
+
+    wildcard_response = Response(headers={'Vary': '*'})
+    add_vary_header(wildcard_response, 'Cookie')
+    assert wildcard_response.headers['Vary'] == '*'
 

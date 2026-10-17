@@ -11,7 +11,7 @@ from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
 from .request_auth import RequestAuthContext, request_auth_context
-from .response_compat import flask_redirect_response
+from .response_compat import add_vary_header, flask_redirect_response
 
 
 class BrowseDataAccess:
@@ -193,4 +193,4 @@ def _set_session_cookie(response, flask_app, auth_context):
         samesite=str(samesite).lower() if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')

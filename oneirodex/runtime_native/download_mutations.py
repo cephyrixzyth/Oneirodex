@@ -446,6 +446,19 @@ def _legacy_post_only_method_response(request):
     return response
 
 
+def _legacy_werkzeug_error(error_type):
+    """Render the same HTML error response Flask's ``abort`` produced."""
+    from starlette.responses import Response
+
+    legacy_response = error_type().get_response()
+    return Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers={key: value for key, value in legacy_response.headers.items()},
+        media_type=None,
+    )
+
+
 def _legacy_other_get_preflight(request, *, flask_app, data, find_user, find_token,
                                 commit_token_touch, load_user_id, login_manager,
                                 file_type, game_uuid, file_id):
@@ -549,13 +562,16 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
         elif not auth.has_scope('write:download'):
             response = Response(status_code=403)
         elif not _UUID_RE.fullmatch(game_uuid):
-            response = Response(status_code=400)
+            from werkzeug.exceptions import BadRequest
+            response = _legacy_werkzeug_error(BadRequest)
         else:
             game = data.game(game_uuid)
             if game is None:
-                response = Response(status_code=404)
+                from werkzeug.exceptions import NotFound
+                response = _legacy_werkzeug_error(NotFound)
             elif not data.can_access(auth.user, game):
-                response = Response(status_code=403)
+                from werkzeug.exceptions import Forbidden
+                response = _legacy_werkzeug_error(Forbidden)
             else:
                 data.log_legacy_event(
                     f'User initiated download for game: {game.name}',
@@ -656,18 +672,22 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
             _flash(auth.session_data, 'error', 'Invalid file type')
             response = RedirectResponse(detail_url, status_code=302)
         elif not _UUID_RE.fullmatch(game_uuid):
-            response = Response(status_code=400)
+            from werkzeug.exceptions import BadRequest
+            response = _legacy_werkzeug_error(BadRequest)
         else:
             game = data.game(game_uuid)
             if game is None:
-                response = Response(status_code=404)
+                from werkzeug.exceptions import NotFound
+                response = _legacy_werkzeug_error(NotFound)
             elif not data.can_access(auth.user, game):
-                response = Response(status_code=403)
+                from werkzeug.exceptions import Forbidden
+                response = _legacy_werkzeug_error(Forbidden)
             else:
                 token = str(file_id or '').strip()
                 if not _UUID_RE.fullmatch(token) and not _is_integer_token(token):
                     data.log_legacy_event('Invalid download file ID', event_type='security', event_level='warning')
-                    response = Response(status_code=400)
+                    from werkzeug.exceptions import BadRequest
+                    response = _legacy_werkzeug_error(BadRequest)
                 else:
                     record = data.other_file(file_type, game_uuid, token)
                     if record is None:

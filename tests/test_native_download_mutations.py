@@ -19,14 +19,18 @@ class FakeDownloads:
         self.cleaned = []
         self.legacy_existing = None
         self.legacy_zip = '/storage/fixture/game.zip'
+        self.missing_game = False
+        self.access_allowed = True
         self.other_record = SimpleNamespace(file_path='/storage/fixture/update.zip', times_downloaded=0)
 
     def game(self, game_uuid):
+        if self.missing_game:
+            return None
         return SimpleNamespace(uuid=game_uuid, name='Fixture', full_disk_path='/storage/fixture',
                                size=1024, times_downloaded=2)
 
     def can_access(self, _user, _game):
-        return True
+        return self.access_allowed
 
     def resolve_version(self, _game, *, kind, version_uuid):
         return '/storage/fixture', '/storage/fixture', version_uuid or 'version-1'
@@ -378,6 +382,40 @@ def test_legacy_other_download_failure_matches_v118_flash_and_event(
     assert data.events[-1][0].startswith(event_prefix)
     assert data.events[-1][1] == {'event_type': 'system', 'event_level': 'error'}
     assert rollback_calls == [True]
+
+
+@pytest.mark.parametrize(
+    ('path', 'error_type', 'missing_game', 'access_allowed'),
+    [
+        ('/download_game/not-a-uuid', 'bad_request', False, True),
+        ('/download_game/12345678-1234-1234-1234-123456789abc', 'not_found', True, True),
+        ('/download_game/12345678-1234-1234-1234-123456789abc', 'forbidden', False, False),
+        ('/download_other/update/not-a-uuid/42', 'bad_request', False, True),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/42', 'not_found', True, True),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/42', 'forbidden', False, False),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/not-an-id', 'bad_request', False, True),
+    ],
+)
+def test_legacy_download_validation_errors_match_werkzeug_abort(
+    path, error_type, missing_game, access_allowed,
+):
+    from werkzeug.exceptions import BadRequest, Forbidden, NotFound
+
+    error_classes = {
+        'bad_request': BadRequest,
+        'forbidden': Forbidden,
+        'not_found': NotFound,
+    }
+    data = FakeDownloads()
+    data.missing_game = missing_game
+    data.access_allowed = access_allowed
+    response = make_client(data=data, role='user').post(path, follow_redirects=False)
+    expected = error_classes[error_type]().get_response()
+
+    assert response.status_code == expected.status_code
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.headers['content-length'] == expected.headers['Content-Length']
+    assert response.content == expected.get_data()
 
 
 def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch):
