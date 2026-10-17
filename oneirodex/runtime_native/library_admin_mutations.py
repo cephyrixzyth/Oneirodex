@@ -463,10 +463,14 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                     elif depth not in (1, 2):
                         message = 'Please correct the errors below.'
                     else:
-                        try:
-                            watch = _watch_value(watch_raw)
-                        except ValueError:
+                        # WTForms SelectField accepts only its declared choice
+                        # values on the legacy multipart form. Keep the more
+                        # permissive boolean aliases on the JSON API, but do
+                        # not silently accept them on this compatibility route.
+                        if watch_raw not in ('default', 'on', 'off'):
                             watch = 'invalid'
+                        else:
+                            watch = _watch_value(watch_raw)
                         if watch == 'invalid':
                             message = 'Please correct the errors below.'
                         else:

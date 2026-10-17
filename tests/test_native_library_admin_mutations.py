@@ -180,6 +180,8 @@ def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client
           'watch_enabled': 'default'}, 'Please correct the errors below.'),
         ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '1',
           'watch_enabled': 'invalid'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '1',
+          'watch_enabled': 'false'}, 'Please correct the errors below.'),
     ],
 )
 def test_legacy_library_invalid_create_form_renders_matching_error_page(native_client, form, message):
