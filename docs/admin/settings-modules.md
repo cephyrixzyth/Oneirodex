@@ -311,7 +311,7 @@ These behaviors are available through the React admin pages. Flask continues to 
 
 ### SMTP
 
-The React admin page provides the SMTP form at the existing URL. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Save settings before using Test connection. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
+The React admin page provides the SMTP form at the existing URL. Its direct page GET is served by the React shell; the legacy POST at the same URL remains a settings compatibility handler. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Save settings before using Test connection. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
 
 ### Scan / match policy recovery
 
@@ -337,11 +337,11 @@ The React admin page provides the complete Attract mode form even while the feat
 
 ### IGDB metadata
 
-The React admin page preserves the IGDB settings URL. Saved secrets are never returned; a blank secret field keeps the stored value. Show entered secret reveals only a new draft and resets after a successful save. Test connection requires saved credentials and no unsaved changes, then contacts IGDB explicitly. Failed loading offers Retry and blocks saving; failed saving keeps the draft. Provider setup instructions link to the official developer console.
+The React admin page preserves the IGDB settings URL. Its direct page GET is served by the React shell before same-path legacy POST handlers are considered. Saved secrets are never returned; a blank secret field keeps the stored value. Show entered secret reveals only a new draft and resets after a successful save. Test connection requires saved credentials and no unsaved changes, then contacts IGDB explicitly. Failed loading offers Retry and blocks saving; failed saving keeps the draft. Provider setup instructions link to the official developer console.
 
 ### Household chat emoji
 
-The React admin page preserves the custom emoji URL and upload constraints. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
+The React admin page preserves the custom emoji URL and upload constraints. Each emoji image file is limited to 256 KiB. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
 
 ### Features
 

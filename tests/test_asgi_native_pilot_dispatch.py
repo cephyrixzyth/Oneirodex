@@ -63,6 +63,9 @@ def test_admin_shell_uses_packaged_pilot_by_default(monkeypatch, tmp_path):
     assert fetch(runtime, '/admin/users', method='HEAD').status_code == 200
     assert fetch(runtime, '/admin/features').text == 'native'
     assert fetch(runtime, '/admin/features', method='HEAD').status_code == 200
+    assert fetch(runtime, '/admin/help').text == 'native'
+    assert fetch(runtime, '/admin/smtp_settings').text == 'native'
+    assert fetch(runtime, '/admin/igdb_settings').text == 'native'
     assert captured == [shell_path]
 
 
@@ -86,13 +89,11 @@ def test_legacy_admin_paths_dispatch_to_native_router(monkeypatch):
     runtime._app = legacy
     runtime._ensure_flask = ready
 
-    assert fetch(runtime, '/admin/help').text == 'native redirect route'
     assert fetch(runtime, '/admin/scan_management?active_tab=tools', method='HEAD').status_code == 200
     assert fetch(runtime, '/admin/statistics/data').text == 'native redirect route'
     assert fetch(runtime, '/api/get_company_role?game_igdb_id=1&company_id=2').text == 'native redirect route'
     assert fetch(runtime, '/api/search_igdb_by_id?igdb_id=1').text == 'native redirect route'
     assert seen == [
-        ('/admin/help', 'GET'),
         ('/admin/scan_management', 'HEAD'),
         ('/admin/statistics/data', 'GET'),
         ('/api/get_company_role', 'GET'),
@@ -1679,8 +1680,8 @@ def test_admin_routes_are_bounded_and_retired_switch_cannot_restore_wsgi(monkeyp
 def test_native_shell_switch_preserves_invite_form_post_dispatch(monkeypatch):
     runtime = asgi.LazyASGIApp()
     runtime._flask_app = Flask(__name__)
-    seen = []
     runtime._flask_app.config['WTF_CSRF_ENABLED'] = False
+    seen = []
 
     async def native(scope, receive, send):
         seen.append((scope['path'], scope['method']))
