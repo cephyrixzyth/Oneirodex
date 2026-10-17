@@ -435,8 +435,8 @@ class FakeSavedFilterData:
         self.rows[row.id] = row
         return row
 
-    def save(self):
-        self.calls.append(('save',))
+    def save(self, row=None):
+        self.calls.append(('save', getattr(row, 'id', None)))
 
     def delete(self, row):
         self.calls.append(('delete', row.id))

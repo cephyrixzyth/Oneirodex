@@ -54,12 +54,20 @@ class SavedFilterData:
         )
         db.session.add(row)
         db.session.commit()
+        # PostgreSQL stores these DateTime columns without a timezone. Flask's
+        # legacy session expires ORM instances on commit, so its response
+        # serializes the reloaded naive timestamps. The native session keeps
+        # committed instances alive; refresh them to preserve that response
+        # contract and match a subsequent GET.
+        db.session.refresh(row)
         return row
 
-    def save(self):
+    def save(self, row=None):
         from oneirodex.runtime_native.db_session import native_db as db
 
         db.session.commit()
+        if row is not None:
+            db.session.refresh(row)
 
     def delete(self, row):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -213,7 +221,7 @@ def create_saved_filter_router(
                             if body.is_collection is not None:
                                 row.is_collection = body.is_collection
                             try:
-                                data.save()
+                                data.save(row)
                                 response = _success({'filter': row.to_dict()})
                             except Exception:  # noqa: BLE001 — retain generic persistence error
                                 data.rollback()
