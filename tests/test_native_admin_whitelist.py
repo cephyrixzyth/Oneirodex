@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -11,7 +12,9 @@ from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
 
 from oneirodex.runtime_native.admin_whitelist import create_admin_whitelist_router
-from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.runtime_native.session_compat import (
+    dump_session_cookie, generate_csrf_token, load_session_cookie,
+)
 
 
 class FakeWhitelist:
@@ -159,4 +162,27 @@ def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(ema
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/whitelist'
+    assert data.calls == []
+
+
+@pytest.mark.parametrize(('email', 'message'), [
+    ('', 'This field is required.'),
+    ('not-an-email', 'Invalid email address.'),
+    ('person@' + 'a' * 60 + '.' + 'b' * 60 + '.com',
+     'Email address is too long (maximum 120 characters)'),
+])
+def test_legacy_whitelist_form_preserves_field_validation_messages(email, message):
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
+        follow_redirects=False,
+    )
+    cookies = SimpleCookie()
+    cookies.load(response.headers['set-cookie'])
+    session = load_session_cookie(
+        cookies['session'].value, 'native-whitelist-secret', max_age=3600,
+    )
+
+    assert response.status_code == 302
+    assert session['_flashes'] == [('danger', message)]
     assert data.calls == []

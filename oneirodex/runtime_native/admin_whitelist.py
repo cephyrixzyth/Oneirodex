@@ -207,17 +207,28 @@ def create_admin_whitelist_router(
                     # that raw value first so whitespace/control characters
                     # cannot be silently accepted by the normalized API schema.
                     validate_email(raw_email, check_deliverability=False)
-                    body = AddWhitelistBody.model_validate({'email': raw_email})
-                except (EmailNotValidError, ValidationError):
-                    _flash(auth.session_data, 'danger', 'Please enter a valid email address.')
+                except EmailNotValidError:
+                    message = 'This field is required.' if not raw_email.strip() else 'Invalid email address.'
+                    _flash(auth.session_data, 'danger', message)
                 else:
-                    payload, error = data.add(body, auth.user)
-                    if error is None:
-                        _flash(auth.session_data, 'success', 'The email was successfully added to the whitelist!')
-                    elif error[1] == 'conflict':
-                        _flash(auth.session_data, 'danger', 'The email is already in the whitelist!')
+                    if len(raw_email.strip()) > 120:
+                        _flash(
+                            auth.session_data, 'danger',
+                            'Email address is too long (maximum 120 characters)',
+                        )
                     else:
-                        _flash(auth.session_data, 'danger', 'An error occurred while adding the email to the whitelist')
+                        try:
+                            body = AddWhitelistBody.model_validate({'email': raw_email})
+                        except ValidationError:
+                            _flash(auth.session_data, 'danger', 'Invalid email address.')
+                        else:
+                            payload, error = data.add(body, auth.user)
+                            if error is None:
+                                _flash(auth.session_data, 'success', 'The email was successfully added to the whitelist!')
+                            elif error[1] == 'conflict':
+                                _flash(auth.session_data, 'danger', 'The email is already in the whitelist!')
+                            else:
+                                _flash(auth.session_data, 'danger', 'An error occurred while adding the email to the whitelist')
                 from .response_compat import flask_redirect_response
                 response = flask_redirect_response('/admin/whitelist')
             if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
