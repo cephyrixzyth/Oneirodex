@@ -303,7 +303,11 @@ export function ScanControlsPage() {
           </Button>
         ) : null}
       </form>
-      <section className="od-admin-panel" aria-labelledby="od-manual-identify-title">
+      <section
+        className="od-admin-panel"
+        aria-labelledby="od-manual-identify-title"
+        hidden={!manualMode}
+      >
         <h2 id="od-manual-identify-title">Manual identify</h2>
         <p className="od-admin-lede">
           When no scan is running, list folders or supported game files to identify. If a scan is

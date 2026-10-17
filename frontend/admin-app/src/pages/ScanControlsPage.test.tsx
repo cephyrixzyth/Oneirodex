@@ -89,13 +89,13 @@ test('keeps the legacy 10080 interval maximum for both hour and minute schedules
   expect(screen.getByLabelText('Interval')).toHaveAttribute('max', '10080')
 })
 
-test('keeps manual identify available as a focused compatibility workflow', async () => {
+test('keeps the Automatic scan page focused on scan controls', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries' ? [] : { roots: [] },
   )
   renderPage()
   expect(await screen.findByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Manual identify' })).not.toBeInTheDocument()
 })
 
 test('lists manual identify candidates without starting a scan and links to the native identify form', async () => {
@@ -115,7 +115,7 @@ test('lists manual identify candidates without starting a scan and links to the 
     read_only: true,
     games: [{ name: 'Metroid', full_path: '/games/Metroid' }],
   })
-  renderPage()
+  renderPage('/scan_management?active_tab=manual')
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   const identify = await screen.findByRole('link', { name: 'Identify' })
@@ -160,7 +160,7 @@ test('shows the busy-scan queue result from the manual list action', async () =>
     message: 'Queued manual scan.',
     read_only: false,
   })
-  renderPage()
+  renderPage('/scan_management?active_tab=manual')
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Queued manual scan.')
@@ -188,7 +188,7 @@ test('asks before queueing or forcing a manual scan when another scan is active'
   vi.mocked(postJson)
     .mockResolvedValueOnce({ action: 'conflict', read_only: true })
     .mockResolvedValueOnce({ action: 'queued', message: 'Queued manual scan.', read_only: false })
-  renderPage()
+  renderPage('/scan_management?active_tab=manual')
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   const queue = await screen.findByRole('button', { name: 'Queue this scan' })
@@ -249,6 +249,7 @@ test('manual deep link focuses identification and hides automatic scan actions',
   renderPage('/scan_management?active_tab=manual')
 
   expect(await screen.findByRole('heading', { name: 'Manual scan / identify' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
   expect(screen.getByRole('group', { name: 'Manual identify options' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Remove games whose files are missing')).not.toBeInTheDocument()
@@ -280,7 +281,7 @@ test('confirms linking a listed folder to an existing game before posting', asyn
       : { ok: true },
   )
   vi.mocked(confirmAction).mockResolvedValue(false)
-  renderPage()
+  renderPage('/scan_management?active_tab=manual')
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   await screen.findByRole('link', { name: 'Identify' })
