@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from werkzeug.datastructures import MultiDict
 
 from oneirodex.models import Game, Library, Theme, User
@@ -8,8 +9,9 @@ from oneirodex.platform import LibraryPlatform
 from oneirodex.runtime_native.favorites import FavoritesData
 
 
+@pytest.mark.parametrize('failure_kind', ['runtime', 'sqlalchemy'])
 def test_favorites_database_failure_matches_wsgi_and_native_asgi(
-    app, client, db_session, configured_install, monkeypatch,
+    app, client, db_session, configured_install, monkeypatch, failure_kind,
 ):
     import asyncio
     from contextlib import nullcontext
@@ -35,6 +37,11 @@ def test_favorites_database_failure_matches_wsgi_and_native_asgi(
     db_session.commit()
 
     def fail_with_sensitive_database_detail(*_args, **_kwargs):
+        if failure_kind == 'sqlalchemy':
+            from sqlalchemy.exc import OperationalError
+            raise OperationalError(
+                'SELECT synthetic', {}, RuntimeError('synthetic-secret-db-detail'),
+            )
         raise RuntimeError('synthetic-secret-db-detail')
 
     monkeypatch.setattr(user_routes.db, 'paginate', fail_with_sensitive_database_detail)
