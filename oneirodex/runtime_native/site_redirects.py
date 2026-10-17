@@ -47,7 +47,9 @@ def create_site_redirect_router(
             else:
                 target = '/discover'
 
-        response = RedirectResponse(target, status_code=302)
+        from .response_compat import flask_redirect_response
+
+        response = flask_redirect_response(target)
         if auth.should_set_session_cookie:
             from .oidc_status import _set_session_cookie
 

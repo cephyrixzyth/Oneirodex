@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import httpx
 import pytest
 from fastapi import FastAPI
+from flask import Flask
 from werkzeug.utils import redirect as werkzeug_redirect
 
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -96,8 +97,24 @@ def test_entry_redirects_to_login_or_discover_for_get_post_and_head(monkeypatch)
     assert _request(app, 'HEAD', '/', cookie).headers['location'] == '/discover'
 
     anonymous, _ = _client(monkeypatch)
-    assert _request(anonymous, 'GET', '/').headers['location'] == '/login'
+    entry = _request(anonymous, 'GET', '/')
+    legacy_entry = werkzeug_redirect('/login')
+    assert entry.status_code == legacy_entry.status_code
+    assert entry.headers['location'] == legacy_entry.headers['Location']
+    assert entry.headers['content-type'] == legacy_entry.headers['Content-Type']
+    assert entry.headers['content-length'] == legacy_entry.headers['Content-Length']
+    assert entry.content == legacy_entry.get_data()
     assert _request(anonymous, 'POST', '/index').headers['location'] == '/login'
+    head = _request(anonymous, 'HEAD', '/')
+    assert head.status_code == 302
+    assert head.headers['location'] == '/login'
+    assert head.content == b''
+
+    legacy_app = Flask(__name__)
+    legacy_app.add_url_rule('/', view_func=lambda: werkzeug_redirect('/login'))
+    legacy_head = legacy_app.test_client().head('/')
+    assert head.headers['content-type'] == legacy_head.headers['Content-Type']
+    assert head.headers['content-length'] == legacy_head.headers['Content-Length']
 
 
 def test_entry_redirects_to_current_setup_step_before_auth(monkeypatch):

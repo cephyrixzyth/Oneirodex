@@ -155,6 +155,12 @@ def _set_session_cookie(response, flask_app, auth_context):
     from oneirodex.runtime_native.session_compat import dump_session_cookie
 
     config = flask_app.config
+    cookie_name = config.get('SESSION_COOKIE_NAME', 'session')
+    if any(
+        item.split(';', 1)[0].strip().startswith(f'{cookie_name}=')
+        for item in response.headers.getlist('set-cookie')
+    ):
+        return
     secret_key = config.get('SECRET_KEY')
     if not secret_key:
         return
@@ -163,7 +169,7 @@ def _set_session_cookie(response, flask_app, auth_context):
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
     response.set_cookie(
-        config.get('SESSION_COOKIE_NAME', 'session'),
+        cookie_name,
         dump_session_cookie(
             session_data,
             secret_key,

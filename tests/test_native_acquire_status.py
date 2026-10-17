@@ -5,8 +5,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from starlette.responses import Response
 
-from oneirodex.runtime_native.acquire_status import create_acquire_status_router
+from oneirodex.runtime_native.acquire_status import _set_session_cookie, create_acquire_status_router
+from oneirodex.runtime_native.oidc_status import _set_session_cookie as set_oidc_session_cookie
 from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
@@ -126,4 +128,21 @@ def test_status_head_matches_get_headers_without_a_body():
     assert head_response.status_code == get_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+
+
+def test_session_cookie_is_not_written_twice_by_mixed_compatibility_adapters():
+    flask_app = Flask(__name__)
+    flask_app.config.update(SECRET_KEY='native-acquire-secret')
+    auth = SimpleNamespace(
+        session_data={'_flashes': [('message', 'Please log in to access this page.')]},
+        should_set_session_cookie=True,
+    )
+    response = Response(status_code=302)
+
+    set_oidc_session_cookie(response, flask_app, auth)
+    _set_session_cookie(response, flask_app, auth)
+
+    cookies = response.headers.getlist('set-cookie')
+    assert len(cookies) == 1
+    assert cookies[0].startswith('session=')
 
