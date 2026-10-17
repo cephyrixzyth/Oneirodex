@@ -7764,6 +7764,15 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
     guest = _run(runtime, '/logout')
 
     assert response.status_code == 302 and response.headers['location'] == '/login'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login">/login</a>. If not, click the link.\n'
+    )
     assert head.status_code == 302 and head.content == b''
     cookies = response.headers.get_list('set-cookie')
     assert any(
