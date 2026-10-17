@@ -20,11 +20,14 @@ class PlaytimeData:
 
     def start(self, user, body):
         from oneirodex.utils.playtime import start_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return start_session(
+        row = start_session(
             user.id, body.game_uuid, client=body.client,
             config=self.flask_app.config if self.flask_app is not None else None,
         )
+        db.session.refresh(row)
+        return row
 
     def session(self, user, session_id: int):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -35,16 +38,22 @@ class PlaytimeData:
 
     def heartbeat(self, session):
         from oneirodex.utils.playtime import heartbeat_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return heartbeat_session(session)
+        row = heartbeat_session(session)
+        db.session.refresh(row)
+        return row
 
     def stop(self, session):
         from oneirodex.utils.playtime import end_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return end_session(
+        row = end_session(
             session,
             config=self.flask_app.config if self.flask_app is not None else None,
         )
+        db.session.refresh(row)
+        return row
 
     def me(self, user):
         from sqlalchemy import select
