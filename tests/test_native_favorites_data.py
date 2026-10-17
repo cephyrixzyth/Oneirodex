@@ -1,7 +1,10 @@
 from types import SimpleNamespace
+from uuid import uuid4
 
 from werkzeug.datastructures import MultiDict
 
+from oneirodex.models import Game, Library, User
+from oneirodex.platform import LibraryPlatform
 from oneirodex.runtime_native.favorites import FavoritesData
 
 
@@ -38,3 +41,61 @@ def test_favorites_pagination_clamps_page_size_and_preserves_requested_page(monk
 
     assert observed == {'page': 2, 'per_page': 100}
     assert payload == {'games': [], 'total': 205, 'pages': 3, 'current_page': 2}
+
+
+def test_favorites_adapter_filters_denied_child_library_and_total(
+    app, client, db_session, configured_install, monkeypatch,
+):
+    from oneirodex.utils import client_lifecycle, global_settings
+    from oneirodex.utils.library_acl import set_user_library_allowlist
+
+    user_key = str(uuid4())
+    child = User(
+        name=f'fav-child-{user_key[:8]}',
+        email=f'fav-child-{user_key[:8]}@example.com',
+        password_hash='unused', role='child', user_id=user_key,
+        avatarpath='newstyle/avatar_default.jpg', state=True,
+    )
+    allowed = Library(name=f'Fav allowed {user_key[:8]}', platform=LibraryPlatform.PCWIN)
+    denied = Library(name=f'Fav denied {user_key[:8]}', platform=LibraryPlatform.PCWIN)
+    visible_game = Game(
+        name='Visible Child Favorite',
+        full_disk_path=f'/tmp/fav-child-visible-{user_key}', library=allowed,
+    )
+    hidden_game = Game(
+        name='Hidden Child Favorite',
+        full_disk_path=f'/tmp/fav-child-hidden-{user_key}', library=denied,
+    )
+    child.favorites.extend([visible_game, hidden_game])
+    db_session.add(child)
+    db_session.commit()
+    set_user_library_allowlist(child.id, [allowed.uuid])
+    db_session.commit()
+
+    monkeypatch.setattr(global_settings, 'global_settings_row', lambda: None)
+    monkeypatch.setattr(client_lifecycle, 'load_lifecycle_map', lambda _user_id: {})
+
+    from oneirodex.runtime_native.runtime_context import runtime_config_scope
+
+    with app.app_context(), runtime_config_scope(app.config):
+        payload = FavoritesData().payload(child, MultiDict())
+
+    with client.session_transaction() as session:
+        session['_user_id'] = str(child.id)
+        session['_fresh'] = True
+    response = client.get('/api/favorites')
+
+    assert payload['total'] == 1
+    assert payload['pages'] == 1
+    assert [game['name'] for game in payload['games']] == ['Visible Child Favorite']
+    assert response.status_code == 200
+    flask_payload = response.get_json()
+    differences = {
+        key: (payload['games'][0].get(key), flask_payload['games'][0].get(key))
+        for key in payload['games'][0].keys() | flask_payload['games'][0].keys()
+        if payload['games'][0].get(key) != flask_payload['games'][0].get(key)
+    }
+    assert {key: value for key, value in flask_payload.items() if key != 'games'} == {
+        key: value for key, value in payload.items() if key != 'games'
+    }
+    assert not differences, differences
