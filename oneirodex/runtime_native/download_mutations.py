@@ -153,7 +153,13 @@ class DownloadMutationData:
     def zip_path(self, game, file_location, *, kind, zip_hint):
         if not os.path.isdir(file_location):
             return file_location
-        if os.path.normpath(file_location) != os.path.normpath(game.full_disk_path):
+        # Version selections are already scoped to the requested update or
+        # extra. Preserve the whole directory even when the base is absent.
+        if kind != 'base':
+            return file_location
+        # A base game can have no library path yet. Only inspect the base
+        # directory when one is present.
+        if game.full_disk_path and os.path.normpath(file_location) != os.path.normpath(game.full_disk_path):
             return file_location
         from oneirodex.utils.global_settings import global_settings_row
         settings = global_settings_row()

@@ -4,6 +4,7 @@ import hashlib
 import sys
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -354,3 +355,17 @@ def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch
     assert session.added[0].download_size == len(b'legacy-sized-update')
     assert session.commits == 1
     assert game.times_downloaded == 0
+
+
+@pytest.mark.parametrize('kind', ['update', 'extra'])
+def test_selected_version_directory_is_zip_path_when_base_is_not_installed(tmp_path, kind):
+    from oneirodex.runtime_native.download_mutations import DownloadMutationData
+
+    version_dir = tmp_path / 'update-version'
+    version_dir.mkdir()
+    (version_dir / 'patch.dat').write_bytes(b'patch')
+    game = SimpleNamespace(full_disk_path=None)
+
+    assert DownloadMutationData().zip_path(
+        game, str(version_dir), kind=kind, zip_hint=None,
+    ) == str(version_dir)
