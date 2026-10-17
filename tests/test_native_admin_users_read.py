@@ -87,3 +87,5 @@ def test_admin_user_roster_rejects_member_and_unauthenticated_requests():
     assert member.status_code == anonymous.status_code == 302
     assert member.headers['location'].startswith('/login')
     assert anonymous.headers['location'].startswith('/login')
+    assert anonymous.headers['content-type'] == 'text/html; charset=utf-8'
+    assert len(anonymous.headers.get_list('set-cookie')) == 1

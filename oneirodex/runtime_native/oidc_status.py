@@ -7,9 +7,10 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import flask_redirect_response
 
 _DEFAULT_LOGIN_MESSAGE = object()
 
@@ -154,7 +155,7 @@ def _login_redirect(
     forced_host = flask_app.config.get('FORCE_HOST_FOR_REDIRECTS')
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
-    response = RedirectResponse(urlunsplit(parsed_login), status_code=302)
+    response = flask_redirect_response(urlunsplit(parsed_login))
 
     if message:
         localize = getattr(login_manager, 'localize_callback', None)
@@ -174,6 +175,12 @@ def _set_session_cookie(response, flask_app, auth_context):
     from oneirodex.runtime_native.session_compat import dump_session_cookie
 
     config = flask_app.config
+    cookie_name = config.get('SESSION_COOKIE_NAME', 'session')
+    if any(
+        item.split(';', 1)[0].strip().startswith(f'{cookie_name}=')
+        for item in response.headers.getlist('set-cookie')
+    ):
+        return
     secret_key = config.get('SECRET_KEY')
     if not secret_key:
         return
@@ -182,7 +189,7 @@ def _set_session_cookie(response, flask_app, auth_context):
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
     response.set_cookie(
-        config.get('SESSION_COOKIE_NAME', 'session'),
+        cookie_name,
         dump_session_cookie(
             session_data,
             secret_key,
