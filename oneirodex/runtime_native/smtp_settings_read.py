@@ -274,7 +274,8 @@ def create_smtp_settings_router(
                             logging.getLogger(__name__).warning('SMTP connection test failed')
                             if request.url.path == '/admin/smtp_test':
                                 payload, status = api_error_payload(
-                                    'SMTP connection failed', code='bad_request', status=200,
+                                    'Something went wrong on our end. The error has been logged.',
+                                    code='internal', status=500,
                                 )
                             else:
                                 payload, status = api_error_payload(

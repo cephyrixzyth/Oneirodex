@@ -39,6 +39,8 @@ def _client(*, role='admin', test_result=True, legacy_save=None):
         }}
 
     def legacy_test():
+        if isinstance(test_result, BaseException):
+            raise test_result
         if test_result is None:
             return None
         if isinstance(test_result, tuple):
@@ -287,3 +289,13 @@ def test_legacy_smtp_test_result_redacts_saved_secret():
     assert _redact_smtp_result(
         {'message': 'server echoed private-token'}, 'private-token'
     ) == {'message': 'server echoed [redacted]'}
+
+
+def test_legacy_smtp_unexpected_test_exception_uses_legacy_500_envelope():
+    client = _client(test_result=RuntimeError('private error details'))
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert response.json()['message'] == 'Something went wrong on our end. The error has been logged.'
+    assert 'private error details' not in response.text
