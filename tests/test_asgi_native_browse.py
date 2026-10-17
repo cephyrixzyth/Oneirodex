@@ -9402,6 +9402,23 @@ def test_native_reference_sets_head_matches_get_representation(monkeypatch):
     assert head.headers['content-length'] == str(len(get.content))
 
 
+def test_native_response_vary_keeps_existing_dimensions_and_adds_cookie():
+    from asgi import _ensure_cookie_vary, _vary_cookie_required
+
+    start = {
+        'type': 'http.response.start', 'status': 200,
+        'headers': [(b'content-type', b'application/json'), (b'vary', b'Accept-Encoding')],
+    }
+    result = _ensure_cookie_vary(start)
+    vary = [value.decode() for key, value in result['headers'] if key == b'vary']
+
+    assert vary == ['Accept-Encoding', 'Cookie']
+    assert _ensure_cookie_vary(result) is result
+    assert not _vary_cookie_required('/static/app.js')
+    assert not _vary_cookie_required('/pulse')
+    assert _vary_cookie_required('/api/account/summary')
+
+
 def test_lazy_asgi_dispatches_legacy_chat_emoji_delete_form(monkeypatch):
     from oneirodex.runtime_native import chat_emoji_read as native_chat_emoji
 

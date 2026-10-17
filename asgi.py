@@ -113,6 +113,32 @@ static_access = _lazy_callable('oneirodex.utils.static_files', 'static_access')
 _FILE_CHUNK_SIZE = 2 * 1024 * 1024
 
 
+def _vary_cookie_required(path: str) -> bool:
+    """Return whether a response can depend on the browser session."""
+    if path.startswith('/static/'):
+        return False
+    return path not in {
+        '/favicon.ico', '/manifest.webmanifest', '/offline', '/pulse', '/awake',
+        '/sw.js', '/vr/sw.js',
+    }
+
+
+def _ensure_cookie_vary(message: dict) -> dict:
+    """Add Cookie to an ASGI response's Vary headers without dropping peers."""
+    if message.get('type') != 'http.response.start':
+        return message
+    headers = list(message.get('headers') or ())
+    vary_values = [value for key, value in headers if key.lower() == b'vary']
+    tokens = {
+        token.strip().lower()
+        for value in vary_values
+        for token in value.decode('latin1').split(',')
+    }
+    if '*' in tokens or 'cookie' in tokens:
+        return message
+    return {**message, 'headers': headers + [(b'vary', b'Cookie')]}
+
+
 def _file_headers(filename: str, size: int) -> list[tuple[bytes, bytes]]:
     """Response headers for a file download of *size* bytes."""
     secure_name = secure_filename(filename) or "download.zip"
@@ -2910,6 +2936,13 @@ class LazyASGIApp:
             await self._handle_lifespan(receive, send)
         elif scope["type"] == "http":
             path = scope["path"]
+            if _vary_cookie_required(path):
+                downstream_send = send
+
+                async def send_with_cookie_vary(message):
+                    await downstream_send(_ensure_cookie_vary(message))
+
+                send = send_with_cookie_vary
 
             # Liveness has no DB, session, or app-context dependency. Keep it
             # available to the container probe without constructing Flask on
