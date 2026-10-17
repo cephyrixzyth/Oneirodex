@@ -107,6 +107,11 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     empty_cron = normalize_schedule_fields('cron', cron_expr='')
     assert empty_cron.get('error')
 
+    oversized_cron = normalize_schedule_fields(
+        'cron', cron_expr=(' ' * 56) + '* * * * *',
+    )
+    assert oversized_cron['error'] == 'Field cannot be longer than 64 characters.'
+
     # Parse-ok but no fire in the window (31 Feb) must fail closed.
     impossible = normalize_schedule_fields('cron', cron_expr='0 0 31 2 *')
     assert impossible.get('error')

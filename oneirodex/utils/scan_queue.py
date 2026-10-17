@@ -271,7 +271,13 @@ def normalize_schedule_fields(
         )
         return out
     if choice == 'cron':
-        expr = (cron_expr or '').strip()
+        raw_expr = cron_expr or ''
+        # Mirror AutoScanForm.schedule_cron's WTForms Length(max=64) check
+        # before trimming; otherwise padded valid expressions bypass it.
+        if len(raw_expr) > 64:
+            out['error'] = 'Field cannot be longer than 64 characters.'
+            return out
+        expr = raw_expr.strip()
         from oneirodex.utils.cron_schedule import validate_cron_expression
 
         if not expr:
