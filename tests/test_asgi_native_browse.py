@@ -1479,13 +1479,15 @@ class FakeLocaleData:
         self.value = locale
 
 
-def _run(app, path, *, cookie=None, method='GET', json_body=None, form_body=None, headers=None):
+def _run(app, path, *, cookie=None, extra_cookies=None, method='GET', json_body=None, form_body=None, headers=None):
     async def perform():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://testserver'
         ) as client:
             if cookie:
                 client.cookies.set('session', cookie)
+            for name, value in (extra_cookies or {}).items():
+                client.cookies.set(name, value)
             return await client.request(
                 method, path, json=json_body, data=form_body, headers=headers,
                 follow_redirects=False,
@@ -7788,11 +7790,12 @@ def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monk
 def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie = dump_session_cookie({
-        '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember': 'set',
+        '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember_seconds': 3600,
     }, 'native-asgi-browse-secret')
 
-    response = _run(runtime, '/logout', cookie=cookie)
-    head = _run(runtime, '/logout', cookie=cookie, method='HEAD')
+    remember = {'remember_token': 'remember-cookie'}
+    response = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember)
+    head = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember, method='HEAD')
     guest = _run(runtime, '/logout')
 
     assert response.status_code == 302 and response.headers['location'] == '/login'
@@ -7812,17 +7815,88 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
         for value in cookies
     )
     from http.cookies import SimpleCookie
-    from oneirodex.runtime_native.session_compat import load_session_cookie
-
     jar = SimpleCookie()
     for value in cookies:
         jar.load(value)
-    new_session = load_session_cookie(
-        jar['session'].value, 'native-asgi-browse-secret', max_age=31_536_000,
-    )
-    assert '_user_id' not in new_session and '_fresh' not in new_session and '_id' not in new_session
+    assert jar['session'].value == ''
+    assert jar['session']['max-age'] == '0'
     assert guest.status_code == 302 and guest.headers['location'] == '/login'
     assert guest.headers.get_list('set-cookie') == []
+
+
+@pytest.mark.parametrize('has_remember_cookie', [True, False])
+def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
+    monkeypatch, has_remember_cookie,
+):
+    from flask import redirect
+    from flask_login import logout_user
+    from http.cookies import SimpleCookie
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    legacy_app = Flask(__name__)
+    legacy_app.config.update(
+        SECRET_KEY='native-asgi-browse-secret',
+        SESSION_COOKIE_NAME='session',
+        REMEMBER_COOKIE_NAME='remember_token',
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login'
+    manager.user_loader(lambda _user_id: None)
+    legacy_app.add_url_rule('/login', endpoint='login', view_func=lambda: 'login')
+
+    @legacy_app.get('/logout')
+    def legacy_logout():
+        logout_user()
+        return redirect('/login')
+
+    with legacy_app.test_client() as client:
+        with client.session_transaction() as session:
+            session.update({'_user_id': '7:fp', '_fresh': True, '_id': 'session-id'})
+            if has_remember_cookie:
+                session['_remember_seconds'] = 3600
+            else:
+                session['_remember'] = 'set'
+        if has_remember_cookie:
+            client.set_cookie('remember_token', 'remember-cookie')
+        incoming_session = client.get_cookie('session').value
+        legacy = client.get('/logout', follow_redirects=False)
+
+    current = _run(
+        runtime, '/logout', cookie=incoming_session,
+        extra_cookies={'remember_token': 'remember-cookie'} if has_remember_cookie else None,
+    )
+    assert (current.status_code, current.headers['location'], current.content) == (
+        legacy.status_code, legacy.headers['Location'], legacy.get_data(),
+    )
+
+    def cookies(response):
+        jar = SimpleCookie()
+        values = (
+            response.headers.get_list('set-cookie')
+            if hasattr(response.headers, 'get_list')
+            else response.headers.getlist('set-cookie')
+        )
+        for value in values:
+            jar.load(value)
+        result = {}
+        for name, morsel in jar.items():
+            payload = morsel.value
+            if name == 'session':
+                payload = load_session_cookie(
+                    payload, 'native-asgi-browse-secret', max_age=31_536_000,
+                )
+            result[name] = (
+                payload, morsel['path'], morsel['domain'], morsel['secure'],
+                morsel['httponly'], morsel['samesite'], morsel['max-age'],
+            )
+        return result
+
+    current_cookies = cookies(current)
+    legacy_cookies = cookies(legacy)
+    assert current_cookies == legacy_cookies, (
+        f'current={current_cookies!r} legacy={legacy_cookies!r}'
+    )
 
 
 def test_lazy_asgi_auth_pages_serve_react_shell_and_preserve_flash_and_redirects(monkeypatch, tmp_path):
