@@ -250,7 +250,10 @@ def normalize_schedule_fields(
                 'Not a valid integer value. Number must be between 1 and 10080.'
             )
             return out
-        unit = (interval_unit or 'hours').strip().lower()
+        unit = 'hours' if interval_unit is None else str(interval_unit).strip().lower()
+        if unit not in {'hours', 'minutes'}:
+            out['error'] = 'Not a valid choice.'
+            return out
         # Match AutoScanForm.schedule_interval_value's WTForms range. The
         # current SPA API bypasses that form, so enforce the same raw input cap
         # here instead of accepting schedules the v1.1.8 form rejected.

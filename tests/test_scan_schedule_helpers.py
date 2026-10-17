@@ -134,6 +134,16 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     )
     assert empty_interval['error'] == 'Interval must be at least 1 minute.'
 
+    invalid_unit = normalize_schedule_fields(
+        'interval', interval_value=15, interval_unit='days',
+    )
+    assert invalid_unit['error'] == 'Not a valid choice.'
+
+    empty_unit = normalize_schedule_fields(
+        'interval', interval_value=15, interval_unit='',
+    )
+    assert empty_unit['error'] == 'Not a valid choice.'
+
     over_limit = normalize_schedule_fields(
         'interval', interval_value=10081, interval_unit='minutes',
     )
