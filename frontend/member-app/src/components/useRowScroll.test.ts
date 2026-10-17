@@ -362,7 +362,8 @@ describe('useRowScroll grab-to-scroll', () => {
   })
 
   test('a mouse drag from the first tile pans the track and swallows the click', () => {
-    const tile = document.createElement('div')
+    const tile = document.createElement('a')
+    tile.href = '/game/first'
     track.append(tile)
     const opened = vi.fn()
     tile.addEventListener('click', opened)

@@ -282,7 +282,10 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0, wrapAr
       // Controls on the track (Pin / Hide / See all, the play button) keep
       // their own press; only art and empty track start a drag.
       const target = event.target as HTMLElement | null
-      if (target && target.closest('button, a[href], input, select, textarea')) return
+      // Tile art is usually itself a link. It remains a click when the pointer
+      // stays put; after the drag threshold the existing click guard swallows
+      // navigation, allowing a row to be dragged from its first cover.
+      if (target && target.closest('button, input, select, textarea')) return
       pointerId = event.pointerId
       startX = event.clientX
       startScroll = track.scrollLeft

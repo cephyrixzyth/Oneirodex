@@ -77,7 +77,10 @@ npm run test --workspace ui-catalog
 
 Use `npm run typecheck --workspace ui-catalog` for a standalone TypeScript
 check. The catalog is local developer tooling; it is not installed by external
-applications or served as a public component library. Its dark green theme is
+applications or served as a public component library. After building it, the
+loopback Project hub also serves it at `/ui-catalog/` alongside its decision,
+phase and research boards. Run `npm run build --workspace ui-catalog` after
+source changes so the hub serves the current bundle. Its dark green theme is
 the initial palette. The light theme is a catalog-only preview derived from
 current tokens; it does not establish that an end-user light preset ships.
 
@@ -161,6 +164,7 @@ that a reusable component is exported.
 | Tables | Use table headers and caption/context. Sort controls expose state. Row actions name the subject. Bound wide content in a named, keyboard-focusable scroll region with visible focus. Provide an honest empty/no-match state. | `DataTable` supports sorting, a global text filter, optional column typeahead filters, count, density and `scrollLabel`; React pages use the shared component. |
 | Charts | Give each visualization a clear heading. Pair visual proportions with labels and exact values; provide a useful empty state. Keep labels readable at phone widths and make the data available as text. | Statistics uses token-colored proportional bars with visible series labels and values; this is a page pattern, not a shared chart component. |
 | Filters | Make applied values visible. Distinguish draft from immediately applied state; keep counts/chips synchronized with the query actually applied. Provide a reachable clear/reset action and touch-friendly selection. | `FilterChipGroup` in `@oneirodex/ui` renders controlled multi-select chips, a named group, optional applied-result status, and an optional clear action. The feature owns option meaning, query serialization, and whether `onChange` applies immediately or changes draft state. Pass only the count for applied results. This primitive is not a full filter toolbar or a replacement for `DataTable` search/column filters. |
+| Horizontal shelves | Keep rows scrollable in both directions. For circular discovery, boundary arrows wrap to the opposite end. Let pointer drag start on linked cover art; a stationary click still navigates, while a drag past its threshold suppresses link activation. | `useRowScroll` provides drag, wheel, hover-arrow and keyboard scrolling; `DiscoverShelf` enables wrap-around arrows. |
 
 The shared layer owns reusable presentation, keyboard/focus mechanics and
 common state behavior. The feature owns option data, query meaning, permissions,
