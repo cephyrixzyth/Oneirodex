@@ -71,12 +71,13 @@ class BatchWishlistData:
 
         db.session.rollback()
 
-    def log_created(self, count):
+    def log_created(self, count, *, audit_user=None):
         from oneirodex.utils.event_logging import log_system_event
 
         log_system_event(
             f'Wishlist batch: {count} request(s) created',
             event_type='game', event_level='information',
+            audit_user=audit_user,
         )
 
 
@@ -215,7 +216,9 @@ def create_batch_wishlist_router(
                         if response is None:
                             if updated:
                                 try:
-                                    data.log_created(len(updated))
+                                    data.log_created(
+                                        len(updated), audit_user=auth.user.id,
+                                    )
                                 except Exception:  # noqa: BLE001 — logging is best effort
                                     pass
                             response = JSONResponse({

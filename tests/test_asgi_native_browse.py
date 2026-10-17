@@ -544,8 +544,8 @@ class FakeBatchWishlistData:
     def rollback(self):
         self.calls.append(('rollback',))
 
-    def log_created(self, count):
-        self.calls.append(('log', count))
+    def log_created(self, count, *, audit_user=None):
+        self.calls.append(('log', count, audit_user))
 
 
 class FakeBatchRefreshData:
@@ -3297,7 +3297,7 @@ def test_native_batch_wishlist_add_and_remove_keep_partial_results(monkeypatch):
         'errors': [], 'limit': 50, 'requested': 4, 'count': 1,
     }
     assert runtime._fake_batch_wishlist.calls[-3:] == [
-        ('create', 7, 'Game A', 'game-a'), ('commit',), ('log', 1),
+        ('create', 7, 'Game A', 'game-a'), ('commit',), ('log', 1, 7),
     ]
 
     removed = asyncio.run(send({'uuids': ['pending', 'game-a'], 'action': 'remove'}))
