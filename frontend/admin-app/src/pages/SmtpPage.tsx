@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
-import { getJson, postJson, putJson } from '../api/adminApi'
+import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
@@ -37,7 +37,6 @@ function formFrom(data: Partial<SmtpForm>): SmtpForm {
 
 export function SmtpPage() {
   const [form, setForm] = useState(EMPTY)
-  const [saved, setSaved] = useState(EMPTY)
   const [passwordSaved, setPasswordSaved] = useState(false)
   const [lastTested, setLastTested] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,14 +45,11 @@ export function SmtpPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const dirty = JSON.stringify(form) !== JSON.stringify(saved)
-
   function accept(
     data: Partial<SmtpForm> & { password_saved?: boolean; last_tested?: string | null },
   ) {
     const next = formFrom(data)
     setForm(next)
-    setSaved(next)
     setPasswordSaved(Boolean(data.password_saved))
     setLastTested(data.last_tested || null)
   }
@@ -90,12 +86,15 @@ export function SmtpPage() {
     setError('')
     setMessage('')
     try {
-      const data = await putJson('/api/admin/smtp/settings', form)
-      accept(data.settings)
-      setMessage('SMTP settings saved.')
-      showToast('SMTP settings saved.', 'success')
+      const data = await postJson('/admin/smtp_settings', form)
+      if (data.status !== 'success')
+        throw new Error(data.message || 'Could not save SMTP settings.')
+      setForm({ ...form, smtp_password: '' })
+      setPasswordSaved(passwordSaved || Boolean(form.smtp_password))
+      setMessage('SMTP settings saved successfully')
+      showToast('SMTP settings saved successfully', 'success')
     } catch (err) {
-      const text = errorText(err) || 'Could not save SMTP settings.'
+      const text = `Error saving SMTP settings: ${errorText(err) || 'Unknown error'}`
       setError(text)
       showToast(text, 'error')
     } finally {
@@ -103,16 +102,22 @@ export function SmtpPage() {
     }
   }
   async function testConnection() {
-    if (busy || loading || failed || dirty || !saved.smtp_enabled) return
+    if (busy || loading || failed) return
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      await postJson('/api/admin/smtp/test')
+      const data = await postJson('/admin/smtp_test')
+      if (!data.success) {
+        const text = data.message || 'SMTP connection failed.'
+        setError(text)
+        showToast(`SMTP connection failed: ${text}`, 'error')
+        return
+      }
       setMessage('SMTP connection successful. No email was sent.')
-      showToast('SMTP connection successful.', 'success')
+      showToast('SMTP connection successful', 'success')
     } catch (err) {
-      const text = errorText(err) || 'SMTP connection failed.'
+      const text = `Error testing SMTP connection: ${errorText(err) || 'Unknown error'}`
       setError(text)
       showToast(text, 'error')
     } finally {
@@ -134,7 +139,7 @@ export function SmtpPage() {
       {loading ? (
         <PageStatus loading loadingMessage="Loading SMTP settings…" />
       ) : (
-        <form className="od-admin-panel" onSubmit={save}>
+        <form className="od-admin-panel" noValidate onSubmit={save}>
           <fieldset className="od-admin-panel" disabled={disabled}>
             <legend>Connection settings</legend>
             <label className="od-admin-field">
@@ -149,8 +154,6 @@ export function SmtpPage() {
               SMTP server
               <input
                 className="od-admin-input"
-                maxLength={255}
-                required={form.smtp_enabled}
                 value={form.smtp_server}
                 onChange={(e) => field('smtp_server', e.target.value)}
               />
@@ -160,10 +163,7 @@ export function SmtpPage() {
               <input
                 className="od-admin-input"
                 type="number"
-                min={1}
-                max={65535}
                 step={1}
-                required
                 value={form.smtp_port}
                 onChange={(e) => field('smtp_port', e.target.value)}
               />
@@ -172,9 +172,7 @@ export function SmtpPage() {
               Username
               <input
                 className="od-admin-input"
-                maxLength={255}
                 autoComplete="off"
-                required={form.smtp_enabled}
                 value={form.smtp_username}
                 onChange={(e) => field('smtp_username', e.target.value)}
               />
@@ -184,10 +182,8 @@ export function SmtpPage() {
               <input
                 className="od-admin-input"
                 type="password"
-                maxLength={255}
                 autoComplete="new-password"
                 aria-describedby="smtp-password-help"
-                required={form.smtp_enabled && !passwordSaved}
                 value={form.smtp_password}
                 onChange={(e) => field('smtp_password', e.target.value)}
               />
@@ -210,8 +206,6 @@ export function SmtpPage() {
               <input
                 className="od-admin-input"
                 type="email"
-                maxLength={255}
-                required={form.smtp_enabled}
                 value={form.smtp_default_sender}
                 onChange={(e) => field('smtp_default_sender', e.target.value)}
               />
@@ -226,20 +220,30 @@ export function SmtpPage() {
             <Button type="submit" variant="primary" disabled={disabled}>
               {busy ? 'Working…' : 'Save settings'}
             </Button>
-            <Button disabled={disabled || dirty || !saved.smtp_enabled} onClick={testConnection}>
+            <Button disabled={disabled} onClick={testConnection}>
               Test connection
             </Button>
           </div>
           <details className="od-admin-panel">
             <summary>SMTP setup help</summary>
+            <h3>Option 1: Use your internet service provider’s SMTP server</h3>
             <p>
-              Ask your email provider for the server hostname, port, TLS requirements, username, and
-              SMTP password or app password. Use the provider’s current account security
+              This is often the simplest choice. Check your ISP’s support site or contact its
+              support team for the server hostname and connection settings. A hostname may look like{' '}
+              <code>smtp.yourisp.com</code>.
+            </p>
+            <h3>Option 2: Use Gmail SMTP</h3>
+            <p>
+              Gmail commonly uses <code>smtp.gmail.com</code> on port <code>587</code> with TLS. If
+              your account requires an app password, follow Google’s current account-security
               instructions.
             </p>
+            <h3>Option 3: Use a professional SMTP service</h3>
+            <p>Examples include SendGrid, Amazon Simple Email Service, Mailgun, and SMTP2GO.</p>
             <p>
-              Enter a sender address approved by your provider. Save the settings, then test the
-              connection. A successful connection does not establish email delivery.
+              Use TLS when your provider supports it and confirm the port and sender address with
+              that provider. A successful test checks connection and authentication; it does not
+              confirm email delivery.
             </p>
           </details>
         </form>
