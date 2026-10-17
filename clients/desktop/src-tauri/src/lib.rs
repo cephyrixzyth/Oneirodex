@@ -790,13 +790,18 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
         // bit is the only thing that marks an entry point on a platform with
         // no `.exe` extension. Archives authored on Windows carry no unix mode
         // at all; those stay 0644, which is correct — a Windows build is not
-        // launchable here regardless.
+        // launchable here regardless. Never preserve SUID/SGID/sticky bits
+        // supplied by an archive; installed game files must not gain special
+        // privileges from untrusted ZIP metadata.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = entry.unix_mode() {
-                fs::set_permissions(&entry_path, fs::Permissions::from_mode(mode))
-                    .map_err(|error| error.to_string())?;
+                fs::set_permissions(
+                    &entry_path,
+                    fs::Permissions::from_mode(safe_archive_file_mode(mode)),
+                )
+                .map_err(|error| error.to_string())?;
             }
         }
     }
@@ -806,6 +811,12 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
         extract_path: destination.to_string_lossy().into_owned(),
         exe_path,
     })
+}
+
+/// Keep ordinary read/write/execute bits from ZIP metadata while discarding
+/// SUID, SGID, and sticky bits that must never be applied to extracted files.
+fn safe_archive_file_mode(mode: u32) -> u32 {
+    mode & 0o777
 }
 
 #[tauri::command]
@@ -1884,6 +1895,62 @@ mod tests {
             }
         }
         zip.finish().unwrap();
+    }
+
+    fn write_zip_with_raw_unix_mode(path: &Path, name: &str, body: &[u8], mode: u32) {
+        write_zip(path, &[(name, body)]);
+        let mut archive = fs::read(path).unwrap();
+        let central_header = archive
+            .windows(4)
+            .position(|bytes| bytes == b"PK\x01\x02")
+            .expect("ZIP central directory entry");
+        // Mark the creator as Unix and put the hostile file mode in the
+        // central directory. zip::write::unix_permissions masks these bits,
+        // so patch the archive bytes as an attacker would instead.
+        archive[central_header + 4..central_header + 6]
+            .copy_from_slice(&((3_u16 << 8) | 20).to_le_bytes());
+        archive[central_header + 38..central_header + 42]
+            .copy_from_slice(&(mode << 16).to_le_bytes());
+        fs::write(path, archive).unwrap();
+    }
+
+    #[test]
+    fn archive_mode_filter_removes_setuid_setgid_and_sticky_bits() {
+        let work = tempdir().unwrap();
+        let hostile_modes = [0o104755, 0o102750, 0o101755];
+        for (index, hostile_mode) in hostile_modes.into_iter().enumerate() {
+            let archive = work.path().join(format!("hostile-{index}.zip"));
+            write_zip_with_raw_unix_mode(&archive, "game", b"payload", hostile_mode);
+            let mut zip = ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+            let parsed_mode = zip.by_index(0).unwrap().unix_mode().unwrap();
+            assert_eq!(parsed_mode, hostile_mode);
+
+            let safe = safe_archive_file_mode(parsed_mode);
+            assert_eq!(safe, hostile_mode & 0o777);
+            assert_eq!(safe & 0o7000, 0);
+        }
+        assert_eq!(safe_archive_file_mode(0o100755), 0o755);
+        assert_eq!(safe_archive_file_mode(0o100644), 0o644);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_strips_privileged_archive_bits_and_keeps_executable_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let archive = work.path().join("privileged.zip");
+        write_zip_with_raw_unix_mode(&archive, "game", b"payload", 0o104755);
+        let destination = work.path().join("out");
+
+        extract_zip_to_dir(&archive, &destination).unwrap();
+
+        let mode = fs::metadata(destination.join("game"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o755);
+        assert_eq!(mode & 0o7000, 0);
     }
 
     #[test]
