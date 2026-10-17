@@ -483,17 +483,17 @@ def _legacy_other_get_preflight(request, *, flask_app, data, find_user, find_tok
         _flash(auth.session_data, 'error', 'Invalid file type')
         response = flask_redirect_response(detail_url)
     elif response is None and not _UUID_RE.fullmatch(game_uuid):
-        response = BadRequest().get_response()
+        response = _legacy_werkzeug_error(BadRequest)
     elif response is None:
         game = data.game(game_uuid)
         if game is None:
-            response = NotFound().get_response()
+            response = _legacy_werkzeug_error(NotFound)
         elif not data.can_access(auth.user, game):
-            response = Forbidden().get_response()
+            response = _legacy_werkzeug_error(Forbidden)
         else:
             token = str(file_id or '').strip()
             if not _UUID_RE.fullmatch(token) and not _is_integer_token(token):
-                response = BadRequest().get_response()
+                response = _legacy_werkzeug_error(BadRequest)
             else:
                 record = data.other_file(file_type, game_uuid, token)
                 if record is None:

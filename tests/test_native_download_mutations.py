@@ -418,6 +418,37 @@ def test_legacy_download_validation_errors_match_werkzeug_abort(
     assert response.content == expected.get_data()
 
 
+@pytest.mark.parametrize(
+    ('path', 'error_type', 'missing_game', 'access_allowed'),
+    [
+        ('/download_other/update/not-a-uuid/42', 'bad_request', False, True),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/42', 'not_found', True, True),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/42', 'forbidden', False, False),
+        ('/download_other/update/12345678-1234-1234-1234-123456789abc/not-an-id', 'bad_request', False, True),
+    ],
+)
+def test_legacy_other_get_preflight_errors_match_werkzeug_abort(
+    path, error_type, missing_game, access_allowed,
+):
+    from werkzeug.exceptions import BadRequest, Forbidden, NotFound
+
+    error_classes = {
+        'bad_request': BadRequest,
+        'forbidden': Forbidden,
+        'not_found': NotFound,
+    }
+    data = FakeDownloads()
+    data.missing_game = missing_game
+    data.access_allowed = access_allowed
+    response = make_client(data=data, role='user').get(path, follow_redirects=False)
+    expected = error_classes[error_type]().get_response()
+
+    assert response.status_code == expected.status_code
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.headers['content-length'] == expected.headers['Content-Length']
+    assert response.content == expected.get_data()
+
+
 def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch):
     from oneirodex.runtime_native.download_mutations import DownloadMutationData
 
