@@ -155,16 +155,30 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
 
 
 @pytest.mark.parametrize(('action', 'tab'), [('AutoScan', 'auto'), ('ManualScan', 'manual')])
-def test_legacy_scan_management_rejects_unknown_scan_mode(native_client, action, tab):
+@pytest.mark.parametrize('scan_mode', ['', 'unexpected-mode'])
+def test_legacy_scan_management_rejects_invalid_scan_mode(native_client, action, tab, scan_mode):
     runtime, data = native_client
     response = _request(runtime, action, fields={
         'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
-        'scan_mode': 'unexpected-mode',
+        'scan_mode': scan_mode,
     })
 
     assert response.status_code == 302
     assert response.headers['location'] == f'/scan_management?active_tab={tab}'
     assert not any(call[0] in {'start_scan', 'list_folders', 'list_files'} for call in data.calls)
+
+
+@pytest.mark.parametrize(('action', 'expected_call'), [
+    ('AutoScan', 'start_scan'), ('ManualScan', 'list_folders'),
+])
+def test_legacy_scan_management_defaults_missing_scan_mode(native_client, action, expected_call):
+    runtime, data = native_client
+    response = _request(runtime, action, fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+    })
+
+    assert response.status_code == 302
+    assert any(call[0] == expected_call for call in data.calls)
 
 
 def test_legacy_scan_management_rejects_padded_schedule_choice(native_client):
