@@ -195,6 +195,9 @@ fit.
   disclosure. Reposition it on resize and scroll, keep it within the viewport,
   and make Tab from the disclosure enter the first action; Escape returns focus
   to the disclosure and outside-click dismissal preserves the clicked target.
+- Dropdown hover and keyboard-focus states keep an opaque semantic surface
+  behind readable text; avoid transparent highlights that let page content show
+  through the control.
 - Keep page titles, context controls, view selectors and primary actions in
   their shell's reserved areas. Avoid duplicate titles or nested panels with
   the same information role. Keep a page heading in the accessibility tree;
