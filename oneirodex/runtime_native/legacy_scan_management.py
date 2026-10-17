@@ -309,6 +309,12 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
         flashes.append(('danger', 'Folder does not exist or cannot be accessed.'))
         return f'{redirect}&library_uuid={library_uuid}'
     requested_mode = str(form.get('scan_mode') or 'auto')
+    # AutoScanForm and ScanFolderForm are RadioFields with these exact choices.
+    # WTForms rejects unknown values; the native compatibility handler must not
+    # let resolve_scan_mode_for_path silently turn them into a folders scan.
+    if requested_mode not in {'auto', 'folders', 'files'}:
+        flashes.append(('danger', 'Not a valid choice.'))
+        return redirect
     scan_mode = data.scan_mode(resolved, requested_mode)
     raw_schedule = form.get('schedule')
     schedule = raw_schedule if raw_schedule and str(raw_schedule).strip() else None

@@ -154,6 +154,19 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
     assert ('list_folders', '/safe/root/library', 'lib-1') in data.calls
 
 
+@pytest.mark.parametrize(('action', 'tab'), [('AutoScan', 'auto'), ('ManualScan', 'manual')])
+def test_legacy_scan_management_rejects_unknown_scan_mode(native_client, action, tab):
+    runtime, data = native_client
+    response = _request(runtime, action, fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'unexpected-mode',
+    })
+
+    assert response.status_code == 302
+    assert response.headers['location'] == f'/scan_management?active_tab={tab}'
+    assert not any(call[0] in {'start_scan', 'list_folders', 'list_files'} for call in data.calls)
+
+
 def test_legacy_scan_management_rejects_padded_schedule_choice(native_client):
     runtime, data = native_client
     response = _request(runtime, 'AutoScan', fields={
