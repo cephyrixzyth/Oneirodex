@@ -43,7 +43,6 @@ class SmtpSettingsData:
         port untouched while disabled.
         """
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.utils.cache import cache
         from oneirodex.utils.global_settings import global_settings_row_or_create
 
         values = payload or {}
@@ -76,7 +75,6 @@ class SmtpSettingsData:
         settings.smtp_use_tls = values.get('smtp_use_tls', True)
         settings.smtp_default_sender = values.get('smtp_default_sender')
         db.session.commit()
-        cache.delete('global_settings')
 
     def test_connection(self) -> bool | None:
         from oneirodex.utils.global_settings import global_settings_row

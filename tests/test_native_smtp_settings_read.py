@@ -196,7 +196,6 @@ def test_legacy_smtp_post_uses_compatibility_save_and_exact_response():
 def test_legacy_smtp_disabled_save_preserves_v118_field_semantics(monkeypatch):
     from oneirodex.runtime_native import db_session
     from oneirodex.utils import global_settings
-    from oneirodex.utils.cache import cache
     from oneirodex.runtime_native.smtp_settings_read import SmtpSettingsData
 
     settings = SimpleNamespace(
@@ -206,10 +205,8 @@ def test_legacy_smtp_disabled_save_preserves_v118_field_semantics(monkeypatch):
     )
     session = SimpleNamespace(commits=0)
     session.commit = lambda: setattr(session, 'commits', session.commits + 1)
-    deleted = []
     monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
     monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
-    monkeypatch.setattr(cache, 'delete', lambda key: deleted.append(key))
 
     SmtpSettingsData().save_legacy({
         'smtp_enabled': False,
@@ -229,7 +226,6 @@ def test_legacy_smtp_disabled_save_preserves_v118_field_semantics(monkeypatch):
     assert settings.smtp_use_tls == 'unchecked'
     assert settings.smtp_default_sender == 'not-an-email'
     assert session.commits == 1
-    assert deleted == ['global_settings']
 
 
 def test_legacy_smtp_enabled_validation_keeps_v118_error_order(monkeypatch):
