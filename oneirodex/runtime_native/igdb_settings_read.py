@@ -32,6 +32,17 @@ class IgdbSettingsData:
         cache.delete('global_settings')
         return {'settings': igdb_public_state(settings)}
 
+    def save_legacy(self, payload):
+        """Preserve the v1.1.8 admin form POST while the JSON API stays strict."""
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.global_settings import global_settings_row_or_create
+
+        settings = global_settings_row_or_create()
+        settings.igdb_client_id = payload.get('igdb_client_id')
+        if payload.get('igdb_client_secret'):
+            settings.igdb_client_secret = payload.get('igdb_client_secret')
+        db.session.commit()
+
     def test_connection(self) -> dict | bool | None:
         from datetime import datetime, timezone
 
@@ -131,7 +142,30 @@ def create_igdb_settings_router(
                         'This token does not have the admin scope', code='forbidden'
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif request.url.path in {'/admin/igdb_settings', '/admin/integrations/igdb/save'}:
+                elif request.url.path == '/admin/igdb_settings':
+                    try:
+                        body = await request.json()
+                    except Exception:
+                        body = None
+                    try:
+                        legacy_save = getattr(data, 'save_legacy', None)
+                        if legacy_save is None:
+                            data.save(body)
+                        else:
+                            legacy_save(body)
+                        response = JSONResponse(api_ok_payload({
+                            'status': 'success',
+                            'message': 'IGDB settings updated successfully',
+                        }))
+                    except Exception:
+                        from oneirodex.runtime_native.db_session import native_db as db
+                        import logging
+
+                        db.session.rollback()
+                        logging.getLogger(__name__).warning('IGDB settings form save failed')
+                        payload, status = api_error_payload('Could not save IGDB settings', code='internal')
+                        response = JSONResponse(payload, status_code=status)
+                elif request.url.path == '/admin/integrations/igdb/save':
                     try:
                         body = await request.json()
                     except Exception:

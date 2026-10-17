@@ -12,7 +12,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 from oneirodex.utils.igdb_settings import igdb_public_state
 
 
-def _client(*, role='admin'):
+def _client(*, role='admin', legacy_save=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-igdb-read-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -28,6 +28,21 @@ def _client(*, role='admin'):
         session_protection='basic',
     )
     saved = []
+    data_access = SimpleNamespace(
+        read=lambda: {'settings': {
+            'igdb_client_id': 'client-id', 'secret_present': True, 'last_tested': None,
+        }},
+        save=lambda payload: saved.append(payload) or {'settings': {
+            'igdb_client_id': payload['igdb_client_id'],
+            'secret_present': bool(payload['igdb_client_secret']),
+        }},
+        test_connection=lambda: {'settings': {
+            'igdb_client_id': 'client-id', 'secret_present': True,
+        }},
+    )
+    if legacy_save is not None:
+        data_access.save_legacy = legacy_save
+
     router = create_igdb_settings_router(
         flask_app,
         find_user=lambda user_id: user if user_id == 71 else None,
@@ -35,18 +50,7 @@ def _client(*, role='admin'):
         commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '71' else None,
         login_manager=login_manager,
-        data_access=SimpleNamespace(
-            read=lambda: {'settings': {
-                'igdb_client_id': 'client-id', 'secret_present': True, 'last_tested': None,
-            }},
-            save=lambda payload: saved.append(payload) or {'settings': {
-                'igdb_client_id': payload['igdb_client_id'],
-                'secret_present': bool(payload['igdb_client_secret']),
-            }},
-            test_connection=lambda: {'settings': {
-                'igdb_client_id': 'client-id', 'secret_present': True,
-            }},
-        ),
+        data_access=data_access,
         database_scope=lambda _app: nullcontext(),
     )
     app = FastAPI()
@@ -140,6 +144,51 @@ def test_legacy_igdb_form_save_preserves_status_and_hidden_secret():
     assert saved.json()['message'] == 'IGDB settings updated successfully'
     assert 'private' not in saved.text
     assert client.saved == [{'igdb_client_id': 'updated-id', 'igdb_client_secret': 'private'}]
+
+
+def test_legacy_igdb_form_post_bypasses_modern_api_validation():
+    calls = []
+    client = _client(legacy_save=lambda payload: calls.append(payload))
+    payload = {'igdb_client_id': '', 'igdb_client_secret': ''}
+
+    response = client.post(
+        '/admin/igdb_settings', json=payload,
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert calls == [payload]
+    assert client.saved == []
+    assert response.json() == {
+        'ok': True,
+        'error': None,
+        'error_code': None,
+        'success': True,
+        'status': 'success',
+        'message': 'IGDB settings updated successfully',
+    }
+
+
+def test_legacy_igdb_save_preserves_blank_secret_and_accepts_empty_client_id(monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.igdb_settings_read import IgdbSettingsData
+    from oneirodex.utils import global_settings
+
+    settings = SimpleNamespace(
+        igdb_client_id='old-id', igdb_client_secret='saved-secret',
+    )
+    session = SimpleNamespace(commits=0)
+    session.commit = lambda: setattr(session, 'commits', session.commits + 1)
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+
+    IgdbSettingsData().save_legacy({
+        'igdb_client_id': '', 'igdb_client_secret': '',
+    })
+
+    assert settings.igdb_client_id == ''
+    assert settings.igdb_client_secret == 'saved-secret'
+    assert session.commits == 1
 
 
 def test_legacy_igdb_test_path_uses_native_safe_connection_projection():
