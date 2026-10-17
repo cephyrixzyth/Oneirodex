@@ -328,6 +328,58 @@ def test_legacy_other_download_rejects_invalid_type_and_file_id():
     assert data.created is None
 
 
+@pytest.mark.parametrize(
+    ('error', 'message', 'event_prefix'),
+    [
+        (None, 'Database error occurred', 'Database error creating update download request:'),
+        (RuntimeError('fixture failure'), 'An error occurred processing your request.',
+         'Error creating update download request:'),
+    ],
+)
+def test_legacy_other_download_failure_matches_v118_flash_and_event(
+    error, message, event_prefix, monkeypatch,
+):
+    from sqlalchemy.exc import OperationalError
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    rollback_calls = []
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.runtime_native.db_session',
+        SimpleNamespace(native_db=SimpleNamespace(
+            session=SimpleNamespace(rollback=lambda: rollback_calls.append(True)),
+        )),
+    )
+
+    class FailingDownloads(FakeDownloads):
+        def __init__(self):
+            super().__init__()
+            self.events = []
+
+        def create_other_download_request(self, *_args):
+            if error is None:
+                raise OperationalError('INSERT', {}, RuntimeError('db fixture failure'))
+            raise error
+
+        def log_legacy_event(self, message, **kwargs):
+            self.events.append((message, kwargs))
+
+    data = FailingDownloads()
+    response = make_client(data=data, role='user').post(
+        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/game_details/12345678-1234-1234-1234-123456789abc'
+    cookie = response.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    session = load_session_cookie(cookie, 'native-download-mutations-secret', max_age=3600)
+    assert session['_flashes'][-1] == ('error', message)
+    assert data.events[-1][0].startswith(event_prefix)
+    assert data.events[-1][1] == {'event_type': 'system', 'event_level': 'error'}
+    assert rollback_calls == [True]
+
+
 def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch):
     from oneirodex.runtime_native.download_mutations import DownloadMutationData
 

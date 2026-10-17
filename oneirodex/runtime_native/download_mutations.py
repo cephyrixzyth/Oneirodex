@@ -696,9 +696,22 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
                             try:
                                 data.create_other_download_request(game_uuid, auth.user, record, path)
                                 response = RedirectResponse('/downloads', status_code=302)
-                            except Exception:
+                            except Exception as exc:
                                 db.session.rollback()
-                                _flash(auth.session_data, 'error', 'An error occurred processing your request.')
+                                from sqlalchemy.exc import SQLAlchemyError
+                                if isinstance(exc, SQLAlchemyError):
+                                    data.log_legacy_event(
+                                        f'Database error creating {file_type} download request: {exc}',
+                                        event_type='system', event_level='error',
+                                    )
+                                    message = 'Database error occurred'
+                                else:
+                                    data.log_legacy_event(
+                                        f'Error creating {file_type} download request: {exc}',
+                                        event_type='system', event_level='error',
+                                    )
+                                    message = 'An error occurred processing your request.'
+                                _flash(auth.session_data, 'error', message)
                                 response = RedirectResponse(detail_url, status_code=302)
         if auth is not None and (
             auth.should_set_session_cookie or auth.session_data.get('_flashes')
