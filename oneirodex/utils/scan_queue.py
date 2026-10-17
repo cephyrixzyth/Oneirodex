@@ -254,8 +254,12 @@ def normalize_schedule_fields(
                 'Not a valid integer value. Number must be between 1 and 10080.'
             )
             return out
-        unit = 'hours' if interval_unit is None else str(interval_unit).strip().lower()
-        if unit not in {'hours', 'minutes'}:
+        # SelectField validates the submitted value against exact choice
+        # strings. The FastAPI JSON path bypasses that form, so do not trim or
+        # case-fold values here: malformed choices must fail as they did in
+        # v1.1.8 (for example, " hours " and "HOURS").
+        unit = 'hours' if interval_unit is None else interval_unit
+        if not isinstance(unit, str) or unit not in {'hours', 'minutes'}:
             out['error'] = 'Not a valid choice.'
             return out
         # Match AutoScanForm.schedule_interval_value's WTForms range. The

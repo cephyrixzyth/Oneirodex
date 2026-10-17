@@ -160,6 +160,15 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     )
     assert empty_unit['error'] == 'Not a valid choice.'
 
+    # The v1.1.8 SelectField accepts only the exact declared choice values.
+    # Current JSON validation must not trim or case-fold malformed choices.
+    for malformed_unit in (' hours ', 'HOURS', 'Minutes', [], {}):
+        invalid_unit = normalize_schedule_fields(
+            'interval', interval_value=15, interval_unit=malformed_unit,
+        )
+        assert invalid_unit['error'] == 'Not a valid choice.'
+        assert invalid_unit['schedule_kind'] == 'once'
+
     over_limit = normalize_schedule_fields(
         'interval', interval_value=10081, interval_unit='minutes',
     )

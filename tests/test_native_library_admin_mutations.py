@@ -285,6 +285,19 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['fetch_hltb'] is True
 
 
+@pytest.mark.parametrize('interval_unit', [' hours ', 'HOURS', 'Minutes'])
+def test_single_scan_rejects_non_choice_interval_unit(native_client, interval_unit):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'schedule': 'interval',
+        'schedule_interval_value': 15, 'schedule_interval_unit': interval_unit,
+    })
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Not a valid choice.'
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
 def test_single_scan_missing_folder_matches_legacy_rejection(native_client):
     runtime, data = native_client
     data.items['lib-no-folder'] = SimpleNamespace(
