@@ -90,6 +90,9 @@ class CollectionReadData:
         )
         db.session.add(collection)
         db.session.commit()
+        # Match Flask's expire-on-commit response: the timestamp is reloaded
+        # from PostgreSQL's timezone-naive column before it is serialized.
+        db.session.refresh(collection)
         return _collection_payload(collection, user, admin_access=False, item_count=0)
 
     def update(self, user, collection_uuid: str, payload: dict, *, admin_access: bool):
