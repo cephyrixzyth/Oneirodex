@@ -4460,6 +4460,12 @@ def test_lazy_asgi_dispatches_browser_account_summary_without_flask_or_extra_fie
         'error_code': None,
         'success': True,
     }
+    assert response.content.endswith(b'\n')
+    assert response.content.startswith(b'{"avatar_path":')
+    head = _run(runtime, '/api/account/summary', cookie=_signed_session(), method='HEAD')
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(response.content))
 
 
 def test_lazy_asgi_dispatches_rom_translate_capabilities_to_native_admin_route(monkeypatch):
@@ -4547,6 +4553,12 @@ def test_lazy_asgi_dispatches_browser_account_invites_without_flask(monkeypatch)
         'success': True,
     }
     assert response.headers['x-content-type-options'] == 'nosniff'
+    assert response.content.endswith(b'\n')
+    assert response.content.startswith(b'{"error":')
+    head = _run(runtime, '/api/account/invites', cookie=_signed_session(), method='HEAD')
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(response.content))
 
 
 def test_account_invite_post_rejects_missing_csrf_before_flask_compatibility(monkeypatch):

@@ -7,7 +7,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response as _csrf_error_response
@@ -206,13 +206,14 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 payload = (
                     data.summary(auth.user, static_url=static_url, package_root=flask_app.root_path)
                     if uses_native_data else data.summary(auth.user)
                 )
-                response = _native_success(payload)
+                response = _native_success(payload, config=flask_app.config)
                 # Flask persists the session after remember-cookie login. The
                 # resolver marks that login as a session modification.
                 if auth.should_set_session_cookie:
@@ -247,6 +248,7 @@ def create_account_summary_router(
                 elif auth.token is not None:
                     response = _native_error(
                         'Sign in with your site account to manage invites', 'forbidden',
+                        config=flask_app.config,
                     )
                 else:
                     body = _json_mapping(await request.body())
@@ -259,9 +261,13 @@ def create_account_summary_router(
                         origin=public_origin_for_request(request, flask_app.config),
                     )
                     if 'error' in result:
-                        response = _native_error(result['error'], result['code'])
+                        response = _native_error(
+                            result['error'], result['code'], config=flask_app.config,
+                        )
                     else:
-                        response = _native_success(result, status=201)
+                        response = _native_success(
+                            result, status=201, config=flask_app.config,
+                        )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:
@@ -269,6 +275,7 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 from oneirodex.utils.public_origin import public_origin_for_request
@@ -276,7 +283,7 @@ def create_account_summary_router(
                 response = _native_success(invite_data.invites(
                     auth.user,
                     origin=public_origin_for_request(request, flask_app.config),
-                ))
+                ), config=flask_app.config)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, flask_app, auth)
 
@@ -308,13 +315,16 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 result = mutations.delete(auth.user, token)
                 if 'error' in result:
-                    response = _native_error(result['error'], result['code'])
+                    response = _native_error(
+                        result['error'], result['code'], config=flask_app.config,
+                    )
                 else:
-                    response = _native_success(result)
+                    response = _native_success(result, config=flask_app.config)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, flask_app, auth)
 
@@ -342,16 +352,24 @@ def _json_mapping(raw_body: bytes) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def _native_success(payload, *, status=200):
+def _native_json_response(payload, *, status=200, config):
+    from oneirodex.runtime_native.runtime_context import NativeJSONProvider
+
+    provider = NativeJSONProvider(config)
+    body = (provider.dumps(payload, separators=(',', ':')) + '\n').encode('utf-8')
+    return Response(body, status_code=status, media_type=provider.mimetype)
+
+
+def _native_success(payload, *, status=200, config):
     from oneirodex.utils.api_contract import api_ok_payload
 
-    return JSONResponse(api_ok_payload(payload), status_code=status)
+    return _native_json_response(api_ok_payload(payload), status=status, config=config)
 
 
-def _native_error(message, code, *, detail=None):
+def _native_error(message, code, *, detail=None, config):
     from oneirodex.utils.api_contract import api_error_payload
 
     payload, status = api_error_payload(message, code=code, detail=detail)
-    return JSONResponse(payload, status_code=status)
+    return _native_json_response(payload, status=status, config=config)
 
 
