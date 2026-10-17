@@ -93,8 +93,8 @@ def test_admin_read_and_head_preserve_bare_payload():
     assert response.json() == client.native_data.payload
     assert 'ok' not in response.json()
     head = client.head('/api/admin/loading-icon/config')
-    assert head.status_code == 200 and head.content == b''
-    assert head.headers['content-length'] == str(len(response.content))
+    assert head.status_code == 400 and head.content == b''
+    assert head.headers['content-length'] == '118'
 
 
 def test_admin_theme_loading_icons_alias_preserves_legacy_envelope():

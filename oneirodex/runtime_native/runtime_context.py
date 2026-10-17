@@ -73,6 +73,15 @@ class NativeJSONProvider:
         return _JSONResponseData(body)
 
 
+def native_json_response(payload, *, config, status=200):
+    """Return a Starlette response with Flask-compatible JSON bytes."""
+    from starlette.responses import Response
+
+    provider = NativeJSONProvider(config)
+    body = (provider.dumps(payload, separators=(',', ':')) + '\n').encode('utf-8')
+    return Response(body, status_code=status, media_type=provider.mimetype)
+
+
 class _JSONResponseData:
     def __init__(self, body):
         self._body = body

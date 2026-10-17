@@ -100,7 +100,14 @@ def create_metadata_providers_read_router(
                         'This token does not have the admin scope', code='forbidden'
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif request.method == 'GET' or request.method == 'HEAD':
+                elif request.method == 'HEAD':
+                    from .runtime_context import native_json_response
+
+                    payload, status = api_error_payload('No fields to update', code='bad_request')
+                    response = native_json_response(
+                        payload, config=flask_app.config, status=status,
+                    )
+                elif request.method == 'GET':
                     response = JSONResponse(api_ok_payload(data.read()))
                 else:
                     try:

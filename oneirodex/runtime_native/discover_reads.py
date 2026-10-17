@@ -287,6 +287,17 @@ def create_discover_reads_router(
                     return secure(response, request, auth)
             if auth.user is None:
                 response = anonymous(request, auth)
+            elif request.method == 'HEAD':
+                from oneirodex.utils.api_contract import api_error_payload
+                from .runtime_context import native_json_response
+
+                payload, status = api_error_payload(
+                    'Send pins, hidden, or both as lists of row identifiers.',
+                    code='bad_request',
+                )
+                response = native_json_response(
+                    payload, config=flask_app.config, status=status,
+                )
             elif request.method == 'PUT':
                 try:
                     payload = await request.json()

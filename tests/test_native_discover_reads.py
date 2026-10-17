@@ -409,13 +409,18 @@ def test_anonymous_surprise_and_pins_redirect_without_adapter_calls():
     assert data.pins_calls == []
 
 
-def test_head_surprise_and_pins_keep_content_length_but_return_no_body():
+def test_head_surprise_reads_but_pins_matches_legacy_method_branch():
     data = FakeDiscoverData()
     client = make_client(data=data)
-    for path in ('/api/discover/surprise', '/api/discover/pins'):
-        get_response = client.get(path)
-        head_response = client.head(path)
-        assert head_response.status_code == 200
-        assert head_response.content == b''
-        assert head_response.headers['content-length'] == str(len(get_response.content))
-        assert head_response.headers['X-Content-Type-Options'] == 'nosniff'
+    surprise = client.get('/api/discover/surprise')
+    surprise_head = client.head('/api/discover/surprise')
+    assert surprise_head.status_code == 200
+    assert surprise_head.content == b''
+    assert surprise_head.headers['content-length'] == str(len(surprise.content))
+    assert surprise_head.headers['X-Content-Type-Options'] == 'nosniff'
+
+    client.get('/api/discover/pins')
+    pins_head = client.head('/api/discover/pins')
+    assert pins_head.status_code == 400
+    assert pins_head.content == b''
+    assert pins_head.headers['content-length'] == '190'

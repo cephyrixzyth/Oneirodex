@@ -91,3 +91,14 @@ def test_metadata_provider_put_keeps_validated_admin_write_contract():
     assert response.json()['ok'] is True
     assert response.json()['providers']['steam'] is False
     assert data.saved == [{'providers': {'steam': False}}]
+
+
+def test_metadata_provider_head_preserves_legacy_non_get_validation():
+    client, _data, cookie, _csrf = _client()
+    client.cookies.set('session', cookie)
+
+    response = client.head('/api/admin/integrations/metadata-providers')
+
+    assert response.status_code == 400
+    assert response.content == b''
+    assert response.headers['content-length'] == '118'

@@ -103,7 +103,15 @@ def create_loading_icon_admin_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
                 response = admin_denial(auth)
-            if response is None and request.method in ('GET', 'HEAD'):
+            if response is None and request.method == 'HEAD':
+                from oneirodex.utils.api_contract import api_error_payload
+                from .runtime_context import native_json_response
+
+                payload, status = api_error_payload('No fields to update', code='bad_request')
+                response = native_json_response(
+                    payload, config=flask_app.config, status=status,
+                )
+            if response is None and request.method == 'GET':
                 response = JSONResponse(data.get())
             if response is None:
                 body = await _json_object(request)

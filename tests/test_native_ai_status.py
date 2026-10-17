@@ -193,8 +193,8 @@ def test_ai_config_read_write_and_csrf_contract():
     head = client.head('/api/ai/config')
     assert read.status_code == 200
     assert read.json() == {'enabled': False, 'ollama_model': 'small-model'}
-    assert head.status_code == 200 and head.content == b''
-    assert head.headers['content-length'] == str(len(read.content))
+    assert head.status_code == 400 and head.content == b''
+    assert head.headers['content-length'] == '140'
 
     rejected = client.put('/api/ai/config', json={'enabled': True})
     assert rejected.status_code == 400
