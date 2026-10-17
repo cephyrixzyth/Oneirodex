@@ -5486,6 +5486,20 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
     assert runtime._fake_notifications.calls == [('preferences', {'notify_chat': False})]
 
 
+def test_native_notification_preferences_reject_truthy_non_object_json(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=1, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert runtime._fake_notifications.calls == []
+
+
 def test_native_admin_notification_bus_test_requires_csrf_and_uses_fake_adapter(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
     monkeypatch.setattr(

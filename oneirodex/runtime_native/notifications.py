@@ -168,11 +168,16 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 elif request.method == 'POST':
-                    payload = _json_object(await request.body())
-                    data.update_preferences(auth.user, payload)
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    payload = _preference_json_object(await request.body())
+                    if payload is None:
+                        response = _api_error(
+                            'Request body must be a JSON object.', 'bad_request',
+                        )
+                    else:
+                        data.update_preferences(auth.user, payload)
+                        from oneirodex.utils.api_contract import api_ok_payload
 
-                    response = JSONResponse(api_ok_payload())
+                        response = JSONResponse(api_ok_payload())
                 else:
                     prefs = data.preferences(auth.user)
                     response = JSONResponse({
@@ -292,6 +297,25 @@ def _json_object(raw_body: bytes) -> dict:
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _preference_json_object(raw_body: bytes) -> dict | None:
+    """Keep legacy empty/malformed no-op forms but reject truthy scalar JSON.
+
+    The old route silently accepted an empty body and malformed JSON. A truthy
+    scalar such as ``1`` instead raised during membership tests and produced a
+    500. Returning a clear client error avoids reporting a successful update
+    when the caller supplied no preference object.
+    """
+    import json
+
+    try:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError):
+        return {}
+    if not payload:
+        return {}
+    return payload if isinstance(payload, dict) else None
 
 
 def _finish(response, flask_app, request, auth):
