@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from werkzeug.datastructures import MultiDict
 
-from oneirodex.models import Game, Library, User
+from oneirodex.models import Game, Library, Theme, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.runtime_native.favorites import FavoritesData
 
@@ -47,7 +47,10 @@ def test_favorites_adapter_filters_denied_child_library_and_total(
     app, client, db_session, configured_install, monkeypatch,
 ):
     from oneirodex.utils import client_lifecycle, global_settings
-    from oneirodex.utils.library_acl import set_user_library_allowlist
+    from oneirodex.utils.library_acl import (
+        set_user_content_filters,
+        set_user_library_allowlist,
+    )
 
     user_key = str(uuid4())
     child = User(
@@ -58,18 +61,25 @@ def test_favorites_adapter_filters_denied_child_library_and_total(
     )
     allowed = Library(name=f'Fav allowed {user_key[:8]}', platform=LibraryPlatform.PCWIN)
     denied = Library(name=f'Fav denied {user_key[:8]}', platform=LibraryPlatform.PCWIN)
+    denied_theme = Theme(name=f'Fav denied theme {user_key[:8]}')
     visible_game = Game(
         name='Visible Child Favorite',
         full_disk_path=f'/tmp/fav-child-visible-{user_key}', library=allowed,
     )
+    themed_game = Game(
+        name='Hidden Child Favorite by Theme',
+        full_disk_path=f'/tmp/fav-child-theme-{user_key}', library=allowed,
+    )
+    themed_game.themes.append(denied_theme)
     hidden_game = Game(
         name='Hidden Child Favorite',
         full_disk_path=f'/tmp/fav-child-hidden-{user_key}', library=denied,
     )
-    child.favorites.extend([visible_game, hidden_game])
+    child.favorites.extend([visible_game, themed_game, hidden_game])
     db_session.add(child)
     db_session.commit()
     set_user_library_allowlist(child.id, [allowed.uuid])
+    set_user_content_filters(child.id, [], [denied_theme.name])
     db_session.commit()
 
     monkeypatch.setattr(global_settings, 'global_settings_row', lambda: None)
