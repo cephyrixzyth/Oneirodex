@@ -147,6 +147,40 @@ class LibraryAdminMutationData:
             schedule_fields=options.get('schedule_fields'),
         )
 
+    def fail_scan_for_legacy_mode(self, *, library, folder: str, options: dict):
+        """Preserve v1.1.8's accepted-then-failed result for unknown modes.
+
+        The old worker accepted the request, then failed because it had no
+        branch for the mode. The native queue stores scan mode as a boolean,
+        so persist the same terminal failure directly instead of silently
+        converting the malformed request into a folder scan.
+        """
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.scan_queue import create_scan_job_row
+
+        job = create_scan_job_row(
+            folder_path=folder,
+            library_uuid=library.uuid,
+            scan_mode='folders',
+            remove_missing=options['remove_missing'],
+            download_missing_images=options['download_missing_images'],
+            force_updates_extras_scan=options['force_updates_extras'],
+            schedule=options.get('schedule'),
+            schedule_fields=options.get('schedule_fields'),
+            status='Failed',
+        )
+        job.error_message = (
+            "cannot access local variable 'game_names_with_paths' "
+            'where it is not associated with a value'
+        )
+        db.session.commit()
+        return {
+            'status': 'started',
+            'job_id': job.id,
+            'position': None,
+            'message': f'Scan started (job {job.id[:8]}…).',
+        }
+
     def refresh_queue(self):
         from sqlalchemy import select
 
@@ -807,9 +841,11 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
     )
     if folder is None:
         folder = ''
+    # v1.1.8 stringified JSON scalar folder values before storing the path.
+    # Keep path allowlisting below; a malformed scalar can only address a
+    # child of an allowed scan root after resolution.
     if not isinstance(folder, str):
-        return _error('folder must be a string', 'bad_request', 400,
-                      body_status='rejected', job_id=None, position=None)
+        folder = str(folder)
     if not folder and not use_library_root:
         return _error(
             'No folder provided and library has no last_scan_folder. Run one Auto Scan first or pass folder.',
@@ -833,10 +869,12 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         return _error('Access denied for this scan location', 'forbidden', 403,
                       body_status='rejected', job_id=None, position=None)
     scan_mode = value('scan_mode', 'folders') or 'folders'
-    if scan_mode not in ('auto', 'folders', 'files'):
-        return _error('scan_mode must be auto, folders, or files', 'bad_request', 400,
-                      body_status='rejected', job_id=None, position=None)
-    if scan_mode == 'auto':
+    if not isinstance(scan_mode, str):
+        scan_mode = str(scan_mode)
+    invalid_scan_mode = scan_mode not in ('auto', 'folders', 'files')
+    if invalid_scan_mode:
+        scan_mode = 'folders'
+    elif scan_mode == 'auto':
         scan_mode = data.scan_mode_for_path(resolved, scan_mode)
     force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (form.get('force_parallel') or request.query_params.get('force_parallel'))
     policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (form.get('queue_policy') or request.query_params.get('queue_policy'))
@@ -885,10 +923,15 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         'schedule_fields': schedule_fields,
     }
     try:
-        result = data.start_scan(
-            library=library, folder=resolved, options=options, app=app,
-            database_scope=database_scope,
-        )
+        if invalid_scan_mode:
+            result = data.fail_scan_for_legacy_mode(
+                library=library, folder=resolved, options=options,
+            )
+        else:
+            result = data.start_scan(
+                library=library, folder=resolved, options=options, app=app,
+                database_scope=database_scope,
+            )
     except Exception:
         data.rollback()
         return _error('Scan request could not be queued.', 'internal', 500,

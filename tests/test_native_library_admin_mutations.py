@@ -46,9 +46,19 @@ class FakeLibraryAdminMutations:
         self.calls.append(('scan', library.uuid, folder, options, database_scope))
         return {'status': 'queued', 'job_id': 'scan-job', 'position': 2, 'message': 'queued'}
 
+    def fail_scan_for_legacy_mode(self, *, library, folder, options):
+        self.calls.append(('fail_scan_mode', library.uuid, folder, options))
+        return {
+            'status': 'started', 'job_id': 'failed-scan-job', 'position': None,
+            'message': 'Scan started (job failed-s…).',
+        }
+
     def resolve_scan_path(self, app, folder, library_root):
         self.calls.append(('resolve', folder, library_root))
-        return folder or '/safe/root/one', None
+        resolved = folder or '/safe/root/one'
+        if not resolved.startswith('/'):
+            resolved = '/safe/root/' + resolved
+        return resolved, None
 
     def allowed_bases(self, _app):
         return ['/safe/root']
@@ -283,6 +293,32 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['download_missing_images'] is True
     assert scan[3]['force_updates_extras'] is True
     assert scan[3]['fetch_hltb'] is True
+
+
+def test_single_scan_stringifies_legacy_scalar_folder_without_weakening_root_allowlist(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': 123,
+    })
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'queued'
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[2] == '/safe/root/123'
+
+
+def test_single_scan_unknown_mode_preserves_legacy_accepted_then_failed_contract(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'scan_mode': 'unknown',
+    })
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'started'
+    assert response.json()['position'] is None
+    assert response.json()['job_id'] == 'failed-scan-job'
+    assert any(call[0] == 'fail_scan_mode' for call in data.calls)
+    assert not any(call[0] == 'scan' for call in data.calls)
 
 
 @pytest.mark.parametrize('interval_unit', [' hours ', 'HOURS', 'Minutes'])
