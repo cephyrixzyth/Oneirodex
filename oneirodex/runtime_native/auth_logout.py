@@ -4,7 +4,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import Response
+
+from .response_compat import flask_redirect_response
 
 
 def create_auth_logout_router(flask_app: FastAPI):
@@ -32,19 +33,7 @@ def create_auth_logout_router(flask_app: FastAPI):
         session_data.pop('_remember', None)
         changed = session_data != original
 
-        response = Response(
-            status_code=302,
-            content=(
-                '<!doctype html>\n'
-                '<html lang=en>\n'
-                '<title>Redirecting...</title>\n'
-                '<h1>Redirecting...</h1>\n'
-                '<p>You should be redirected automatically to the target URL: '
-                '<a href="/login">/login</a>. If not, click the link.\n'
-            ),
-            media_type='text/html',
-            headers={'Location': '/login'},
-        )
+        response = flask_redirect_response('/login')
         if clear_remember:
             response.delete_cookie(
                 remember_name,

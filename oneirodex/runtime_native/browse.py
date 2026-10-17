@@ -7,10 +7,11 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class BrowseDataAccess:
@@ -148,7 +149,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
     location = urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     login_message = getattr(login_manager, 'login_message', None)
     if login_message:

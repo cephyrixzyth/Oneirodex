@@ -4,12 +4,15 @@ import asyncio
 import hashlib
 from contextlib import nullcontext
 from dataclasses import dataclass
-from types import SimpleNamespace
-
 import httpx
+import pytest
 from fastapi import FastAPI
+from werkzeug.utils import redirect as werkzeug_redirect
 
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import load_session_cookie
+from oneirodex.runtime_native.response_compat import flask_redirect_response
+from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 from oneirodex.runtime_native.site_redirects import create_site_redirect_router
 
 
@@ -31,8 +34,8 @@ def _client(monkeypatch, *, user=None, setup_required=False, setup_in_progress=F
     monkeypatch.setattr(setup, 'is_setup_required', lambda: setup_required)
     monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: setup_in_progress)
     monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup/features')
-    runtime_app = type('RuntimeConfig', (), {
-        'config': {
+    runtime_app = NativeRuntimeContext(
+        {
             'SECRET_KEY': 'site-redirect-secret',
             'SESSION_COOKIE_NAME': 'session',
             'PERMANENT_SESSION_LIFETIME': 3600,
@@ -40,12 +43,9 @@ def _client(monkeypatch, *, user=None, setup_required=False, setup_in_progress=F
             'SESSION_REFRESH_EACH_REQUEST': True,
             'CSP_ENABLED': False,
         },
-        'login_manager': SimpleNamespace(
-            login_view='/login',
-            login_message='Please log in to access this page.',
-            login_message_category='message',
-        ),
-    })()
+        package_root='.',
+    )
+    runtime_app.login_manager.login_view = '/login'
     app = FastAPI()
     app.include_router(create_site_redirect_router(
         runtime_app,
@@ -70,6 +70,22 @@ def _request(app, method, path, cookie=None):
             return await client.request(method, path, headers=headers)
 
     return asyncio.run(run())
+
+
+@pytest.mark.parametrize('location', [
+    '/login',
+    '/login?next=%2Fbrowse%3Fpage%3D2%26sort%3Dname',
+    '/login?next=%2Fquoted%3Fx%3D%2522',
+])
+def test_compat_redirect_response_matches_werkzeug(location):
+    current = flask_redirect_response(location)
+    legacy = werkzeug_redirect(location)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers['location'] == legacy.headers['Location']
+    assert current.headers['content-type'] == legacy.headers['Content-Type']
+    assert current.headers['content-length'] == legacy.headers['Content-Length']
+    assert current.body == legacy.get_data()
 
 
 def test_entry_redirects_to_login_or_discover_for_get_post_and_head(monkeypatch):
@@ -97,6 +113,11 @@ def test_restricted_redirect_preserves_login_next_and_authenticated_welcome(monk
         '/login?next=%2Frestricted'
     )
     assert response.headers['cache-control'] == 'no-store'
+    session_cookie = response.cookies.get('session')
+    assert session_cookie
+    assert len(response.headers.get_list('set-cookie')) == 1
+    decoded = load_session_cookie(session_cookie, 'site-redirect-secret', max_age=3600)
+    assert decoded['_flashes'] == [('message', 'Please log in to access this page.')]
 
     authenticated, cookie = _client(monkeypatch, user=User())
     response = _request(authenticated, 'GET', '/restricted', cookie)

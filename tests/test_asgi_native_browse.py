@@ -2026,10 +2026,38 @@ def test_lazy_asgi_browse_preserves_login_redirect_and_flash(monkeypatch):
 
     assert response.status_code == 302, response.text
     assert response.headers['location'] == '/login?next=%2Fbrowse_games%3Fpage%3D3'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Fbrowse_games%3Fpage%3D3">'
+        '/login?next=%2Fbrowse_games%3Fpage%3D3</a>. If not, click the link.\n'
+    )
     session_cookie = response.cookies.get('session')
     assert session_cookie
     decoded = flask_app.session_interface.get_signing_serializer(flask_app).loads(session_cookie)
     assert decoded['_flashes'] == [('message', 'Please log in to access this page.')]
+
+
+def test_lazy_asgi_restricted_matches_flask_login_redirect_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    response = _run(runtime, '/restricted')
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=%2Frestricted'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Frestricted">/login?next=%2Frestricted</a>. '
+        'If not, click the link.\n'
+    )
 
 
 def test_lazy_asgi_dispatches_authenticated_acquire_status_without_flask_request(monkeypatch):
@@ -2077,6 +2105,10 @@ def test_lazy_asgi_acquire_status_preserves_login_redirect_and_flash(monkeypatch
     assert response.status_code == 302
     assert response.headers['location'] == (
         '/login?next=%2Fapi%2Facquire%2Fstatus'
+    )
+    assert response.text.endswith(
+        '<a href="/login?next=%2Fapi%2Facquire%2Fstatus">'
+        '/login?next=%2Fapi%2Facquire%2Fstatus</a>. If not, click the link.\n'
     )
     session_cookie = response.cookies.get('session')
     assert session_cookie

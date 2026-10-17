@@ -80,8 +80,8 @@ def create_site_redirect_router(
                 )
             else:
                 response = RedirectResponse('/welcome', status_code=302)
-            if auth.should_set_session_cookie:
-                _set_session_cookie(response, runtime_app, auth)
+                if auth.should_set_session_cookie:
+                    _set_session_cookie(response, runtime_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'

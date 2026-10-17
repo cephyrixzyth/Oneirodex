@@ -154,6 +154,9 @@ class NativeRuntimeContext:
         self.login_manager = SimpleNamespace(
             login_view='login.login',
             blueprint_login_views={},
+            login_message='Please log in to access this page.',
+            login_message_category='message',
+            localize_callback=None,
             session_protection=config.get('SESSION_PROTECTION', 'basic'),
         )
         self.native_engine = None

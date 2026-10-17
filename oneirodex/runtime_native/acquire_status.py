@@ -7,9 +7,10 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class AcquireStatusData:
@@ -131,8 +132,8 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
     forced_host = flask_app.config.get('FORCE_HOST_FOR_REDIRECTS')
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
-    response = RedirectResponse(
-        urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True))), status_code=302
+    response = flask_redirect_response(
+        urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
     )
 
     message = getattr(login_manager, 'login_message', None)
