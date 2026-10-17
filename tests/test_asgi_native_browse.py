@@ -6580,6 +6580,27 @@ def test_native_notification_bearer_write_uses_scope_instead_of_csrf(monkeypatch
     assert response.json()['marked'] == 4
 
 
+def test_native_notification_preferences_write_token_also_requires_read_scope(monkeypatch):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['write:social'])
+
+    async def update_preferences():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/notifications/preferences',
+                json={'share_activity': False},
+                headers={'Authorization': authorization},
+            )
+
+    response = asyncio.run(update_preferences())
+
+    assert response.status_code == 403
+    assert response.json()['error'] == 'Missing scope: read:social'
+    assert response.json()['detail'] == {'required_scope': 'read:social'}
+    assert runtime._fake_notifications.calls == []
+
+
 def test_native_wanted_update_list_without_flask(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     asyncio.run(runtime._ensure_flask())

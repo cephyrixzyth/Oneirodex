@@ -281,6 +281,23 @@ def test_read_social_token_cannot_mutate_social(client, private_data):
         assert response.status_code == 403, path
 
 
+def test_write_social_token_still_requires_read_scope_for_preferences(
+    client, private_data,
+):
+    owner, _, _, _, _ = private_data
+    headers = bearer(owner, ['write:social'])
+
+    response = client.post(
+        '/api/notifications/preferences',
+        headers=headers,
+        json={'share_activity': False},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()['error'] == 'Missing scope: read:social'
+    assert response.get_json()['detail'] == {'required_scope': 'read:social'}
+
+
 def test_write_social_token_can_mutate_social(client, private_data):
     owner, outsider, channel, _, _ = private_data
     headers = bearer(owner, ['read:social', 'write:social'])

@@ -169,11 +169,18 @@ def create_notifications_router(
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
-                scope_name = 'write:social' if request.method == 'POST' else 'read:social'
-                scope_response = _require_scope(auth, scope_name)
-                if scope_response is not None:
-                    response = scope_response
-                elif request.method == 'POST':
+                required_scopes = (
+                    ('read:social', 'write:social')
+                    if request.method == 'POST'
+                    else ('read:social',)
+                )
+                for scope_name in required_scopes:
+                    scope_response = _require_scope(auth, scope_name)
+                    if scope_response is not None:
+                        response = scope_response
+                        break
+            if response is None:
+                if request.method == 'POST':
                     payload = _notification_write_json_object(
                         await request.body(), allow_membership_only=True,
                     )
