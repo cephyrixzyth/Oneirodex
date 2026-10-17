@@ -19,7 +19,7 @@ from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings, User
 from oneirodex.utils.http_safe import BlockedOutboundUrl, safe_request
 from oneirodex.utils.role_catalog import normalize_role
-from oneirodex.utils.security import validate_connector_http_url
+from oneirodex.utils.security import validate_connector_http_url, validate_outbound_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,23 @@ def _failure_text(exc: BaseException) -> str:
     return str(exc)
 
 
-def _post(session, url: str, **kwargs) -> requests.Response:
+def _connector_validator(config=None):
+    if config is None:
+        return validate_connector_http_url
+    values = _config_values(config)
+    allow_lan = _env_bool('ALLOW_PRIVATE_LAN_URLS', False, values)
+    return lambda url: validate_outbound_http_url(
+        url, allow_http=True, allow_private_lan=allow_lan,
+    )
+
+
+def _post(
+    session,
+    url: str,
+    *,
+    validator=validate_connector_http_url,
+    **kwargs,
+) -> requests.Response:
     """POST to an admin-configured bridge, revalidating every redirect hop.
 
     The base URL is validated once at save time; a bridge that later answers
@@ -65,7 +81,7 @@ def _post(session, url: str, **kwargs) -> requests.Response:
     (LAN allowed while ALLOW_PRIVATE_LAN_URLS is on, cloud metadata never).
     """
     return safe_request(
-        'POST', url, validator=validate_connector_http_url, session=session, **kwargs,
+        'POST', url, validator=validator, session=session, **kwargs,
     )
 
 
@@ -290,6 +306,7 @@ class HyperionClient:
         priority: int = 50,
         session: requests.Session | None = None,
         timeout_sec: float = 3.0,
+        validator=validate_connector_http_url,
     ) -> None:
         self.base_url = base_url.rstrip('/')
         if not self.base_url.endswith('/json-rpc'):
@@ -300,6 +317,7 @@ class HyperionClient:
         self.priority = max(0, min(255, int(priority)))
         self._session = session or requests.Session()
         self.timeout_sec = timeout_sec
+        self._validator = validator
 
     def _post_command(self, command: str, **extra: Any) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -314,6 +332,7 @@ class HyperionClient:
         resp = _post(
             self._session,
             self.rpc_url,
+            validator=self._validator,
             json=payload,
             headers=headers,
             timeout=self.timeout_sec,
@@ -347,11 +366,13 @@ class HomeAssistantClient:
         *,
         session: requests.Session | None = None,
         timeout_sec: float = 3.0,
+        validator=validate_connector_http_url,
     ) -> None:
         self.base_url = base_url.rstrip('/')
         self.token = token
         self._session = session or requests.Session()
         self.timeout_sec = timeout_sec
+        self._validator = validator
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -364,6 +385,7 @@ class HomeAssistantClient:
         resp = _post(
             self._session,
             url,
+            validator=self._validator,
             json=body,
             headers=self._headers(),
             timeout=self.timeout_sec,
@@ -391,10 +413,11 @@ class HomeAssistantClient:
 
 def _hyperion_client(cfg: dict[str, Any], config=None) -> HyperionClient | None:
     values = _config_values(config)
+    validator = _connector_validator(config)
     url = cfg.get('hyperion_url') or ''
     if not url:
         return None
-    ok, cleaned = validate_connector_http_url(url)
+    ok, cleaned = validator(url)
     if not ok:
         _set_last_error(cleaned)
         return None
@@ -408,15 +431,17 @@ def _hyperion_client(cfg: dict[str, Any], config=None) -> HyperionClient | None:
         cleaned,
         token=token,
         priority=int(cfg.get('hyperion_priority') or 50),
+        validator=validator,
     )
 
 
 def _ha_client(cfg: dict[str, Any], config=None) -> HomeAssistantClient | None:
     values = _config_values(config)
+    validator = _connector_validator(config)
     url = cfg.get('ha_url') or ''
     if not url:
         return None
-    ok, cleaned = validate_connector_http_url(url)
+    ok, cleaned = validator(url)
     if not ok:
         _set_last_error(cleaned)
         return None
@@ -430,20 +455,20 @@ def _ha_client(cfg: dict[str, Any], config=None) -> HomeAssistantClient | None:
     if not token:
         _set_last_error('Home Assistant token not configured')
         return None
-    return HomeAssistantClient(cleaned, token)
+    return HomeAssistantClient(cleaned, token, validator=validator)
 
 
-def _apply_play_accent(cfg: dict[str, Any]) -> None:
+def _apply_play_accent(cfg: dict[str, Any], *, config=None) -> None:
     provider = cfg.get('provider') or 'off'
     rgb = _parse_rgb(cfg.get('ambient_accent_color'))
     if provider == 'hyperion':
-        client = _hyperion_client(cfg)
+        client = _hyperion_client(cfg, config)
         if client is None:
             return
         client.set_color(rgb)
         _set_last_error(None)
     elif provider == 'homeassistant':
-        client = _ha_client(cfg)
+        client = _ha_client(cfg, config)
         if client is None:
             return
         play_scene = cfg.get('ha_play_scene') or ''
@@ -454,16 +479,16 @@ def _apply_play_accent(cfg: dict[str, Any]) -> None:
         _set_last_error(None)
 
 
-def _apply_play_clear(cfg: dict[str, Any]) -> None:
+def _apply_play_clear(cfg: dict[str, Any], *, config=None) -> None:
     provider = cfg.get('provider') or 'off'
     if provider == 'hyperion':
-        client = _hyperion_client(cfg)
+        client = _hyperion_client(cfg, config)
         if client is None:
             return
         client.clear_priority()
         _set_last_error(None)
     elif provider == 'homeassistant':
-        client = _ha_client(cfg)
+        client = _ha_client(cfg, config)
         if client is None:
             return
         stop_scene = cfg.get('ha_stop_scene') or ''
@@ -476,7 +501,7 @@ def _apply_play_clear(cfg: dict[str, Any]) -> None:
         _set_last_error(None)
 
 
-def _run_async(fn, *args, config=None) -> None:
+def _run_async(fn, *args, config=None, engine=None) -> None:
     """Run explicit-config workers without Flask; keep legacy app fallback."""
     app = None
     if config is None:
@@ -490,7 +515,13 @@ def _run_async(fn, *args, config=None) -> None:
     def worker() -> None:
         try:
             if app is None:
-                fn(*args)
+                if engine is not None:
+                    from oneirodex.runtime_native.db_session import native_engine_session_scope
+
+                    with native_engine_session_scope(engine):
+                        fn(*args, config=config)
+                else:
+                    fn(*args, config=config)
             else:
                 with app.app_context():
                     fn(*args)
@@ -517,7 +548,12 @@ def notify_play_session_started(
     cfg = get_ambient_config(config)
     if cfg.get('provider') == 'off' or not cfg.get('enabled'):
         return
-    _run_async(_apply_play_accent, cfg, config=config)
+    engine = None
+    if config is not None:
+        from oneirodex.runtime_native.db_session import current_native_engine
+
+        engine = current_native_engine()
+    _run_async(_apply_play_accent, cfg, config=config, engine=engine)
 
 
 def notify_play_session_stopped(
@@ -531,7 +567,12 @@ def notify_play_session_stopped(
     cfg = get_ambient_config(config)
     if cfg.get('provider') == 'off' or not cfg.get('enabled'):
         return
-    _run_async(_apply_play_clear, cfg, config=config)
+    engine = None
+    if config is not None:
+        from oneirodex.runtime_native.db_session import current_native_engine
+
+        engine = current_native_engine()
+    _run_async(_apply_play_clear, cfg, config=config, engine=engine)
 
 
 def ambient_lighting_status(*, probe: bool = False, config=None) -> dict[str, Any]:
@@ -542,7 +583,7 @@ def ambient_lighting_status(*, probe: bool = False, config=None) -> dict[str, An
     provider = cfg.get('provider') or 'off'
     if cfg.get('enabled') and provider != 'off':
         if provider == 'hyperion' and cfg.get('hyperion_url'):
-            ok, _ = validate_connector_http_url(cfg['hyperion_url'])
+            ok, _ = _connector_validator(config)(cfg['hyperion_url'])
             reachable = ok
             if probe and ok:
                 try:
@@ -556,7 +597,7 @@ def ambient_lighting_status(*, probe: bool = False, config=None) -> dict[str, An
                     error = _failure_text(exc)
                     _set_last_error(error)
         elif provider == 'homeassistant' and cfg.get('ha_url'):
-            ok, _ = validate_connector_http_url(cfg['ha_url'])
+            ok, _ = _connector_validator(config)(cfg['ha_url'])
             reachable = ok and cfg.get('ha_token_configured')
             if probe and reachable:
                 try:

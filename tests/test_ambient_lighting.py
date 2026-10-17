@@ -181,6 +181,61 @@ def test_explicit_ambient_config_play_hook_needs_no_flask_context(monkeypatch):
     )
 
 
+def test_explicit_config_reaches_async_play_lighting_clients(monkeypatch):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from oneirodex.utils import ambient_lighting
+
+    config = {'ENABLE_AMBIENT_LIGHTING': True, 'HYPERION_TOKEN': 'test-token'}
+    lighting = {'provider': 'hyperion', 'enabled': True, 'ambient_accent_color': '#ff8000'}
+    client = MagicMock()
+    client_configs = []
+    engine = object()
+    native_scopes = []
+
+    class InlineThread:
+        def __init__(self, *, target, **_kwargs):
+            self.target = target
+
+        def start(self):
+            self.target()
+
+    monkeypatch.setattr(ambient_lighting, 'get_ambient_config', lambda _config: lighting)
+    monkeypatch.setattr(
+        'oneirodex.runtime_native.db_session.current_native_engine', lambda: engine,
+    )
+    monkeypatch.setattr(
+        'oneirodex.runtime_native.db_session.native_engine_session_scope',
+        lambda passed_engine: native_scopes.append(passed_engine) or nullcontext(),
+    )
+    monkeypatch.setattr(
+        ambient_lighting,
+        '_hyperion_client',
+        lambda _cfg, passed_config: client_configs.append(passed_config) or client,
+    )
+    monkeypatch.setattr(ambient_lighting.threading, 'Thread', InlineThread)
+
+    notify_play_session_started(SimpleNamespace(role='user'), config=config)
+    notify_play_session_stopped(user=SimpleNamespace(role='user'), config=config)
+
+    assert client_configs == [config, config]
+    assert native_scopes == [engine, engine]
+    client.set_color.assert_called_once_with((255, 128, 0))
+    client.clear_priority.assert_called_once_with()
+
+
+def test_explicit_connector_policy_uses_the_captured_lan_setting():
+    from oneirodex.utils.ambient_lighting import _connector_validator
+
+    private_url = 'http://192.168.1.20:8090'
+    assert _connector_validator({'ALLOW_PRIVATE_LAN_URLS': True})(private_url)[0] is True
+    assert _connector_validator({'ALLOW_PRIVATE_LAN_URLS': False})(private_url)[0] is False
+    assert _connector_validator({'ALLOW_PRIVATE_LAN_URLS': True})(
+        'http://169.254.169.254/latest/meta-data/'
+    )[0] is False
+
+
 def test_ambient_lighting_status_api(client, app, db_session, monkeypatch):
     _disable_ambient(app, db_session, monkeypatch)
     from uuid import uuid4
