@@ -75,15 +75,27 @@ test('loads library and root choices and submits Auto Scan settings through the 
   )
 })
 
-test('keeps manual identify available as the compatibility workflow', async () => {
+test('keeps the legacy 10080 interval maximum for both hour and minute schedules', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : { roots: [] },
+  )
+  renderPage()
+  await screen.findByRole('option', { name: 'Nintendo' })
+  fireEvent.change(screen.getByLabelText('Repeat schedule'), { target: { value: 'interval' } })
+  expect(screen.getByLabelText('Interval')).toHaveAttribute('max', '10080')
+  fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'minutes' } })
+  expect(screen.getByLabelText('Interval')).toHaveAttribute('max', '10080')
+})
+
+test('keeps manual identify available as a focused compatibility workflow', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries' ? [] : { roots: [] },
   )
   renderPage()
-  expect(await screen.findByRole('link', { name: 'Manual scan / identify' })).toHaveAttribute(
-    'href',
-    '/scan_management?active_tab=manual',
-  )
+  expect(await screen.findByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
 })
 
 test('lists manual identify candidates without starting a scan and links to the native identify form', async () => {
@@ -216,7 +228,7 @@ test('restores the selected library from scan-management deep links', async () =
   await waitFor(() => expect(library).toHaveValue('lib-2'))
 })
 
-test('manual deep link focuses the identification flow and hides automatic scan actions', async () => {
+test('manual deep link focuses identification and hides automatic scan actions', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'
       ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
@@ -237,14 +249,6 @@ test('manual deep link focuses the identification flow and hides automatic scan 
   renderPage('/scan_management?active_tab=manual')
 
   expect(await screen.findByRole('heading', { name: 'Manual scan / identify' })).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'Automatic scan' })).toHaveAttribute(
-    'href',
-    '/admin/scan-controls',
-  )
-  expect(screen.getByRole('link', { name: 'Scan jobs' })).toHaveAttribute(
-    'href',
-    '/admin/scan-jobs',
-  )
   expect(screen.getByRole('group', { name: 'Manual identify options' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
   expect(screen.queryByLabelText('Remove games whose files are missing')).not.toBeInTheDocument()

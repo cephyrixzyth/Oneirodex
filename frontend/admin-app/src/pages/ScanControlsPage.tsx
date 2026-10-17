@@ -91,20 +91,6 @@ export function ScanControlsPage() {
           : 'Choose a library and server folder, then start or schedule a scan.'
       }
     >
-      <div className="od-admin-panel__toolbar od-scan-controls__links">
-        {manualMode ? (
-          <a className="od-cbtn" href="/admin/scan-controls">
-            Automatic scan
-          </a>
-        ) : (
-          <a className="od-cbtn" href="/scan_management?active_tab=manual">
-            Manual scan / identify
-          </a>
-        )}
-        <a className="od-cbtn" href="/admin/scan-jobs">
-          Scan jobs
-        </a>
-      </div>
       <PageStatus
         loading={loading}
         loadingMessage="Loading libraries and scan locations…"
@@ -271,7 +257,7 @@ export function ScanControlsPage() {
                     className="od-admin-input"
                     type="number"
                     min={1}
-                    max={schedule === 'interval' && unit === 'hours' ? 168 : 10080}
+                    max={10080}
                     value={interval}
                     onChange={(event) => setInterval(Number(event.target.value))}
                     disabled={scanning}
