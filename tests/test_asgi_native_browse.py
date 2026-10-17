@@ -7956,6 +7956,10 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
         'REMEMBER_COOKIE_HTTPONLY': True,
         'REMEMBER_COOKIE_SAMESITE': 'Strict',
     },
+    {
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_PARTITIONED': True,
+    },
 ])
 def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
     monkeypatch, has_remember_cookie, cookie_overrides,
@@ -8040,6 +8044,7 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
             result[name] = (
                 payload, morsel['path'], morsel['domain'], morsel['secure'],
                 morsel['httponly'], morsel['samesite'], morsel['max-age'],
+                morsel['partitioned'],
             )
         return result
 
