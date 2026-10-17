@@ -5,8 +5,8 @@
  * "which section am I in" (SECTION_HOME) and, in (c), by the route table.
  * It renders nothing and must stay free of React / JSX imports.
  *
- * '/admin/help' redirects to the shared member Help route. It still classifies
- * here so the top nav can highlight the section during legacy navigation.
+ * '/admin/help' is the dedicated operator guide. Member help remains available
+ * at its own route and is linked from the admin guide where useful.
  */
 export function resolveAdminPage(pathname: string): string {
   if (pathname === '/admin/dashboard' || pathname === '/admin' || pathname === '/admin/') {

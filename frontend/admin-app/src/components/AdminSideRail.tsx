@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import {
   ADMIN_NAV,
@@ -141,9 +141,9 @@ export function AdminSideRail({
     const linkClass = active ? 'od-rail__link is-active' : 'od-rail__link'
     return (
       <li key={link.id}>
-        <a
+        <Link
           className={linkClass}
-          href={link.path}
+          to={link.path}
           data-rail-item={link.id}
           onClick={onCloseDrawer}
           title={iconOnly ? link.label : undefined}
@@ -153,7 +153,7 @@ export function AdminSideRail({
             <RailIcon name={link.id} />
           </span>
           <span className="od-rail__label">{link.label}</span>
-        </a>
+        </Link>
       </li>
     )
   }
@@ -171,10 +171,10 @@ export function AdminSideRail({
       <button type="button" className="od-rail__close" onClick={onCloseDrawer}>
         Close
       </button>
-      <a className="od-rail__brand od-rail__brand--mark-only" href="/admin/dashboard">
+      <Link className="od-rail__brand od-rail__brand--mark-only" to="/admin/dashboard">
         <span className="od-rail__mark od-brand-mark" aria-hidden="true" />
         <span className="od-rail__brand-text">Oneirodex Admin</span>
-      </a>
+      </Link>
 
       <nav id="od-primary-navigation" className="od-rail__nav" aria-label="Admin">
         {ADMIN_NAV.map((link) => {
@@ -213,13 +213,13 @@ export function AdminSideRail({
                     const groupActive = here?.sub.id === group.id && here.sectionId === link.id
                     return (
                       <li key={`${link.id}:${group.id}`}>
-                        <a
+                        <Link
                           className={
                             groupActive
                               ? 'od-rail__link od-rail__link--sub is-active'
                               : 'od-rail__link od-rail__link--sub'
                           }
-                          href={group.items[0].to}
+                          to={group.items[0].to}
                           data-rail-item={group.icon}
                           onClick={onCloseDrawer}
                           aria-current={groupActive ? 'page' : undefined}
@@ -228,7 +228,7 @@ export function AdminSideRail({
                             <RailIcon name={group.icon} />
                           </span>
                           <span className="od-rail__label">{group.title}</span>
-                        </a>
+                        </Link>
                       </li>
                     )
                   })}
@@ -238,13 +238,13 @@ export function AdminSideRail({
                     const subActive = isActiveSub(sub.href, sub.label)
                     return (
                       <li key={`${link.id}:${sub.href}:${sub.label}`}>
-                        <a
+                        <Link
                           className={
                             subActive
                               ? 'od-rail__link od-rail__link--sub is-active'
                               : 'od-rail__link od-rail__link--sub'
                           }
-                          href={sub.href}
+                          to={sub.href}
                           data-rail-item={hubIcon(sub.label)}
                           onClick={onCloseDrawer}
                           aria-current={subActive ? 'page' : undefined}
@@ -253,7 +253,7 @@ export function AdminSideRail({
                             <RailIcon name={hubIcon(sub.label)} />
                           </span>
                           <span className="od-rail__label">{sub.label}</span>
-                        </a>
+                        </Link>
                       </li>
                     )
                   })}
