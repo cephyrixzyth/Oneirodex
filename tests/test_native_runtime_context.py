@@ -14,7 +14,11 @@ from oneirodex.runtime_native.db_session import (
     native_db,
     native_session_scope_key,
 )
-from oneirodex.runtime_native.runtime_context import NativeRuntimeContext, get_runtime_config
+from oneirodex.runtime_native.runtime_context import (
+    NativeRuntimeContext,
+    get_runtime_config,
+    install_flask_json_response_compat,
+)
 
 
 def test_native_runtime_context_preserves_required_flask_defaults(tmp_path):
@@ -58,6 +62,17 @@ def test_native_json_provider_matches_flask_default_json_contract(tmp_path):
     actual = context.json.response(payload).get_data()
 
     assert actual == expected
+
+
+def test_starlette_json_response_matches_flask_trailing_newline():
+    from starlette.responses import JSONResponse
+
+    install_flask_json_response_compat()
+    install_flask_json_response_compat()
+    response = JSONResponse({'ok': True})
+
+    assert response.body == b'{"ok":true}\n'
+    assert response.headers['content-length'] == str(len(response.body))
 
 
 def test_native_app_context_owns_a_scoped_session_without_flask_app_context(tmp_path):

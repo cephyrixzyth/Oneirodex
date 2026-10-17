@@ -1210,7 +1210,12 @@ class LazyASGIApp:
                 return
             from oneirodex.runtime_native.app_config import build_runtime_config
             from oneirodex.runtime_native.db_session import create_native_engine
-            from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
+            from oneirodex.runtime_native.runtime_context import (
+                NativeRuntimeContext,
+                install_flask_json_response_compat,
+            )
+
+            install_flask_json_response_compat()
 
             compatibility_app_injected = create_app is not _DEFAULT_CREATE_APP
             if compatibility_app_injected:
