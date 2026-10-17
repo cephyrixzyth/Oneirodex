@@ -449,6 +449,19 @@ def test_legacy_other_get_preflight_errors_match_werkzeug_abort(
     assert response.content == expected.get_data()
 
 
+def test_legacy_other_safe_get_preflight_does_not_require_write_csrf():
+    from werkzeug.exceptions import BadRequest
+
+    response = make_client(role='user', csrf_enabled=True).get(
+        '/download_other/update/not-a-uuid/42', follow_redirects=False,
+    )
+    expected = BadRequest().get_response()
+
+    assert response.status_code == expected.status_code
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
+
+
 def test_version_download_request_records_actual_file_size(tmp_path, monkeypatch):
     from oneirodex.runtime_native.download_mutations import DownloadMutationData
 

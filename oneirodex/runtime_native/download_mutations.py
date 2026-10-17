@@ -257,7 +257,7 @@ def mount_download_mutation_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _auth_and_csrf(request, flask_app, find_user, find_token, commit_token_touch,
-                   load_user_id, login_manager):
+                   load_user_id, login_manager, *, check_csrf=True):
     from .csrf_compat import csrf_error_response
     auth = request_auth_context(
         request, flask_app.config, find_user=find_user, find_token=find_token,
@@ -266,7 +266,7 @@ def _auth_and_csrf(request, flask_app, find_user, find_token, commit_token_touch
     )
     # A verified bearer credential is explicit and is not ambient browser
     # authority. Cookie and remember-cookie writes still require CSRF.
-    csrf = None if auth.source == 'bearer' else csrf_error_response(
+    csrf = None if not check_csrf or auth.source == 'bearer' else csrf_error_response(
         request, auth.session_data, flask_app.config,
     )
     if csrf is not None:
@@ -470,7 +470,7 @@ def _legacy_other_get_preflight(request, *, flask_app, data, find_user, find_tok
 
     auth, csrf = _auth_and_csrf(
         request, flask_app, find_user, find_token, commit_token_touch,
-        load_user_id, login_manager,
+        load_user_id, login_manager, check_csrf=False,
     )
     response = csrf
     detail_url = f'/game_details/{game_uuid}'
