@@ -136,7 +136,8 @@ def create_notifications_router(
                     payload = _notification_write_json_object(await request.body())
                     if payload is None:
                         response = _api_error(
-                            'Request body must be a JSON object.', 'bad_request',
+                            'Something went wrong on our end. The error has been logged.',
+                            'internal',
                         )
                     else:
                         all_read = bool(payload.get('all'))
@@ -173,10 +174,13 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 elif request.method == 'POST':
-                    payload = _notification_write_json_object(await request.body())
+                    payload = _notification_write_json_object(
+                        await request.body(), allow_membership_only=True,
+                    )
                     if payload is None:
                         response = _api_error(
-                            'Request body must be a JSON object.', 'bad_request',
+                            'Something went wrong on our end. The error has been logged.',
+                            'internal',
                         )
                     else:
                         data.update_preferences(auth.user, payload)
@@ -312,13 +316,16 @@ def _json_object(raw_body: bytes) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def _notification_write_json_object(raw_body: bytes) -> dict | None:
-    """Keep legacy empty/malformed no-op forms but reject truthy scalar JSON.
+def _notification_write_json_object(
+    raw_body: bytes, *, allow_membership_only: bool = False,
+) -> dict | None:
+    """Preserve the legacy outcomes for malformed notification write bodies.
 
-    The old routes silently accepted an empty body and malformed JSON. A
-    truthy scalar such as ``1`` instead raised during object access and
-    produced a 500. A clear client error avoids reporting a successful
-    notification mutation when the caller supplied no object.
+    The old routes silently accepted empty/malformed JSON. Their truthy
+    non-object outcomes differed by operation: preference membership tests
+    accept arrays/strings, while integer/bool values and all non-object
+    mark-read payloads fail. ``None`` signals that the caller must return the
+    same generic internal-error envelope without allowing a TypeError to escape.
     """
     import json
 
@@ -328,7 +335,13 @@ def _notification_write_json_object(raw_body: bytes) -> dict | None:
         return {}
     if not payload:
         return {}
-    return payload if isinstance(payload, dict) else None
+    if isinstance(payload, dict):
+        return payload
+    if allow_membership_only and isinstance(payload, (list, str)):
+        if any(key in payload for key in _PREFERENCE_FIELDS):
+            return None
+        return {}
+    return None
 
 
 def _finish(response, flask_app, request, auth):

@@ -3998,7 +3998,10 @@ def test_native_social_mutations_dispatch_with_browser_csrf(
     assert repeated.status_code == 200
 
 
-def test_native_social_request_rejects_truthy_non_object_json(monkeypatch):
+@pytest.mark.parametrize('json_body', [1, [1], 'truthy'])
+def test_native_social_request_matches_legacy_internal_error_for_truthy_non_object_json(
+    monkeypatch, json_body,
+):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
 
@@ -4007,12 +4010,13 @@ def test_native_social_request_rejects_truthy_non_object_json(monkeypatch):
         '/api/social/friends',
         cookie=cookie,
         method='POST',
-        json_body=1,
+        json_body=json_body,
         headers={'X-CSRFToken': csrf},
     )
 
-    assert response.status_code == 400
-    assert response.json()['error'] == 'Expected a JSON object'
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
     assert runtime._fake_social_writes.calls == []
 
 
@@ -5557,7 +5561,7 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
     assert runtime._fake_notifications.calls == [('preferences', {'notify_chat': False})]
 
 
-def test_native_notification_preferences_reject_truthy_non_object_json(monkeypatch):
+def test_native_notification_preferences_match_legacy_internal_error_for_truthy_scalar_json(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
 
@@ -5566,12 +5570,46 @@ def test_native_notification_preferences_reject_truthy_non_object_json(monkeypat
         json_body=1, headers={'X-CSRFToken': csrf},
     )
 
-    assert response.status_code == 400
-    assert response.json()['error_code'] == 'bad_request'
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
     assert runtime._fake_notifications.calls == []
 
 
-def test_native_notification_read_rejects_truthy_non_object_json(monkeypatch):
+@pytest.mark.parametrize('json_body', [['notify_chat'], 'notify_chat'])
+def test_native_notification_preferences_matches_legacy_membership_type_error(
+    monkeypatch, json_body,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=json_body, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert runtime._fake_notifications.calls == []
+
+
+@pytest.mark.parametrize('json_body', [[1], 'irrelevant'])
+def test_native_notification_preferences_ignores_truthy_nonmatching_list_or_string(
+    monkeypatch, json_body,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=json_body, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['ok'] is True
+    assert runtime._fake_notifications.calls == [('preferences', {})]
+
+
+def test_native_notification_read_matches_legacy_internal_error_for_truthy_non_object_json(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
 
@@ -5580,8 +5618,8 @@ def test_native_notification_read_rejects_truthy_non_object_json(monkeypatch):
         json_body=1, headers={'X-CSRFToken': csrf},
     )
 
-    assert response.status_code == 400
-    assert response.json()['error_code'] == 'bad_request'
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
     assert runtime._fake_notifications.calls == []
 
 

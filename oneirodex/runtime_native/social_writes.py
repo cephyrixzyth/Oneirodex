@@ -152,7 +152,10 @@ def create_social_writes_router(
                 if response is None:
                     payload = _json_object(await request.body())
                     if payload is None:
-                        response = _error(400, 'bad_request', 'Expected a JSON object')
+                        response = _error(
+                            500, 'internal',
+                            'Something went wrong on our end. The error has been logged.',
+                        )
                     else:
                         result, status, refusal = data.request(auth.user, payload)
                         response = _error(*refusal) if refusal else _success(result, status=status)
@@ -243,8 +246,9 @@ def _json_object(raw_body: bytes) -> dict | None:
         return {}
     if isinstance(payload, dict):
         return payload
-    # Preserve the legacy endpoint's empty-input behavior, but avoid claiming
-    # success for a truthy scalar/array that cannot express a friend request.
+    # Preserve the legacy endpoint's empty-input success and generic internal
+    # error for truthy non-object bodies without allowing its attribute error
+    # to escape the native route.
     return None if payload else {}
 
 
