@@ -215,7 +215,7 @@ class SetupTransitionData:
 
                 result = start_or_queue_scan(
                     folder_path=folder, library_uuid=library.uuid, scan_mode=body['scan_mode'],
-                    queue_policy='queue', force_parallel=False, allow_force=False, app=flask_app,
+                    queue_policy='queue', allow_force=False, app=flask_app,
                     database_scope=database_scope,
                 )
                 scan_status = result.get('status')

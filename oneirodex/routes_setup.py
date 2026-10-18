@@ -435,7 +435,6 @@ def setup_library():
                     library_uuid=library.uuid,
                     scan_mode=scan_mode,
                     queue_policy='queue',
-                    force_parallel=False,
                     allow_force=False,
                     app=current_app._get_current_object(),
                 )

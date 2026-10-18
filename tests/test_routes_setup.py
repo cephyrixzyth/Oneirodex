@@ -737,6 +737,8 @@ class TestSetupFirstLibrary:
         assert library.last_scan_folder == str(folder)
         start_scan.assert_called_once()
         assert start_scan.call_args.kwargs['library_uuid'] == library.uuid
+        assert start_scan.call_args.kwargs['queue_policy'] == 'queue'
+        assert 'force_parallel' not in start_scan.call_args.kwargs
         assert get_current_setup_step() is None
 
     def test_first_library_rejects_paths_outside_declared_roots(

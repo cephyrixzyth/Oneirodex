@@ -279,7 +279,7 @@ def submit_setup_step(body: SetupTransitionBody):
             from oneirodex.utils.scan_queue import start_or_queue_scan
             result = start_or_queue_scan(
                 folder_path=folder, library_uuid=library.uuid, scan_mode=body.scan_mode,
-                queue_policy='queue', force_parallel=False, allow_force=False,
+                queue_policy='queue', allow_force=False,
                 app=current_app._get_current_object(),
             )
             scan_status = result.get('status')
