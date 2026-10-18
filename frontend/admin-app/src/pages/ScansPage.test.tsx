@@ -2,9 +2,15 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { confirmAction } from '@oneirodex/ui'
 import { LibrariesPage } from './LibrariesPage'
 import { ScansPage } from './ScansPage'
 import { SCAN_QUEUE_POLICY } from '../components/scanQueuePolicy'
+
+vi.mock('@oneirodex/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneirodex/ui')>()
+  return { ...actual, confirmAction: vi.fn() }
+})
 
 describe('ScansPage queued jobs', () => {
   beforeEach(() => {
@@ -56,6 +62,7 @@ describe('ScansPage queued jobs', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.mocked(confirmAction).mockReset()
   })
 
   test('lists Running and Queued jobs from scan_jobs_status array', async () => {
@@ -70,14 +77,48 @@ describe('ScansPage queued jobs', () => {
     expect(await screen.findByText(/Scanning PCWIN/i)).toBeInTheDocument()
     expect(screen.getByText(/Scanning PCWIN — 1\/10/i)).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByText(/Queued/)).toBeInTheDocument()
+      expect(screen.getByText(/Queued \(#1\)/)).toBeInTheDocument()
     })
     expect(screen.getByText(/\(#1\)/)).toBeInTheDocument()
     expect(screen.getByText('PCWIN')).toBeInTheDocument()
     expect(screen.getByText('PS2')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/Scanning/i)
-    expect(screen.getByRole('region', { name: 'Recent scan jobs table' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Scan jobs table' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
+  })
+
+  test('labels a cancelled running job as stopping while it waits for its worker', async () => {
+    const jobs = [
+      {
+        id: 'stopping-1',
+        library_name: 'PCWIN',
+        status: 'Stopping',
+        scan_folder: '/storage/pc',
+        folders_success: 1,
+        folders_failed: 0,
+        total_folders: 10,
+      },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(jobs),
+        json: async () => jobs,
+      })),
+    )
+
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Stopping PCWIN — 1/10')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Stopping…')
+    expect(screen.queryByText('Scanning…')).not.toBeInTheDocument()
   })
 
   test('a queue with nothing running does not read as idle', async () => {
@@ -178,8 +219,246 @@ describe('ScansPage queued jobs', () => {
     expect(screen.getByText('3/9 · 1 failed')).toBeInTheDocument()
   })
 
+  test('keeps full scan history available and filters it by status', async () => {
+    const user = userEvent.setup()
+    const jobs = Array.from({ length: 13 }, (_, index) => ({
+      id: `completed-${index}`,
+      library_name: `History ${index}`,
+      status: 'Completed',
+      scan_folder: `/storage/history-${index}`,
+      total_folders: 1,
+      folders_success: 1,
+    }))
+    jobs.push({
+      id: 'failed-1',
+      library_name: 'Failed history',
+      status: 'Failed',
+      scan_folder: '/storage/failed',
+      total_folders: 1,
+      folders_success: 0,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(jobs),
+        json: async () => jobs,
+      })),
+    )
+
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('History 12')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Failed (1)' }))
+    expect(await screen.findByText('Failed history')).toBeInTheDocument()
+    expect(screen.queryByText('History 12')).not.toBeInTheDocument()
+  })
+
+  test('exports only the rows in the active scan-job filter', async () => {
+    const user = userEvent.setup()
+    const jobs = [
+      {
+        id: 'done-1',
+        library_name: 'Completed history',
+        status: 'Completed',
+        scan_folder: '/storage/done',
+        total_folders: 2,
+        folders_success: 2,
+      },
+      {
+        id: 'failed-1',
+        library_name: 'Failed "history"',
+        status: 'Failed',
+        last_run: null,
+        scan_folder: '/storage/failed',
+        total_folders: 2,
+        folders_failed: 1,
+        error_message: 'Network unavailable',
+      },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(jobs),
+        json: async () => jobs,
+      })),
+    )
+    const blobParts: BlobPart[][] = []
+    const NativeBlob = globalThis.Blob
+    class CapturedBlob extends NativeBlob {
+      constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+        blobParts.push(parts || [])
+        super(parts, options)
+      }
+    }
+    vi.stubGlobal('Blob', CapturedBlob)
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:scan-jobs-test')
+    const originalDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    try {
+      render(
+        <MemoryRouter>
+          <ScansPage />
+        </MemoryRouter>,
+      )
+
+      expect(await screen.findByText('Failed "history"')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Failed (1)' }))
+      await user.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+      expect(createObjectURL).toHaveBeenCalledOnce()
+      const csv = String(blobParts[0]?.[0] || '')
+      expect(csv).toContain('id,when,library,path,status,progress,error')
+      expect(csv).toContain('"Failed ""history"""')
+      expect(csv).toContain('Network unavailable')
+      expect(csv).toContain(
+        'failed-1,—,"Failed ""history""",/storage/failed,Failed,1/2,Network unavailable',
+      )
+      expect(csv).not.toContain('Completed history')
+      expect(click).toHaveBeenCalledOnce()
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(URL, 'createObjectURL', originalDescriptor)
+      } else {
+        Reflect.deleteProperty(URL, 'createObjectURL')
+      }
+    }
+  })
+
+  test('confirms clear-completed, posts with CSRF, then refreshes the scan list', async () => {
+    const user = userEvent.setup()
+    let cleared = false
+    const fetchMock = vi.fn(async (url, init) => {
+      if (String(url).includes('/api/scan_jobs_status')) {
+        const currentJobs = cleared
+          ? [{ id: 'active-1', library_name: 'Active history', status: 'Running' }]
+          : [
+              { id: 'done-1', library_name: 'Old history', status: 'Completed' },
+              { id: 'active-1', library_name: 'Active history', status: 'Running' },
+            ]
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: async () => JSON.stringify(currentJobs),
+          json: async () => currentJobs,
+        }
+      }
+      cleared = true
+      return {
+        ok: true,
+        status: 200,
+        redirected: false,
+        url: 'http://localhost/clear_scan_jobs?status=Completed',
+        headers: new Headers({ 'content-type': 'text/html' }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(confirmAction).mockResolvedValue(true)
+
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Old history')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear completed' }))
+    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url) === '/clear_scan_jobs?status=Completed' && init?.method === 'POST',
+        ),
+      ).toBe(true),
+    )
+    expect(await screen.findByText('Active history')).toBeInTheDocument()
+    expect(screen.queryByText('Old history')).not.toBeInTheDocument()
+    expect(screen.getByText('Cleared 1 Completed scan jobs.')).toBeInTheDocument()
+  })
+
+  test('clear all confirms terminal-only semantics and posts to the legacy endpoint', async () => {
+    const user = userEvent.setup()
+    let cleared = false
+    const fetchMock = vi.fn(async (url, init) => {
+      if (String(url).includes('/api/scan_jobs_status')) {
+        const currentJobs = cleared
+          ? [{ id: 'active-1', library_name: 'Active history', status: 'Running' }]
+          : [
+              { id: 'done-1', library_name: 'Completed history', status: 'Completed' },
+              { id: 'failed-1', library_name: 'Failed history', status: 'Failed' },
+              { id: 'cancelled-1', library_name: 'Cancelled history', status: 'Cancelled' },
+              { id: 'active-1', library_name: 'Active history', status: 'Running' },
+            ]
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: async () => JSON.stringify(currentJobs),
+          json: async () => currentJobs,
+        }
+      }
+      cleared = true
+      return {
+        ok: true,
+        status: 200,
+        redirected: false,
+        url: 'http://localhost/clear_all_scan_jobs',
+        headers: new Headers({ 'content-type': 'text/html' }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(confirmAction).mockResolvedValue(true)
+
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Cancelled history')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(confirmAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(
+            'Running, stopping, queued, and scheduled scans will stay.',
+          ),
+        }),
+      ),
+    )
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) => String(url) === '/clear_all_scan_jobs' && init?.method === 'POST',
+        ),
+      ).toBe(true),
+    )
+    expect(await screen.findByText('Active history')).toBeInTheDocument()
+    expect(screen.queryByText('Completed history')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cancelled history')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Cleared 3 completed/failed/cancelled scan jobs (Running/Stopping/Queued/Scheduled kept).',
+      ),
+    ).toBeInTheDocument()
+  })
+
   test('Refresh all while busy opens conflict modal and posts queue_policy', async () => {
     const user = userEvent.setup()
+    vi.mocked(confirmAction).mockResolvedValue(true)
     const fetchMock = vi.fn(async (url, opts) => {
       if (String(url).includes('/api/scan_jobs_status')) {
         return {
@@ -226,8 +505,7 @@ describe('ScansPage queued jobs', () => {
 
     await screen.findByText(/Scanning PCWIN/i)
     await user.click(screen.getByRole('button', { name: /refresh all libraries/i }))
-    // The house dialog, not window.confirm (UID-042) — its named button commits.
-    await user.click(await screen.findByRole('button', { name: /^refresh all$/i }))
+    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
     expect(await screen.findByRole('heading', { name: /scan in progress/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /queue this scan/i }))
@@ -251,6 +529,7 @@ describe('LibrariesPage refresh all', () => {
 
   test('idle Refresh all posts default queue_policy fields', async () => {
     const user = userEvent.setup()
+    vi.mocked(confirmAction).mockResolvedValue(true)
     const fetchMock = vi.fn(async (url, opts) => {
       if (String(url).includes('/api/get_libraries')) {
         return {
@@ -309,8 +588,7 @@ describe('LibrariesPage refresh all', () => {
 
     expect(await screen.findByText('PCWIN')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /refresh all libraries/i }))
-    // The house dialog, not window.confirm (UID-042) — its named button commits.
-    await user.click(await screen.findByRole('button', { name: /^refresh all$/i }))
+    await waitFor(() => expect(confirmAction).toHaveBeenCalled())
     await waitFor(() => {
       const refreshCall = fetchMock.mock.calls.find((c) =>
         String(c[0]).includes('/api/admin/libraries/refresh_all'),
