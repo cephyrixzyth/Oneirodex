@@ -558,7 +558,8 @@ def _setup_form_payload(path, form):
     try:
         validated = SetupTransitionBody.model_validate(body).model_dump()
     except ValidationError:
-        return None, path, 'Please check the setup form and try again.'
+        target = '/setup' if path == '/setup/submit' else path
+        return None, target, 'Please check the setup form and try again.'
     target = path if path != '/setup/submit' else '/setup'
     return validated, target, None
 
