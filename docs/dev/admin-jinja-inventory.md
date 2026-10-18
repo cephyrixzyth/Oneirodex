@@ -1019,3 +1019,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Setup IGDB credential save, 2026-10-18:** Exact-image setup flow accepted and persisted synthetic valid-length credentials identically, then advanced to integrations. Only credential lengths were recorded; no provider request or test was sent. Invalid lengths, integration credentials/OIDC, save failures, and restart persistence remain open. Evidence: .artifacts/parity-v1.1.8/setup-igdb-valid-current-d183-paired-20261018.json.
+
+
+**Setup optional integrations save, 2026-10-18:** Synthetic Steam key save and HowLongToBeat enablement matched persisted state and redirect. OIDC stayed disabled on both versions. Only credential length was recorded; no provider calls were sent. OIDC validation/secret retention, provider health, and restart persistence remain open. Evidence: .artifacts/parity-v1.1.8/setup-integrations-valid-current-d183-paired-20261018.json.
