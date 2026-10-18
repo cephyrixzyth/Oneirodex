@@ -29,7 +29,7 @@ test('loads disabled configuration and saves all filters and autoplay settings',
   expect(screen.getByLabelText('Skip first (seconds)')).toHaveValue(5)
   fireEvent.change(timeout, { target: { value: '70' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-  expect(await screen.findByText('Attract mode settings saved.')).toBeInTheDocument()
+  expect(await screen.findByText('Attract mode settings saved successfully')).toBeInTheDocument()
   expect(putJson).toHaveBeenCalledWith('/api/admin/attract-mode/settings', {
     ...settings,
     idle_timeout: 70,

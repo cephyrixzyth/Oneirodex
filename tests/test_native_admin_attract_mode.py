@@ -98,5 +98,5 @@ def test_legacy_attract_mode_post_alias_uses_validated_native_adapter():
     response = make_client(data=data).post('/admin/attract_mode_settings', json=body)
 
     assert response.status_code == 200
-    assert response.json()['message'] == 'Attract mode settings saved.'
+    assert response.json()['message'] == 'Attract mode settings saved successfully'
     assert data.saved == [(11, {**body, 'filters': {'library_uuid': None, 'genres': [], 'themes': [], 'date_from': None, 'date_to': None}})]
