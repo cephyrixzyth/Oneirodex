@@ -83,6 +83,7 @@ def create_setup_pages_router(
                 load_user_id=load_user_id, login_manager=login_manager,
                 allow_bearer=False,
             )
+            had_flashes = bool(auth.session_data.get('_flashes'))
             if page == '/setup':
                 required = data.required()
                 if not required and data.in_progress():
@@ -117,7 +118,10 @@ def create_setup_pages_router(
                 else:
                     response = _shell(request, flask_app, auth)
 
-            _finish_response(response, flask_app, auth)
+            _finish_response(
+                response, flask_app, auth,
+                session_changed=had_flashes or bool(auth.session_data.get('_flashes')),
+            )
             return response
 
     return router
@@ -141,12 +145,12 @@ def _shell(request, flask_app, auth):
     return _shell_response(flask_app, auth.session_data)
 
 
-def _finish_response(response, flask_app, auth):
+def _finish_response(response, flask_app, auth, *, session_changed=False):
     if auth.remember_action:
         from oneirodex.runtime_native.auth_login import _write_remember_cookie
 
         _write_remember_cookie(response, auth.session_data, flask_app.config)
-    if auth.should_set_session_cookie:
+    if auth.should_set_session_cookie or session_changed:
         from oneirodex.runtime_native.oidc_status import _set_session_cookie
 
         _set_session_cookie(response, flask_app, auth)

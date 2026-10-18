@@ -8240,7 +8240,56 @@ def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(m
     assert created.status_code == 200
     assert created.json()['step'] == 2
     assert any('session=' in value and 'Path=/' in value for value in created.headers.get_list('set-cookie'))
+    saved_session = load_session_cookie(
+        created.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == (
+        'success', 'Admin account created successfully! Please configure your SMTP settings.',
+    )
     assert len(calls) == 1 and calls[0][0] == 1
+
+
+def test_lazy_asgi_setup_step_flashes_scan_queue_fallback(monkeypatch):
+    from pathlib import Path
+
+    message = 'Your first library is ready. Start its first scan from Libraries & scans.'
+    data = SimpleNamespace(
+        current_step=lambda: 6,
+        transition=lambda *args, **kwargs: (
+            {'complete': True, 'next_url': '/libraries', 'message': message}, None, None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    monkeypatch.setattr(
+        native_setup_pages, 'SetupPagesData',
+        lambda: SimpleNamespace(current_step=lambda: 6),
+    )
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app.static_folder = str(Path('oneirodex/static').resolve())
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/setup/step', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf},
+        json_body={'step': 6, 'skip': False, 'library_name': 'First NES library'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['message'] == message
+    assert response.json()['message_category'] == 'warning'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == ('warning', message)
+
+    page = _run(runtime, '/setup/library', cookie=response.cookies['session'])
+    assert page.status_code == 200
+    assert message.replace('&', '&amp;').encode() in page.content
+    assert 'session=' in page.headers.get('set-cookie', '')
+    consumed_session = load_session_cookie(
+        page.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert not consumed_session.get('_flashes')
 
 
 def test_lazy_asgi_setup_transition_requires_admin_after_account_creation(monkeypatch):

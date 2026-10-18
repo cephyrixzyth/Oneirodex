@@ -475,8 +475,18 @@ def create_setup_transition_router(
                                 code, message, status, detail = result['_error']
                                 response = _error(message, code, status, detail=detail)
                             else:
+                                category, message = _setup_form_success(
+                                    body['step'], body, result or {},
+                                )
+                                _setup_form_flash(auth.session_data, category, message)
+                                result = {
+                                    **(result or {}), 'message': message,
+                                    'message_category': category,
+                                }
                                 response = _ok(result)
-            if auth is not None and auth.should_set_session_cookie:
+            if auth is not None and (
+                auth.should_set_session_cookie or auth.session_data.get('_flashes')
+            ):
                 from oneirodex.runtime_native.oidc_status import _set_session_cookie
 
                 _set_session_cookie(response, flask_app, auth)
