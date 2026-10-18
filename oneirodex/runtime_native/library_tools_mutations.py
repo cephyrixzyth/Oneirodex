@@ -272,6 +272,8 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                 request, session_data, flask_app.config,
                 token=str(form.get('csrf_token') or ''),
             )
+            if response is not None:
+                response = _csrf_html_response(response)
             auth = None
             if response is None:
                 auth = request_auth_context(
@@ -347,6 +349,26 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
             return response
         finally:
             await form.close()
+
+
+def _csrf_html_response(csrf):
+    import json
+
+    from starlette.responses import Response
+    from werkzeug.exceptions import BadRequest
+
+    try:
+        error_payload = json.loads(csrf.body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError):
+        error_payload = {}
+    bad_request = BadRequest(
+        description=error_payload.get('message') or 'The CSRF token is invalid.',
+    ).get_response()
+    return Response(
+        content=bad_request.get_data(),
+        status_code=bad_request.status_code,
+        media_type='text/html',
+    )
 
 
 async def _run(request, *, flask_app, data, find_user, find_token,

@@ -276,6 +276,8 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
         }, follow_redirects=False)
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/admin/scan_management?active_tab=unmatched'
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
