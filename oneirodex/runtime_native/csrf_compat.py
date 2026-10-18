@@ -38,16 +38,19 @@ def csrf_error_response(
     return None
 
 
-def csrf_html_error_response(response: Response) -> Response:
+def csrf_html_error_response(response: Response | str) -> Response:
     """Render a CSRF rejection using Flask/Werkzeug's default HTML 400 page."""
     import json
 
     from werkzeug.exceptions import BadRequest
 
-    try:
-        error_payload = json.loads(response.body or b'{}')
-    except (TypeError, ValueError, UnicodeDecodeError):
-        error_payload = {}
+    if isinstance(response, str):
+        error_payload = {'message': response}
+    else:
+        try:
+            error_payload = json.loads(response.body or b'{}')
+        except (TypeError, ValueError, UnicodeDecodeError):
+            error_payload = {}
     bad_request = BadRequest(
         description=error_payload.get('message') or 'The CSRF token is invalid.',
     ).get_response()

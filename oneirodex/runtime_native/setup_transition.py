@@ -312,8 +312,10 @@ def create_setup_transition_router(
                         field_name=field_name,
                         time_limit=flask_app.config.get('WTF_CSRF_TIME_LIMIT', 3600),
                     )
-                except CsrfTokenError:
-                    response = PlainTextResponse('The CSRF token is invalid.', status_code=400)
+                except CsrfTokenError as exc:
+                    from oneirodex.runtime_native.csrf_compat import csrf_html_error_response
+
+                    response = csrf_html_error_response(str(exc))
                     _setup_form_headers(response, flask_app)
                     return response
 

@@ -8268,6 +8268,9 @@ def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(mo
         runtime, '/setup/features', method='POST', cookie=cookie,
         form_body={'csrf_token': 'wrong', 'enable_game_updates': 'on'},
     )
+    missing = _run(
+        runtime, '/setup/features', method='POST', cookie=cookie, form_body={},
+    )
     accepted = _run(
         runtime, '/setup/features', method='POST', cookie=cookie,
         form_body={
@@ -8277,6 +8280,11 @@ def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(mo
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is invalid.</p>' in rejected.content
+    assert missing.status_code == 400
+    assert missing.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in missing.content
     assert {
         key: calls[0][key]
         for key in (
