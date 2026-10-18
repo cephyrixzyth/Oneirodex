@@ -1031,3 +1031,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Setup OIDC insecure-issuer validation, 2026-10-18:** Both versions rejected an HTTP issuer, stayed on the integrations step, preserved blank cloned OIDC settings, and kept OIDC sign-in disabled. Legacy renders HTTP 200; current PRG redirects back with validation feedback. No identity provider was contacted. Valid OIDC save/restart and other failure cases remain open. Evidence: .artifacts/parity-v1.1.8/setup-oidc-insecure-issuer-current-d183-paired-20261018.json.
+
+
+**Setup OIDC valid-settings parity, 2026-10-18:** Synthetic HTTPS issuer, client, redirect URI, and secret save matched; both advance to the library step while OIDC authentication remains disabled. Only secret length was retained, and no identity provider was contacted. Post-setup activation, restart persistence, and callback lifecycle remain open. Evidence: .artifacts/parity-v1.1.8/setup-oidc-valid-current-d183-paired-20261018.json.
