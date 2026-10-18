@@ -740,6 +740,10 @@ class TestSetupFirstLibrary:
         assert start_scan.call_args.kwargs['queue_policy'] == 'queue'
         assert 'force_parallel' not in start_scan.call_args.kwargs
         assert get_current_setup_step() is None
+        with client.session_transaction() as session:
+            assert session['_flashes'][-1] == (
+                'success', 'Your first library is ready and its initial scan has started or queued.',
+            )
 
     def test_first_library_rejects_paths_outside_declared_roots(
         self, client, db_session, admin_user, tmp_path,
@@ -780,6 +784,44 @@ class TestSetupFirstLibrary:
         assert db_session.execute(
             select(Library).filter_by(name='Missing path library')
         ).scalars().first() is None
+
+    def test_first_library_scan_queue_failure_finishes_with_warning(self, client, db_session, admin_user, tmp_path, monkeypatch):
+        from oneirodex.utils.setup import get_current_setup_step, set_setup_step
+
+        folder = tmp_path / 'roms'
+        folder.mkdir()
+        monkeypatch.setattr(
+            'oneirodex.utils.security.get_allowed_base_directories',
+            lambda _app: [str(tmp_path)],
+        )
+        set_setup_step(6)
+        for name in (
+            'initialize_library_folders', 'initialize_discovery_sections',
+            'insert_default_scanning_filters', 'initialize_default_settings',
+            'initialize_allowed_file_types',
+        ):
+            monkeypatch.setattr(f'oneirodex.init_data.{name}', lambda *a, **k: None)
+
+        def fail_scan(**_kwargs):
+            raise OSError('synthetic queue failure')
+
+        monkeypatch.setattr('oneirodex.utils.scan_queue.start_or_queue_scan', fail_scan)
+        response = client.post('/setup/library', data={
+            'name': 'Queue failure library', 'platform': 'NES',
+            'folder_path': str(folder), 'scan_mode': 'folders', 'scan_depth': '1',
+        })
+
+        assert response.status_code == 302
+        assert response.location.endswith('/libraries')
+        assert get_current_setup_step() is None
+        library = db_session.execute(
+            select(Library).filter_by(name='Queue failure library')
+        ).scalars().first()
+        assert library is not None
+        with client.session_transaction() as session:
+            assert session['_flashes'][-1] == (
+                'warning', 'Your first library is ready. Start its first scan from Libraries & scans.',
+            )
 
 
 class TestSetupApiConnections:
