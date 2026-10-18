@@ -91,13 +91,13 @@ class AdminOpsReadData:
         return deletion_progress
 
     def clear_logs(self, actor):
-        from sqlalchemy import func, select
+        from sqlalchemy import delete, func, select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import SystemEvents
         from oneirodex.utils.event_logging import log_system_event
 
         count = db.session.execute(select(func.count(SystemEvents.id))).scalar() or 0
-        db.session.execute(db.delete(SystemEvents))
+        db.session.execute(delete(SystemEvents))
         db.session.commit()
         log_system_event(
             f"System logs cleared by admin user '{actor.name}' (ID: {actor.id}). {count} logs were deleted.",
