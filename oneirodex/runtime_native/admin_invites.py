@@ -1,6 +1,7 @@
 """FastAPI compatibility routes for the admin invite manager APIs."""
 from __future__ import annotations
 
+from .form_compat import first_form_value, first_form_values
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -170,7 +171,7 @@ async def _adjust_form(request, form, data, auth):
 
     if int(request.headers.get('content-length') or '0') > 64 * 1024:
         return Response(status_code=413)
-    user_id = (form.get('user_id') or '').strip()
+    user_id = (first_form_value(form, 'user_id') or '').strip()
     page_message = None
     page_category = 'success'
     if not user_id:
@@ -178,7 +179,7 @@ async def _adjust_form(request, form, data, auth):
         return _manage_invites_redirect()
     else:
         try:
-            number = int(form.get('invites_number') or '0')
+            number = int(first_form_value(form, 'invites_number') or '0')
         except (TypeError, ValueError):
             _flash(auth.session_data, 'error', 'Invalid invite number provided. Please enter a valid number.')
             return _manage_invites_redirect()
@@ -257,7 +258,7 @@ async def _legacy_form(request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 def _valid_uuid(value):

@@ -1,6 +1,7 @@
 """FastAPI admin newsletter API routes."""
 from __future__ import annotations
 
+from .form_compat import first_form_value, first_form_values
 from contextlib import nullcontext
 
 from fastapi import APIRouter, FastAPI, Request
@@ -227,9 +228,9 @@ async def _legacy_send(form, user, auth, data):
     import json
     from .account_avatar_upload import _flash
 
-    subject = form.get('subject') or ''
-    content = form.get('content') or ''
-    recipients = [value.strip() for value in (form.get('recipients') or '').split(',') if value.strip()]
+    subject = first_form_value(form, 'subject') or ''
+    content = first_form_value(form, 'content') or ''
+    recipients = [value.strip() for value in (first_form_value(form, 'recipients') or '').split(',') if value.strip()]
     if not subject.strip() or not content.strip() or not recipients:
         _flash(auth.session_data, 'error', 'Please correct the errors below.')
         return RedirectResponse('/admin/newsletter', status_code=302)
@@ -259,7 +260,7 @@ async def _legacy_form(request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 async def _json_object(request):

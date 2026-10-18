@@ -1,7 +1,7 @@
 """Native admin feature and challenge-solver configuration APIs."""
 from __future__ import annotations
 
-from .form_compat import first_form_value
+from .form_compat import first_form_value, first_form_values
 from contextlib import nullcontext
 import logging
 import os
@@ -200,7 +200,7 @@ async def _read_form(request: Request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 async def _handle(request, *, flask_app, data, find_user, find_token,

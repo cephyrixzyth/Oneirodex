@@ -1,6 +1,7 @@
 """FastAPI compatibility routes for the admin email whitelist."""
 from __future__ import annotations
 
+from .form_compat import first_form_value, first_form_values
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -188,7 +189,7 @@ def create_admin_whitelist_router(
                 from .csrf_compat import csrf_error_response
                 response = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
+                    token=first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
                 )
             from oneirodex.utils.role_catalog import normalize_role
             if response is None and auth.user is None:
@@ -206,7 +207,7 @@ def create_admin_whitelist_router(
                 from oneirodex.schemas.whitelist import AddWhitelistBody
                 from pydantic import ValidationError
                 from email_validator import EmailNotValidError, validate_email
-                raw_email = form.get('email') or ''
+                raw_email = first_form_value(form, 'email') or ''
                 invalid_form_error = None
                 try:
                     # The legacy WTForms Email validator checks the submitted
@@ -290,7 +291,7 @@ async def _legacy_form(request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 def _wants_json_error(request):
