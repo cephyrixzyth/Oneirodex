@@ -98,22 +98,22 @@ describe('groupLibraryScanToasts', () => {
 })
 
 describe('burstToastMessages', () => {
-  it('keeps five libraries as named toasts', () => {
+  it('keeps three libraries as named toasts', () => {
     const groups = groupLibraryScanToasts(
-      ['A', 'B', 'C', 'D', 'E'].map((library, i) => ({
+      ['A', 'B', 'C'].map((library, i) => ({
         id: i + 1,
         library,
         count: 1,
       })),
     )
     const burst = burstToastMessages(groups)
-    expect(burst).toHaveLength(5)
+    expect(burst).toHaveLength(3)
     expect(burst.every((item) => item.count === 1)).toBe(true)
   })
 
-  it('collapses six libraries into one count', () => {
+  it('collapses four libraries into one count', () => {
     const groups = groupLibraryScanToasts(
-      ['A', 'B', 'C', 'D', 'E', 'F'].map((library, i) => ({
+      ['A', 'B', 'C', 'D'].map((library, i) => ({
         id: i + 1,
         library,
         count: 2,
@@ -121,8 +121,22 @@ describe('burstToastMessages', () => {
     )
     const burst = burstToastMessages(groups)
     expect(burst).toHaveLength(1)
-    expect(burst[0].message).toBe('6 notifications')
-    expect(burst[0].count).toBe(6)
-    expect(burst[0].rows).toHaveLength(6)
+    expect(burst[0].message).toBe('4 notifications')
+    expect(burst[0].count).toBe(4)
+    expect(burst[0].rows).toHaveLength(4)
+  })
+
+  it('collapses a three-library burst at the narrow viewport cap', () => {
+    const groups = groupLibraryScanToasts(
+      ['A', 'B', 'C'].map((library, i) => ({
+        id: i + 1,
+        library,
+        count: 1,
+      })),
+    )
+    const burst = burstToastMessages(groups, { maxIndividual: 2 })
+    expect(burst).toHaveLength(1)
+    expect(burst[0].message).toBe('3 notifications')
+    expect(burst[0].rows).toHaveLength(3)
   })
 })
