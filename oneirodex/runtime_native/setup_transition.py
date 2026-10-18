@@ -188,9 +188,13 @@ class SetupTransitionData:
                 safe, _reason = is_safe_path(
                     folder, get_allowed_base_directories(flask_app), logger=flask_app.logger,
                 )
-                if not safe or not os.path.isdir(folder):
+                if not safe:
                     errors['folder_path'] = [
-                        'Choose an existing folder inside an allowed library location.'
+                        'That folder is outside the configured library locations.'
+                    ]
+                elif not os.path.isdir(folder):
+                    errors['folder_path'] = [
+                        'That folder is not available as a directory on the server.'
                     ]
             if errors:
                 return None, ('unprocessable', 'Check the first library details.', 422, errors), None

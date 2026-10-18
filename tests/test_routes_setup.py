@@ -759,6 +759,28 @@ class TestSetupFirstLibrary:
             select(Library).filter_by(name='Unsafe library')
         ).scalars().first() is None
 
+    def test_first_library_reports_missing_directory_inside_allowed_root(
+        self, client, db_session, admin_user, tmp_path, monkeypatch,
+    ):
+        from oneirodex.utils.setup import set_setup_step
+
+        monkeypatch.setattr(
+            'oneirodex.utils.security.get_allowed_base_directories',
+            lambda _app: [str(tmp_path)],
+        )
+        set_setup_step(6)
+        missing = tmp_path / 'not-created'
+        response = client.post('/setup/library', data={
+            'name': 'Missing path library', 'platform': 'NES',
+            'folder_path': str(missing), 'scan_mode': 'folders', 'scan_depth': '1',
+        })
+
+        assert response.status_code == 200
+        assert b'That folder is not available as a directory on the server.' in response.data
+        assert db_session.execute(
+            select(Library).filter_by(name='Missing path library')
+        ).scalars().first() is None
+
 
 class TestSetupApiConnections:
     def test_api_secrets_are_not_rendered_and_selected_credentials_are_saved(

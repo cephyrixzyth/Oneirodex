@@ -43,3 +43,41 @@ def test_setup_finalizer_runs_seeders_without_pushing_flask_context(monkeypatch)
     assert calls[0] == ('library', app.config, app)
     assert ('complete',) in calls
     assert calls[-1][0] == 'event'
+
+
+def test_setup_library_keeps_distinct_path_validation_messages(monkeypatch):
+    import oneirodex.runtime_native.setup_transition as setup_transition
+    import oneirodex.utils.setup as setup_state
+    import oneirodex.utils.security as security
+
+    app = SimpleNamespace(config={}, logger=SimpleNamespace(warning=lambda *a: None, error=lambda *a: None))
+    monkeypatch.setattr(setup_state, 'is_setup_required', lambda: False)
+    monkeypatch.setattr(setup_state, 'get_current_setup_step', lambda: 6)
+    monkeypatch.setattr(security, 'get_allowed_base_directories', lambda _app: ['/allowed'])
+    monkeypatch.setattr(setup_transition.os.path, 'isdir', lambda _folder: False)
+
+    monkeypatch.setattr(security, 'is_safe_path', lambda *_a, **_k: (False, 'outside'))
+    _, outside_failure, _ = setup_transition.SetupTransitionData().transition(
+        {
+            'step': 6, 'skip': False, 'library_name': 'First library', 'platform': 'NES',
+            'folder_path': '/outside/game-data', 'scan_depth': 1, 'scan_mode': 'folders',
+        },
+        app,
+    )
+    assert outside_failure == (
+        'unprocessable', 'Check the first library details.', 422,
+        {'folder_path': ['That folder is outside the configured library locations.']},
+    )
+
+    monkeypatch.setattr(security, 'is_safe_path', lambda *_a, **_k: (True, None))
+    _, missing_failure, _ = setup_transition.SetupTransitionData().transition(
+        {
+            'step': 6, 'skip': False, 'library_name': 'First library', 'platform': 'NES',
+            'folder_path': '/allowed/missing', 'scan_depth': 1, 'scan_mode': 'folders',
+        },
+        app,
+    )
+    assert missing_failure == (
+        'unprocessable', 'Check the first library details.', 422,
+        {'folder_path': ['That folder is not available as a directory on the server.']},
+    )
