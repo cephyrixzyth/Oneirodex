@@ -967,3 +967,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Site-entry POST redirect parity, 2026-10-18:** Exact-image `POST /` and `POST /index` redirect to `/discover` on both runtimes when CSRF is valid. v1.1.8 returns 400 for missing CSRF; current retains a 302 because these entry handlers only redirect and do not mutate state. This is an intentional difference for non-mutating routes. Setup and anonymous cases remain open. Evidence: `.artifacts/parity-v1.1.8/root-post-redirect-current-d175-paired-20261018.json, .artifacts/parity-v1.1.8/index-post-redirect-current-d175-paired-20261018.json`. The matrix now records 628 partially evidenced, 38 behavior-unverified, and zero fully behavior-verified route entries.
+
+
+**AI config empty-payload validation parity, 2026-10-18:** Exact-image `PUT /api/ai/config` matched v1.1.8 for missing CSRF and empty JSON validation. No configuration was saved. Valid updates and authorization/error branches remain open. Evidence: `.artifacts/parity-v1.1.8/ai-config-empty-current-d175-paired-20261018.json`. Current image ID: `sha256:5b7450299b64d0de2176b434c66f40c0bc98a0a632e4f84681db798c2a82f5bf`. The matrix now records 629 partially evidenced, 37 behavior-unverified, and zero fully behavior-verified route entries.
