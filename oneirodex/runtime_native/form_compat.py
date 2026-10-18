@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 
+def first_form_values(fields):
+    """Collapse parsed URL-encoded fields using Flask MultiDict first-value semantics."""
+    return {name: values[0] for name, values in fields.items() if values}
+
+
 def first_form_value(form, key, default=None):
     """Match Flask ``request.form.get()``, which selects the first repeated value.
 

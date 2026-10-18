@@ -307,3 +307,34 @@ def test_legacy_password_form_validation_messages_match_v118_copy():
         assert session['_flashes'] == [('error', expected_message)]
         assert user.password == 'OldPassword1!'
         assert data.commits == 0
+
+
+def test_legacy_password_form_uses_first_repeated_field_value():
+    from urllib.parse import urlencode
+
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+    fields = [
+        ('csrf_token', csrf),
+        ('current_password', 'wrong-first'),
+        ('current_password', 'OldPassword1!'),
+        ('password', 'NewPassword2!'),
+        ('confirm_password', 'NewPassword2!'),
+    ]
+
+    response = client.post(
+        '/settings_password',
+        content=urlencode(fields),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/library?account=password'
+    session = load_session_cookie(
+        response.cookies.get('session'), SECRET, max_age=31_536_000
+    )
+    assert session['_flashes'] == [('error', 'Current password is incorrect.')]
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0

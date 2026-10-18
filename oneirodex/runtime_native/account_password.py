@@ -12,7 +12,7 @@ from starlette.responses import RedirectResponse, Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
-from .form_compat import first_form_value
+from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -238,7 +238,7 @@ async def _legacy_password_form(request: Request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 def _api_error(message: str, *, code: str):

@@ -188,3 +188,25 @@ def test_legacy_preferences_form_rejects_missing_hidden_csrf():
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert b'<p>The CSRF token is missing.</p>' in response.content
     assert data.updates == []
+
+
+def test_legacy_preferences_form_uses_first_repeated_field_value():
+    from urllib.parse import urlencode
+
+    data = FakePreferencesData()
+    client, _actor = make_client(data)
+    cookie, csrf = signed_session(csrf=True)
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/settings_panel',
+        content=urlencode([
+            ('csrf_token', csrf),
+            ('tile_size', '55'),
+            ('tile_size', '72'),
+        ]),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert response.status_code == 200
+    assert data.updates == [(167, {'tile_size': '55'})]

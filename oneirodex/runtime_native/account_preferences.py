@@ -14,6 +14,7 @@ from .csrf_compat import (
     csrf_error_response as _csrf_error_response,
     csrf_html_error_response as _csrf_html_error_response,
 )
+from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -211,7 +212,7 @@ def create_account_preferences_router(
             if response is None:
                 response = _csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
+                    token=first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
                 )
                 if response is not None:
                     response = _csrf_html_error_response(response)
@@ -282,4 +283,4 @@ async def _legacy_form(request: Request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
