@@ -2561,6 +2561,30 @@ def test_native_reorder_libraries_requires_admin_csrf_and_keeps_body_status(monk
     assert runtime._fake_library_reads.calls == [('reorder', ['lib-1', 'lib-2'])]
 
 
+def test_native_reorder_libraries_rejects_malformed_or_non_object_json(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(body):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/reorder_libraries', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    malformed = asyncio.run(send('{'))
+    non_object = asyncio.run(send('[]'))
+
+    assert malformed.status_code == 400
+    assert malformed.json()['error_code'] == 'bad_request'
+    assert non_object.status_code == 400
+    assert non_object.json()['error_code'] == 'bad_request'
+    assert runtime._fake_library_reads.calls == []
+
+
 def test_native_batch_edit_libraries_requires_admin_csrf_and_preserves_envelope(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
     cookie, csrf = _signed_session_with_csrf()
@@ -2586,6 +2610,20 @@ def test_native_batch_edit_libraries_requires_admin_csrf_and_preserves_envelope(
     assert runtime._fake_library_reads.calls == [(
         'batch_edit', 7, {'library_uuids': ['lib-1'], 'scan_depth': 2},
     )]
+
+
+def test_native_batch_edit_empty_selection_uses_shared_error_envelope():
+    body, status = library_reads.LibraryReadData().batch_edit({}, user=None)
+
+    assert status == 400
+    assert body == {
+        'ok': False,
+        'error': 'library_uuids required (list) or library_uuid',
+        'error_code': 'bad_request',
+        'message': 'library_uuids required (list) or library_uuid',
+        'success': False,
+        'status': 'rejected',
+    }
 
 
 def test_native_playtime_me_and_per_game_reads_dispatch(monkeypatch):

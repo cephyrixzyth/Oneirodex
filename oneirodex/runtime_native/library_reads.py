@@ -95,7 +95,7 @@ class LibraryReadData:
 
         uuids, error = parse_library_uuids(payload)
         if error:
-            return error[0], error[1]
+            return _batch_rejection(error[0], error[1])
         if len(uuids) > LIBRARY_BATCH_UUID_CAP:
             body, status = api_error_payload(
                 f'No more than {LIBRARY_BATCH_UUID_CAP} libraries may be selected',
@@ -494,23 +494,29 @@ def create_library_reads_router(
                 ):
                     response = _api_error('Admin required', 'forbidden')
             if response is None:
-                payload = await _json_object(request)
-                order = payload.get('order') if isinstance(payload.get('order'), list) else []
                 try:
-                    data.reorder(order)
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    payload = await request.json()
+                except Exception:  # noqa: BLE001 — malformed JSON must not become a no-op success
+                    payload = None
+                if not isinstance(payload, dict):
+                    response = _api_error('Invalid JSON payload', 'bad_request')
+                else:
+                    order = payload.get('order') if isinstance(payload.get('order'), list) else []
+                    try:
+                        data.reorder(order)
+                        from oneirodex.utils.api_contract import api_ok_payload
 
-                    response = JSONResponse(api_ok_payload({'status': 'success'}))
-                except Exception:  # noqa: BLE001 — preserve the legacy safe failure
-                    data.rollback()
-                    flask_app.logger.warning('library reorder failed')
-                    from oneirodex.utils.api_contract import api_error_payload
+                        response = JSONResponse(api_ok_payload({'status': 'success'}))
+                    except Exception:  # noqa: BLE001 — preserve the legacy safe failure
+                        data.rollback()
+                        flask_app.logger.warning('library reorder failed')
+                        from oneirodex.utils.api_contract import api_error_payload
 
-                    body, status = api_error_payload(
-                        'Could not update the library', code='internal',
-                        body_status='error',
-                    )
-                    response = JSONResponse(body, status_code=status)
+                        body, status = api_error_payload(
+                            'Could not update the library', code='internal',
+                            body_status='error',
+                        )
+                        response = JSONResponse(body, status_code=status)
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -564,6 +570,34 @@ def create_library_reads_router(
 def mount_library_reads_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_library_reads_router(flask_app, **kwargs))
     return app
+
+
+def _batch_rejection(payload, http_status):
+    """Wrap the shared library-batch refusal in the API error envelope."""
+    from oneirodex.utils.api_contract import api_error_payload
+
+    message = payload.get('message') or payload.get('error') or 'Rejected'
+    token = payload.get('error')
+    extras = {
+        key: value for key, value in payload.items()
+        if key not in ('ok', 'error', 'message', 'status', 'success', 'error_code')
+    }
+    if token and token != message:
+        extras['body_error'] = token
+    code = {
+        400: 'bad_request',
+        403: 'forbidden',
+        404: 'not_found',
+        409: 'conflict',
+        500: 'internal',
+    }.get(http_status, 'bad_request')
+    return api_error_payload(
+        message,
+        code=code,
+        status=http_status,
+        body_status=payload.get('status', 'rejected'),
+        **extras,
+    )
 
 
 async def _json_object(request):
