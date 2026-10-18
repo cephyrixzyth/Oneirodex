@@ -9538,6 +9538,21 @@ def test_lazy_asgi_dispatches_legacy_server_settings_post_aliases(monkeypatch):
     assert response.status_code == 200
     assert saved == [{'showVersion': False}]
 
+    empty = _run(
+        runtime, '/admin/settings', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+    assert empty.status_code == 400
+    assert empty.json()['message'] == 'No settings data provided'
+    assert saved == [{'showVersion': False}]
+    second_alias = _run(
+        runtime, '/admin/new_server_settings', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+    assert second_alias.status_code == 400
+    assert second_alias.json()['message'] == 'No settings data provided'
+    assert saved == [{'showVersion': False}]
+
 
 def test_lazy_asgi_dispatches_legacy_attract_mode_post_alias(monkeypatch):
     from oneirodex.runtime_native import admin_attract_mode as native_attract_mode

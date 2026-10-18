@@ -110,13 +110,18 @@ def create_admin_server_settings_router(
             if response is None:
                 if request.method in ('PUT', 'POST'):
                     payload = await _json_object(request)
-                    result, message, code = data.save(payload)
-                    if message:
-                        response = _error(message, code, 500 if code == 'internal' else 400)
+                    if request.method == 'POST' and request.url.path in (
+                        '/admin/settings', '/admin/new_server_settings',
+                    ) and payload == {}:
+                        response = _error('No settings data provided', 'bad_request', 400)
                     else:
-                        response = _ok({'settings': result['settings'],
-                                        'bounds': result['bounds'],
-                                        'text_limits': result['text_limits']})
+                        result, message, code = data.save(payload)
+                        if message:
+                            response = _error(message, code, 500 if code == 'internal' else 400)
+                        else:
+                            response = _ok({'settings': result['settings'],
+                                            'bounds': result['bounds'],
+                                            'text_limits': result['text_limits']})
                 else:
                     try:
                         response = _ok(data.state())
