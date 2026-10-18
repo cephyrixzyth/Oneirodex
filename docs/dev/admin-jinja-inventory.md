@@ -1010,3 +1010,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **SMTP setup save parity, 2026-10-18:** A valid synthetic SMTP settings form matched v1.1.8 for the next-step redirect and persisted server, port, TLS, enabled, and sender fields. No email or provider request was sent; cloned databases were cleaned. Provider delivery/failure, restart persistence, and other setup branches remain open. Evidence: .artifacts/parity-v1.1.8/setup-smtp-valid-current-d182-paired-20261018b.json.
+
+
+**First-run state transition snapshots, 2026-10-18:** The full six-step wizard on exact v1.1.8/d182 images matched status, redirect, setup state, SMTP defaults/skip, all six feature flags when unchecked, and library row count. Combined with the synthetic SMTP save above. No external provider was called. IGDB credential save, enabled integrations, library creation/discovery, restart persistence, and full UI/accessibility remain open. Evidence: .artifacts/parity-v1.1.8/setup-flow-snapshots-current-d182-paired-20261018.json.
