@@ -1022,3 +1022,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Setup optional integrations save, 2026-10-18:** Synthetic Steam key save and HowLongToBeat enablement matched persisted state and redirect. OIDC stayed disabled on both versions. Only credential length was recorded; no provider calls were sent. OIDC validation/secret retention, provider health, and restart persistence remain open. Evidence: .artifacts/parity-v1.1.8/setup-integrations-valid-current-d183-paired-20261018.json.
+
+
+**Setup IGDB invalid-input parity, 2026-10-18:** Short synthetic client ID/secret were rejected by both exact images; the wizard remained on IGDB and cloned credentials stayed unset. v1.1.8 renders HTTP 200, while current redirects to the same step and displays validation feedback. Keep current PRG behavior. No provider calls; clones cleaned. Upper-bound, storage-failure, and restart cases remain open. Evidence: .artifacts/parity-v1.1.8/setup-igdb-invalid-current-d183-paired-20261018.json.
