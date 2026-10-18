@@ -147,8 +147,12 @@ def test_wrong_current_password_does_not_mutate_or_commit():
         headers={'X-CSRFToken': csrf},
     )
 
-    assert response.status_code == 401
+    # This is a field-validation failure inside an authenticated session. A
+    # 401 makes the member SPA treat the response as an expired login and
+    # redirect away before the password panel can show this error.
+    assert response.status_code == 422
     assert response.json()['error'] == 'Current password is incorrect.'
+    assert response.json()['error_code'] == 'unprocessable'
     assert user.password == 'OldPassword1!'
     assert data.commits == 0
 
@@ -254,3 +258,52 @@ def test_legacy_password_form_requires_csrf():
 
     assert response.status_code == 400
     assert data.commits == 0
+
+
+def test_legacy_password_form_validation_messages_match_v118_copy():
+    cases = (
+        (
+            {
+                'current_password': 'wrong',
+                'password': 'NewPassword2!',
+                'confirm_password': 'NewPassword2!',
+            },
+            'Current password is incorrect.',
+        ),
+        (
+            {
+                'current_password': 'OldPassword1!',
+                'password': 'short',
+                'confirm_password': 'short',
+            },
+            'New Password: Field must be at least 8 characters long.',
+        ),
+        (
+            {
+                'current_password': 'OldPassword1!',
+                'password': 'NewPassword2!',
+                'confirm_password': 'OtherPassword2!',
+            },
+            'Confirm Password: Passwords must match',
+        ),
+    )
+
+    for fields, expected_message in cases:
+        client, user, data = make_client()
+        cookie, csrf = credentials()
+        client.cookies.set('session', cookie)
+
+        response = client.post(
+            '/settings_password',
+            data={'csrf_token': csrf, **fields},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert response.headers['location'] == '/library?account=password'
+        session = load_session_cookie(
+            response.cookies.get('session'), SECRET, max_age=31_536_000
+        )
+        assert session['_flashes'] == [('error', expected_message)]
+        assert user.password == 'OldPassword1!'
+        assert data.commits == 0

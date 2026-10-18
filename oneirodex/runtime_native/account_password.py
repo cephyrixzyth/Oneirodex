@@ -12,6 +12,7 @@ from starlette.responses import RedirectResponse, Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
+from .form_compat import first_form_value
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -82,7 +83,7 @@ def create_account_password_router(
                         response = _api_error('Account not found.', code='not_found')
                     elif not user.check_password(body.current_password):
                         response = _api_error(
-                            'Current password is incorrect.', code='unauthorized'
+                            'Current password is incorrect.', code='unprocessable'
                         )
                     else:
                         minimum = 8
@@ -143,7 +144,7 @@ def create_account_password_router(
             if response is None:
                 response = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get('csrf_token'),
+                    token=first_form_value(form, 'csrf_token'),
                 )
             remember_cookie = False
             if response is None and auth.user is None:
@@ -154,15 +155,22 @@ def create_account_password_router(
                 user = data.get_user(auth.user.id)
                 if user is None:
                     _flash(auth.session_data, 'error', 'Account not found.')
-                elif not form.get('current_password'):
+                elif not first_form_value(form, 'current_password'):
                     _flash(auth.session_data, 'error', 'Current Password: This field is required.')
                 elif not user.check_password(form['current_password']):
                     _flash(auth.session_data, 'error', 'Current password is incorrect.')
-                elif len(form.get('password') or '') < 8:
-                    _flash(auth.session_data, 'error', 'New Password must be at least 8 characters.')
-                elif form.get('password') != form.get('confirm_password'):
-                    _flash(auth.session_data, 'error', 'Passwords must match.')
-                elif form.get('password') == form.get('current_password'):
+                elif len(first_form_value(form, 'password') or '') < 8:
+                    _flash(
+                        auth.session_data,
+                        'error',
+                        'New Password: Field must be at least 8 characters long.',
+                    )
+                elif (
+                    first_form_value(form, 'password')
+                    != first_form_value(form, 'confirm_password')
+                ):
+                    _flash(auth.session_data, 'error', 'Confirm Password: Passwords must match')
+                elif first_form_value(form, 'password') == first_form_value(form, 'current_password'):
                     _flash(auth.session_data, 'error', "Pick a password you're not already using.")
                 else:
                     try:
