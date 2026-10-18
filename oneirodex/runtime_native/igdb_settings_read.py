@@ -248,7 +248,10 @@ def create_igdb_settings_router(
                         response = JSONResponse(payload, status_code=status)
                 elif request.method == 'POST':
                     try:
-                        legacy_test = request.url.path == '/admin/test_igdb'
+                        legacy_test = request.url.path in {
+                            '/admin/test_igdb', '/admin/integrations/igdb/test',
+                        }
+                        integration_test = request.url.path == '/admin/integrations/igdb/test'
                         test_connection = (
                             getattr(data, 'test_connection_legacy', data.test_connection)
                             if legacy_test else data.test_connection
@@ -256,7 +259,9 @@ def create_igdb_settings_router(
                         result = test_connection()
                         if result is None:
                             payload, status = api_error_payload(
-                                'IGDB settings not configured' if legacy_test else
+                                'IGDB settings not configured' if request.url.path == '/admin/test_igdb' else
+                                'IGDB settings not configured. Please save your settings first.'
+                                if integration_test else
                                 'Save a client ID and secret before testing the connection',
                                 code='bad_request',
                             )
@@ -270,7 +275,8 @@ def create_igdb_settings_router(
                             response = JSONResponse(payload, status_code=status)
                         else:
                             if legacy_test:
-                                response = JSONResponse(api_ok_payload(result))
+                                success = {'message': result['message']} if integration_test else result
+                                response = JSONResponse(api_ok_payload(success))
                             else:
                                 response = JSONResponse(api_ok_payload({
                                     **result, 'message': 'IGDB connection successful.',
@@ -281,8 +287,12 @@ def create_igdb_settings_router(
 
                         db.session.rollback()
                         logging.getLogger(__name__).warning('IGDB connection test failed')
-                        legacy_test = request.url.path == '/admin/test_igdb'
+                        legacy_test = request.url.path in {
+                            '/admin/test_igdb', '/admin/integrations/igdb/test',
+                        }
+                        integration_test = request.url.path == '/admin/integrations/igdb/test'
                         payload, status = api_error_payload(
+                            'The IGDB connection test failed.' if integration_test else
                             'IGDB API test failed' if legacy_test else 'IGDB connection test failed',
                             code='internal' if legacy_test else 'bad_gateway',
                         )

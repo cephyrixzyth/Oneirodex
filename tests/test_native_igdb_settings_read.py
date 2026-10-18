@@ -304,6 +304,30 @@ def test_legacy_igdb_test_path_preserves_v118_missing_and_invalid_results():
     assert response.json()['message'] == 'Invalid API response'
 
 
+def test_integrations_igdb_test_path_preserves_v118_unconfigured_message():
+    client = _client(legacy_test=lambda: None)
+    response = client.post(
+        '/admin/integrations/igdb/test',
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['message'] == (
+        'IGDB settings not configured. Please save your settings first.'
+    )
+
+
+def test_integrations_igdb_test_path_preserves_v118_invalid_response():
+    client = _client(legacy_test=lambda: False)
+    response = client.post(
+        '/admin/integrations/igdb/test',
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['message'] == 'Invalid API response'
+
+
 def test_legacy_integrations_igdb_aliases_use_native_save_and_test():
     client = _client()
     saved = client.post(
@@ -325,4 +349,5 @@ def test_legacy_integrations_igdb_aliases_use_native_save_and_test():
         'igdb_client_secret': 'alias-secret-20-chars',
     }]
     assert tested.status_code == 200
-    assert tested.json()['message'] == 'IGDB connection successful.'
+    assert tested.json()['message'] == 'IGDB API test successful'
+    assert 'status' not in tested.json()

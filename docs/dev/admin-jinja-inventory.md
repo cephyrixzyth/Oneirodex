@@ -936,3 +936,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **IGDB integrations-save parity, 2026-10-18:** The isolated legacy/current replay found current accepted too-short credentials and returned a different success envelope. Current now enforces the legacy 20-character minimum, retains a configured secret on blank replacement, and matches the success body. Missing-CSRF, invalid short, valid synthetic save, blank-secret update, and database readback matched on exact images. No provider request ran; disposable databases were removed. Malformed-body, database-failure, authorization, concurrency, and provider-test paths remain open. Evidence: `.artifacts/parity-v1.1.8/igdb-save-workflow-current-d168-paired-20261018.json`.
+
+
+**IGDB integration-test disabled state parity, 2026-10-18:** The isolated replay found a different unconfigured message on `/admin/integrations/igdb/test`. Current now matches v1.1.8. Both cloned databases had IGDB credentials cleared and verified absent before the request, so no provider call was possible. Configured provider success/failure and transport behavior remain open. Evidence: `.artifacts/parity-v1.1.8/igdb-test-unconfigured-current-d169-paired-20261018.json`. The matrix now records 614 partially evidenced, 52 behavior-unverified, and zero fully verified entries.
