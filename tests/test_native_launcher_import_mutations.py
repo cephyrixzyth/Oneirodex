@@ -113,3 +113,24 @@ def test_launcher_csv_upload_is_bounded_and_keeps_selected_format():
 
     assert response.status_code == 200
     assert data.calls == [('launcher', 7, b'Name,Id\nFixture,123\n', 'library.csv', 'heroic')]
+
+
+def test_launcher_import_keeps_safe_parse_errors_and_hides_untrusted_details():
+    for parser_error, expected in (
+        ('No games found in that export', 'No games found in that export'),
+        ('Unknown launcher: untrusted-user-input', 'The launcher export could not be read'),
+    ):
+        data = FakeImports()
+
+        def fail_import(*_args, _error=parser_error, **_kwargs):
+            raise ValueError(_error)
+
+        data.launcher = fail_import
+        response = make_client(data=data).post(
+            '/api/imports/launcher', json={},
+        )
+
+        assert response.status_code == 400
+        assert response.json()['error'] == expected
+        if parser_error.startswith('Unknown launcher:'):
+            assert 'untrusted-user-input' not in response.text

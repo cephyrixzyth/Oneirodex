@@ -13,6 +13,14 @@ from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
 _MAX_UPLOAD = 8 * 1024 * 1024
+_SAFE_LAUNCHER_IMPORT_ERRORS = frozenset({
+    'The file is empty',
+    'CSV has no header row',
+    'CSV must include a Name or Title column',
+    'The file is not valid JSON or CSV',
+    'The file must be UTF-8 text',
+    'No games found in that export',
+})
 
 
 class LauncherImportMutationData:
@@ -142,8 +150,15 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                             response = JSONResponse(payload, status_code=status)
                         else:
                             response = JSONResponse(api_ok_payload(result))
-            except ValueError:
-                message = 'The Playnite export could not be read' if kind == 'playnite' else 'The launcher export could not be read'
+            except ValueError as exc:
+                candidate = str(exc)
+                if kind == 'playnite':
+                    message = 'The Playnite export could not be read'
+                else:
+                    message = (
+                        candidate if candidate in _SAFE_LAUNCHER_IMPORT_ERRORS
+                        else 'The launcher export could not be read'
+                    )
                 payload, status = api_error_payload(message, code='bad_request')
                 response = JSONResponse(payload, status_code=status)
             except Exception:
