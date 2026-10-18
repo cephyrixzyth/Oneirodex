@@ -224,6 +224,7 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     client, _session_data = _native_client(monkeypatch)
     runtime = asgi.LazyASGIApp()
     runtime._native_member_shell_app = client.app
+    runtime._flask_app = _app_config()
 
     async def initialized():
         return None
