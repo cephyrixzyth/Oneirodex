@@ -1025,3 +1025,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Setup IGDB invalid-input parity, 2026-10-18:** Short synthetic client ID/secret were rejected by both exact images; the wizard remained on IGDB and cloned credentials stayed unset. v1.1.8 renders HTTP 200, while current redirects to the same step and displays validation feedback. Keep current PRG behavior. No provider calls; clones cleaned. Upper-bound, storage-failure, and restart cases remain open. Evidence: .artifacts/parity-v1.1.8/setup-igdb-invalid-current-d183-paired-20261018.json.
+
+
+**First-library invalid-path validation, 2026-10-18:** An outside-root synthetic path was rejected on both exact images; setup stayed on step 6 and no library row was created. Legacy renders HTTP 200; current PRG returns to the same step with validation feedback. Keep current flow. Clones were cleaned. Missing/unavailable in-root folders, duplicates, scan failures, and restart behavior remain open. Evidence: .artifacts/parity-v1.1.8/setup-library-invalid-path-current-d183-paired-20261018.json.
