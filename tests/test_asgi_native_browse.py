@@ -9552,6 +9552,9 @@ def test_lazy_asgi_dispatches_legacy_integration_post_aliases_natively(monkeypat
         read=lambda: {},
         save=lambda payload: calls.append(('igdb-save', payload)) or {'settings': {}},
         test_connection=lambda: calls.append(('igdb-test',)) or {'settings': {}},
+        test_connection_legacy=lambda: calls.append(('igdb-test-legacy',)) or {
+            'message': 'IGDB API test successful',
+        },
     )
     monkeypatch.setattr(native_integration_settings, 'IntegrationSettingsData', lambda: integration_data)
     monkeypatch.setattr(native_igdb_settings, 'IgdbSettingsData', lambda: igdb_data)
@@ -9564,18 +9567,44 @@ def test_lazy_asgi_dispatches_legacy_integration_post_aliases_natively(monkeypat
         headers=headers,
         json_body={'community_chat_url': 'https://community.example', 'community_chat_label': 'Chat'},
     )
+    async def post_repeated_community_form():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/admin/integrations/community',
+                content=urlencode([
+                    ('csrf_token', csrf),
+                    ('community_chat_url', 'https://first.example'),
+                    ('community_chat_url', 'https://second.example'),
+                    ('community_chat_label', 'First'),
+                    ('community_chat_label', 'Second'),
+                ]),
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                follow_redirects=False,
+            )
+
+    community_form = asyncio.run(post_repeated_community_form())
     igdb_save = _run(
         runtime, '/admin/integrations/igdb/save', cookie=cookie, method='POST', headers=headers,
-        json_body={'igdb_client_id': 'client-id', 'igdb_client_secret': 'secret'},
+        json_body={
+            'igdb_client_id': 'igdb-client-id-123456789012',
+            'igdb_client_secret': 'igdb-client-secret-123456789',
+        },
     )
     igdb_test = _run(
         runtime, '/admin/integrations/igdb/test', cookie=cookie, method='POST', headers=headers,
     )
 
     assert community.status_code == 200
+    assert community_form.status_code == 302
+    assert calls[1] == ('community', 'https://first.example', 'First')
     assert igdb_save.status_code == 200
     assert igdb_test.status_code == 200
-    assert [call[0] for call in calls] == ['community', 'igdb-save', 'igdb-test']
+    assert [call[0] for call in calls] == [
+        'community', 'community', 'igdb-save', 'igdb-test-legacy',
+    ]
 
 
 def test_lazy_asgi_dispatches_legacy_server_settings_post_aliases(monkeypatch):

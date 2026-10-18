@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, RedirectResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
+from .form_compat import first_form_value
 from .request_auth import request_auth_context
 
 _OIDC_ADMIN_FIELDS = {
@@ -176,7 +177,7 @@ def create_integration_settings_router(
                 csrf_token = None
                 if legacy_community_form and community_form is not None:
                     field_name = str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
-                    value = community_form.get(field_name)
+                    value = first_form_value(community_form, field_name)
                     csrf_token = str(value) if value is not None else None
                 csrf_response = csrf_error_response(
                     request, session, flask_app.config, token=csrf_token,
@@ -206,8 +207,15 @@ def create_integration_settings_router(
                 elif legacy_community_form:
                     from oneirodex.utils.security import validate_community_chat_url
 
-                    raw_url = str(community_form.get('community_chat_url') or '') if community_form is not None else ''
-                    label = str(community_form.get('community_chat_label') or 'Open community').strip()[:120] if community_form is not None else 'Open community'
+                    raw_url = (
+                        str(first_form_value(community_form, 'community_chat_url') or '')
+                        if community_form is not None else ''
+                    )
+                    label = (
+                        str(first_form_value(community_form, 'community_chat_label') or 'Open community')
+                        .strip()[:120]
+                        if community_form is not None else 'Open community'
+                    )
                     ok, normalized_or_error = validate_community_chat_url(raw_url.strip())
                     if not ok:
                         auth.session_data.setdefault('_flashes', []).append(('error', normalized_or_error))
