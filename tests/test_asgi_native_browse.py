@@ -8292,6 +8292,45 @@ def test_lazy_asgi_setup_step_flashes_scan_queue_fallback(monkeypatch):
     assert not consumed_session.get('_flashes')
 
 
+@pytest.mark.parametrize(
+    ('step', 'skip', 'next_step', 'next_url', 'category', 'message'),
+    [
+        (2, True, 3, '/setup/features', 'info',
+         'SMTP setup skipped. Choose which features to keep enabled.'),
+        (3, False, 4, '/setup/igdb', 'success',
+         'Feature preferences saved. Configure IGDB next.'),
+        (4, True, 5, '/setup/integrations', 'info',
+         'IGDB skipped. Choose any additional API connections, or continue without them.'),
+        (5, True, 6, '/setup/library', 'info',
+         'Optional API setup skipped. You can continue without API credentials.'),
+    ],
+)
+def test_native_setup_api_carries_each_middle_step_flash(
+    monkeypatch, step, skip, next_step, next_url, category, message,
+):
+    result = {'step': next_step, 'next_url': next_url}
+    data = SimpleNamespace(
+        current_step=lambda: step,
+        transition=lambda *_args, **_kwargs: (result, None, None),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/setup/step', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf}, json_body={'step': step, 'skip': skip},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['message'] == message
+    assert response.json()['message_category'] == category
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == (category, message)
+
+
 def test_lazy_asgi_setup_transition_requires_admin_after_account_creation(monkeypatch):
     calls = []
     data = SimpleNamespace(
