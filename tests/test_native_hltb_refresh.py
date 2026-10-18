@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -9,6 +12,21 @@ from flask import Flask
 
 from oneirodex.runtime_native.hltb_refresh import create_hltb_refresh_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+
+
+def test_hltb_utility_import_does_not_require_flask_runtime():
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            "import sys; sys.modules['flask'] = None; import oneirodex.utils.hltb",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _client(*, role='admin', outcome=('updated', {
