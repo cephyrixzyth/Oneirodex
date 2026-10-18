@@ -113,6 +113,30 @@ def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract(monkey
     assert calls[0]['raw'] == b'contents'
 
 
+def test_legacy_reference_sets_invalid_form_redirect_keeps_html_content_type():
+    client = _client()
+    missing_csrf = client.post('/admin/reference_sets', data={'field': 'value'})
+    invalid_form = client.post(
+        '/admin/reference_sets', data={'csrf_token': client.csrf_token},
+        headers={'X-CSRFToken': client.csrf_token}, follow_redirects=False,
+    )
+
+    assert missing_csrf.status_code == 400
+    assert invalid_form.status_code == 302
+    assert invalid_form.headers['content-type'] == 'text/html; charset=utf-8'
+    assert invalid_form.headers['location'] == '/admin/reference_sets'
+
+    delete_client = _client(data=SimpleNamespace(read=lambda: {}, delete=lambda _set_id: False))
+    missing_set = delete_client.post(
+        '/admin/reference_sets',
+        data={'csrf_token': delete_client.csrf_token, 'action': 'delete', 'set_id': '3'},
+        headers={'X-CSRFToken': delete_client.csrf_token}, follow_redirects=False,
+    )
+    assert missing_set.status_code == 302
+    assert missing_set.headers['content-type'] == 'text/html; charset=utf-8'
+    assert missing_set.headers['location'] == '/admin/reference_sets'
+
+
 def test_reference_set_delete_checks_csrf_and_keeps_not_found_contract():
     calls = []
     client = _client(data=SimpleNamespace(read=lambda: {}, delete=lambda set_id: calls.append(set_id) or set_id == 17))

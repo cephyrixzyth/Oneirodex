@@ -562,7 +562,10 @@ def create_reference_sets_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, message))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/reference_sets', status_code=302)
+                    response = RedirectResponse(
+                        '/admin/reference_sets', status_code=302,
+                        headers={'Content-Type': 'text/html; charset=utf-8'},
+                    )
                     _set_session_cookie(response, flask_app, auth)
                 else:
                     upload = form.get('file')
@@ -664,7 +667,10 @@ def create_reference_sets_router(
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append((category, message))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/admin/reference_sets', status_code=302)
+                response = RedirectResponse(
+                    '/admin/reference_sets', status_code=302,
+                    headers={'Content-Type': 'text/html; charset=utf-8'},
+                )
                 _set_session_cookie(response, flask_app, auth)
 
             if parsed_form is not None:
