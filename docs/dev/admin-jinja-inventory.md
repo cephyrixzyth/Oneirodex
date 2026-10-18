@@ -1013,3 +1013,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **First-run state transition snapshots, 2026-10-18:** The full six-step wizard on exact v1.1.8/d182 images matched status, redirect, setup state, SMTP defaults/skip, all six feature flags when unchecked, and library row count. Combined with the synthetic SMTP save above. No external provider was called. IGDB credential save, enabled integrations, library creation/discovery, restart persistence, and full UI/accessibility remain open. Evidence: .artifacts/parity-v1.1.8/setup-flow-snapshots-current-d182-paired-20261018.json.
+
+
+**First-library scan queue correction, 2026-10-18:** Exact-image setup replay found v1.1.8 completes first-library creation without queueing its initial scan: the caller passes the removed orce_parallel argument, and the resulting TypeError is caught. Current setup callers now use the queue-policy API. On d183, the same synthetic library was saved and setup completed, with a scan job reaching Completed over fresh empty read-only storage (zero folders). This is an intentional improvement over the baseline. Focused checks passed 3/3; all clones were removed. Evidence: .artifacts/parity-v1.1.8/setup-library-valid-current-d182-paired-20261018b.json and .artifacts/parity-v1.1.8/setup-library-valid-current-d183-paired-20261018.json.
