@@ -10,7 +10,10 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response as _csrf_error_response
+from .csrf_compat import (
+    csrf_error_response as _csrf_error_response,
+    csrf_html_error_response as _csrf_html_error_response,
+)
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -210,6 +213,8 @@ def create_account_preferences_router(
                     request, auth.session_data, flask_app.config,
                     token=form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
                 )
+                if response is not None:
+                    response = _csrf_html_error_response(response)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:

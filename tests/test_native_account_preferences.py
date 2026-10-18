@@ -185,4 +185,6 @@ def test_legacy_preferences_form_rejects_missing_hidden_csrf():
     response = client.post('/settings_panel', data={'tile_size': '72'})
 
     assert response.status_code == 400
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in response.content
     assert data.updates == []
