@@ -1034,3 +1034,7 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Setup OIDC valid-settings parity, 2026-10-18:** Synthetic HTTPS issuer, client, redirect URI, and secret save matched; both advance to the library step while OIDC authentication remains disabled. Only secret length was retained, and no identity provider was contacted. Post-setup activation, restart persistence, and callback lifecycle remain open. Evidence: .artifacts/parity-v1.1.8/setup-oidc-valid-current-d183-paired-20261018.json.
+
+
+**Setup administrator authorization check, 2026-10-18:** After creating the synthetic admin, an anonymous session with valid CSRF could not submit the next setup step on either version. Both redirect to login and remain at step 2 with one user. Current percent-encodes the slash in 
+ext; legacy leaves it literal, resolving to the same destination. No setup state changed; cloned resources were removed. Evidence: .artifacts/parity-v1.1.8/setup-setup-admin-required-current-d183-paired-20261018.json.
