@@ -18,6 +18,12 @@ class IgdbSettingsData:
 
         return {'settings': igdb_public_state(global_settings_row())}
 
+    def existing_secret_length(self) -> int:
+        from oneirodex.utils.global_settings import global_settings_row
+
+        settings = global_settings_row()
+        return len((settings.igdb_client_secret or '') if settings else '')
+
     def save(self, payload: dict) -> dict:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.cache import cache
@@ -208,10 +214,26 @@ def create_igdb_settings_router(
 
                     try:
                         payload = validate_igdb_data(body)
+                        settings_state = data.read().get('settings') or {}
+                        client_id = payload['igdb_client_id'].strip()
+                        client_secret = payload['igdb_client_secret'].strip()
+                        secret_length = getattr(data, 'existing_secret_length', None)
+                        existing_secret_length = (
+                            int(secret_length()) if callable(secret_length)
+                            else 20 if settings_state.get('secret_present') else 0
+                        )
+                        effective_secret_length = len(client_secret) or existing_secret_length
+                        if len(client_id) < 20 or effective_secret_length < 20:
+                            raise ValueError(
+                                'Client ID and Secret must be at least 20 characters long'
+                            )
+                        payload = {
+                            'igdb_client_id': client_id,
+                            'igdb_client_secret': client_secret,
+                        }
                         data.save(payload)
                         response = JSONResponse(api_ok_payload({
-                            'status': 'success',
-                            'message': 'IGDB settings updated successfully',
+                            'message': 'IGDB settings saved successfully',
                         }))
                     except ValueError as exc:
                         payload, status = api_error_payload(str(exc), code='bad_request')

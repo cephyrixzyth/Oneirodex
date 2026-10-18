@@ -12,7 +12,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 from oneirodex.utils.igdb_settings import igdb_public_state
 
 
-def _client(*, role='admin', legacy_save=None, legacy_test=None):
+def _client(*, role='admin', legacy_save=None, legacy_test=None, existing_secret_length=20):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-igdb-read-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -32,6 +32,7 @@ def _client(*, role='admin', legacy_save=None, legacy_test=None):
         read=lambda: {'settings': {
             'igdb_client_id': 'client-id', 'secret_present': True, 'last_tested': None,
         }},
+        existing_secret_length=lambda: existing_secret_length,
         save=lambda payload: saved.append(payload) or {'settings': {
             'igdb_client_id': payload['igdb_client_id'],
             'secret_present': bool(payload['igdb_client_secret']),
@@ -172,6 +173,60 @@ def test_legacy_igdb_form_post_bypasses_modern_api_validation():
     }
 
 
+def test_integrations_igdb_save_matches_legacy_minimum_and_success_message():
+    client = _client()
+    headers = {'X-CSRFToken': client.csrf_token}
+    short = client.post(
+        '/admin/integrations/igdb/save',
+        json={'igdb_client_id': 'short', 'igdb_client_secret': 'short'},
+        headers=headers,
+    )
+    saved = client.post(
+        '/admin/integrations/igdb/save',
+        json={'igdb_client_id': 'client-id-at-least-20', 'igdb_client_secret': 'client-secret-at-least-20'},
+        headers=headers,
+    )
+
+    assert short.status_code == 400
+    assert short.json()['error'] == 'Client ID and Secret must be at least 20 characters long'
+    assert saved.status_code == 200
+    assert saved.json()['message'] == 'IGDB settings saved successfully'
+    assert 'status' not in saved.json()
+    assert client.saved == [{
+        'igdb_client_id': 'client-id-at-least-20',
+        'igdb_client_secret': 'client-secret-at-least-20',
+    }]
+
+
+def test_integrations_igdb_save_allows_blank_secret_when_saved_secret_exists():
+    client = _client()
+    response = client.post(
+        '/admin/integrations/igdb/save',
+        json={'igdb_client_id': 'client-id-at-least-20', 'igdb_client_secret': ''},
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['message'] == 'IGDB settings saved successfully'
+    assert 'status' not in response.json()
+    assert client.saved == [{
+        'igdb_client_id': 'client-id-at-least-20', 'igdb_client_secret': '',
+    }]
+
+
+def test_integrations_igdb_save_rejects_blank_replacement_of_short_saved_secret():
+    client = _client(existing_secret_length=8)
+    response = client.post(
+        '/admin/integrations/igdb/save',
+        json={'igdb_client_id': 'client-id-at-least-20', 'igdb_client_secret': ''},
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Client ID and Secret must be at least 20 characters long'
+    assert client.saved == []
+
+
 def test_legacy_igdb_save_preserves_blank_secret_and_accepts_empty_client_id(monkeypatch):
     from oneirodex.runtime_native import db_session
     from oneirodex.runtime_native.igdb_settings_read import IgdbSettingsData
@@ -253,7 +308,10 @@ def test_legacy_integrations_igdb_aliases_use_native_save_and_test():
     client = _client()
     saved = client.post(
         '/admin/integrations/igdb/save',
-        json={'igdb_client_id': 'alias-id', 'igdb_client_secret': 'alias-secret'},
+        json={
+            'igdb_client_id': 'alias-client-id-20chars',
+            'igdb_client_secret': 'alias-secret-20-chars',
+        },
         headers={'X-CSRFToken': client.csrf_token},
     )
     tested = client.post(
@@ -261,7 +319,10 @@ def test_legacy_integrations_igdb_aliases_use_native_save_and_test():
     )
 
     assert saved.status_code == 200
-    assert saved.json()['status'] == 'success'
-    assert client.saved == [{'igdb_client_id': 'alias-id', 'igdb_client_secret': 'alias-secret'}]
+    assert saved.json()['message'] == 'IGDB settings saved successfully'
+    assert client.saved == [{
+        'igdb_client_id': 'alias-client-id-20chars',
+        'igdb_client_secret': 'alias-secret-20-chars',
+    }]
     assert tested.status_code == 200
     assert tested.json()['message'] == 'IGDB connection successful.'
