@@ -8,7 +8,7 @@ import os
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
@@ -147,6 +147,18 @@ def create_integration_settings_router(
     @router.api_route('/api/admin/integrations/community', methods=['GET', 'HEAD', 'PUT'])
     async def integration_settings(request: Request):
         is_oidc = request.url.path.endswith('/oidc') or request.url.path.endswith('/oidc/save')
+        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+        legacy_community_form = (
+            request.url.path == '/admin/integrations/community'
+            and request.method == 'POST'
+            and content_type in {'application/x-www-form-urlencoded', 'multipart/form-data'}
+        )
+        community_form = None
+        if legacy_community_form:
+            try:
+                community_form = await request.form()
+            except Exception:
+                community_form = None
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
@@ -161,7 +173,14 @@ def create_integration_settings_router(
                     max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
                     fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
                 )
-                csrf_response = csrf_error_response(request, session, flask_app.config)
+                csrf_token = None
+                if legacy_community_form and community_form is not None:
+                    field_name = str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+                    value = community_form.get(field_name)
+                    csrf_token = str(value) if value is not None else None
+                csrf_response = csrf_error_response(
+                    request, session, flask_app.config, token=csrf_token,
+                )
             auth = None
             if csrf_response is None:
                 auth = request_auth_context(
@@ -184,6 +203,29 @@ def create_integration_settings_router(
                 elif auth.token is not None and not auth.has_scope('admin'):
                     payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
+                elif legacy_community_form:
+                    from oneirodex.utils.security import validate_community_chat_url
+
+                    raw_url = str(community_form.get('community_chat_url') or '') if community_form is not None else ''
+                    label = str(community_form.get('community_chat_label') or 'Open community').strip()[:120] if community_form is not None else 'Open community'
+                    ok, normalized_or_error = validate_community_chat_url(raw_url.strip())
+                    if not ok:
+                        auth.session_data.setdefault('_flashes', []).append(('error', normalized_or_error))
+                    else:
+                        try:
+                            data.community_save(normalized_or_error, label or 'Open community')
+                            auth.session_data.setdefault('_flashes', []).append(('success', 'Community chat link saved.'))
+                        except Exception:
+                            from oneirodex.runtime_native.db_session import native_db as db
+                            import logging
+
+                            db.session.rollback()
+                            logging.getLogger(__name__).warning('Community settings save failed')
+                            auth.session_data.setdefault('_flashes', []).append(('error', 'Failed to save community chat link.'))
+                    response = RedirectResponse('/admin/integrations#community', status_code=302)
+                    response.headers['content-type'] = 'text/html; charset=utf-8'
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
                 elif request.method in ('PUT', 'POST'):
                     body = await _read_json(request)
                     if body is None:

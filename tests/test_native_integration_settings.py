@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from flask import Flask
 
 from oneirodex.runtime_native.integration_settings import create_integration_settings_router
-from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
 class FakeSettings:
@@ -30,11 +30,11 @@ class FakeSettings:
         return {'community_chat_url': url, 'community_chat_label': label.strip() or 'Open community'}
 
 
-def make_client(*, role='admin', data=None):
+def make_client(*, role='admin', data=None, csrf_enabled=False):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-integration-settings-secret', TESTING=True,
-        WTF_CSRF_ENABLED=False,
+        WTF_CSRF_ENABLED=csrf_enabled,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(id=7, role=role, is_active=True, state=True, is_authenticated=True)
@@ -52,7 +52,9 @@ def make_client(*, role='admin', data=None):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-integration-settings-secret'))
+    session_data = {'_user_id': '7:fp'}
+    client.csrf_token = generate_csrf_token(session_data, 'native-integration-settings-secret')
+    client.cookies.set('session', dump_session_cookie(session_data, 'native-integration-settings-secret'))
     return client
 
 
@@ -146,6 +148,47 @@ def test_legacy_integration_post_aliases_use_native_validators(monkeypatch):
     assert data.oidc_saved == oidc
     assert community_response.status_code == 200
     assert data.community_saved == ('https://community.example.test', 'Chat')
+
+
+def test_legacy_community_form_rejects_invalid_url_with_flash_redirect(monkeypatch):
+    from oneirodex.utils import security
+
+    monkeypatch.setattr(
+        security, 'validate_community_chat_url',
+        lambda _value: (False, 'Community chat URL host is not allowed'),
+    )
+    data = FakeSettings()
+    response = make_client(data=data).post(
+        '/admin/integrations/community',
+        data={'community_chat_url': 'javascript:alert(1)', 'community_chat_label': 'Bad'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/integrations#community'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert data.community_saved is None
+
+
+def test_legacy_community_form_accepts_hidden_csrf_and_preserves_redirect(monkeypatch):
+    from oneirodex.utils import security
+
+    monkeypatch.setattr(security, 'validate_community_chat_url', lambda value: (True, value.rstrip('/')))
+    data = FakeSettings()
+    client = make_client(data=data, csrf_enabled=True)
+    response = client.post(
+        '/admin/integrations/community',
+        data={
+            'community_chat_url': '', 'community_chat_label': 'Household chat',
+            'csrf_token': client.csrf_token,
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/integrations#community'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert data.community_saved == ('', 'Household chat')
 
 
 def test_legacy_integration_post_aliases_validate_csrf_before_body():
