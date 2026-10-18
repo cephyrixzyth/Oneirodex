@@ -99,6 +99,7 @@ def test_legacy_feature_form_uses_hidden_csrf_and_saves_all_toggles():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/features'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert data.saved == [{
         'enable_arr_module': True, 'enable_ai_assist': True,
         'enable_malware_scan': True, 'enable_game_updates': True,
