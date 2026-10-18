@@ -341,7 +341,7 @@ def create_batch_refresh_router(
 
     @router.post('/refresh_game_images/{game_uuid}')
     async def legacy_refresh_game_images(game_uuid: str, request: Request):
-        from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_error_response, csrf_html_error_response
         from .oidc_status import _login_redirect, _set_session_cookie
         from oneirodex.utils.role_catalog import normalize_role
         from starlette.responses import RedirectResponse
@@ -356,6 +356,8 @@ def create_batch_refresh_router(
             response = None
             if auth.token is None:
                 response = csrf_error_response(request, auth.session_data, flask_app.config)
+                if response is not None:
+                    response = csrf_html_error_response(response)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None and normalize_role(getattr(auth.user, 'role', '') or '') != 'admin':

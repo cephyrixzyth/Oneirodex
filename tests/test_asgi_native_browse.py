@@ -9809,6 +9809,8 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
     )
     assert denied.status_code == 400
+    assert denied.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in denied.content
     assert not any(call[0] == 'enqueue' for call in data.calls)
 
     response = _run(
