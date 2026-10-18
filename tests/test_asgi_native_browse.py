@@ -3604,6 +3604,58 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
     assert cleared.json()['status'] is None
     assert cleared.json()['message'] == 'Status cleared'
 
+    restored = asyncio.run(send('POST', '/api/set_game_status/game-a', {'status': 'completed'}))
+    assert restored.status_code == 200
+    calls_before_invalid = list(runtime._fake_member_game_state.calls)
+    invalid = asyncio.run(send('POST', '/api/set_game_status/game-a', {'status': 7}))
+    assert invalid.status_code == 500
+    assert invalid.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    async def send_json_null():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='null',
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    invalid_null = asyncio.run(send_json_null())
+    assert invalid_null.status_code == 500
+    assert invalid_null.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+    assert runtime._fake_member_game_state.calls == calls_before_invalid + [
+        ('game', 'game-a'), ('game', 'game-a'),
+    ]
+
+    async def send_form_body():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='status=unplayed',
+                headers={
+                    'X-CSRFToken': csrf,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            )
+
+    unsupported_media = asyncio.run(send_form_body())
+    assert unsupported_media.status_code == 415
+    assert unsupported_media.json()['error'] == (
+        "Did not attempt to load JSON data because the request Content-Type was not 'application/json'."
+    )
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    missing_status = asyncio.run(send('POST', '/api/set_game_status/game-a', {}))
+    assert missing_status.status_code == 200
+    assert missing_status.json()['status'] is None
+    assert missing_status.json()['message'] == 'Status cleared'
+    assert 'game-a' not in runtime._fake_member_game_state.statuses
+
 
 def test_native_library_writes_require_write_scope_for_bearer_tokens(monkeypatch):
     paths = [
