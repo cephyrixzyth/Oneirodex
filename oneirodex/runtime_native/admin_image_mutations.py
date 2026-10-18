@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
@@ -298,7 +298,22 @@ def create_admin_image_mutation_router(
                     token=form.get('csrf_token') if form is not None else None,
                 ) if auth.token is None else None
                 if csrf is not None:
-                    response = csrf
+                    import json
+
+                    from werkzeug.exceptions import BadRequest
+
+                    try:
+                        error_payload = json.loads(csrf.body or b'{}')
+                    except (TypeError, ValueError, UnicodeDecodeError):
+                        error_payload = {}
+                    bad_request = BadRequest(
+                        description=error_payload.get('message') or 'The CSRF token is invalid.',
+                    ).get_response()
+                    response = Response(
+                        content=bad_request.get_data(),
+                        status_code=bad_request.status_code,
+                        media_type='text/html',
+                    )
             try:
                 if response is None and is_scan_job_running():
                     payload, status = _error(

@@ -155,6 +155,8 @@ def test_single_game_image_upload_preserves_csrf_and_payload(monkeypatch):
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 200
     assert accepted.json()['image_id'] == 11
     assert accepted.json()['image_type'] == 'cover'
