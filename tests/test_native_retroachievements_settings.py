@@ -54,11 +54,11 @@ class FakeRetroAchievements:
         return {'platform': platform, 'rehash': rehash, 'matched': 0}
 
 
-def make_client(*, role='admin', data=None):
+def make_client(*, role='admin', data=None, csrf_enabled=False):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-ra-settings-secret', TESTING=True,
-        WTF_CSRF_ENABLED=False,
+        WTF_CSRF_ENABLED=csrf_enabled,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
@@ -137,3 +137,29 @@ def test_admin_match_action_validates_platform_before_provider_adapter():
 
     assert response.status_code == 200
     assert response.json()['platform'] == 'SNES'
+
+
+def test_admin_match_empty_body_uses_safe_legacy_validation_envelope():
+    response = make_client().post('/api/retroachievements/match', json={})
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Invalid request.'
+    assert response.json()['error_code'] == 'unprocessable'
+    assert response.json()['detail'] == {'platform': 'Field required'}
+    assert 'input_value' not in response.text
+    assert 'pydantic.dev' not in response.text
+
+
+def test_admin_match_non_object_body_validates_as_missing_fields():
+    response = make_client().post('/api/retroachievements/match', json=[])
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {'platform': 'Field required'}
+
+
+def test_admin_match_requires_csrf_before_body_validation():
+    response = make_client(csrf_enabled=True).post('/api/retroachievements/match', json={})
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert 'detail' not in response.json()

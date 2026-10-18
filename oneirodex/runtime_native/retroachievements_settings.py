@@ -119,7 +119,7 @@ def create_retroachievements_settings_router(
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
-            if request.method == 'PUT':
+            if request.method in {'POST', 'PUT'}:
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
@@ -188,9 +188,12 @@ def create_retroachievements_settings_router(
                 elif operation == 'match':
                     body = await _read_json(request)
                     try:
-                        if body is None:
-                            raise ValueError('A valid JSON object is required.')
-                        model = RetroAchievementsMatchBody.model_validate(body)
+                        # Match the legacy validate_body contract: absent,
+                        # malformed, and non-object JSON validate as an empty
+                        # object and return a safe 422 field-error envelope.
+                        model = RetroAchievementsMatchBody.model_validate(
+                            body if isinstance(body, dict) else {}
+                        )
                         if not data.configured():
                             payload, status = api_error_payload(
                                 'RetroAchievements is not configured — save the household username and web API key under Admin → Integrations.',
@@ -210,9 +213,15 @@ def create_retroachievements_settings_router(
                                 response = JSONResponse(api_ok_payload(
                                     data.match_platform(platform, rehash=model.rehash)
                                 ))
-                    except (ValidationError, ValueError) as exc:
-                        message = str(exc) if isinstance(exc, ValueError) else 'Invalid RetroAchievements match request.'
-                        payload, status = api_error_payload(message, code='bad_request')
+                    except ValidationError as exc:
+                        from oneirodex.utils.validation import format_validation_errors
+                        payload, status = api_error_payload(
+                            'Invalid request.', code='unprocessable',
+                            detail=format_validation_errors(exc),
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                    except ValueError as exc:
+                        payload, status = api_error_payload(str(exc), code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     except RuntimeError as exc:
                         payload, status = api_error_payload(str(exc), code='forbidden')
