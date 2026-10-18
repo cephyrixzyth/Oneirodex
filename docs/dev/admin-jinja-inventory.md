@@ -1028,3 +1028,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **First-library invalid-path validation, 2026-10-18:** An outside-root synthetic path was rejected on both exact images; setup stayed on step 6 and no library row was created. Legacy renders HTTP 200; current PRG returns to the same step with validation feedback. Keep current flow. Clones were cleaned. Missing/unavailable in-root folders, duplicates, scan failures, and restart behavior remain open. Evidence: .artifacts/parity-v1.1.8/setup-library-invalid-path-current-d183-paired-20261018.json.
+
+
+**Setup OIDC insecure-issuer validation, 2026-10-18:** Both versions rejected an HTTP issuer, stayed on the integrations step, preserved blank cloned OIDC settings, and kept OIDC sign-in disabled. Legacy renders HTTP 200; current PRG redirects back with validation feedback. No identity provider was contacted. Valid OIDC save/restart and other failure cases remain open. Evidence: .artifacts/parity-v1.1.8/setup-oidc-insecure-issuer-current-d183-paired-20261018.json.
