@@ -973,3 +973,6 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 
 **Art Studio generate empty-payload parity, 2026-10-18:** Exact-image `POST /admin/api/art-studio/generate` matched v1.1.8 for missing CSRF and empty-title validation. No pack or filesystem write was produced. Valid generation and apply workflows remain open. Evidence: `.artifacts/parity-v1.1.8/art-studio-generate-empty-current-d175-paired-20261018.json`. Current image ID: `sha256:5b7450299b64d0de2176b434c66f40c0bc98a0a632e4f84681db798c2a82f5bf`. The matrix now records 630 partially evidenced, 36 behavior-unverified, and zero fully behavior-verified route entries.
+
+
+**Generated artwork empty-body validation parity, 2026-10-18:** Exact-image `POST /admin/api/artwork/generate` matched v1.1.8 for missing CSRF and missing-game validation. No image generation or provider request ran. Valid generation and storage behavior remain open. Evidence: `.artifacts/parity-v1.1.8/artwork-generate-empty-current-d175-paired-20261018.json`. Current image ID: `sha256:5b7450299b64d0de2176b434c66f40c0bc98a0a632e4f84681db798c2a82f5bf`. The matrix now records 631 partially evidenced, 35 behavior-unverified, and zero fully behavior-verified route entries.
