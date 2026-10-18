@@ -137,7 +137,7 @@ def create_legacy_scan_form_router(
                                     _flash(auth, 'error', 'Folder does not exist or cannot be accessed.')
                     response = RedirectResponse(
                         '/scan_manual_folder' if cancelled else
-                        '/admin/scan_management?active_tab=manualScan', status_code=302,
+                        '/scan_management?active_tab=manual', status_code=302,
                     )
 
                 if auth is not None and auth.should_set_session_cookie:

@@ -16,6 +16,8 @@ On narrow screens, admin page actions sit on a second top-bar row and long actio
 
 The Libraries page is an admin SPA **DataTable** (sort + per-column filters, themed `od-cbtn` Scan/Edit/Delete bar, sticky multi-select batch actions). If the library roster fails to load, **Retry loading libraries** retries it while retaining the shared page heading. Its **Create library** form is inline on `/libraries`: choose a name, supported platform, mounted folder path, scan depth and watch preference; optionally upload a JPG/PNG/GIF/WebP image (10 MB max), then create and queue the first scan through the admin API. The former “full library forms” self-link has been removed. `/admin/library/add` opens the shared create form and `/admin/library/edit/<uuid>` opens the direct editor. Edit reads and saves through the admin library JSON API, including platform, scan depth, watch preference and optional image replacement.  The native editor has passed authenticated 375/1440 captures and a disposable save/reload/restore check; broader library tools and scan action parity remain open.
 
+The legacy `POST /scan_manual_folder` compatibility form now returns to the React Manual view (`/scan_management?active_tab=manual`) after validation, so a missing library or inaccessible folder does not send the operator back to Automatic scan.
+
 ## Where can a library point?
 
 By default: anywhere under the games folder (`DATA_FOLDER_GAMES`) or the OS base
