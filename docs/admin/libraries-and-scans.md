@@ -326,7 +326,7 @@ buttons: use Tab to focus a folder and Enter or Space to open it.
 
 ## Image queue and per-game artwork
 
-From a game card, details page, or the image queue, **Edit all artwork** opens `/edit_game_images/<uuid>` . The shared React page displays cover, screenshots and other image kinds; it supports local uploads, confirmed deletion and the existing artwork picker. Refresh from IGDB is a separate confirmed action that runs in the background. Artwork changes pause while a scan is running.
+From a game card, details page, or the image queue, **Edit all artwork** opens `/edit_game_images/<uuid>` . The shared React page displays cover, screenshots and other image kinds; it supports local uploads, confirmed deletion and the existing artwork picker. Refresh from IGDB is available after the game artwork record loads, is a separate confirmed action, and runs in the background. Artwork changes pause while a scan is running.
 
 The legacy image editor uses the shared, theme-aware fallback when a game has
 no cover: the game title and **No cover art** stay readable as live text. A

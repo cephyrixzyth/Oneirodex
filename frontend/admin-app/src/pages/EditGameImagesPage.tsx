@@ -138,7 +138,7 @@ export function EditGameImagesPage() {
         <Button
           className="od-btn--secondary"
           onClick={() => void refreshFromProvider()}
-          disabled={Boolean(busy) || scanRunning}
+          disabled={Boolean(busy) || scanRunning || images === null}
         >
           Refresh from IGDB
         </Button>

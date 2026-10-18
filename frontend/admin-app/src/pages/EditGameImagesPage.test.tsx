@@ -46,6 +46,7 @@ test('loads artwork into the shared admin page and uploads a selected kind throu
   )
 
   expect(await screen.findByRole('heading', { name: 'Edit game images' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh from IGDB' })).toBeEnabled()
   expect(screen.getAllByText('Fixture Game', { exact: true }).length).toBeGreaterThan(0)
   expect(screen.getByRole('img', { name: 'Fixture Game cover' })).toHaveAttribute(
     'src',
@@ -66,4 +67,20 @@ test('loads artwork into the shared admin page and uploads a selected kind throu
   )
   const uploadCall = fetchMock.mock.calls.find(([url]) => String(url) === '/upload_image/game-1')
   expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData)
+})
+
+test('does not offer provider refresh until the game artwork record loads', async () => {
+  globalThis.fetch = vi.fn(async () =>
+    jsonResponse({ code: 'not_found', message: 'Game not found.' }, 404) as any,
+  ) as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/edit_game_images/missing-game']}>
+      <Routes>
+        <Route path="/edit_game_images/:gameUuid" element={<EditGameImagesPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('Game not found.')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh from IGDB' })).toBeDisabled()
 })
