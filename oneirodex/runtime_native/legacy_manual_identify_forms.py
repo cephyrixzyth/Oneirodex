@@ -7,7 +7,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, FastAPI, Request
 from starlette.datastructures import FormData
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import RedirectResponse
+from starlette.responses import RedirectResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
@@ -76,7 +76,7 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
             token=str(form.get(token_name) or ''),
         ) if auth.token is None else None
         if csrf is not None:
-            response = csrf
+            response = _csrf_html_response(csrf)
         elif auth.user is None:
             response = _login_redirect(app, request, login_manager, auth)
         elif normalize_role(getattr(auth.user, 'role', None) or '') != 'admin':
@@ -131,6 +131,25 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
                     destination = '/libraries'
                 response = RedirectResponse(destination, status_code=303)
         return _finish(response, app, auth, request)
+
+
+def _csrf_html_response(csrf):
+    import json
+
+    from werkzeug.exceptions import BadRequest
+
+    try:
+        error_payload = json.loads(csrf.body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError):
+        error_payload = {}
+    bad_request = BadRequest(
+        description=error_payload.get('message') or 'The CSRF token is invalid.',
+    ).get_response()
+    return Response(
+        content=bad_request.get_data(),
+        status_code=bad_request.status_code,
+        media_type='text/html',
+    )
 
 
 async def _bounded_form(request, config):

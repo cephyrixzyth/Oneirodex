@@ -87,6 +87,8 @@ def test_legacy_edit_form_checks_csrf_and_uses_native_update(native_client):
     runtime, data = native_client
     refused = _request(runtime, '/game_edit/game-1', _base_fields(), csrf=False)
     assert refused.status_code == 400
+    assert refused.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is invalid.</p>' in refused.content
     assert data.calls == []
 
     accepted = _request(runtime, '/game_edit/game-1', _base_fields())
