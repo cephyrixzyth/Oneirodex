@@ -1135,3 +1135,6 @@ ext; legacy leaves it literal, resolving to the same destination. No setup state
 
 
 **Reset-confirm validator comparison, 2026-10-19:** Legacy WTForms and the FastAPI form adapter matched on required password/confirmation, eight-character minimum, mismatch, valid matching passwords, whitespace-only input, and preservation of password spaces (7/7 field/error cases). Current presents accessible inline errors with a summary instead of legacy field-labeled flash messages; retain this owner-approved UX improvement. The check used in-memory synthetic submissions and did not touch a database, send email, or make network requests. It does not close route status/session/token/rendering parity. Evidence: `.artifacts/parity-v1.1.8/auth-reset-confirm-validator-parity-local-20261019.json`.
+
+
+**Reset-token expiry boundary comparison, 2026-10-19:** Legacy and current validity predicates matched for missing user/timestamp, a token 14m59s old, the exact 15-minute boundary, a token 15m1s old, a naive UTC timestamp, and a future timestamp (7/7). This used fake in-memory sessions only; no database or account state changed. The check covers the validity predicate, not HTTP/session or persistence behavior. Evidence: `.artifacts/parity-v1.1.8/auth-reset-token-expiry-boundaries-local-20261019.json`.
