@@ -8519,6 +8519,7 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     )
 
     assert response.status_code == 302 and response.headers['location'] == '/library'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert calls and calls[0][:2] == ('player', 'secret')
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,

@@ -114,7 +114,7 @@ def create_auth_form_post_router(
             )
             auth.session_data['_remember'] = 'set'
             target = _safe_next(request.query_params.get('next'))
-            return _finish(RedirectResponse(target, status_code=302), flask_app, auth)
+            return _finish(flask_redirect_response(target), flask_app, auth)
 
     @router.post('/register', include_in_schema=False)
     async def registration_form(request: Request):
