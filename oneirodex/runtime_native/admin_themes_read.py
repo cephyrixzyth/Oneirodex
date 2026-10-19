@@ -1,14 +1,16 @@
 """Native read-only admin theme inventory endpoint."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class AdminThemesData:
@@ -143,7 +145,7 @@ def create_admin_themes_read_router(
                                 request, max_body_bytes=max_bytes + 64 * 1024,
                                 max_files=1, max_fields=12, max_part_size=max_bytes,
                             )
-                            form_csrf_token = compat_form.get('csrf_token')
+                            form_csrf_token = first_form_value(compat_form, 'csrf_token')
                         except RequestBodyTooLarge:
                             from oneirodex.utils.api_contract import api_error_payload
 
@@ -216,10 +218,9 @@ def create_admin_themes_read_router(
                         )
                         response = JSONResponse(payload, status_code=status)
                 else:
-                    flashes = list(auth.session_data.get('_flashes') or [])
-                    flashes.append(('success' if ok else 'error', message))
-                    auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/themes', status_code=302)
+                    response = _theme_form_redirect(
+                        auth, message, 'success' if ok else 'error',
+                    )
             elif request.method == 'POST' or request.method == 'DELETE':
                 response = await _admin_theme_action(
                     request, flask_app, data, user, theme_name, api_ok_payload, api_error_payload,
@@ -274,7 +275,7 @@ def create_admin_themes_read_router(
                     payload, status = api_error('Invalid request size.', code='bad_request')
                     return JSONResponse(payload, status_code=status)
                 try:
-                    upload = form.get('theme_zip')
+                    upload = first_form_upload(form, 'theme_zip')
                     if upload is None:
                         result, error = data.upload(app, user, '', b'')
                     else:
@@ -301,7 +302,7 @@ def _theme_form_redirect(auth, message: str, category: str) -> Response:
     flashes = list(auth.session_data.get('_flashes') or [])
     flashes.append((category, message))
     auth.session_data['_flashes'] = flashes
-    return RedirectResponse('/admin/themes', status_code=302)
+    return flask_redirect_response('/admin/themes', status_code=302)
 
 
 async def _admin_theme_form_upload(request, form, app, data, user):
@@ -309,7 +310,7 @@ async def _admin_theme_form_upload(request, form, app, data, user):
         return None, ('Please choose a valid theme archive and try again.', 'bad_request')
     try:
         max_bytes = int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024)
-        upload = form.get('theme_zip')
+        upload = first_form_upload(form, 'theme_zip')
         if upload is None:
             return None, ('No file provided', 'bad_request')
         try:

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.admin_themes_read import create_admin_themes_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -167,6 +167,9 @@ def test_default_theme_reset_form_request_redirects_with_flash():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/themes'
+    expected = flask_redirect('/admin/themes', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert 'session=' in response.headers.get('set-cookie', '')
     assert data.write_calls == [('reset', 95)]
 
@@ -187,9 +190,14 @@ def test_classic_theme_upload_and_delete_forms_dispatch_natively():
 
     assert uploaded.status_code == 302
     assert uploaded.headers['location'] == '/admin/themes'
+    expected = flask_redirect('/admin/themes', code=302)
+    assert uploaded.headers['content-type'] == expected.headers['Content-Type']
+    assert uploaded.content == expected.get_data()
     assert 'session=' in uploaded.headers.get('set-cookie', '')
     assert deleted.status_code == 302
     assert deleted.headers['location'] == '/admin/themes'
+    assert deleted.headers['content-type'] == expected.headers['Content-Type']
+    assert deleted.content == expected.get_data()
     assert data.write_calls == [
         ('upload', 95, 'custom.zip', b'fake archive'), ('delete', 95, 'custom'),
     ]
