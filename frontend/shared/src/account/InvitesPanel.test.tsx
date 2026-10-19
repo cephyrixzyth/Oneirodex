@@ -69,6 +69,29 @@ test('revokes an outstanding invite and refreshes the empty state', async () => 
   expect(listInvites).toHaveBeenCalledTimes(2)
 })
 
+test('reports when the email server accepted the invite', async () => {
+  const email = 'member@example.com'
+  const emailedInvite = { ...invite, email }
+  vi.mocked(listInvites)
+    .mockResolvedValueOnce(emptyState)
+    .mockResolvedValueOnce({ ...emptyState, invites: [emailedInvite], remaining: 4 })
+  vi.mocked(createInvite).mockResolvedValue({
+    invite: emailedInvite,
+    emailed: true,
+    remaining: 4,
+    unlimited: false,
+  })
+
+  render(<InvitesPanel />)
+  expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('Email address (optional)'), { target: { value: email } })
+  fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
+
+  await waitFor(() => expect(createInvite).toHaveBeenCalledWith({ email }))
+  expect(await screen.findByText('Invite created and emailed.')).toBeInTheDocument()
+  expect(screen.getByText(email)).toBeInTheDocument()
+})
+
 test('prevents creating another invite when the quota is exhausted', async () => {
   vi.mocked(listInvites).mockResolvedValue({ ...emptyState, remaining: 0 })
 
