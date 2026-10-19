@@ -5,7 +5,7 @@ from contextlib import nullcontext
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 from .request_auth import request_auth_context
 from .response_compat import flask_redirect_response
@@ -70,7 +70,7 @@ def create_auth_form_post_router(
             if response is not None:
                 return _finish(response, flask_app)
             if auth.user is not None:
-                return _finish(RedirectResponse('/discover', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/discover', status_code=302), flask_app, auth)
 
             from oneirodex.schemas.auth import LoginBody
 
@@ -81,7 +81,7 @@ def create_auth_form_post_router(
                 })
             except ValidationError:
                 _flash(auth.session_data, 'error', 'Please enter your username and password.')
-                return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
             try:
                 user, failure = login_data.authenticate(
@@ -99,7 +99,7 @@ def create_auth_form_post_router(
                 else:
                     category = 'error'
                 _flash(auth.session_data, category, failure[1])
-                return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
             from oneirodex.runtime_native.auth_resolver import session_identifier
             from oneirodex.runtime_native.auth_login import _safe_next
@@ -130,7 +130,7 @@ def create_auth_form_post_router(
             invite_token = request.query_params.get('token')
             if auth.user is not None:
                 if not invite_token:
-                    return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                    return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
                 for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
                     auth.session_data.pop(key, None)
                 auth.session_data['_remember'] = 'clear'
@@ -146,13 +146,13 @@ def create_auth_form_post_router(
                 }).model_dump()
             except ValidationError:
                 _flash(auth.session_data, 'error', 'Please check the account details and try again.')
-                return _finish(RedirectResponse(_register_target(invite_token), status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
 
             errors = _registration_errors(body)
             if errors:
                 _flash(auth.session_data, 'error', 'Invalid registration details.')
                 _flash_errors(auth.session_data, errors)
-                return _finish(RedirectResponse(_register_target(invite_token), status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
 
             try:
                 result, failure = registration_data.register(
@@ -163,7 +163,7 @@ def create_auth_form_post_router(
             if failure:
                 _flash(auth.session_data, _failure_category(failure[0]), failure[1])
                 _flash_errors(auth.session_data, failure[3])
-                return _finish(RedirectResponse(_register_target(invite_token), status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
 
             if result.get('confirmation_sent'):
                 _flash(auth.session_data, 'success', 'A confirmation email has been sent via email.')
@@ -183,7 +183,7 @@ def create_auth_form_post_router(
             if response is not None:
                 return _finish(response, flask_app)
             if auth.user is not None:
-                return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
             from oneirodex.schemas.password_reset import PasswordResetRequestBody
             from oneirodex.runtime_native.password_reset_confirm import _client_ip
@@ -195,7 +195,7 @@ def create_auth_form_post_router(
                 validate_email(body.email, check_deliverability=False)
             except (ValidationError, EmailNotValidError):
                 _flash(auth.session_data, 'error', 'Invalid email address.')
-                return _finish(RedirectResponse('/reset_password_request', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/reset_password_request', status_code=302), flask_app, auth)
 
             try:
                 outcome = password_reset_data.request_reset(
@@ -213,7 +213,7 @@ def create_auth_form_post_router(
             else:
                 _flash(auth.session_data, 'error', 'Could not request a password reset. Please try again.')
                 target = '/reset_password_request'
-            return _finish(RedirectResponse(target, status_code=302), flask_app, auth)
+            return _finish(flask_redirect_response(target, status_code=302), flask_app, auth)
 
     @router.post('/reset_password/{token}', include_in_schema=False)
     async def password_reset_confirm_form(token: str, request: Request):
@@ -227,7 +227,7 @@ def create_auth_form_post_router(
             if response is not None:
                 return _finish(response, flask_app)
             if auth.user is not None:
-                return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
             try:
                 valid_token = password_reset_data.valid_reset_token(token)
@@ -235,7 +235,7 @@ def create_auth_form_post_router(
                 valid_token = False
             if not valid_token:
                 _flash(auth.session_data, 'message', 'The password reset link is invalid or has expired.')
-                return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
             from oneirodex.schemas.password_reset import PasswordResetConfirmBody
             from oneirodex.runtime_native.password_reset_confirm import _password_form_errors
@@ -253,7 +253,7 @@ def create_auth_form_post_router(
                 _flash(auth.session_data, 'error', 'Invalid password details.')
                 _flash_errors(auth.session_data, errors)
                 return _finish(
-                    RedirectResponse(f'/reset_password/{token}', status_code=302),
+                    flask_redirect_response(f'/reset_password/{token}', status_code=302),
                     flask_app, auth,
                 )
             try:
@@ -269,7 +269,7 @@ def create_auth_form_post_router(
             else:
                 _flash(auth.session_data, 'message', 'Your password has been reset.')
                 target = '/login'
-            return _finish(RedirectResponse(target, status_code=302), flask_app, auth)
+            return _finish(flask_redirect_response(target, status_code=302), flask_app, auth)
 
     @router.api_route('/user/invites', methods=['GET', 'HEAD', 'POST'], include_in_schema=False)
     async def invites_form(request: Request):
@@ -283,7 +283,7 @@ def create_auth_form_post_router(
             if request.method == 'POST' and response is not None:
                 return _finish(response, flask_app)
             if auth is None:
-                response = RedirectResponse('/login?next=%2Fuser%2Finvites', status_code=302)
+                response = flask_redirect_response('/login?next=%2Fuser%2Finvites', status_code=302)
                 return _finish(response, flask_app)
             if auth.user is None:
                 from .acquire_status import _login_redirect
@@ -303,7 +303,7 @@ def create_auth_form_post_router(
                         auth.session_data, 'warning',
                         'Set a public Site URL in admin settings so invite links are not tied to localhost. Until then, links use the address you are browsing from.',
                     )
-                response = RedirectResponse(target, status_code=302)
+                response = flask_redirect_response(target, status_code=302)
                 return _finish(response, flask_app, auth)
 
             from email_validator import EmailNotValidError, validate_email
@@ -315,7 +315,7 @@ def create_auth_form_post_router(
                 validate_email(email, check_deliverability=False)
             except (EmailNotValidError, ValueError):
                 _flash(auth.session_data, 'error', 'Invalid email.')
-                return _finish(RedirectResponse(target, status_code=302), flask_app, auth)
+                return _finish(flask_redirect_response(target, status_code=302), flask_app, auth)
 
             try:
                 from oneirodex.utils.public_origin import public_origin_for_request
@@ -334,7 +334,7 @@ def create_auth_form_post_router(
                     auth.session_data, 'success',
                     'Invite sent successfully. The invite expires after 48 hours.',
                 )
-            return _finish(RedirectResponse(target, status_code=302), flask_app, auth)
+            return _finish(flask_redirect_response(target, status_code=302), flask_app, auth)
 
     @router.post('/delete_invite/{token}', include_in_schema=False)
     async def delete_invite_form(token: str, request: Request):
