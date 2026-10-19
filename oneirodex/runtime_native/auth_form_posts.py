@@ -162,7 +162,7 @@ def create_auth_form_post_router(
                 _flash(auth.session_data, 'success', 'A confirmation email has been sent via email.')
             else:
                 _flash(auth.session_data, 'warning', 'Your account was created, but the confirmation email could not be sent.')
-            return _finish(RedirectResponse('/', status_code=302), flask_app, auth)
+            return _finish(RedirectResponse('/index', status_code=302), flask_app, auth)
 
     @router.post('/reset_password_request', include_in_schema=False)
     async def password_reset_request_form(request: Request):
