@@ -12,6 +12,7 @@ from .batch_favorite import _finish
 from .request_auth import request_auth_context
 
 _UNSUPPORTED_JSON_CONTENT_TYPE = object()
+_INVALID_JSON_PAYLOAD = object()
 
 
 class MemberGameStateData:
@@ -206,24 +207,16 @@ def create_member_game_state_router(
                             "Did not attempt to load JSON data because the request Content-Type was not 'application/json'.",
                             'bad_request', status=415,
                         )
+                    elif payload is _INVALID_JSON_PAYLOAD:
+                        response = _api_error('Invalid JSON payload', 'bad_request')
                     elif not isinstance(payload, dict):
-                        # Match the legacy handler's generic 500 when JSON is
-                        # valid but its top-level value cannot provide .get().
-                        response = _api_error(
-                            'Something went wrong on our end. The error has been logged.',
-                            'internal',
-                        )
+                        response = _api_error('Invalid status value', 'bad_request')
                     else:
                         # The v1.1.8 contract treats an omitted status as an
                         # empty value, which clears the saved status.
                         raw_status = payload.get('status', '')
                         if not isinstance(raw_status, str):
-                            # Legacy calls .strip() directly and its global
-                            # error handler returns this generic internal error.
-                            response = _api_error(
-                                'Something went wrong on our end. The error has been logged.',
-                                'internal',
-                            )
+                            response = _api_error('Invalid status value', 'bad_request')
                         else:
                             status = raw_status.strip()
                             from oneirodex.models import get_status_info
@@ -266,8 +259,8 @@ async def _json_payload(request):
             return _UNSUPPORTED_JSON_CONTENT_TYPE
         payload = await request.json()
         return payload
-    except Exception:  # noqa: BLE001 — match Flask silent JSON handling
-        return {}
+    except Exception:  # noqa: BLE001 — malformed JSON must not clear saved state
+        return _INVALID_JSON_PAYLOAD
 
 
 def _api_error(message, code, *, status=None):

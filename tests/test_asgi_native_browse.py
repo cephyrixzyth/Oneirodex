@@ -3608,8 +3608,8 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
     assert restored.status_code == 200
     calls_before_invalid = list(runtime._fake_member_game_state.calls)
     invalid = asyncio.run(send('POST', '/api/set_game_status/game-a', {'status': 7}))
-    assert invalid.status_code == 500
-    assert invalid.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+    assert invalid.status_code == 400
+    assert invalid.json()['error'] == 'Invalid status value'
     assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
 
     async def send_json_null():
@@ -3623,11 +3623,26 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
             )
 
     invalid_null = asyncio.run(send_json_null())
-    assert invalid_null.status_code == 500
-    assert invalid_null.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+    assert invalid_null.status_code == 400
+    assert invalid_null.json()['error'] == 'Invalid status value'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    async def send_malformed_json():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='{',
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    invalid_json = asyncio.run(send_malformed_json())
+    assert invalid_json.status_code == 400
+    assert invalid_json.json()['error'] == 'Invalid JSON payload'
     assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
     assert runtime._fake_member_game_state.calls == calls_before_invalid + [
-        ('game', 'game-a'), ('game', 'game-a'),
+        ('game', 'game-a'), ('game', 'game-a'), ('game', 'game-a'),
     ]
 
     async def send_form_body():
