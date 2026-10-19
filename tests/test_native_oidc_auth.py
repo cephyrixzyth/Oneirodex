@@ -104,8 +104,9 @@ def test_native_oidc_pkce_flow_sets_state_nonce_and_remember_session(native_clie
             assert session['oidc_code_verifier']
             assert session['oidc_nonce'] == data.client.authorize['nonce']
             callback = await client.get(
-                '/login/oidc/callback?code=auth-code&next=%2Flibraries&state='
-                + session['oidc_auth_state']
+                '/login/oidc/callback?code=auth-code&code=untrusted'
+                '&next=%2Flibraries&next=https%3A%2F%2Fevil.example&state='
+                + session['oidc_auth_state'] + '&state=untrusted'
             )
             return callback
 
