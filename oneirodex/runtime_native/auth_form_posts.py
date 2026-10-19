@@ -404,8 +404,19 @@ def _form_csrf_error(request, form, session_data, config):
             config.get('WTF_CSRF_SECRET_KEY') or config.get('SECRET_KEY'),
             field_name=field, time_limit=config.get('WTF_CSRF_TIME_LIMIT', 3600),
         )
-    except CsrfTokenError:
-        return PlainTextResponse('The CSRF token is invalid.', status_code=400)
+    except CsrfTokenError as exc:
+        import html
+
+        from starlette.responses import HTMLResponse
+
+        body = (
+            '<!doctype html>\n'
+            '<html lang=en>\n'
+            '<title>400 Bad Request</title>\n'
+            '<h1>Bad Request</h1>\n'
+            f'<p>{html.escape(str(exc))}</p>\n'
+        )
+        return HTMLResponse(body, status_code=400)
     return None
 
 

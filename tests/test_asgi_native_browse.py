@@ -8527,6 +8527,26 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_lazy_asgi_login_form_missing_csrf_matches_flask_bad_request(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, _csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'username': 'player', 'password': 'secret'},
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n'
+        '<p>The CSRF token is missing.</p>\n'
+    )
+
+
 @pytest.mark.parametrize(
     ('message', 'category'),
     [
