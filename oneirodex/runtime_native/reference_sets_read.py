@@ -1,6 +1,9 @@
 """Native admin read for the ROM reference-set catalogue and upload limits."""
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -9,6 +12,8 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+from .response_compat import flask_redirect_response
 
 MAX_DAT_BYTES = 32 * 1024 * 1024
 
@@ -151,11 +156,11 @@ def create_reference_sets_router(
                     include_next=True,
                 )
             else:
-                platform = (request.query_params.get('library_platform') or request.query_params.get('platform') or '').strip()
-                region = (request.query_params.get('region') or 'USA').strip()
-                include_matched = request.query_params.get('include_matched', '0').lower() in ('1', 'true', 'yes')
+                platform = (first_query_value(request.query_params, 'library_platform') or first_query_value(request.query_params, 'platform') or '').strip()
+                region = (first_query_value(request.query_params, 'region') or 'USA').strip()
+                include_matched = first_query_value(request.query_params, 'include_matched', '0').lower() in ('1', 'true', 'yes')
                 try:
-                    missing_limit = int(request.query_params.get('missing_limit'))
+                    missing_limit = int(first_query_value(request.query_params, 'missing_limit'))
                 except (TypeError, ValueError):
                     missing_limit = None
                 if not platform:
@@ -247,7 +252,7 @@ def create_reference_sets_router(
                         platform = str(payload.get('library_platform') or payload.get('platform') or '').strip()
                     else:
                         form = await request.form(max_files=0, max_fields=4)
-                        platform = str(form.get('library_platform') or form.get('platform') or '').strip()
+                        platform = str(first_form_value(form, 'library_platform') or first_form_value(form, 'platform') or '').strip()
                     if not platform:
                         payload, status = api_error_payload('library_platform required', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
@@ -368,15 +373,15 @@ def create_reference_sets_router(
                     response = JSONResponse(payload, status_code=status)
             elif request.method == 'POST':
                 form = await request.form(max_files=1, max_fields=12, max_part_size=64 * 1024)
-                upload = form.get('file') or form.get('dat')
+                upload = first_form_upload(form, 'file') or first_form_upload(form, 'dat')
                 if upload is None or not getattr(upload, 'filename', None):
                     payload, status = api_error_payload('DAT file required', code='bad_request')
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    platform = str(form.get('library_platform') or form.get('platform') or '').strip()
-                    region = str(form.get('region') or 'USA').strip()
-                    source = str(form.get('source') or 'nointro').strip()
-                    name = str(form.get('name') or '').strip() or None
+                    platform = str(first_form_value(form, 'library_platform') or first_form_value(form, 'platform') or '').strip()
+                    region = str(first_form_value(form, 'region') or 'USA').strip()
+                    source = str(first_form_value(form, 'source') or 'nointro').strip()
+                    name = str(first_form_value(form, 'name') or '').strip() or None
                     try:
                         raw = await upload.read(MAX_DAT_BYTES + 1)
                     finally:
@@ -405,6 +410,14 @@ def create_reference_sets_router(
                             from oneirodex.runtime_native.db_session import native_db as db
                             db.session.rollback()
                             payload, status = api_error_payload(str(exc), code='bad_request')
+                            response = JSONResponse(payload, status_code=status)
+                        except ET.ParseError:
+                            from oneirodex.runtime_native.db_session import native_db as db
+                            db.session.rollback()
+                            payload, status = api_error_payload(
+                                'Could not parse the DAT. Check its contents and selected platform.',
+                                code='bad_request',
+                            )
                             response = JSONResponse(payload, status_code=status)
                         except Exception:
                             from oneirodex.runtime_native.db_session import native_db as db
@@ -490,7 +503,7 @@ def create_reference_sets_router(
                     )
                     csrf_response = csrf_error_response(
                         request, auth.session_data, flask_app.config,
-                        token=str(parsed_form.get('csrf_token') or ''),
+                        token=str(first_form_value(parsed_form, 'csrf_token') or ''),
                     )
                 except RequestBodyTooLarge:
                     payload, status = api_error_payload(
@@ -549,9 +562,9 @@ def create_reference_sets_router(
                     form = {}
                 if response is not None:
                     pass
-                elif legacy_form and str(form.get('action') or 'upload').strip() == 'delete':
+                elif legacy_form and str(first_form_value(form, 'action') or 'upload').strip() == 'delete':
                     try:
-                        target_id = int(form.get('set_id') or '0')
+                        target_id = int(first_form_value(form, 'set_id') or '0')
                         deleted = target_id > 0 and data.delete(target_id)
                     except Exception:
                         from oneirodex.runtime_native.db_session import native_db as db
@@ -562,20 +575,19 @@ def create_reference_sets_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, message))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse(
+                    response = flask_redirect_response(
                         '/admin/reference_sets', status_code=302,
-                        headers={'Content-Type': 'text/html; charset=utf-8'},
                     )
                     _set_session_cookie(response, flask_app, auth)
                 else:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     if upload is None or not getattr(upload, 'filename', None):
                         payload, status = api_error_payload('DAT file required', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        platform = str(form.get('library_platform') or '').strip()
-                        region = str(form.get('region') or 'USA').strip()
-                        source = str(form.get('source') or 'nointro').strip()
+                        platform = str(first_form_value(form, 'library_platform') or '').strip()
+                        region = str(first_form_value(form, 'region') or 'USA').strip()
+                        source = str(first_form_value(form, 'source') or 'nointro').strip()
                         if any(len(value) > 64 or any(ord(char) < 32 for char in value) for value in (platform, region, source)):
                             payload, status = api_error_payload('Invalid platform, region, or source', code='bad_request')
                             response = JSONResponse(payload, status_code=status)
@@ -595,7 +607,7 @@ def create_reference_sets_router(
                                     result, reference_set = data.upload(
                                         platform=platform, region=region, source=source, raw=raw,
                                         uploader_id=getattr(user, 'id', None),
-                                        replace=str(form.get('replace') or '') == 'true',
+                                        replace=str(first_form_value(form, 'replace') or '') == 'true',
                                     )
                                     if result == 'conflict':
                                         payload, status = api_error_payload(
@@ -606,6 +618,14 @@ def create_reference_sets_router(
                                     else:
                                         response = JSONResponse(api_ok_payload({'reference_set': reference_set}), status_code=201)
                                 except ValueError:
+                                    from oneirodex.runtime_native.db_session import native_db as db
+                                    db.session.rollback()
+                                    payload, status = api_error_payload(
+                                        'Could not parse the DAT. Check its contents and selected platform.',
+                                        code='bad_request',
+                                    )
+                                    response = JSONResponse(payload, status_code=status)
+                                except ET.ParseError:
                                     from oneirodex.runtime_native.db_session import native_db as db
                                     db.session.rollback()
                                     payload, status = api_error_payload(
@@ -667,9 +687,8 @@ def create_reference_sets_router(
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append((category, message))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse(
+                response = flask_redirect_response(
                     '/admin/reference_sets', status_code=302,
-                    headers={'Content-Type': 'text/html; charset=utf-8'},
                 )
                 _set_session_cookie(response, flask_app, auth)
 

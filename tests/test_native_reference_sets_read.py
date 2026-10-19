@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.reference_sets_read import create_reference_sets_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -123,7 +123,9 @@ def test_legacy_reference_sets_invalid_form_redirect_keeps_html_content_type():
 
     assert missing_csrf.status_code == 400
     assert invalid_form.status_code == 302
-    assert invalid_form.headers['content-type'] == 'text/html; charset=utf-8'
+    expected = flask_redirect('/admin/reference_sets', code=302)
+    assert invalid_form.headers['content-type'] == expected.headers['Content-Type']
+    assert invalid_form.content == expected.get_data()
     assert invalid_form.headers['location'] == '/admin/reference_sets'
 
     delete_client = _client(data=SimpleNamespace(read=lambda: {}, delete=lambda _set_id: False))
@@ -133,7 +135,8 @@ def test_legacy_reference_sets_invalid_form_redirect_keeps_html_content_type():
         headers={'X-CSRFToken': delete_client.csrf_token}, follow_redirects=False,
     )
     assert missing_set.status_code == 302
-    assert missing_set.headers['content-type'] == 'text/html; charset=utf-8'
+    assert missing_set.headers['content-type'] == expected.headers['Content-Type']
+    assert missing_set.content == expected.get_data()
     assert missing_set.headers['location'] == '/admin/reference_sets'
 
 
@@ -298,6 +301,9 @@ def test_legacy_reference_sets_form_upload_uses_hidden_csrf_and_redirects():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/reference_sets'
+    expected = flask_redirect('/admin/reference_sets', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert calls[0]['raw'] == b'dat-payload'
     assert calls[0]['uploader_id'] == 71
     from oneirodex.runtime_native.session_compat import load_session_cookie
