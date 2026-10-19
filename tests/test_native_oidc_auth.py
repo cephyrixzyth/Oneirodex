@@ -221,3 +221,148 @@ def test_native_oidc_sparse_id_token_userinfo_is_subject_bound(
     else:
         assert callback.headers['location'] == '/login'
         assert not data.provisioned
+
+
+def test_native_oidc_successful_callback_matches_checked_in_flask_fallback_contract(
+    native_client, monkeypatch,
+):
+    """Compare the successful callback's claims, navigation and session effects."""
+    from flask import Flask
+    from flask_login import LoginManager
+
+    from oneirodex import routes_login as legacy_login
+    from oneirodex.runtime_native.auth_resolver import decode_remember_cookie
+
+    runtime, data = native_client
+    claims = {
+        'sub': 'subject-1', 'email': 'user@example.test',
+        'email_verified': True, 'preferred_username': 'User',
+        'groups': ['OneirodexMembers'],
+    }
+    data.client.userinfo_claims = claims
+
+    legacy_user = SimpleNamespace(
+        name='User', is_active=True, get_id=lambda: '7:fingerprint',
+    )
+    legacy_events = []
+    legacy_provisioned = []
+    legacy_client = SimpleNamespace(oidc=SimpleNamespace(
+        authorize_access_token=lambda **kwargs: (
+            legacy_events.append(('token', kwargs)) or {'userinfo': claims}
+        ),
+    ))
+    monkeypatch.setattr(legacy_login, 'global_settings_row', lambda: object())
+    monkeypatch.setattr(
+        legacy_login, 'build_oidc_config', lambda _settings: data.settings(),
+    )
+    monkeypatch.setattr(legacy_login, 'AUTHLIB_FLASK_AVAILABLE', True)
+    monkeypatch.setattr(legacy_login, 'init_oauth', lambda _app: None)
+    monkeypatch.setattr(legacy_login, 'register_oidc_provider', lambda *_args: None)
+    monkeypatch.setattr(legacy_login, 'get_oauth_client', lambda: legacy_client)
+    monkeypatch.setattr(
+        legacy_login, 'provision_or_update_user',
+        lambda _session, received, _config: legacy_provisioned.append(received) or legacy_user,
+    )
+    monkeypatch.setattr(
+        legacy_login, 'log_system_event',
+        lambda message, **kwargs: legacy_events.append(('login', message, kwargs)),
+    )
+
+    legacy_app = Flask('legacy-oidc-parity')
+    legacy_app.config.update(
+        SECRET_KEY='oidc-secret', TESTING=True,
+        SESSION_PROTECTION='none', SESSION_COOKIE_SAMESITE='Lax',
+    )
+    manager = LoginManager(legacy_app)
+    manager.user_loader(
+        lambda identity: legacy_user if identity == legacy_user.get_id() else None,
+    )
+    legacy_app.register_blueprint(legacy_login.login_bp)
+    legacy_app.add_url_rule(
+        '/discover', endpoint='discover.discover', view_func=lambda: 'discover',
+    )
+    legacy_browser = legacy_app.test_client()
+    with legacy_browser.session_transaction() as session:
+        session['oidc_auth_state'] = 'paired-state'
+        session['oidc_code_verifier'] = 'paired-verifier'
+    legacy_response = legacy_browser.get(
+        '/login/oidc/callback?code=paired-code&state=paired-state&next=%2Flibraries',
+        headers={'User-Agent': 'Oneirodex-Parity-Test/1.0'},
+    )
+
+    async def native_callback():
+        transport = httpx.ASGITransport(app=runtime, client=('127.0.0.1', 50000))
+        async with httpx.AsyncClient(
+            transport=transport, base_url='https://app.example',
+            headers={'User-Agent': 'Oneirodex-Parity-Test/1.0'},
+        ) as browser:
+            start = await browser.get('/login/oidc')
+            assert start.status_code == 302
+            session = load_session_cookie(
+                browser.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+            )
+            return await browser.get(
+                '/login/oidc/callback?code=paired-code&state='
+                + session['oidc_auth_state'] + '&next=%2Flibraries'
+            )
+
+    native_response = asyncio.run(native_callback())
+
+    assert legacy_response.status_code == native_response.status_code == 302
+    assert (
+        legacy_response.headers['Location']
+        == native_response.headers['location']
+        == '/libraries'
+    )
+    assert legacy_events[0] == (
+        'token', {'code_verifier': 'paired-verifier'},
+    )
+    assert data.client.access['code'] == 'paired-code'
+    assert data.client.access['code_verifier']
+    assert legacy_provisioned == [data.provisioned[0][0]] == [claims]
+    assert legacy_events[-1][1] == 'User User logged in via OIDC SSO.'
+    assert legacy_events[-1][2] == {
+        'event_type': 'login', 'event_level': 'information',
+    }
+    assert data.logged == ['User']
+
+    legacy_session_cookie = legacy_browser.get_cookie('session').value
+    native_session_cookie = native_response.cookies.get('session')
+    legacy_session = load_session_cookie(
+        legacy_session_cookie, 'oidc-secret', max_age=31_536_000,
+    )
+    native_session = load_session_cookie(
+        native_session_cookie, 'oidc-secret', max_age=31_536_000,
+    )
+    for key in ('_user_id', '_fresh', '_id'):
+        assert legacy_session[key] == native_session[key]
+    assert not (
+        {'oidc_auth_state', 'oidc_code_verifier', 'oidc_nonce'}
+        & native_session.keys()
+    )
+    legacy_remember = legacy_response.headers.getlist('Set-Cookie')
+    native_remember = native_response.headers.get_list('set-cookie')
+    legacy_cookie_header = next(
+        value for value in legacy_remember if value.startswith('remember_token=')
+    )
+    native_cookie_header = next(
+        value for value in native_remember if value.startswith('remember_token=')
+    )
+    from http.cookies import SimpleCookie
+
+    parsed_legacy = SimpleCookie()
+    parsed_legacy.load(legacy_cookie_header)
+    parsed_native = SimpleCookie()
+    parsed_native.load(native_cookie_header)
+    assert (
+        decode_remember_cookie(
+            parsed_legacy['remember_token'].value, 'oidc-secret',
+        ) == '7:fingerprint'
+    )
+    assert (
+        decode_remember_cookie(
+            parsed_native['remember_token'].value, 'oidc-secret',
+        ) == '7:fingerprint'
+    )
+    for key in ('path', 'httponly', 'secure', 'samesite'):
+        assert parsed_legacy['remember_token'][key] == parsed_native['remember_token'][key]
