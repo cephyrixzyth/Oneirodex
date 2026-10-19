@@ -8188,9 +8188,15 @@ def test_lazy_asgi_auth_pages_serve_react_shell_and_preserve_flash_and_redirects
     assert login_page.headers['cache-control'] == 'no-store'
     assert head.status_code == 200 and head.content == b''
     assert signed_in.status_code == 302 and signed_in.headers['location'] == '/discover'
+    assert signed_in.headers['content-type'] == 'text/html; charset=utf-8'
+    assert signed_in.text.endswith('<a href="/discover">/discover</a>. If not, click the link.\n')
     assert bad_invite.status_code == 302 and bad_invite.headers['location'] == '/register'
+    assert bad_invite.headers['content-type'] == 'text/html; charset=utf-8'
+    assert bad_invite.text.endswith('<a href="/register">/register</a>. If not, click the link.\n')
     assert confirmation.status_code == 200
     assert bad_reset.status_code == 302 and bad_reset.headers['location'] == '/login'
+    assert bad_reset.headers['content-type'] == 'text/html; charset=utf-8'
+    assert bad_reset.text.endswith('<a href="/login">/login</a>. If not, click the link.\n')
     assert calls == [('invite', 'expired'), ('reset', 'expired')]
 
 

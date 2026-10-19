@@ -7,9 +7,10 @@ from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 from .query_compat import first_query_value
 
 
@@ -120,11 +121,11 @@ def create_auth_pages_router(
             )
             invite_token = first_query_value(request.query_params, 'token') if page == 'register' else None
             if page == 'login' and auth.user is not None:
-                response = RedirectResponse('/discover', status_code=302)
+                response = flask_redirect_response('/discover', status_code=302)
             elif page in {'reset_request', 'reset'} and auth.user is not None:
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif page == 'register' and auth.user is not None and not invite_token:
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             else:
                 if page == 'register' and auth.user is not None and invite_token:
                     for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
@@ -139,7 +140,7 @@ def create_auth_pages_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(invalid_message)
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse(
+                    response = flask_redirect_response(
                         '/register' if page == 'register' else '/login', status_code=302,
                     )
                 else:
