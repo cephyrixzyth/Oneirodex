@@ -5,6 +5,7 @@ All durable writes, scans, and deletion scheduling live behind
 """
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 import json
 import logging
 import os
@@ -15,10 +16,12 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
+from .query_compat import first_query_value
 
 logger = logging.getLogger(__name__)
 
@@ -430,7 +433,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
             replay = Request(request.scope, receive=_body_receive(b''.join(raw_chunks)))
             form = await replay.form(max_files=1, max_fields=20, max_part_size=64 * 1024)
             form_values = {key: value for key, value in form.items() if not isinstance(value, UploadFile)}
-            upload = form.get('image')
+            upload = first_form_upload(form, 'image')
             raw_image = None
             filename = ''
             if isinstance(upload, UploadFile) and upload.filename:
@@ -569,7 +572,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, notice))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/libraries', status_code=302)
+                    response = flask_redirect_response('/libraries', status_code=302)
                     _set_session_cookie(response, app, auth)
                 else:
                     response = _legacy_library_form_error_response(
@@ -632,11 +635,11 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             delete_payload, delete_too_large = await _json_object_or_form(request, flask_app.config)
             if auth.token is None and request.headers.get('X-CSRFToken') is None:
                 form = delete_payload.get('__form__', {})
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
         elif auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
                 form = await request.form(max_files=0, max_fields=10, max_part_size=16 * 1024)
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
                 pass
         response = csrf_error_response(
@@ -821,9 +824,9 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
     def value(key, default=None):
         if key in payload:
             return payload.get(key)
-        return form.get(key) or request.query_params.get(key) or default
+        return first_form_value(form, key) or first_query_value(request.query_params, key) or default
 
-    library_uuid = payload.get('library_uuid') or form.get('library_uuid') or request.query_params.get('library_uuid')
+    library_uuid = payload.get('library_uuid') or first_form_value(form, 'library_uuid') or first_query_value(request.query_params, 'library_uuid')
     if not library_uuid:
         return _error('library_uuid is required', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
@@ -836,7 +839,7 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         return _error('use_library_root must be a boolean', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
     folder = payload.get('folder', '') if use_library_root else (
-        payload.get('folder') or form.get('folder') or request.query_params.get('folder')
+        payload.get('folder') or first_form_value(form, 'folder') or first_query_value(request.query_params, 'folder')
         or getattr(library, 'last_scan_folder', None)
     )
     if folder is None:
@@ -876,8 +879,8 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         scan_mode = 'folders'
     elif scan_mode == 'auto':
         scan_mode = data.scan_mode_for_path(resolved, scan_mode)
-    force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (form.get('force_parallel') or request.query_params.get('force_parallel'))
-    policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (form.get('queue_policy') or request.query_params.get('queue_policy'))
+    force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (first_form_value(form, 'force_parallel') or first_query_value(request.query_params, 'force_parallel'))
+    policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (first_form_value(form, 'queue_policy') or first_query_value(request.query_params, 'queue_policy'))
     schedule = payload.get('schedule')
     if schedule is not None and not isinstance(schedule, str):
         return _error('schedule must be a string', 'bad_request', 400,
@@ -902,7 +905,7 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
                       body_status='rejected', job_id=None, position=None)
 
     def flag(key, default=False):
-        raw = payload.get(key) if key in payload else (form.get(key) or request.query_params.get(key))
+        raw = payload.get(key) if key in payload else (first_form_value(form, key) or first_query_value(request.query_params, key))
         if raw is None:
             return default
         if isinstance(raw, bool):
@@ -957,10 +960,10 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         return _error('Request body is too large.', 'bad_request', 413)
     form = payload.get('__form__', {})
     force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (
-        form.get('force_parallel') or request.query_params.get('force_parallel')
+        first_form_value(form, 'force_parallel') or first_query_value(request.query_params, 'force_parallel')
     )
     policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (
-        form.get('queue_policy') or request.query_params.get('queue_policy')
+        first_form_value(form, 'queue_policy') or first_query_value(request.query_params, 'queue_policy')
     )
     force = parse_queue_policy(policy_raw, force_parallel=force_raw) == 'force'
     try:
@@ -1091,11 +1094,11 @@ async def _delete_single(request, app, data, user, library_uuid, *, database_sco
     form = payload.get('__form__', {})
     force_raw = payload.get('force') if 'force' in payload else (
         payload.get('force_delete') if 'force_delete' in payload else
-        (form.get('force') or form.get('force_delete')
-         or request.query_params.get('force') or request.query_params.get('force_delete'))
+        (first_form_value(form, 'force') or first_form_value(form, 'force_delete')
+         or first_query_value(request.query_params, 'force') or first_query_value(request.query_params, 'force_delete'))
     )
     confirm_raw = payload.get('confirm_name') if 'confirm_name' in payload else (
-        form.get('confirm_name') or request.query_params.get('confirm_name')
+        first_form_value(form, 'confirm_name') or first_query_value(request.query_params, 'confirm_name')
     )
     if force_raw is not None or confirm_raw is not None:
         force = parse_bool_flag(force_raw, default=False)
@@ -1245,7 +1248,7 @@ async def _create_payload(request, config):
         try:
             form = await replay.form(max_files=1, max_fields=20)
             payload = dict(form)
-            upload = form.get('image')
+            upload = first_form_upload(form, 'image')
             image = (upload.filename or '', await upload.read()) if upload is not None and upload.filename else None
             return payload, image, False
         except Exception:

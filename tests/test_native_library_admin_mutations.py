@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 from PIL import Image
 
 from oneirodex.runtime_native.library_admin_mutations import (
@@ -176,6 +176,9 @@ def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client
     assert rejected.status_code == 400
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/libraries'
+    expected = flask_redirect('/libraries', code=302)
+    assert accepted.headers['content-type'] == expected.headers['Content-Type']
+    assert accepted.content == expected.get_data()
     assert [call[0] for call in data.calls] == ['create']
 
 
@@ -255,6 +258,9 @@ def test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter(nati
 
     assert response.status_code == 302
     assert response.headers['location'] == '/libraries'
+    expected = flask_redirect('/libraries', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.calls[0][0] == 'update'
     assert data.calls[0][1] == 'lib-1'
 
