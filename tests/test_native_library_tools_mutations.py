@@ -124,6 +124,9 @@ class FakeData:
         self.calls.append(('directory_readable', path))
         return path == '/safe/NewFolder'
 
+    def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
+        self.calls.append(('unsafe_link_path', path, reason, actor_name, actor_id))
+
     def link_existing_game(self, _app, game_uuid, path, actor, _actor_id):
         self.calls.append(('link_existing_game', game_uuid, path, actor))
         return {'game_uuid': game_uuid, 'game_name': 'Original',
@@ -288,6 +291,10 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
             'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
             'library_uuid': 'lib1', 'from_unmatched': 'false', 'csrf_token': csrf,
         }, follow_redirects=False)
+        rejected_path = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/outside/New Folder',
+            'from_unmatched': 'true', 'csrf_token': csrf,
+        }, follow_redirects=False)
 
     assert rejected.status_code == 400
     assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
@@ -296,7 +303,12 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
     assert accepted.headers['location'] == '/scan_management?active_tab=unmatched'
     assert accepted_from_identify.status_code == 302
     assert accepted_from_identify.headers['location'] == '/scan_management?active_tab=unmatched'
+    assert rejected_path.status_code == 302
+    assert rejected_path.headers['location'] == (
+        '/add_game_manual?full_disk_path=/outside/New+Folder&from_unmatched=true'
+    )
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+    assert ('unsafe_link_path', '/outside/New Folder', 'outside allowed roots', 'admin', 7) in data.calls
 
 
 def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):

@@ -54,6 +54,17 @@ class LibraryToolsMutationData:
         import os
         return os.path.isdir(path) and os.access(path, os.R_OK)
 
+    def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
+        from oneirodex.utils.event_logging import log_system_event
+        from oneirodex.utils.security import sanitize_path_for_logging
+
+        safe_path = sanitize_path_for_logging(path)
+        log_system_event(
+            f"Path validation failed for admin {actor_name} linking existing game: "
+            f"{safe_path} - {reason}",
+            event_type='security', event_level='warning', audit_user=actor_id,
+        )
+
     def link_existing_game(self, app, game_uuid, path, actor_name, actor_id):
         from sqlalchemy import select
         from sqlalchemy.exc import SQLAlchemyError
@@ -318,6 +329,11 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                         else:
                             safe, reason = data.safe_path(flask_app, full_disk_path)
                             if not safe:
+                                data.log_unsafe_existing_game_path(
+                                    full_disk_path, reason,
+                                    getattr(auth.user, 'name', 'administrator'),
+                                    getattr(auth.user, 'id', None),
+                                )
                                 message, category = f'Access denied: {reason}', 'error'
                             elif not data.directory_readable(full_disk_path):
                                 message, category = 'The selected folder does not exist or cannot be read.', 'error'
@@ -350,11 +366,15 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                 else:
                     # Match Flask's legacy url_for behavior: omit empty/None
                     # query values and sort the remaining keys.
-                    query = urlencode(sorted((key, value) for key, value in {
-                        'full_disk_path': full_disk_path or None,
-                        'library_uuid': library_uuid or None,
-                        'from_unmatched': 'true' if from_unmatched else 'false',
-                    }.items() if value is not None))
+                    query_values = []
+                    if full_disk_path:
+                        query_values.append(('full_disk_path', full_disk_path))
+                    if library_uuid:
+                        query_values.append(('library_uuid', library_uuid))
+                    query_values.append((
+                        'from_unmatched', 'true' if from_unmatched else 'false',
+                    ))
+                    query = urlencode(query_values, safe='/')
                     location = '/add_game_manual?' + query
                 legacy_redirect = werkzeug_redirect(location, code=302)
                 response = Response(
