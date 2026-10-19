@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.download_mutations import create_download_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -152,6 +152,9 @@ def test_legacy_game_download_creates_request_and_redirects_to_downloads():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/downloads'
+    expected = flask_redirect('/downloads', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.created == (
         '12345678-1234-1234-1234-123456789abc', 7,
         '/storage/fixture', '/storage/fixture/game.zip',
@@ -265,6 +268,9 @@ def test_legacy_game_download_preserves_duplicate_request_flash():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/downloads'
+    expected = flask_redirect('/downloads', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.created is None
     assert response.headers.get('set-cookie', '').startswith('session=')
 
