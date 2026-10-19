@@ -61,8 +61,8 @@ class ScanUnmatchedReadsData:
 
     @staticmethod
     def _apply_filters(query, filters):
-        from sqlalchemy import or_
-        from oneirodex.models import Library, UnmatchedFolder
+        from sqlalchemy import String, cast, exists, or_, select
+        from oneirodex.models import Game, Library, UnmatchedFolder
 
         status = filters.get('status') or 'all'
         if status != 'all':
@@ -95,6 +95,15 @@ class ScanUnmatchedReadsData:
                 UnmatchedFolder.search_name.ilike(pattern),
                 UnmatchedFolder.display_name.ilike(pattern),
                 Library.name.ilike(pattern),
+                cast(Library.platform, String).ilike(pattern),
+                cast(UnmatchedFolder.status, String).ilike(pattern),
+                UnmatchedFolder.suggested_kind.ilike(pattern),
+                UnmatchedFolder.match_reason.ilike(pattern),
+                UnmatchedFolder.suggested_candidate_name.ilike(pattern),
+                exists(select(1).where(
+                    Game.uuid == UnmatchedFolder.matched_game_uuid,
+                    or_(Game.name.ilike(pattern), Game.full_disk_path.ilike(pattern)),
+                )),
             ))
         why = filters.get('why') or ''
         if why:

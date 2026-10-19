@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { AdminRoutes } from './AdminRoutes'
 
@@ -29,6 +29,17 @@ function mountAt(path: any) {
     <MemoryRouter initialEntries={[path]}>
       <AdminRoutes />
     </MemoryRouter>,
+  )
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <output data-testid="current-location">
+      {location.pathname}
+      {location.search}
+      {location.state?.linkSuccess || ''}
+    </output>
   )
 }
 
@@ -89,6 +100,37 @@ describe('AdminRoutes path -> page', () => {
   test('catch-all lede matches the old switch default', () => {
     mountAt('/admin/nope')
     expect(screen.getByText('Pick a section from the rail on the left.')).toBeInTheDocument()
+  })
+
+  test('scan-management unmatched route keeps its URL and uses the paginated scan table', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => [],
+      text: async () => '',
+    })) as unknown as typeof globalThis.fetch
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/scan_management',
+            search: '?active_tab=unmatched',
+            state: { linkSuccess: 'link completed' },
+          },
+        ]}
+      >
+        <AdminRoutes />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('heading', { name: 'Unmatched folders' })).toBeInTheDocument()
+    expect(screen.getByTestId('current-location')).toHaveTextContent(
+      '/scan_management?active_tab=unmatched',
+    )
+    expect(await screen.findByText('link completed')).toBeInTheDocument()
+    expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Unmatched folder filters and results')).toBeInTheDocument()
   })
 
   test('Admin Help internal navigation stays in the SPA', () => {

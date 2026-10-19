@@ -26,9 +26,9 @@ test('direct unmatched page retains review controls and links back to scan jobs'
   })
 
   render(
-    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+    <MemoryRouter initialEntries={['/admin/unmatched']}>
       <Routes>
-        <Route path="/scan_management" element={<UnmatchedPage />} />
+        <Route path="/admin/unmatched" element={<UnmatchedPage />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -51,14 +51,13 @@ test('shows one-time link success feedback passed from the identify form', async
     <MemoryRouter
       initialEntries={[
         {
-          pathname: '/scan_management',
-          search: '?active_tab=unmatched',
+          pathname: '/admin/unmatched',
           state: { linkSuccess: "Linked existing game 'Parity Game' to this folder." },
         },
       ]}
     >
       <Routes>
-        <Route path="/scan_management" element={<UnmatchedPage />} />
+        <Route path="/admin/unmatched" element={<UnmatchedPage />} />
       </Routes>
     </MemoryRouter>,
   )

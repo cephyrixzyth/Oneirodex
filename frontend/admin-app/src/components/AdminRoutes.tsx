@@ -30,6 +30,7 @@ import { DownloadsPage } from '../pages/DownloadsPage'
 import { StatisticsPage } from '../pages/StatisticsPage'
 import { ScansPage } from '../pages/ScansPage'
 import { UnmatchedPage } from '../pages/UnmatchedPage'
+import { ScanUnmatchedPage } from '../pages/ScanUnmatchedPage'
 import { ManualIdentifyPage } from '../pages/ManualIdentifyPage'
 import { EditGameImagesPage } from '../pages/EditGameImagesPage'
 import { ScanFiltersPage } from '../pages/ScanFiltersPage'
@@ -115,11 +116,12 @@ function SettingsSectionPage() {
 }
 
 function ScanManagementRoute() {
-  const { search } = useLocation()
+  const location = useLocation()
+  const { search } = location
   const tab = new URLSearchParams(search).get('active_tab') || 'auto'
   if (tab === 'jobs') return <ScansPage />
   if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />
-  if (tab === 'unmatched') return <UnmatchedPage />
+  if (tab === 'unmatched') return <ScanUnmatchedPage />
   if (tab === 'scan_filters') return <ScanFiltersPage />
   if (tab === 'file_extensions') return <ExtensionsPage />
   if (tab === 'image_queue') return <ImagesPage />

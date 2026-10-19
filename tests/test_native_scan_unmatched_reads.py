@@ -10,8 +10,29 @@ from fastapi import FastAPI
 from flask import Flask
 from flask_login import LoginManager
 
-from oneirodex.runtime_native.scan_unmatched_reads import create_scan_unmatched_reads_router
+from oneirodex.runtime_native.scan_unmatched_reads import (
+    ScanUnmatchedReadsData,
+    create_scan_unmatched_reads_router,
+)
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+
+
+def test_search_filter_includes_linked_game_title_and_disk_path():
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+    from oneirodex.models import Library, UnmatchedFolder
+
+    query = select(UnmatchedFolder, Library.name).join(Library)
+    filtered = ScanUnmatchedReadsData._apply_filters(query, {'q': 'Linked Match'})
+    sql = str(filtered.compile(dialect=postgresql.dialect())).lower()
+
+    assert 'exists (select 1' in sql
+    assert 'from games' in sql
+    assert 'games.name ilike' in sql
+    assert 'games.full_disk_path ilike' in sql
+    assert 'cast(libraries.platform as varchar)' in sql
+    assert 'cast(unmatched_folders.status as varchar)' in sql
+    assert UnmatchedFolder.matched_game_uuid.key in sql
 
 
 class FakeUnmatchedData:
