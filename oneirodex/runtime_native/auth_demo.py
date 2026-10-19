@@ -6,7 +6,9 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import PlainTextResponse, RedirectResponse
+from starlette.responses import PlainTextResponse
+
+from .response_compat import flask_redirect_response
 
 
 class PublicDemoData:
@@ -61,7 +63,7 @@ def create_public_demo_router(
             trusted_forwarded_for(request, flask_app.config),
         )
         session_data.pop('_remember', None)
-        response = RedirectResponse('/discover', status_code=302)
+        response = flask_redirect_response('/discover', status_code=302)
         _set_session_cookie(response, flask_app, SimpleNamespace(session_data=session_data))
         response.headers.setdefault('Cache-Control', 'no-store')
         for key, value in security_header_values(flask_app.config).items():
