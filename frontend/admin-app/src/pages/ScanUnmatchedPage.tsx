@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { csrfHeaders, getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
@@ -85,6 +85,7 @@ export function ScanUnmatchedPage() {
   const [actionStatus, setActionStatus] = useState('')
   const [busyId, setBusyId] = useState<string | number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectedRows = useRef(new Map<string, UnmatchedRow>())
   const [searchNames, setSearchNames] = useState<Record<string, string>>({})
   const [reloadKey, setReloadKey] = useState(0)
   const clientPagination = layout !== 'all' || triage !== 'all' || kind === 'none'
@@ -146,13 +147,16 @@ export function ScanUnmatchedPage() {
     if (kind !== 'all' && kind !== 'none') params.set('suggested_kind', kind)
     void getJson(`/api/unmatched_folders?${params}`, { signal: controller.signal })
       .then((value: PageResult) => {
+        let nextRows: UnmatchedRow[]
         if (Array.isArray(value)) {
-          setRows(value)
-          setTotal(value.length)
+          nextRows = value
+          setTotal(nextRows.length)
         } else {
-          setRows(Array.isArray(value?.items) ? value.items : [])
+          nextRows = Array.isArray(value?.items) ? value.items : []
           setTotal(Number(value?.total) || 0)
         }
+        nextRows.forEach((row) => selectedRows.current.set(String(row.id), row))
+        setRows(nextRows)
         setError(null)
       })
       .catch((reason) => {
@@ -233,14 +237,13 @@ export function ScanUnmatchedPage() {
   const displayTotal = clientPagination ? filteredRows.length : total
 
   useEffect(() => {
-    setSelectedIds((current) => {
-      const visible = new Set(visibleRows.map((row) => String(row.id)))
-      const next = new Set([...current].filter((id) => visible.has(id)))
-      return next.size === current.size ? current : next
-    })
-  }, [visibleRows])
+    setSelectedIds(new Set())
+    selectedRows.current.clear()
+  }, [status, libraryUuid, platform, region, searchQuery, why, kind, layout, triage])
 
   function changeFilter(setter: (value: string) => void, value: string) {
+    setSelectedIds(new Set())
+    selectedRows.current.clear()
     setter(value)
     setOffset(0)
   }
@@ -279,7 +282,10 @@ export function ScanUnmatchedPage() {
     action: 'clear' | 'ignore_selected' | 'mark_kind' | 'merge' | 'keep' | 'ignore',
     kindValue?: string,
   ) {
-    const ids = visibleRows.map((row) => String(row.id)).filter((id) => selectedIds.has(id))
+    const ids = [...selectedIds]
+    const selectedRowData = ids
+      .map((id) => selectedRows.current.get(id))
+      .filter((row): row is UnmatchedRow => Boolean(row))
     if (!ids.length) return
     if (action === 'clear' && !window.confirm(`Clear ${ids.length} selected unmatched entries?`))
       return
@@ -299,9 +305,7 @@ export function ScanUnmatchedPage() {
         }
         setActionStatus(`Cleared ${cleared} selected entries.`)
       } else if (action === 'ignore_selected') {
-        const eligible = visibleRows.filter(
-          (row) => ids.includes(String(row.id)) && row.status !== 'Ignore',
-        )
+        const eligible = selectedRowData.filter((row) => row.status !== 'Ignore')
         let ignored = 0
         for (let index = 0; index < eligible.length; index += 100) {
           const results = await Promise.all(
@@ -335,8 +339,8 @@ export function ScanUnmatchedPage() {
         }
         setActionStatus(`Marked ${marked} of ${ids.length} selected as ${kindValue}.`)
       } else {
-        const duplicateIds = visibleRows
-          .filter((row) => ids.includes(String(row.id)) && row.status === 'Duplicate')
+        const duplicateIds = selectedRowData
+          .filter((row) => row.status === 'Duplicate')
           .map((row) => String(row.id))
         if (!duplicateIds.length) {
           setActionStatus('Select duplicate rows for Merge, Keep, or Ignore.')
@@ -353,6 +357,7 @@ export function ScanUnmatchedPage() {
         setActionStatus(`Duplicate ${action}: ${fixed} of ${duplicateIds.length}.`)
       }
       setSelectedIds(new Set())
+      selectedRows.current.clear()
       setReloadKey((value) => value + 1)
     } catch (reason) {
       setError(reason)
@@ -394,6 +399,7 @@ export function ScanUnmatchedPage() {
         cleared += removed
       }
       setSelectedIds(new Set())
+      selectedRows.current.clear()
       setActionStatus(`Cleared ${cleared} entries. Storage files were not changed.`)
       setReloadKey((value) => value + 1)
     } catch (reason) {
@@ -684,6 +690,8 @@ export function ScanUnmatchedPage() {
             type="search"
             value={query}
             onChange={(event) => {
+              setSelectedIds(new Set())
+              selectedRows.current.clear()
               setQuery(event.target.value)
               setOffset(0)
             }}
@@ -763,7 +771,7 @@ export function ScanUnmatchedPage() {
                 type="button"
                 aria-pressed={layout === value}
                 className={`od-scan-unmatched__filter${layout === value ? ' is-active' : ''}`}
-                onClick={() => setLayout(value)}
+                onClick={() => changeFilter(setLayout, value)}
               >
                 {label}
               </Button>
@@ -781,7 +789,7 @@ export function ScanUnmatchedPage() {
                 type="button"
                 aria-pressed={triage === value}
                 className={`od-scan-unmatched__filter${triage === value ? ' is-active' : ''}`}
-                onClick={() => setTriage(value)}
+                onClick={() => changeFilter(setTriage, value)}
               >
                 {label}
               </Button>
@@ -880,7 +888,13 @@ export function ScanUnmatchedPage() {
             <Button type="button" disabled={loading} onClick={() => void runBatchAction('ignore')}>
               Ignore duplicates
             </Button>
-            <Button type="button" onClick={() => setSelectedIds(new Set())}>
+            <Button
+              type="button"
+              onClick={() => {
+                setSelectedIds(new Set())
+                selectedRows.current.clear()
+              }}
+            >
               Deselect
             </Button>
           </div>

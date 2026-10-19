@@ -166,6 +166,57 @@ test('computed filters paginate across every matching row and report the filtere
   )
 })
 
+test('keeps selected rows across server pages and applies batch actions to every selection', async () => {
+  const allRows = Array.from({ length: 51 }, (_, index) => ({
+    id: `folder-${index}`,
+    folder_path: `/storage/review/page-${String(index).padStart(2, '0')}`,
+    status: 'Unmatched',
+    library_name: 'Review Library',
+    platform_name: 'PCWIN',
+  }))
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    if (String(url) === '/api/get_libraries') return []
+    const params = new URL(String(url), 'http://oneirodex.test').searchParams
+    const offset = Number(params.get('offset') || 0)
+    const limit = Number(params.get('limit') || 150)
+    return { items: allRows.slice(offset, offset + limit), total: allRows.length }
+  })
+  vi.mocked(postJson).mockResolvedValue({ marked: 2 })
+
+  render(
+    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+      <ScanUnmatchedPage />
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(
+    await screen.findByRole('checkbox', { name: 'Select folder /storage/review/page-00' }),
+  )
+  fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
+  await screen.findByText('/storage/review/page-00')
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+  fireEvent.click(
+    await screen.findByRole('checkbox', { name: 'Select folder /storage/review/page-50' }),
+  )
+
+  expect(screen.getByRole('group', { name: 'Selected folder actions' })).toHaveTextContent(
+    '2 selected',
+  )
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'Selected folder actions' })).getByRole('button', {
+      name: 'Mark Soft',
+    }),
+  )
+
+  await waitFor(() =>
+    expect(postJson).toHaveBeenCalledWith('/api/unmatched_folders/batch/mark_kind', {
+      ids: ['folder-0', 'folder-50'],
+      item_kind: 'experience',
+    }),
+  )
+  expect(await screen.findByText('Marked 2 of 2 selected as experience.')).toBeInTheDocument()
+})
+
 test('saves the legacy soft search name without renaming the folder path', async () => {
   vi.mocked(getJson).mockImplementation(async (url) => {
     if (String(url) === '/api/get_libraries') return []
