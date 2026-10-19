@@ -10152,7 +10152,7 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
     )
 
     assert response.status_code == 302, response.text
-    assert response.headers['location'] == '/libraries'
+    assert response.headers['location'] == '/library'
     assert ajax.status_code == 200
     assert ajax.json()['message'] == 'Game images refresh process started for Fixture game.'
     assert data.calls.count(('enqueue', 'game-1')) == 2
