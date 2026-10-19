@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from urllib.parse import urlsplit
 
 import httpx
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 from flask_login import LoginManager, UserMixin
 
 from oneirodex.runtime_native.admin_redirects import create_admin_redirect_router
@@ -77,8 +77,11 @@ def test_admin_redirect_targets_and_query_compatibility():
 
     for path, expected in cases.items():
         response = fetch(app, path, cookie)
+        expected_response = flask_redirect(expected, code=302)
         assert response.status_code == 302
         assert response.headers['location'] == expected
+        assert response.headers['content-type'] == expected_response.headers['Content-Type']
+        assert response.content == expected_response.get_data()
         assert response.headers['cache-control'] == 'no-store'
         assert response.headers['vary'] == 'Cookie'
 
