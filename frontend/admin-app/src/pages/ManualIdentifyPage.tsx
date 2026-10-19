@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Button, PageStatus } from '@oneirodex/ui'
+import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson, putJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { Candidate, Options, TAXONOMIES } from './manualIdentifyTypes'
@@ -45,6 +45,19 @@ export function ManualIdentifyPage() {
   const [saveError, setSaveError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [scanRunning, setScanRunning] = useState(false)
+  const [linkQuery, setLinkQuery] = useState('')
+  const [linkHits, setLinkHits] = useState<
+    Array<{ uuid: string; name: string; full_disk_path?: string | null }>
+  >([])
+  const [linkSelected, setLinkSelected] = useState<{
+    uuid: string
+    name: string
+    full_disk_path?: string | null
+  } | null>(null)
+  const [linkSearching, setLinkSearching] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState('')
+  const [linkSearched, setLinkSearched] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -76,6 +89,7 @@ export function ManualIdentifyPage() {
         if (!live) return
         setForm((current) => ({ ...current, ...payload.game }))
         setSearchText(payload.game?.name || '')
+        setLinkQuery(payload.game?.name || '')
         setScanRunning(Boolean(payload.scan_running))
       })
       .catch((error) => {
@@ -262,6 +276,56 @@ export function ManualIdentifyPage() {
       setSaveError(
         error instanceof Error ? error.message : 'Could not allocate a custom catalog ID.',
       )
+    }
+  }
+  async function searchExistingGames(event: FormEvent) {
+    event.preventDefault()
+    const term = linkQuery.trim()
+    if (term.length < 2 || linkSearching || linkBusy) return
+    setLinkSearching(true)
+    setLinkError('')
+    setLinkHits([])
+    setLinkSelected(null)
+    setLinkSearched(false)
+    try {
+      const result = await getJson(`/api/admin/games_search?q=${encodeURIComponent(term)}`)
+      if (!Array.isArray(result))
+        throw new Error('Existing game search returned an invalid response.')
+      setLinkHits(result as Array<{ uuid: string; name: string; full_disk_path?: string | null }>)
+      setLinkSearched(true)
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Unable to search existing games.')
+    } finally {
+      setLinkSearching(false)
+    }
+  }
+  async function linkExistingGame() {
+    if (!form.full_disk_path || !form.library_uuid || !linkSelected || linkBusy) return
+    const confirmed = await confirmAction({
+      title: 'Link this folder to an existing game?',
+      body: [
+        `Set ${linkSelected.name} to use this folder path?`,
+        String(form.full_disk_path),
+        'This updates the selected game path and removes any matching unmatched-folder row.',
+      ],
+      confirmLabel: 'Link folder',
+      tone: 'neutral',
+    })
+    if (!confirmed) return
+    setLinkBusy(true)
+    setLinkError('')
+    try {
+      await postJson('/api/library_tools/link_existing_game', {
+        game_uuid: linkSelected.uuid,
+        full_disk_path: form.full_disk_path,
+        library_uuid: form.library_uuid,
+        from_unmatched: fromUnmatched,
+      })
+      navigate(fromUnmatched ? '/admin/scan_management?active_tab=unmatched' : '/libraries')
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Unable to link this folder.')
+    } finally {
+      setLinkBusy(false)
     }
   }
   return (
@@ -595,6 +659,72 @@ export function ManualIdentifyPage() {
           </Button>
         </div>
       </form>
+      <section className="od-admin-panel" aria-labelledby="od-link-existing-title">
+        <h2 id="od-link-existing-title">Or link to an existing library game</h2>
+        <p className="od-admin-lede">
+          Search your library and choose a game to link this folder to instead of adding a new one.
+        </p>
+        <form className="od-admin-panel__toolbar" onSubmit={searchExistingGames}>
+          <label className="od-admin-field">
+            Search existing games
+            <input
+              className="od-admin-input"
+              value={linkQuery}
+              onChange={(event) => {
+                setLinkQuery(event.target.value)
+                setLinkHits([])
+                setLinkSelected(null)
+                setLinkError('')
+                setLinkSearched(false)
+              }}
+              disabled={linkSearching || linkBusy}
+              maxLength={100}
+            />
+          </label>
+          <Button
+            className="od-btn--secondary"
+            type="submit"
+            disabled={linkQuery.trim().length < 2 || linkSearching || linkBusy}
+          >
+            {linkSearching ? 'Searching…' : 'Search existing games'}
+          </Button>
+        </form>
+        {linkError ? (
+          <PageStatus error={linkError} errorMessage="Unable to link this folder." />
+        ) : null}
+        {linkHits.length ? (
+          <div role="group" aria-label="Existing game search results">
+            {linkHits.map((game) => (
+              <Button
+                key={game.uuid}
+                type="button"
+                className={
+                  linkSelected?.uuid === game.uuid ? 'od-btn--accent' : 'od-btn--secondary'
+                }
+                aria-pressed={linkSelected?.uuid === game.uuid}
+                onClick={() => setLinkSelected(game)}
+                disabled={linkBusy}
+              >
+                {game.name}
+                {game.full_disk_path ? ` · ${game.full_disk_path}` : ''}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        {linkSearched && !linkHits.length ? (
+          <PageStatus announcement="status">No existing games matched that search.</PageStatus>
+        ) : null}
+        <div className="od-admin-panel__toolbar">
+          <Button
+            className="od-btn--accent"
+            type="button"
+            onClick={() => void linkExistingGame()}
+            disabled={!form.full_disk_path || !form.library_uuid || !linkSelected || linkBusy}
+          >
+            {linkBusy ? 'Linking…' : 'Link selected game'}
+          </Button>
+        </div>
+      </section>
     </Page>
   )
 }

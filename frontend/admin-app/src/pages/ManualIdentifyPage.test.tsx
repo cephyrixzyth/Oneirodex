@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ManualIdentifyPage } from './ManualIdentifyPage'
+import { confirmAction } from '@oneirodex/ui'
+
+vi.mock('@oneirodex/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneirodex/ui')>()
+  return { ...actual, confirmAction: vi.fn() }
+})
 
 const originalFetch = globalThis.fetch
 afterEach(() => {
@@ -102,4 +108,79 @@ test('prefills identify fields from the existing direct-entry query contract', a
   expect(await screen.findByLabelText('Name')).toHaveValue('Sample')
   expect(screen.getByLabelText('Game name')).toHaveValue('Sample')
   expect(screen.getByLabelText('IGDB ID')).toHaveValue(123)
+})
+
+test('searches and confirms linking a folder to an existing game from edit page', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'PC', platform_name: 'PC' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.endsWith('/api/admin/manual-identify/game-1'))
+      return response({
+        game: {
+          uuid: 'game-1',
+          name: 'Current Game',
+          igdb_id: 123,
+          library_uuid: 'lib-1',
+          full_disk_path: '/games/current',
+          provider_urls: {},
+          genre_ids: [],
+          game_mode_ids: [],
+          theme_ids: [],
+          platform_ids: [],
+          player_perspective_ids: [],
+        },
+        scan_running: false,
+      }) as any
+    if (url.endsWith('/api/admin/games_search?q=Target'))
+      return response([
+        { uuid: 'target-1', name: 'Target Game', full_disk_path: '/games/target' },
+      ]) as any
+    return response({ ok: true }) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  vi.mocked(confirmAction).mockResolvedValue(true)
+  render(
+    <MemoryRouter initialEntries={['/game_edit/game-1']}>
+      <Routes>
+        <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
+        <Route path="/libraries" element={<div>Library page</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const search = await screen.findByLabelText('Search existing games')
+  fireEvent.change(search, { target: { value: 'Target' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Search existing games' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Target Game · /games/target' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Link selected game' }))
+
+  await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/library_tools/link_existing_game',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+  const linkCall = fetchMock.mock.calls.find(
+    ([url]) => String(url) === '/api/library_tools/link_existing_game',
+  )
+  expect(JSON.parse((linkCall?.[1] as RequestInit).body as string)).toMatchObject({
+    game_uuid: 'target-1',
+    full_disk_path: '/games/current',
+    library_uuid: 'lib-1',
+    from_unmatched: false,
+  })
+  expect(await screen.findByText('Library page')).toBeInTheDocument()
 })
