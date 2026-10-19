@@ -8,7 +8,7 @@ import os
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .form_compat import first_form_value
@@ -230,8 +230,11 @@ def create_integration_settings_router(
                             db.session.rollback()
                             logging.getLogger(__name__).warning('Community settings save failed')
                             auth.session_data.setdefault('_flashes', []).append(('error', 'Failed to save community chat link.'))
-                    response = RedirectResponse('/admin/integrations#community', status_code=302)
-                    response.headers['content-type'] = 'text/html; charset=utf-8'
+                    from .response_compat import flask_redirect_response
+
+                    response = flask_redirect_response(
+                        '/admin/integrations#community', status_code=302,
+                    )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
                 elif request.method in ('PUT', 'POST'):

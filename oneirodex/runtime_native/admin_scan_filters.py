@@ -1,6 +1,7 @@
 """Native admin API for scan-filter catalog CRUD."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 import logging
 import re
@@ -11,6 +12,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 def filter_projection(group):
@@ -111,7 +113,7 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
                     max_files=0, max_fields=10, max_part_size=16 * 1024,
                 )
                 legacy_form_values = form
-                form_token = str(form.get('csrf_token') or '')
+                form_token = str(first_form_value(form, 'csrf_token') or '')
             cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
             session = load_session_cookie(
                 request.cookies.get(cookie_name), flask_app.config.get('SECRET_KEY'),
@@ -141,7 +143,6 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
             payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
             response = JSONResponse(payload, status_code=status)
         elif legacy_form and filter_id is None and request.method == 'POST':
-            from starlette.responses import RedirectResponse
             pattern = str(legacy_form_values.get('filter_pattern') or '')
             case_raw = legacy_form_values.get('case_sensitive')
             case_value = str(case_raw if case_raw is not None else 'no')
@@ -162,7 +163,7 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
             flashes = list(auth.session_data.get('_flashes') or [])
             flashes.append((category, message))
             auth.session_data['_flashes'] = flashes
-            response = RedirectResponse('/admin/edit_filters', status_code=302)
+            response = flask_redirect_response('/admin/edit_filters', status_code=302)
             _set_session_cookie(response, flask_app, auth)
         elif filter_id is not None and legacy_form:
             try:
@@ -184,8 +185,7 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('message', 'Scanning filter removed.'))
                     auth.session_data['_flashes'] = flashes
-                    from starlette.responses import RedirectResponse
-                    response = RedirectResponse('/admin/edit_filters', status_code=302)
+                    response = flask_redirect_response('/admin/edit_filters', status_code=302)
         elif request.method == 'GET' or request.method == 'HEAD':
             rows = data.list()
             response = JSONResponse(api_ok_payload({'filters': [filter_projection(row) for row in rows]}))

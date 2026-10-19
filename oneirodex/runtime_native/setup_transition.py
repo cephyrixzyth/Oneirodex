@@ -1,6 +1,7 @@
 """FastAPI transition API for the ordered first-run setup wizard."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import os
 import re
 from contextlib import nullcontext
@@ -11,9 +12,10 @@ from uuid import uuid4
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
-from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class SetupTransitionData:
@@ -305,7 +307,7 @@ def create_setup_transition_router(
                 token = (
                     request.headers.get('X-CSRFToken')
                     or request.headers.get('X-CSRF-Token')
-                    or form.get(field_name)
+                    or first_form_value(form, field_name)
                 )
                 try:
                     validate_csrf_token(
@@ -332,7 +334,7 @@ def create_setup_transition_router(
             body, return_to, parse_error = _setup_form_payload(path, form)
             if parse_error:
                 _setup_form_flash(auth.session_data, 'error', parse_error)
-                response = RedirectResponse(return_to, status_code=302)
+                response = flask_redirect_response(return_to, status_code=302)
                 _setup_form_session_cookie(response, flask_app, auth)
                 _setup_form_headers(response, flask_app)
                 return response
@@ -344,7 +346,7 @@ def create_setup_transition_router(
                     auth.session_data, 'warning',
                     'This setup step is no longer current. Reload setup to continue.',
                 )
-                response = RedirectResponse('/setup', status_code=302)
+                response = flask_redirect_response('/setup', status_code=302)
             elif step > 1 and (auth.user is None or _role(auth.user) != 'admin'):
                 _setup_form_flash(
                     auth.session_data, 'warning',
@@ -352,8 +354,9 @@ def create_setup_transition_router(
                 )
                 from urllib.parse import urlencode
 
-                response = RedirectResponse(
-                    '/login?' + urlencode({'next': request.url.path}), status_code=302,
+                response = flask_redirect_response(
+                    '/login?' + urlencode({'next': request.url.path}, safe='/'),
+                    status_code=302,
                 )
             else:
                 try:
@@ -385,15 +388,15 @@ def create_setup_transition_router(
                         for errors in detail.values():
                             for message in errors:
                                 _setup_form_flash(auth.session_data, 'error', str(message))
-                    response = RedirectResponse(return_to, status_code=302)
+                    response = flask_redirect_response(return_to, status_code=302)
                 elif result and '_error' in result:
                     _setup_form_flash(auth.session_data, 'error', result['_error'][1])
-                    response = RedirectResponse(return_to, status_code=302)
+                    response = flask_redirect_response(return_to, status_code=302)
                 else:
                     category, message = _setup_form_success(step, body, result or {})
                     _setup_form_flash(auth.session_data, category, message)
                     target = (result or {}).get('next_url') or return_to
-                    response = RedirectResponse(target, status_code=302)
+                    response = flask_redirect_response(target, status_code=302)
 
             _setup_form_session_cookie(response, flask_app, auth)
             _setup_form_headers(response, flask_app)
@@ -513,20 +516,20 @@ def _setup_form_payload(path, form):
     truthy = lambda value: str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
     if step == 1:
         body.update(
-            username=form.get('username', ''), email=form.get('email', ''),
-            password=form.get('password', ''),
-            confirm_password=form.get('confirm_password', ''),
+            username=first_form_value(form, 'username', ''), email=first_form_value(form, 'email', ''),
+            password=first_form_value(form, 'password', ''),
+            confirm_password=first_form_value(form, 'confirm_password', ''),
         )
     elif step == 2:
         body.update(
             skip='skip_smtp' in form,
-            smtp_server=form.get('smtp_server', ''),
-            smtp_port=form.get('smtp_port', '587'),
-            smtp_username=form.get('smtp_username', ''),
-            smtp_password=form.get('smtp_password', ''),
-            smtp_use_tls=truthy(form.get('smtp_use_tls')),
-            smtp_default_sender=form.get('smtp_default_sender', ''),
-            smtp_enabled=truthy(form.get('smtp_enabled')),
+            smtp_server=first_form_value(form, 'smtp_server', ''),
+            smtp_port=first_form_value(form, 'smtp_port', '587'),
+            smtp_username=first_form_value(form, 'smtp_username', ''),
+            smtp_password=first_form_value(form, 'smtp_password', ''),
+            smtp_use_tls=truthy(first_form_value(form, 'smtp_use_tls')),
+            smtp_default_sender=first_form_value(form, 'smtp_default_sender', ''),
+            smtp_enabled=truthy(first_form_value(form, 'smtp_enabled')),
         )
     elif step == 3:
         for key in (
@@ -537,14 +540,14 @@ def _setup_form_payload(path, form):
     elif step == 4:
         body.update(
             skip='skip_igdb' in form,
-            igdb_client_id=form.get('igdb_client_id', ''),
-            igdb_client_secret=form.get('igdb_client_secret', ''),
+            igdb_client_id=first_form_value(form, 'igdb_client_id', ''),
+            igdb_client_secret=first_form_value(form, 'igdb_client_secret', ''),
         )
     elif step == 5:
         body.update(
-            skip=form.get('skip_integrations') == '1',
-            configure_oidc=form.get('configure_oidc') == 'on',
-            enable_hltb_integration=form.get('enable_hltb_integration') == 'on',
+            skip=first_form_value(form, 'skip_integrations') == '1',
+            configure_oidc=first_form_value(form, 'configure_oidc') == 'on',
+            enable_hltb_integration=first_form_value(form, 'enable_hltb_integration') == 'on',
         )
         for key in (
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
@@ -552,21 +555,21 @@ def _setup_form_payload(path, form):
             'oidc_client_id', 'oidc_client_secret', 'oidc_redirect_uri',
             'oidc_scopes', 'oidc_role_claim',
         ):
-            body[key] = form.get(key, '')
+            body[key] = first_form_value(form, key, '')
         for key in (
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
             'mobygames_api_key', 'thegamesdb_api_key',
         ):
-            if form.get('configure_' + key) != 'on':
+            if first_form_value(form, 'configure_' + key) != 'on':
                 body[key] = ''
     else:
         body.update(
-            skip=form.get('skip_library') == 'on',
-            library_name=form.get('name', ''),
-            platform=form.get('platform', ''),
-            folder_path=form.get('folder_path', ''),
-            scan_mode=form.get('scan_mode') or 'folders',
-            scan_depth=form.get('scan_depth') or '1',
+            skip=first_form_value(form, 'skip_library') == 'on',
+            library_name=first_form_value(form, 'name', ''),
+            platform=first_form_value(form, 'platform', ''),
+            folder_path=first_form_value(form, 'folder_path', ''),
+            scan_mode=first_form_value(form, 'scan_mode') or 'folders',
+            scan_depth=first_form_value(form, 'scan_depth') or '1',
         )
 
     try:

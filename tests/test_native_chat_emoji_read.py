@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from types import SimpleNamespace
+from flask import redirect as flask_redirect
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -144,4 +145,7 @@ def test_legacy_admin_chat_emoji_delete_keeps_csrf_flash_and_redirect():
     assert rejected.status_code == 400
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/admin/chat_emoji'
+    expected = flask_redirect('/admin/chat_emoji', code=302)
+    assert accepted.headers['content-type'] == expected.headers['Content-Type']
+    assert accepted.content == expected.get_data()
     assert calls == [('cheer', None)]

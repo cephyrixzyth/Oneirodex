@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.download_request_reads import create_download_request_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -133,6 +133,9 @@ def test_legacy_download_delete_form_is_user_scoped_and_redirects(monkeypatch):
 
     assert removed.status_code == 302
     assert removed.headers['location'] == '/downloads'
+    expected = flask_redirect('/downloads', code=302)
+    assert removed.headers['content-type'] == expected.headers['Content-Type']
+    assert removed.content == expected.get_data()
     assert removed.headers['cache-control'] == 'no-store'
     assert removed.cookies.get('session')
     assert missing.status_code == 404
@@ -155,6 +158,9 @@ def test_legacy_admin_download_delete_form_keeps_admin_gate_and_flash(monkeypatc
 
     assert removed.status_code == 302
     assert removed.headers['location'] == '/admin/manage-downloads'
+    expected = flask_redirect('/admin/manage-downloads', code=302)
+    assert removed.headers['content-type'] == expected.headers['Content-Type']
+    assert removed.content == expected.get_data()
     assert removed.headers['cache-control'] == 'no-store'
     assert missing.status_code == 302
     assert missing.headers['location'] == '/admin/manage-downloads'

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.admin_newsletters import create_admin_newsletters_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -77,6 +77,9 @@ def test_legacy_newsletter_form_sends_through_adapter_and_redirects():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/newsletter'
+    expected = flask_redirect('/admin/newsletter', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert client.adapter.calls == [(
         'Household update', 'A short update.',
         ['one@example.test', 'two@example.test'], 4,
@@ -96,4 +99,7 @@ def test_legacy_newsletter_form_requires_csrf_and_valid_fields():
 
     assert denied.status_code == 400
     assert invalid.status_code == 302
+    expected = flask_redirect('/admin/newsletter', code=302)
+    assert invalid.headers['content-type'] == expected.headers['Content-Type']
+    assert invalid.content == expected.get_data()
     assert client.adapter.calls == []

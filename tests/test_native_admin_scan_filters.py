@@ -4,9 +4,10 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 
 from oneirodex.runtime_native.admin_scan_filters import create_admin_scan_filters_router
+from oneirodex.runtime_native.response_compat import flask_redirect_response
 from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
@@ -51,6 +52,16 @@ def make_client(data=None):
     return client
 
 
+def test_scan_filter_form_redirect_matches_werkzeug_response_exactly():
+    legacy = flask_redirect('/admin/edit_filters', code=302)
+    current = flask_redirect_response('/admin/edit_filters', status_code=302)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers['location'] == legacy.headers['Location']
+    assert current.headers['content-type'] == legacy.headers['Content-Type']
+    assert current.body == legacy.get_data()
+
+
 def test_scan_filter_read_create_and_regex_validation():
     data = FakeFilters()
     client = make_client(data)
@@ -88,6 +99,8 @@ def test_legacy_scan_filter_post_redirects_and_flashes_after_deletion(monkeypatc
 
     assert response.status_code == 302, response.text
     assert response.headers['location'] == '/admin/edit_filters'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/admin/edit_filters">/admin/edit_filters</a>' in response.text
     assert data.deleted == [1]
     assert tokens == ['form-token']
     session = load_session_cookie(
@@ -110,6 +123,8 @@ def test_legacy_scan_filter_add_redirects_and_flashes(monkeypatch):
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/edit_filters'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/admin/edit_filters">/admin/edit_filters</a>' in response.text
     assert data.rows[-1].filter_pattern == 'Scene Release'
     assert data.rows[-1].case_sensitive == 'yes'
     session = load_session_cookie(

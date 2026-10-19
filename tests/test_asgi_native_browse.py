@@ -8218,7 +8218,9 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
 
     assert setup.status_code == 200 and calls == ['start']
     assert unauthorized.status_code == 302
-    assert unauthorized.headers['location'] == '/login?next=%2Fsetup%2Fsmtp'
+    assert unauthorized.headers['location'] == '/login?next=/setup/smtp'
+    assert unauthorized.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in unauthorized.text
     assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup'
 
 
@@ -8396,6 +8398,15 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
 
     assert response.status_code == 302
     assert response.headers['location'] == '/setup/smtp'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/setup/smtp">/setup/smtp</a>. If not, click the link.\n'
+    )
     assert calls[0]['step'] == 1 and calls[0]['username'] == 'first.admin'
     assert any('session=' in value for value in response.headers.get_list('set-cookie'))
     saved_session = load_session_cookie(

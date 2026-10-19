@@ -1,6 +1,7 @@
 """Native session reads for member and administrator download queues."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -9,6 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class DownloadRequestReadData:
@@ -300,7 +302,6 @@ def create_download_request_read_router(
         from .session_compat import load_session_cookie
         from .oidc_status import _set_session_cookie
         from oneirodex.utils.security_headers import security_header_values
-        from starlette.responses import RedirectResponse
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -313,7 +314,7 @@ def create_download_request_read_router(
             )
             csrf = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
             if csrf is not None:
                 response = csrf
@@ -337,7 +338,7 @@ def create_download_request_read_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('info', 'Download request removed.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/downloads', status_code=302)
+                    response = flask_redirect_response('/downloads', status_code=302)
             if auth is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 
@@ -356,7 +357,6 @@ def create_download_request_read_router(
         from oneirodex.utils.api_contract import api_error_payload
         from oneirodex.utils.role_catalog import normalize_role
         from oneirodex.utils.security_headers import security_header_values
-        from starlette.responses import RedirectResponse
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -369,7 +369,7 @@ def create_download_request_read_router(
             )
             csrf = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
             if csrf is not None:
                 response = csrf
@@ -403,12 +403,12 @@ def create_download_request_read_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('error', 'Download request not found.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/manage-downloads', status_code=302)
+                    response = flask_redirect_response('/admin/manage-downloads', status_code=302)
                 else:
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('success', 'Download request deleted.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/manage-downloads', status_code=302)
+                    response = flask_redirect_response('/admin/manage-downloads', status_code=302)
             if auth is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 

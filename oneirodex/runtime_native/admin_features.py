@@ -8,10 +8,11 @@ import os
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 _FEATURE_DB_FIELDS = (
     'enable_arr_module', 'enable_ai_assist', 'enable_malware_scan',
@@ -165,14 +166,12 @@ def create_admin_features_router(
                 try:
                     data.save_preferences(body)
                     _flash(auth.session_data, 'success', 'Feature preferences saved. Env flags (docker/.env) still override process defaults until restart.')
-                    response = RedirectResponse('/admin/features', status_code=302)
-                    response.headers['content-type'] = 'text/html; charset=utf-8'
+                    response = flask_redirect_response('/admin/features', status_code=302)
                 except Exception:
                     from oneirodex.runtime_native.db_session import native_db as db
                     db.session.rollback()
                     _flash(auth.session_data, 'error', 'Could not save feature preferences.')
-                    response = RedirectResponse('/admin/features', status_code=302)
-                    response.headers['content-type'] = 'text/html; charset=utf-8'
+                    response = flask_redirect_response('/admin/features', status_code=302)
             if auth is not None and (auth.should_set_session_cookie or auth.session_data.get('_flashes')):
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values

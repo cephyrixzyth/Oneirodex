@@ -1,12 +1,15 @@
 """Native FastAPI compatibility actions for legacy admin scan-job forms."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+from .response_compat import flask_redirect_response
 
 
 class ScanJobMutationData:
@@ -81,7 +84,10 @@ def create_scan_job_mutation_router(
     app, *, find_user, find_token, commit_token_touch,
     load_user_id=None, login_manager=None, data_access=None, database_scope=None,
 ):
-    from .acquire_status import _login_redirect
+    # Admin-role denials pass the legacy flash message/category options.
+    # Use the shared login redirect adapter that supports those options;
+    # the acquire-status variant only handles anonymous redirects.
+    from .oidc_status import _login_redirect
 
     router = APIRouter()
     data = data_access or ScanJobMutationData()
@@ -156,7 +162,7 @@ async def _handle(
         if auth.token is None:
             try:
                 form = await request.form(max_files=0, max_fields=10, max_part_size=16 * 1024)
-                csrf_token = form.get(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
                 csrf_token = None
             csrf = csrf_error_response(request, auth.session_data, app.config, token=csrf_token)
@@ -203,7 +209,7 @@ async def _handle(
                         from oneirodex.utils.scan_queue import parse_queue_policy
 
                         queue_policy = parse_queue_policy(
-                            form.get('queue_policy'), form.get('force_parallel'),
+                            first_form_value(form, 'queue_policy'), first_form_value(form, 'force_parallel'),
                         )
                         result = data.restart(
                             job_id,
@@ -224,23 +230,25 @@ async def _handle(
                                 form = await request.form(
                                     max_files=0, max_fields=10, max_part_size=16 * 1024,
                                 )
-                                status = str(form.get('status') or request.query_params.get('status') or '').strip()
+                                status = str(first_form_value(form, 'status') or first_query_value(request.query_params, 'status') or '').strip()
                             except Exception:
-                                status = str(request.query_params.get('status') or '').strip()
+                                status = str(first_query_value(request.query_params, 'status') or '').strip()
                             if status not in {'Completed', 'Failed', 'Cancelled'}:
                                 auth.session_data.setdefault('_flashes', []).append(
                                     ('error', 'Unknown job status to clear.'),
                                 )
                                 return _finish(
-                                    RedirectResponse('/admin/scan_management?active_tab=jobs', status_code=302),
+                                    flask_redirect_response('/scan_management?active_tab=jobs', status_code=302),
                                     app, auth, request,
                                 )
                         count, label = data.clear(status)
                         message = f'Cleared {count} {label}.'
                         auth.session_data.setdefault('_flashes', []).append(('success', message))
-                    response = RedirectResponse(
-                        '/admin/scan_management?active_tab=jobs', status_code=302,
+                    target = (
+                        '/scan_management?active_tab=jobs'
+                        if action in {'clear', 'clear_all'} else '/scan_management'
                     )
+                    response = flask_redirect_response(target, status_code=302)
                 except HTTPException:
                     raise
                 except Exception:

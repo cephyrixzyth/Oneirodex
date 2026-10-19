@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from flask import redirect as flask_redirect
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -166,7 +167,9 @@ def test_legacy_community_form_rejects_invalid_url_with_flash_redirect(monkeypat
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/integrations#community'
-    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    expected = flask_redirect('/admin/integrations#community', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.community_saved is None
 
 
@@ -187,7 +190,9 @@ def test_legacy_community_form_accepts_hidden_csrf_and_preserves_redirect(monkey
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/integrations#community'
-    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    expected = flask_redirect('/admin/integrations#community', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.community_saved == ('', 'Household chat')
 
 

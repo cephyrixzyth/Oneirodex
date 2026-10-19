@@ -5,9 +5,8 @@ from contextlib import nullcontext
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
-
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class SetupPagesData:
@@ -87,10 +86,10 @@ def create_setup_pages_router(
             if page == '/setup':
                 required = data.required()
                 if not required and data.in_progress():
-                    response = RedirectResponse(data.redirect_url(), status_code=302)
+                    response = flask_redirect_response(data.redirect_url(), status_code=302)
                 elif not required:
                     _flash(auth.session_data, 'warning', 'Setup has already been completed.')
-                    response = RedirectResponse('/login', status_code=302)
+                    response = flask_redirect_response('/login', status_code=302)
                 else:
                     data.start()
                     response = _shell(request, flask_app, auth)
@@ -99,21 +98,22 @@ def create_setup_pages_router(
                 if step is None:
                     if page != '/setup/library':
                         _flash(auth.session_data, 'warning', 'Setup already completed.')
-                        response = RedirectResponse('/login', status_code=302)
+                        response = flask_redirect_response('/login', status_code=302)
                     else:
-                        response = RedirectResponse('/setup', status_code=302)
+                        response = flask_redirect_response('/setup', status_code=302)
                 elif step != expected_steps[page]:
                     message = wrong_step_messages.get(page)
                     if message:
                         _flash(auth.session_data, 'warning', message)
-                    response = RedirectResponse('/setup', status_code=302)
+                    response = flask_redirect_response('/setup', status_code=302)
                 elif auth.user is None or _role(auth.user) != 'admin':
                     _flash(
                         auth.session_data, 'warning',
                         'Sign in with the admin account you just created to finish setup.',
                     )
-                    response = RedirectResponse(
-                        '/login?' + urlencode({'next': request.url.path}), status_code=302,
+                    response = flask_redirect_response(
+                        '/login?' + urlencode({'next': request.url.path}, safe='/'),
+                        status_code=302,
                     )
                 else:
                     response = _shell(request, flask_app, auth)

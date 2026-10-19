@@ -1,11 +1,12 @@
 """Native admin read for the custom chat emoji catalogue."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
@@ -282,7 +283,7 @@ def create_chat_emoji_router(
             if response is None:
                 form = await request.form()
                 try:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     file = None
                     if isinstance(upload, StarletteUploadFile):
                         raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -290,8 +291,8 @@ def create_chat_emoji_router(
                             stream=BytesIO(raw), filename=upload.filename,
                             content_type=upload.content_type,
                         )
-                    slug = str(form.get('slug') or '')
-                    label = str(form.get('label') or '')
+                    slug = str(first_form_value(form, 'slug') or '')
+                    label = str(first_form_value(form, 'label') or '')
                 finally:
                     await form.close()
                 try:
@@ -418,12 +419,12 @@ def create_chat_emoji_router(
                 if response is None:
                     response = csrf_error_response(
                         request, session_data, flask_app.config,
-                        token=str(form.get('csrf_token') or ''),
+                        token=str(first_form_value(form, 'csrf_token') or ''),
                     )
                 if response is None:
-                    action = str(form.get('action') or 'upload').strip()
+                    action = str(first_form_value(form, 'action') or 'upload').strip()
                     if action == 'delete':
-                        slug = str(form.get('slug') or '')
+                        slug = str(first_form_value(form, 'slug') or '')
                         try:
                             deleted = data.delete(
                                 slug, upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
@@ -433,7 +434,7 @@ def create_chat_emoji_router(
                         except ValueError:
                             message, category = 'Invalid emoji slug', 'error'
                     else:
-                        upload = form.get('file')
+                        upload = first_form_upload(form, 'file')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -443,8 +444,8 @@ def create_chat_emoji_router(
                             )
                         try:
                             row = data.upload(
-                                slug=str(form.get('slug') or ''),
-                                label=str(form.get('label') or ''), file=file,
+                                slug=str(first_form_value(form, 'slug') or ''),
+                                label=str(first_form_value(form, 'label') or ''), file=file,
                                 uploader=auth.user,
                                 upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
                             )
@@ -462,7 +463,9 @@ def create_chat_emoji_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, message))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/chat_emoji', status_code=302)
+                    from .response_compat import flask_redirect_response
+
+                    response = flask_redirect_response('/admin/chat_emoji', status_code=302)
                     _set_session_cookie(response, flask_app, auth)
                 return response
             finally:
