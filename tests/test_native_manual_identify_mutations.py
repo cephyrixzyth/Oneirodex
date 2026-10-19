@@ -95,6 +95,57 @@ def test_manual_identify_invalid_payload_and_csrf_never_call_mutation_data(monke
     assert csrf_data.calls == []
 
 
+def test_manual_identify_image_refresh_uses_owned_worker_app_context(monkeypatch):
+    import oneirodex.utils.background as background
+    import oneirodex.utils.scanning as scanning
+
+    app = object()
+    game_uuid = '12345678-90ab-cdef-1234-567890abcdef'
+    sentinel = object()
+    calls = []
+
+    def fake_run_in_background(*args, **kwargs):
+        calls.append((args, kwargs))
+        return sentinel
+
+    monkeypatch.setattr(background, 'run_in_background', fake_run_in_background)
+    monkeypatch.setattr(scanning, 'refresh_images_in_background', sentinel)
+
+    result = manual_identify_mutations._queue_image_refresh(app, game_uuid)
+
+    assert result is sentinel
+    assert calls == [((app, sentinel, game_uuid), {
+        'app': app,
+        'name': 'oneirodex-refresh-images-12345678',
+    })]
+
+
+def test_background_worker_accepts_app_keyword_for_native_callbacks():
+    from contextlib import contextmanager
+
+    from oneirodex.utils.background import run_in_background
+
+    class NativeApp:
+        @contextmanager
+        def app_context(self):
+            yield self
+
+    app = NativeApp()
+    seen = {}
+
+    def callback(game_uuid, *, app):
+        seen['game_uuid'] = game_uuid
+        seen['app'] = app
+
+    thread = run_in_background(
+        app, callback, 'game-uuid', app=app, name='test-native-callback',
+    )
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert seen == {'game_uuid': 'game-uuid', 'app': app}
+
+
 def test_filesystem_helpers_accept_explicit_roots_without_flask_context(tmp_path, monkeypatch):
     from oneirodex.utils.helpers.fs import get_folder_size_in_bytes_updates, read_first_nfo_content
     from oneirodex.utils.local_metadata import write_local_metadata

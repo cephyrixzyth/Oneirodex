@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_in_background(
-    app,
+    worker_app,
     func: Callable[..., Any],
     *args: Any,
     name: str | None = None,
@@ -63,7 +63,7 @@ def run_in_background(
 ) -> Thread:
     """Run a daemon task with an isolated native DB scope or legacy app context.
 
-    :param app: the real application object — ``current_app._get_current_object()``
+    :param worker_app: the app-like context — ``current_app._get_current_object()``
         from inside a request. The proxy itself is bound to the calling
         thread's context and is useless in the worker.
     :param name: thread name, for logs and stack dumps. Worth setting: an
@@ -72,34 +72,28 @@ def run_in_background(
     :returns: the started thread, so callers (and tests) can join it.
     """
 
+    def _run() -> None:
+        try:
+            func(*args, **kwargs)
+        except Exception:
+            # A daemon thread that dies takes its work with it and prints a
+            # bare traceback to stderr with no clue which request started
+            # it. Log it against a named task instead.
+            logger.exception(
+                'Background task %s failed',
+                name or getattr(func, '__name__', repr(func)),
+            )
+
     def _worker() -> None:
-        def invoke(*, legacy_database=None):
-            try:
-                func(*args, **kwargs)
-            except Exception:
-                # A daemon thread that dies takes its work with it and prints a
-                # bare traceback to stderr with no clue which request started
-                # it. Log it against a named task instead.
-                logger.exception(
-                    'Background task %s failed',
-                    name or getattr(func, '__name__', repr(func)),
-                )
-            finally:
-                if legacy_database is not None:
-                    # Flask's app context teardown also removes this scoped
-                    # session; doing it here makes worker ownership explicit.
-                    legacy_database.session.remove()
-
         if database_scope is None:
-            # Imported here rather than at module scope so the native worker
-            # path does not load Flask or Jinja.
-            from oneirodex.runtime_native.db_session import native_db as db
-
-            with app.app_context():
-                invoke(legacy_database=db)
+            # Flask app contexts and NativeRuntimeContext both own session
+            # teardown. Avoid Flask-only scoped_session.remove() here: the
+            # native runtime uses a plain SQLAlchemy Session and has no Flask.
+            with worker_app.app_context():
+                _run()
         else:
-            with database_scope(app):
-                invoke()
+            with database_scope(worker_app):
+                _run()
 
     thread = Thread(target=_worker, daemon=True, name=name)
     thread.start()

@@ -126,9 +126,7 @@ class ManualIdentifyMutationData:
 
         _event(f'Game {game.name} updated by admin {actor.name}', actor)
         if igdb_changed:
-            from oneirodex.utils.background import run_in_background
-            from oneirodex.utils.scanning import refresh_images_in_background
-            run_in_background(app, refresh_images_in_background, game_uuid, app=app, name=f'oneirodex-refresh-images-{game_uuid[:8]}')
+            _queue_image_refresh(app, game_uuid)
         return {'game_uuid': game_uuid, 'redirect_url': '/libraries'}
 
     def create(self, app, body, actor, *, from_unmatched: bool):
@@ -261,10 +259,7 @@ class ManualIdentifyMutationData:
             app.logger.exception('Could not write local metadata for manually identified game')
 
         game_uuid = game.uuid
-        from oneirodex.utils.background import run_in_background
-        from oneirodex.utils.scanning import refresh_images_in_background
-        run_in_background(app, refresh_images_in_background, game_uuid, app=app,
-                          name=f'oneirodex-refresh-images-{str(game_uuid)[:8]}')
+        _queue_image_refresh(app, game_uuid)
         log_system_event(
             f"Game '{body.name}' added manually by admin {actor.name}",
             event_type='game', event_level='information', audit_user=getattr(actor, 'id', None),
@@ -372,6 +367,17 @@ def _event(message, actor):
     log_system_event(
         message, event_type='game', event_level='information',
         audit_user=getattr(actor, 'id', None),
+    )
+
+
+def _queue_image_refresh(app, game_uuid):
+    """Queue image work with an owned app context and plain UUID value."""
+    from oneirodex.utils.background import run_in_background
+    from oneirodex.utils.scanning import refresh_images_in_background
+
+    return run_in_background(
+        app, refresh_images_in_background, game_uuid, app=app,
+        name=f'oneirodex-refresh-images-{str(game_uuid)[:8]}',
     )
 
 
