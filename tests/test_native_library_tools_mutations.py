@@ -358,6 +358,30 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
     assert ('unsafe_link_path', '/outside/New Folder', 'outside allowed roots', 'admin', 7) in data.calls
 
 
+def test_legacy_link_existing_game_login_and_admin_redirects(runtime):
+    from http.cookies import SimpleCookie
+    from starlette.testclient import TestClient
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    app, data, cookies = runtime
+    with TestClient(app) as client:
+        anonymous = client.post('/link_existing_game', data={}, follow_redirects=False)
+    with TestClient(app) as client:
+        client.cookies.set('session', cookies['member'])
+        member = client.post('/link_existing_game', data={}, follow_redirects=False)
+        cookie = SimpleCookie()
+        cookie.load(next(value for value in member.headers.get_list('set-cookie')
+                         if value.startswith('session=')))
+        session_cookie = cookie['session'].value
+
+    session = load_session_cookie(session_cookie, 'mutation-secret', max_age=31_536_000)
+    assert anonymous.status_code == member.status_code == 302
+    assert anonymous.headers['location'] == '/login?next=%2Flink_existing_game'
+    assert member.headers['location'] == '/login'
+    assert ('danger', 'You must be an admin to access this page.') in session['_flashes']
+    assert not data.calls
+
+
 def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):
     from starlette.testclient import TestClient
 
