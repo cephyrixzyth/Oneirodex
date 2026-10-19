@@ -365,14 +365,24 @@ async def _dispatch_action(request, data, user, section_id):
 
 async def _model_body(request, model_type):
     from pydantic import ValidationError
+    from oneirodex.utils.validation import format_validation_errors
 
-    payload = await _json_body(request)
+    # Match the legacy @validate_body contract: missing, malformed, or JSON
+    # null bodies validate as an empty object, while non-object JSON values
+    # retain their root-level model error.
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
     if payload is None:
-        return _error('Invalid request body', 'bad_request')
+        payload = {}
     try:
         return model_type.model_validate(payload)
-    except ValidationError:
-        return _error('Invalid request body', 'bad_request')
+    except ValidationError as exc:
+        return _error(
+            'Invalid request.', 'unprocessable', 422,
+            detail=format_validation_errors(exc),
+        )
 
 
 async def _json_body(request):
@@ -396,9 +406,9 @@ def _ok(payload, *, status=200):
     return JSONResponse(api_ok_payload(payload), status_code=status)
 
 
-def _error(message, code, status=None):
+def _error(message, code, status=None, **fields):
     from oneirodex.utils.api_contract import api_error_payload
-    payload, status = api_error_payload(message, code=code, status=status)
+    payload, status = api_error_payload(message, code=code, status=status, **fields)
     return JSONResponse(payload, status_code=status)
 
 
