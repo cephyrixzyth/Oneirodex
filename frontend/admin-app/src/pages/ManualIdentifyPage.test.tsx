@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ManualIdentifyPage } from './ManualIdentifyPage'
 import { confirmAction } from '@oneirodex/ui'
@@ -23,6 +23,12 @@ function response(body: unknown) {
     json: async () => body,
     text: async () => JSON.stringify(body),
   }
+}
+
+function LinkSuccessRoute() {
+  const location = useLocation()
+  const state = location.state as { linkSuccess?: string } | null
+  return <div>Unmatched scan management {state?.linkSuccess || ''}</div>
 }
 
 test('loads options, applies an IGDB match, and posts a JSON identify payload', async () => {
@@ -110,7 +116,9 @@ test('prefills identify fields from the existing direct-entry query contract', a
   expect(screen.getByLabelText('IGDB ID')).toHaveValue(123)
 })
 
-test('searches and confirms linking a folder to an existing game from edit page', async () => {
+test.each([true, false])(
+  'searches and confirms linking an existing game from edit page (from unmatched: %s)',
+  async (fromUnmatched) => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/api/admin/manual-identify/options'))
@@ -152,10 +160,15 @@ test('searches and confirms linking a folder to an existing game from edit page'
   globalThis.fetch = fetchMock as unknown as typeof fetch
   vi.mocked(confirmAction).mockResolvedValue(true)
   render(
-    <MemoryRouter initialEntries={['/game_edit/game-1']}>
+    <MemoryRouter
+      initialEntries={[
+        `/game_edit/game-1${fromUnmatched ? '?from_unmatched=true' : ''}`,
+      ]}
+    >
       <Routes>
         <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
         <Route path="/libraries" element={<div>Library page</div>} />
+        <Route path="/scan_management" element={<LinkSuccessRoute />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -180,7 +193,12 @@ test('searches and confirms linking a folder to an existing game from edit page'
     game_uuid: 'target-1',
     full_disk_path: '/games/current',
     library_uuid: 'lib-1',
-    from_unmatched: false,
+    from_unmatched: fromUnmatched,
   })
-  expect(await screen.findByText('Library page')).toBeInTheDocument()
-})
+  expect(
+    await screen.findByText(
+      "Unmatched scan management Linked existing game 'Target Game' to this folder.",
+    ),
+  ).toBeInTheDocument()
+  },
+)

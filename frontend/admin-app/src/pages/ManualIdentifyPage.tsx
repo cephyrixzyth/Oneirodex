@@ -321,7 +321,9 @@ export function ManualIdentifyPage() {
         library_uuid: form.library_uuid,
         from_unmatched: fromUnmatched,
       })
-      navigate(fromUnmatched ? '/admin/scan_management?active_tab=unmatched' : '/libraries')
+      navigate('/scan_management?active_tab=unmatched', {
+        state: { linkSuccess: `Linked existing game '${linkSelected.name}' to this folder.` },
+      })
     } catch (error) {
       setLinkError(error instanceof Error ? error.message : 'Unable to link this folder.')
     } finally {
