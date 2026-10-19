@@ -8607,6 +8607,8 @@ def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
     )
 
     assert response.status_code == 302 and response.headers['location'] == '/index'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'href=\"/index\"' in response.content
     assert calls[0][1] == 'invite-123'
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
