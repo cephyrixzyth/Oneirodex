@@ -27,9 +27,12 @@ class LibraryToolsMutationData:
         return is_safe_path(path, self.allowed_bases(app))
 
     def game(self, app, game_uuid):
+        from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
-        return db.session.get(Game, game_uuid)
+        return db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
 
     def build_rename_preview(self, root, *, title, year, template, rename_root,
                              rename_media, move_bucket):
@@ -57,7 +60,9 @@ class LibraryToolsMutationData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, UnmatchedFolder
         from oneirodex.utils.event_logging import log_system_event
-        game = db.session.get(Game, game_uuid)
+        game = db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
         if not game:
             return None, 'not_found'
         try:
@@ -91,13 +96,16 @@ class LibraryToolsMutationData:
         return validate_plan_for_game(plan, root)
 
     def apply_rename(self, app, game_uuid, plan, allowed_bases):
+        from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
         from oneirodex.utils.disk_rename import apply_rename_plan
         from oneirodex.utils.path_repoint import _moved as path_moved, repoint_paths
         results = apply_rename_plan(plan, allowed_bases)
         roots = [row for row in results if row.get('ok') and row.get('kind') == 'root_folder']
-        game = db.session.get(Game, game_uuid)
+        game = db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
         if not game:
             return results, '', True
         if roots:
@@ -336,7 +344,9 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                 flashes.append((category, message))
                 auth.session_data['_flashes'] = flashes
                 if category == 'success':
-                    location = '/admin/scan_management?active_tab=unmatched'
+                    # The legacy blueprint's url_for destination is rooted at
+                    # /scan_management, without the current admin-shell prefix.
+                    location = '/scan_management?active_tab=unmatched'
                 else:
                     # Match Flask's legacy url_for behavior: omit empty/None
                     # query values and sort the remaining keys.

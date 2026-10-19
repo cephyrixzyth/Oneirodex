@@ -22,10 +22,20 @@ def test_native_library_data_methods_use_scoped_session_without_app_context(monk
 
     game = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
     library = SimpleNamespace(uuid='l1')
-    rows = {('Game', 'g1'): game, ('Library', 'l1'): library}
+    rows = {('Library', 'l1'): library}
+
+    def execute(query):
+        model = query.column_descriptions[0]['entity']
+        filters = query.whereclause
+        if model is Game and str(filters.right.value) == game.uuid:
+            row = game
+        else:
+            row = None
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: row))
+
     fake_session = SimpleNamespace(
         get=lambda model, key: rows.get((model.__name__, key)),
-        execute=lambda *_: SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None)),
+        execute=execute,
         commit=lambda: None,
         rollback=lambda: None,
     )
@@ -283,9 +293,9 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
     assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
     assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 302
-    assert accepted.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert accepted.headers['location'] == '/scan_management?active_tab=unmatched'
     assert accepted_from_identify.status_code == 302
-    assert accepted_from_identify.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert accepted_from_identify.headers['location'] == '/scan_management?active_tab=unmatched'
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
 
 
