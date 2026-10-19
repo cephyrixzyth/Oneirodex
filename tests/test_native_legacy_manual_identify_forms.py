@@ -93,7 +93,7 @@ def test_legacy_edit_form_checks_csrf_and_uses_native_update(native_client):
 
     accepted = _request(runtime, '/game_edit/game-1', _base_fields())
     assert accepted.status_code == 303
-    assert accepted.headers['location'] == '/libraries'
+    assert accepted.headers['location'] == '/library'
     assert data.calls[0][0:2] == ('update', 'game-1')
 
 

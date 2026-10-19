@@ -128,7 +128,7 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
                     _flash(auth, 'image-refresh' if outcome.get('image_refresh_started') else 'success',
                            'Game updated successfully.' if not outcome.get('image_refresh_started')
                            else 'Game updated, downloading images')
-                    destination = '/libraries'
+                    destination = '/library'
                 response = RedirectResponse(destination, status_code=303)
         return _finish(response, app, auth, request)
 
