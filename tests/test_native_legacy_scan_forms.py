@@ -74,7 +74,13 @@ def test_legacy_scan_manual_form_checks_hidden_csrf_and_persists_scan_projection
     }, follow_redirects=False)
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert rejected.text == (
+        '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n<p>The CSRF token is missing.</p>\n'
+    )
     assert accepted.status_code == 302
+    assert accepted.headers['content-type'] == 'text/html; charset=utf-8'
     assert accepted.headers['location'] == '/admin/scan_management?active_tab=manualScan'
     assert ('list', '/safe/ROMs', ['ignored'], ['CaseSensitive']) in data.calls
     assert 'session=' in accepted.headers.get('set-cookie', '')

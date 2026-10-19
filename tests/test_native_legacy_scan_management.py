@@ -110,12 +110,15 @@ def test_legacy_scan_management_csrf_and_filter_actions(native_client):
     runtime, data = native_client
     refused = _request(runtime, 'AddReleaseGroup', fields={'filter_pattern': 'Scene'}, csrf=False)
     assert refused.status_code == 400
+    assert refused.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<p>The CSRF token is invalid.</p>' in refused.text
     assert data.calls == []
 
     added = _request(runtime, 'AddReleaseGroup', fields={
         'filter_pattern': ' Scene ', 'case_sensitive': 'yes',
     })
     assert added.status_code == 302
+    assert added.headers['content-type'] == 'text/html; charset=utf-8'
     assert added.headers['location'] == '/scan_management?active_tab=scan_filters'
     assert ('add_filter', 'Scene', True) in data.calls
 

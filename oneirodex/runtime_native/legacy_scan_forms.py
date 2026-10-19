@@ -1,11 +1,13 @@
 """Native compatibility handlers for the remaining scan form entry points."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
+from .csrf_compat import csrf_html_error_response
+from .response_compat import flask_redirect_response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
@@ -78,8 +80,10 @@ def create_legacy_scan_form_router(
                 )
                 response = csrf_error_response(
                     request, session_data, flask_app.config,
-                    token=str(form.get('csrf_token') or ''),
+                    token=str(first_form_value(form, 'csrf_token') or ''),
                 )
+                if response is not None:
+                    response = csrf_html_error_response(response)
                 auth = None
                 if response is None:
                     auth = request_auth_context(
@@ -105,12 +109,12 @@ def create_legacy_scan_form_router(
                         response = JSONResponse(payload, status_code=status)
 
                 if response is None:
-                    folder_path = str(form.get('folder_path') or '').strip()
-                    library_root = str(form.get('library_root') or '').strip() or None
-                    cancelled = bool(form.get('cancel'))
+                    folder_path = str(first_form_value(form, 'folder_path') or '').strip()
+                    library_root = str(first_form_value(form, 'library_root') or '').strip() or None
+                    cancelled = bool(first_form_value(form, 'cancel'))
                     if cancelled:
                         pass
-                    elif not str(form.get('library_uuid') or '').strip():
+                    elif not str(first_form_value(form, 'library_uuid') or '').strip():
                         _flash(auth, 'error', 'Please select a library.')
                     else:
                         resolved, root_error = data.resolve_path(
@@ -135,7 +139,7 @@ def create_legacy_scan_form_router(
                                     }
                                 else:
                                     _flash(auth, 'error', 'Folder does not exist or cannot be accessed.')
-                    response = RedirectResponse(
+                    response = flask_redirect_response(
                         '/scan_manual_folder' if cancelled else
                         '/admin/scan_management?active_tab=manualScan', status_code=302,
                     )
