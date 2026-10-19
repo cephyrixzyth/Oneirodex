@@ -11,6 +11,7 @@ from starlette.responses import RedirectResponse
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 _NONCE_KEY = 'oidc_nonce'
 
@@ -131,15 +132,15 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         if not AUTHLIB_NATIVE_AVAILABLE:
             _flash(auth, 'error', 'SSO is configured but authlib is not installed.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
-        idp_error = request.query_params.get('error')
+        idp_error = first_query_value(request.query_params, 'error')
         if idp_error:
-            _flash(auth, 'error', format_oidc_idp_error(idp_error, request.query_params.get('error_description')))
+            _flash(auth, 'error', format_oidc_idp_error(idp_error, first_query_value(request.query_params, 'error_description')))
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
 
         state = auth.session_data.pop(OIDC_SESSION_STATE_KEY, None)
         verifier = auth.session_data.pop(OIDC_SESSION_VERIFIER_KEY, None)
         nonce = auth.session_data.pop(_NONCE_KEY, None)
-        callback_state = request.query_params.get('state')
+        callback_state = first_query_value(request.query_params, 'state')
         if not state or not callback_state or not secrets.compare_digest(str(state), str(callback_state)):
             _flash(auth, 'error', 'Invalid SSO state. Please try again.')
             return _finish(RedirectResponse('/login', status_code=302), app, auth, request, force_session=True)
@@ -151,14 +152,43 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
             client = (client_factory or _make_oidc_client)(config)
             token = await client.fetch_access_token(
                 redirect_uri=config.redirect_uri,
-                code=request.query_params.get('code'),
+                code=first_query_value(request.query_params, 'code'),
                 code_verifier=verifier,
             )
             claims = None
             if token.get('id_token'):
                 claims = await client.parse_id_token(token, nonce=nonce)
-            if not claims:
-                claims = await client.userinfo(token=token)
+            claims = claims if isinstance(claims, dict) else {}
+            userinfo = token.get('userinfo')
+            # The legacy Authlib callback prefers its validated userinfo claim
+            # set. The native flow parses the ID token directly, so recover
+            # profile and configured role claims from UserInfo when that token
+            # is sparse. UserInfo must belong to the same OIDC subject, and it
+            # can never replace signed identity or token-validation claims.
+            role_claim = config.role_claim or 'groups'
+            profile_claims = ('email', 'preferred_username', 'nickname')
+            if not isinstance(userinfo, dict) and (
+                not any(claims.get(key) for key in profile_claims)
+                or role_claim not in claims
+            ):
+                try:
+                    userinfo = await client.userinfo(token=token)
+                except Exception:
+                    app.logger.warning('OIDC UserInfo lookup failed; using validated ID token claims.', exc_info=True)
+            if isinstance(userinfo, dict) and userinfo:
+                subject = claims.get('sub')
+                userinfo_subject = userinfo.get('sub')
+                if subject is not None and userinfo_subject != subject:
+                    raise ValueError('SSO identity claims did not match. Please contact an administrator.')
+                if subject is None:
+                    claims = dict(userinfo)
+                else:
+                    for key, value in userinfo.items():
+                        if key not in claims and key not in {
+                            'iss', 'sub', 'aud', 'azp', 'exp', 'iat',
+                            'auth_time', 'nonce', 'at_hash', 'c_hash',
+                        }:
+                            claims[key] = value
             user = data.provision(claims, config, app)
         except ValueError as exc:
             data.rollback()
@@ -181,7 +211,7 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         )
         auth.session_data['_remember'] = 'set'
         data.log_login(user)
-        response = RedirectResponse(_safe_next(request.query_params.get('next')), status_code=302)
+        response = RedirectResponse(_safe_next(first_query_value(request.query_params, 'next')), status_code=302)
         from oneirodex.runtime_native.auth_login import _write_remember_cookie
         _write_remember_cookie(response, auth.session_data, app.config)
         return _finish(response, app, auth, request, force_session=True)

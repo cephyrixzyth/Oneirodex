@@ -18,6 +18,7 @@ class FakeOidcClient:
         self.authorize = None
         self.access = None
         self.nonce = None
+        self.userinfo_claims = None
 
     async def create_authorization_url(self, **kwargs):
         self.authorize = kwargs
@@ -30,6 +31,9 @@ class FakeOidcClient:
     async def parse_id_token(self, token, *, nonce):
         self.nonce = nonce
         return {'sub': 'subject-1', 'email': 'user@example.test', 'email_verified': True}
+
+    async def userinfo(self, *, token):
+        return self.userinfo_claims or {}
 
 
 class FakeOidcData:
@@ -170,3 +174,49 @@ def test_native_oidc_rejects_state_mismatch_and_clears_state(native_client):
         callback.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
     )
     assert 'oidc_auth_state' not in session
+
+
+@pytest.mark.parametrize('userinfo_subject, expected_status', [
+    ('subject-1', 302),
+    ('different-subject', 302),
+])
+def test_native_oidc_sparse_id_token_userinfo_is_subject_bound(
+    native_client, monkeypatch, userinfo_subject, expected_status,
+):
+    runtime, data = native_client
+    data.client.userinfo_claims = {
+        'sub': userinfo_subject,
+        'email': 'profile@example.test',
+        'preferred_username': 'profile-user',
+        'groups': ['OneirodexAdmins'],
+    }
+    async def sparse_id_token(_token, *, nonce):
+        data.client.nonce = nonce
+        return {'sub': 'subject-1'}
+
+    monkeypatch.setattr(data.client, 'parse_id_token', sparse_id_token)
+
+    async def flow():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='https://app.example',
+        ) as client:
+            await client.get('/login/oidc')
+            session = load_session_cookie(
+                client.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+            )
+            return await client.get(
+                '/login/oidc/callback?code=auth-code&state=' + session['oidc_auth_state']
+            )
+
+    callback = asyncio.run(flow())
+    assert callback.status_code == expected_status
+    if userinfo_subject == 'subject-1':
+        assert callback.headers['location'] == '/discover'
+        claims = data.provisioned[0][0]
+        assert claims['sub'] == 'subject-1'
+        assert claims['email'] == 'profile@example.test'
+        assert claims['preferred_username'] == 'profile-user'
+        assert claims['groups'] == ['OneirodexAdmins']
+    else:
+        assert callback.headers['location'] == '/login'
+        assert not data.provisioned
