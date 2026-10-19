@@ -102,33 +102,38 @@ def native_client():
         WTF_CSRF_ENABLED=True, WTF_CSRF_SECRET_KEY='library-admin-secret',
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
     )
-    user = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True)
+    users = {
+        7: SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True),
+        8: SimpleNamespace(id=8, name='Member', role='user', state=True, is_active=True),
+    }
     data = FakeLibraryAdminMutations()
     database_scope = lambda _app: nullcontext()
     runtime = FastAPI()
     runtime.include_router(create_library_admin_mutations_router(
-        flask_app, find_user=lambda _id: user, find_token=lambda _prefix: None,
+        flask_app, find_user=lambda user_id: users.get(user_id), find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '7:fp' else None,
+        load_user_id=lambda user_id: users.get(int(user_id.split(':', 1)[0]))
+        if user_id in ('7:fp', '8:fp') else None,
+        login_manager=SimpleNamespace(login_view='/login'),
         data_access=data,
         database_scope=database_scope,
     ))
     return runtime, data
 
 
-def _session_cookie():
-    session = {'_user_id': '7:fp', '_fresh': True}
+def _session_cookie(user_id=7):
+    session = {'_user_id': f'{user_id}:fp', '_fresh': True}
     csrf = generate_csrf_token(session, 'library-admin-secret')
     return dump_session_cookie(session, 'library-admin-secret'), csrf
 
 
-def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csrf_header=True, files=None, data=None):
+def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csrf_header=True, files=None, data=None, user_id=7):
     async def send():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url='http://testserver') as client:
             request_headers = dict(headers or {})
             form_data = data
             if cookie:
-                session, csrf = _session_cookie()
+                session, csrf = _session_cookie(user_id)
                 request_headers['Cookie'] = f'session={session}'
                 if csrf_header:
                     request_headers['X-CSRFToken'] = csrf
@@ -513,7 +518,6 @@ def test_single_library_delete_preserves_legacy_confirmation_and_form_csrf(nativ
     )
     assert missing_csrf.status_code == 400
     assert not any(call[0] == 'delete' for call in data.calls)
-
     # Existing classic clients rely on client-side typed confirmation and omit
     # the optional server-side force/confirm fields.
     accepted = _request(
@@ -523,6 +527,30 @@ def test_single_library_delete_preserves_legacy_confirmation_and_form_csrf(nativ
     assert accepted.status_code == 200
     assert accepted.json()['status'] == 'started'
     assert ('delete', 'lib-1', True) in data.calls
+
+
+def test_single_library_delete_form_csrf_failure_matches_legacy_html(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        data={}, csrf_header=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
+    assert data.calls == []
+
+
+def test_single_library_delete_form_member_denial_redirects_to_login(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        data={'csrf_token': '__csrf__'}, csrf_header=False, user_id=8,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert data.calls == []
 
 
 def test_single_library_delete_validates_explicit_confirmation(native_client):

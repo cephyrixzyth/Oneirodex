@@ -626,6 +626,7 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             login_manager=login_manager,
         )
         from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_html_error_response
         from .acquire_status import _login_redirect
 
         csrf_token = None
@@ -645,6 +646,12 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
         response = csrf_error_response(
             request, auth.session_data, flask_app.config, token=csrf_token,
         ) if auth.token is None else None
+        delete_form_compat = (
+            action == 'delete_single'
+            and not request.headers.get('content-type', '').lower().startswith('application/json')
+        )
+        if response is not None and delete_form_compat:
+            response = csrf_html_error_response(response)
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         if response is None:
@@ -653,7 +660,16 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             if normalize_role(getattr(auth.user, 'role', None)) != 'admin' or (
                 auth.token is not None and not auth.has_scope('admin')
             ):
-                response = _error('Admin required', 'forbidden', 403)
+                if delete_form_compat and auth.token is None:
+                    from .oidc_status import _login_redirect as _admin_login_redirect
+
+                    response = _admin_login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message='You must be an admin to access this page.',
+                        category='danger', include_next=False,
+                    )
+                else:
+                    response = _error('Admin required', 'forbidden', 403)
         if response is None:
             if action == 'create':
                 response = await _create(request, flask_app, data, auth.user)
