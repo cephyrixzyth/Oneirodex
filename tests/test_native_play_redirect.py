@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import httpx
 import asgi
+from flask import redirect as flask_redirect
 
 from oneirodex.runtime_native import db_session
 from oneirodex.runtime_native import play_redirect
@@ -87,8 +88,11 @@ def _client(monkeypatch, *, game, can_access=True, playable=False):
 def test_missing_and_inaccessible_games_redirect_to_library_with_flash(monkeypatch):
     missing, missing_session = _client(monkeypatch, game=None)
     response = missing.get('/play_game/not-a-game', follow_redirects=False)
+    legacy = flask_redirect('/library')
     assert response.status_code == 302
     assert response.headers['location'] == '/library'
+    assert response.headers['content-type'] == legacy.headers['Content-Type']
+    assert response.content == legacy.get_data()
     assert missing_session['_flashes'] == [('error', 'Game not found.')]
     assert response.cookies.get('session')
 
@@ -96,7 +100,10 @@ def test_missing_and_inaccessible_games_redirect_to_library_with_flash(monkeypat
         monkeypatch, game=SimpleNamespace(uuid='game-uuid'), can_access=False,
     )
     response = denied.get('/play_game/game-uuid', follow_redirects=False)
+    legacy = flask_redirect('/library')
     assert response.headers['location'] == '/library'
+    assert response.headers['content-type'] == legacy.headers['Content-Type']
+    assert response.content == legacy.get_data()
     assert denied_session['_flashes'] == [
         ('error', 'You do not have access to this game.'),
     ]
@@ -106,11 +113,17 @@ def test_playable_and_non_playable_games_keep_legacy_redirects(monkeypatch):
     game = SimpleNamespace(uuid='game-uuid')
     playable, _ = _client(monkeypatch, game=game, playable=True)
     response = playable.get('/play_game/game-uuid', follow_redirects=False)
+    legacy = flask_redirect('https://play.example.invalid/game')
     assert response.headers['location'] == 'https://play.example.invalid/game'
+    assert response.headers['content-type'] == legacy.headers['Content-Type']
+    assert response.content == legacy.get_data()
 
     details, session_data = _client(monkeypatch, game=game)
     response = details.get('/play_game/game-uuid', follow_redirects=False)
+    legacy = flask_redirect('/game_details/game-uuid')
     assert response.headers['location'] == '/game_details/game-uuid'
+    assert response.headers['content-type'] == legacy.headers['Content-Type']
+    assert response.content == legacy.get_data()
     assert session_data['_flashes'] == [(
         'info',
         'This title is not playable in the browser. Open details for download/install.',
