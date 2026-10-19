@@ -200,7 +200,7 @@ def _set_session_cookie(response, flask_app, auth_context):
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
     add_vary_header(response, 'Cookie')

@@ -134,6 +134,24 @@ def test_native_oidc_client_does_not_require_flask_authlib(monkeypatch):
     assert client.client_id == 'client'
 
 
+def test_native_session_cookie_preserves_configured_samesite_spelling():
+    from starlette.responses import Response
+    from oneirodex.runtime_native.oidc_status import _set_session_cookie
+
+    app = Flask('native-session-cookie-test')
+    app.config.update(
+        SECRET_KEY='session-cookie-secret',
+        SESSION_COOKIE_SAMESITE='Lax',
+    )
+    response = Response()
+
+    _set_session_cookie(response, app, SimpleNamespace(session_data={'_fresh': True}))
+
+    cookie = response.headers['set-cookie']
+    assert 'session=' in cookie
+    assert 'SameSite=Lax' in cookie
+
+
 def test_native_oidc_rejects_state_mismatch_and_clears_state(native_client):
     runtime, data = native_client
 
