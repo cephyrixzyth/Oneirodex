@@ -226,11 +226,13 @@ def runtime():
         (user for user in users.values() if identity == f'{user.id}:fp'), None))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeData()
+    tokens = {}
     app = FastAPI()
     app.state.flask_app = flask_app
+    app.state.tokens = tokens
     app.include_router(create_library_tools_mutations_router(
         flask_app, find_user=lambda uid: next((u for u in users.values() if u.id == uid), None),
-        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        find_token=lambda prefix: tokens.get(prefix), commit_token_touch=lambda _token: None,
         load_user_id=lambda identity: manager.user_callback(identity), login_manager=manager,
         data_access=data))
     cookies = {name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
@@ -379,6 +381,42 @@ def test_legacy_link_existing_game_login_and_admin_redirects(runtime):
     assert anonymous.headers['location'] == '/login?next=%2Flink_existing_game'
     assert member.headers['location'] == '/login'
     assert ('danger', 'You must be an admin to access this page.') in session['_flashes']
+    assert not data.calls
+
+
+def test_legacy_link_existing_game_bearer_token_requires_admin_scope(runtime):
+    import hashlib
+    from starlette.testclient import TestClient
+
+    app, data, _cookies = runtime
+    secret = 'synthetic-read-only-secret'
+    app.state.tokens['scope1'] = SimpleNamespace(
+        user_id=7, token_hash=hashlib.sha256(secret.encode()).hexdigest(),
+        revoked_at=None, expires_at=None, scopes=['read:library'],
+        has_scope=lambda scope: scope == 'read:library',
+    )
+    app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {}
+    csrf = generate_csrf_token(session, 'mutation-secret')
+    cookie = dump_session_cookie(session, 'mutation-secret')
+    with TestClient(app) as client:
+        client.cookies.set('session', cookie)
+        response = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+            'csrf_token': csrf,
+        }, headers={
+            'Authorization': f'Bearer gt_scope1_{secret}',
+            'X-CSRFToken': csrf,
+        }, follow_redirects=False)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        'error': 'This token does not have the admin scope',
+        'error_code': 'forbidden',
+        'message': 'This token does not have the admin scope',
+        'ok': False,
+        'success': False,
+    }
     assert not data.calls
 
 

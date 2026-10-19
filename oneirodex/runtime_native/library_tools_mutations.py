@@ -316,7 +316,9 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                     )
                 elif auth.token is not None and not auth.has_scope('admin'):
                     from .library_tools import _error
-                    response = _error(403, 'forbidden', 'Admin required')
+                    response = _error(
+                        403, 'forbidden', 'This token does not have the admin scope',
+                    )
 
             if response is None:
                 game_uuid = str(first_form_value(form, 'game_uuid') or '').strip()
