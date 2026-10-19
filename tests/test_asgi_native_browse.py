@@ -8528,6 +8528,24 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_lazy_asgi_login_form_renders_visible_validation_with_legacy_status(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'username': '', 'password': ''},
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Please enter your username and password.' in response.text
+    assert 'role="alert"' in response.text
+
+
 def test_lazy_asgi_login_form_missing_csrf_matches_flask_bad_request(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, _csrf = _signed_session_with_csrf()
@@ -8670,6 +8688,33 @@ def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_lazy_asgi_registration_form_renders_visible_validation_with_legacy_status(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        native_auth_registration, 'AuthRegistrationData',
+        lambda: SimpleNamespace(register=lambda *args: calls.append(args)),
+    )
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/register', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'parity-invalid',
+            'email': 'not-an-email', 'password': 'secure-password',
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid registration details.' in response.text
+    assert 'role="alert"' in response.text
+    assert calls == []
+
+
 def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     calls = []
 
@@ -8687,7 +8732,8 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
             return True
 
     monkeypatch.setattr(native_password_reset_confirm, 'PasswordResetConfirmData', FakeResetData)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
     cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
@@ -8695,6 +8741,17 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     requested = _run(
         runtime, '/reset_password_request', method='POST', cookie=cookie,
         form_body={'csrf_token': csrf, 'email': 'player@example.com'},
+    )
+    invalid_email = _run(
+        runtime, '/reset_password_request', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'email': 'not-an-email'},
+    )
+    mismatch = _run(
+        runtime, '/reset_password/token-123', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'password': 'new-password',
+            'confirm_password': 'different-password',
+        },
     )
     reset = _run(
         runtime, '/reset_password/token-123', method='POST', cookie=cookie,
@@ -8705,6 +8762,14 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     )
 
     assert requested.status_code == 302 and requested.headers['location'] == '/login'
+    assert invalid_email.status_code == 200
+    assert invalid_email.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid email address.' in invalid_email.text
+    assert 'role="alert"' in invalid_email.text
+    assert mismatch.status_code == 200
+    assert mismatch.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid password details.' in mismatch.text
+    assert 'role="alert"' in mismatch.text
     assert reset.status_code == 302 and reset.headers['location'] == '/login'
     assert ('request', 'player@example.com', '127.0.0.1') in calls
     assert ('valid', 'token-123') in calls

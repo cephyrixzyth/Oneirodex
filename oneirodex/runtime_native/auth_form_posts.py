@@ -7,7 +7,9 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse, PlainTextResponse
 
+from .form_compat import first_form_value
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 from .response_compat import flask_redirect_response
 
 
@@ -76,12 +78,12 @@ def create_auth_form_post_router(
 
             try:
                 body = LoginBody.model_validate({
-                    'username': form.get('username', ''),
-                    'password': form.get('password', ''),
+                    'username': first_form_value(form, 'username', ''),
+                    'password': first_form_value(form, 'password', ''),
                 })
             except ValidationError:
                 _flash(auth.session_data, 'error', 'Please enter your username and password.')
-                return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
+                return _render_auth_form(flask_app, auth)
 
             try:
                 user, failure = login_data.authenticate(
@@ -113,7 +115,7 @@ def create_auth_form_post_router(
                 trusted_forwarded_for(request, flask_app.config),
             )
             auth.session_data['_remember'] = 'set'
-            target = _safe_next(request.query_params.get('next'))
+            target = _safe_next(first_query_value(request.query_params, 'next'))
             return _finish(flask_redirect_response(target), flask_app, auth)
 
     @router.post('/register', include_in_schema=False)
@@ -127,7 +129,7 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if response is not None:
                 return _finish(response, flask_app)
-            invite_token = request.query_params.get('token')
+            invite_token = first_query_value(request.query_params, 'token')
             if auth.user is not None:
                 if not invite_token:
                     return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
@@ -140,19 +142,19 @@ def create_auth_form_post_router(
 
             try:
                 body = RegistrationBody.model_validate({
-                    'username': form.get('username', ''),
-                    'email': form.get('email', ''),
-                    'password': form.get('password', ''),
+                    'username': first_form_value(form, 'username', ''),
+                    'email': first_form_value(form, 'email', ''),
+                    'password': first_form_value(form, 'password', ''),
                 }).model_dump()
             except ValidationError:
                 _flash(auth.session_data, 'error', 'Please check the account details and try again.')
-                return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
+                return _render_auth_form(flask_app, auth)
 
             errors = _registration_errors(body)
             if errors:
                 _flash(auth.session_data, 'error', 'Invalid registration details.')
                 _flash_errors(auth.session_data, errors)
-                return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
+                return _render_auth_form(flask_app, auth)
 
             try:
                 result, failure = registration_data.register(
@@ -189,13 +191,13 @@ def create_auth_form_post_router(
             from oneirodex.runtime_native.password_reset_confirm import _client_ip
             from email_validator import EmailNotValidError, validate_email
 
-            email = str(form.get('email') or '').strip()
+            email = str(first_form_value(form, 'email') or '').strip()
             try:
                 body = PasswordResetRequestBody.model_validate({'email': email})
                 validate_email(body.email, check_deliverability=False)
             except (ValidationError, EmailNotValidError):
                 _flash(auth.session_data, 'error', 'Invalid email address.')
-                return _finish(flask_redirect_response('/reset_password_request', status_code=302), flask_app, auth)
+                return _render_auth_form(flask_app, auth)
 
             try:
                 outcome = password_reset_data.request_reset(
@@ -241,8 +243,8 @@ def create_auth_form_post_router(
             from oneirodex.runtime_native.password_reset_confirm import _password_form_errors
 
             payload = {
-                'password': form.get('password', ''),
-                'confirm_password': form.get('confirm_password', ''),
+                'password': first_form_value(form, 'password', ''),
+                'confirm_password': first_form_value(form, 'confirm_password', ''),
             }
             try:
                 body = PasswordResetConfirmBody.model_validate(payload).model_dump()
@@ -252,10 +254,7 @@ def create_auth_form_post_router(
             if errors:
                 _flash(auth.session_data, 'error', 'Invalid password details.')
                 _flash_errors(auth.session_data, errors)
-                return _finish(
-                    flask_redirect_response(f'/reset_password/{token}', status_code=302),
-                    flask_app, auth,
-                )
+                return _render_auth_form(flask_app, auth)
             try:
                 changed = password_reset_data.reset(token, body['password'])
             except Exception:  # noqa: BLE001
@@ -308,7 +307,7 @@ def create_auth_form_post_router(
 
             from email_validator import EmailNotValidError, validate_email
 
-            email = str(form.get('email') or '').strip()
+            email = str(first_form_value(form, 'email') or '').strip()
             try:
                 if not email or len(email) > 254:
                     raise ValueError('invalid email')
@@ -397,7 +396,7 @@ def _form_csrf_error(request, form, session_data, config):
     from oneirodex.runtime_native.session_compat import CsrfTokenError, validate_csrf_token
 
     field = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
-    token = request.headers.get('X-CSRFToken') or request.headers.get('X-CSRF-Token') or form.get(field)
+    token = request.headers.get('X-CSRFToken') or request.headers.get('X-CSRF-Token') or first_form_value(form, field)
     try:
         validate_csrf_token(
             token, session_data,
@@ -433,6 +432,14 @@ def _finish(response, flask_app, auth=None):
     for key, value in security_header_values(flask_app.config).items():
         response.headers.setdefault(key, value)
     return response
+
+
+def _render_auth_form(flask_app, auth):
+    """Render compatibility-form validation in the shared auth shell."""
+    from .auth_pages import _shell_response
+
+    response = _shell_response(flask_app, auth.session_data)
+    return _finish(response, flask_app, auth)
 
 
 def _flash(session_data, category, message):

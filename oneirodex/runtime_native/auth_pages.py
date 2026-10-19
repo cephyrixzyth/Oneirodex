@@ -10,6 +10,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import RedirectResponse, Response
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AuthPageData:
@@ -117,7 +118,7 @@ def create_auth_pages_router(
                 login_manager=login_manager,
                 allow_bearer=False,
             )
-            invite_token = request.query_params.get('token') if page == 'register' else None
+            invite_token = first_query_value(request.query_params, 'token') if page == 'register' else None
             if page == 'login' and auth.user is not None:
                 response = RedirectResponse('/discover', status_code=302)
             elif page in {'reset_request', 'reset'} and auth.user is not None:
