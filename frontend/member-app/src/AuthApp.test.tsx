@@ -39,6 +39,9 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
   expect(await screen.findByRole('heading', { name: 'Sign in to Oneirodex' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Sign in' }).closest('form')).toHaveAttribute(
+    'novalidate',
+  )
   expect(api.setCsrfToken).toHaveBeenCalledWith('csrf-test')
   expect(screen.getByRole('link', { name: 'Household SSO' })).toHaveAttribute('href', '/login/oidc')
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'member' } })
@@ -51,6 +54,47 @@ test('login direct entry loads CSRF state and submits credentials through the AP
     ),
   )
   expect(navigate).toHaveBeenCalledWith('/library')
+})
+
+test('empty login credentials show accessible required-field feedback without an API request', async () => {
+  render(<AuthApp />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Please enter your username and password.',
+  )
+  expect(api.signIn).not.toHaveBeenCalled()
+})
+
+test('login with only a username identifies the missing password without clearing the username', async () => {
+  render(<AuthApp />)
+  const username = await screen.findByLabelText('Username') as HTMLInputElement
+  fireEvent.change(username, { target: { value: 'member' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Please enter your password.')
+  expect(username).toHaveValue('member')
+  expect(api.signIn).not.toHaveBeenCalled()
+})
+
+test('failed login displays the error and clears both credential fields', async () => {
+  api.signIn.mockRejectedValue(
+    new Error('Invalid username or password. USERNAMES ARE CASE SENSITIVE!'),
+  )
+  render(<AuthApp />)
+  const username = await screen.findByLabelText('Username') as HTMLInputElement
+  const password = screen.getByLabelText('Password') as HTMLInputElement
+  fireEvent.change(username, { target: { value: 'ParityAdmin' } })
+  fireEvent.change(password, { target: { value: 'wrong-password' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Invalid username or password. USERNAMES ARE CASE SENSITIVE!',
+  )
+  await waitFor(() => {
+    expect(username).toHaveValue('')
+    expect(password).toHaveValue('')
+  })
 })
 
 test('registration preserves invite token and shows the generic account request response', async () => {

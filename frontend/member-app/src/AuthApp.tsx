@@ -107,14 +107,17 @@ export function AuthApp({
   async function submit(
     event: FormEvent<HTMLFormElement>,
     action: (data: FormData) => Promise<void>,
+    clearOnError = false,
   ) {
     event.preventDefault()
+    const form = event.currentTarget
     setError('')
     setNotice('')
     setBusy(true)
     try {
       await action(new FormData(event.currentTarget))
     } catch (cause) {
+      if (clearOnError) form.reset()
       setError(cause instanceof Error ? cause.message : 'The request could not be completed.')
     } finally {
       setBusy(false)
@@ -141,18 +144,37 @@ export function AuthApp({
         <p className="auth-pilot__lede">Household library access for your gaming sphere.</p>
         <form
           className="auth-pilot__form"
-          onSubmit={(event) =>
-            submit(event, async (data) => {
+          noValidate
+          onSubmit={(event) => {
+            const form = event.currentTarget
+            const data = new FormData(form)
+            const username = String(data.get('username') || '')
+            const password = String(data.get('password') || '')
+            const missingUsername = !username.trim()
+            const missingPassword = !password.trim()
+            if (missingUsername || missingPassword) {
+              event.preventDefault()
+              setNotice('')
+              setError(
+                missingUsername && missingPassword
+                  ? 'Please enter your username and password.'
+                  : missingUsername
+                    ? 'Please enter your username.'
+                    : 'Please enter your password.',
+              )
+              return
+            }
+            void submit(event, async (formData) => {
               const result = await signIn(
                 {
-                  username: String(data.get('username') || ''),
-                  password: String(data.get('password') || ''),
+                  username: String(formData.get('username') || ''),
+                  password: String(formData.get('password') || ''),
                 },
                 { next: params.get('next') || undefined },
               )
               navigate(result.next_url)
-            })
-          }
+            }, true)
+          }}
         >
           <label className="auth-pilot__field">
             <span>Username</span>
