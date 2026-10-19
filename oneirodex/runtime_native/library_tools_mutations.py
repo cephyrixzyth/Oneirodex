@@ -5,6 +5,7 @@ so the router can be exercised using fake-only tests.
 """
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -248,7 +249,8 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                                      login_manager, database_scope):
     from contextlib import nullcontext
 
-    from starlette.responses import RedirectResponse
+    from starlette.responses import Response
+    from werkzeug.utils import redirect as werkzeug_redirect
 
     from .csrf_compat import csrf_error_response
     from .oidc_status import _login_redirect, _set_session_cookie
@@ -270,7 +272,7 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
             )
             response = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
             if response is not None:
                 response = _csrf_html_response(response)
@@ -294,10 +296,10 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                     response = _error(403, 'forbidden', 'Admin required')
 
             if response is None:
-                game_uuid = str(form.get('game_uuid') or '').strip()
-                full_disk_path = str(form.get('full_disk_path') or '').strip()
-                library_uuid = str(form.get('library_uuid') or '').strip()
-                from_unmatched = str(form.get('from_unmatched') or 'false') == 'true'
+                game_uuid = str(first_form_value(form, 'game_uuid') or '').strip()
+                full_disk_path = str(first_form_value(form, 'full_disk_path') or '').strip()
+                library_uuid = str(first_form_value(form, 'library_uuid') or '').strip()
+                from_unmatched = str(first_form_value(form, 'from_unmatched') or 'false') == 'true'
                 if not game_uuid or not full_disk_path:
                     message, category = 'Select a game and a folder path before linking.', 'error'
                 else:
@@ -333,18 +335,26 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append((category, message))
                 auth.session_data['_flashes'] = flashes
-                if category == 'success' and from_unmatched:
+                if category == 'success':
                     location = '/admin/scan_management?active_tab=unmatched'
-                elif category == 'success':
-                    location = '/libraries'
                 else:
-                    query = urlencode({
-                        'full_disk_path': full_disk_path,
-                        'library_uuid': library_uuid,
+                    # Match Flask's legacy url_for behavior: omit empty/None
+                    # query values and sort the remaining keys.
+                    query = urlencode(sorted((key, value) for key, value in {
+                        'full_disk_path': full_disk_path or None,
+                        'library_uuid': library_uuid or None,
                         'from_unmatched': 'true' if from_unmatched else 'false',
-                    })
+                    }.items() if value is not None))
                     location = '/add_game_manual?' + query
-                response = RedirectResponse(location, status_code=302)
+                legacy_redirect = werkzeug_redirect(location, code=302)
+                response = Response(
+                    content=legacy_redirect.get_data(),
+                    status_code=legacy_redirect.status_code,
+                    headers={
+                        'content-type': legacy_redirect.headers['content-type'],
+                        'location': legacy_redirect.headers['location'],
+                    },
+                )
                 _set_session_cookie(response, flask_app, auth)
             return response
         finally:

@@ -274,13 +274,39 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
             'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
             'library_uuid': 'lib1', 'from_unmatched': 'true', 'csrf_token': csrf,
         }, follow_redirects=False)
+        accepted_from_identify = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+            'library_uuid': 'lib1', 'from_unmatched': 'false', 'csrf_token': csrf,
+        }, follow_redirects=False)
 
     assert rejected.status_code == 400
     assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
     assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert accepted_from_identify.status_code == 302
+    assert accepted_from_identify.headers['location'] == '/admin/scan_management?active_tab=unmatched'
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+
+
+def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):
+    from starlette.testclient import TestClient
+
+    app, _data, _cookies = runtime
+    app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {'_user_id': '7:fp', '_fresh': True}
+    csrf = generate_csrf_token(session, 'mutation-secret')
+    cookie = dump_session_cookie(session, 'mutation-secret')
+
+    with TestClient(app) as client:
+        client.cookies.set('session', cookie)
+        response = client.post('/link_existing_game', data={},
+                               headers={'X-CSRFToken': csrf}, follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/add_game_manual?from_unmatched=false'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<a href="/add_game_manual?from_unmatched=false">' in response.content
 
 
 def test_rename_apply_validates_plan_before_adapter_mutation(runtime):
