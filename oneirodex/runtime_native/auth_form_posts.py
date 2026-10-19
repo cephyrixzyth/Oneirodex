@@ -91,7 +91,13 @@ def create_auth_form_post_router(
             except Exception:  # noqa: BLE001 — credential/storage details stay private
                 user, failure = None, ('internal', 'Could not sign in. Please try again.')
             if failure:
-                category = 'warning' if failure[0] == 'forbidden' else 'error'
+                if failure[0] == 'forbidden':
+                    category = (
+                        'error' if failure[1] == 'Your account has been banned.'
+                        else 'warning'
+                    )
+                else:
+                    category = 'error'
                 _flash(auth.session_data, category, failure[1])
                 return _finish(RedirectResponse('/login', status_code=302), flask_app, auth)
 

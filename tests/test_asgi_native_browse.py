@@ -8527,6 +8527,38 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+@pytest.mark.parametrize(
+    ('message', 'category'),
+    [
+        ('Your account has been banned.', 'error'),
+        ('Your account is not activated, check your email.', 'warning'),
+    ],
+)
+def test_lazy_asgi_login_form_preserves_legacy_forbidden_flash_categories(
+    monkeypatch, message, category,
+):
+    failure = ('forbidden', message)
+    monkeypatch.setattr(
+        native_auth_login, 'AuthLoginData',
+        lambda: SimpleNamespace(authenticate=lambda *_args: (None, failure)),
+    )
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'username': 'player', 'password': 'secret'},
+    )
+
+    assert response.status_code == 302 and response.headers['location'] == '/login'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == (category, message)
+
+
 def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
     from flask import Flask, session as flask_session
     from http.cookies import SimpleCookie
