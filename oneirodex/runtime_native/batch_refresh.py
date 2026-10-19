@@ -344,7 +344,7 @@ def create_batch_refresh_router(
         from .csrf_compat import csrf_error_response, csrf_html_error_response
         from .oidc_status import _login_redirect, _set_session_cookie
         from oneirodex.utils.role_catalog import normalize_role
-        from starlette.responses import RedirectResponse
+        from .response_compat import flask_redirect_response
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -380,7 +380,7 @@ def create_batch_refresh_router(
                         flashes = list(auth.session_data.get('_flashes') or [])
                         flashes.append(('info', message))
                         auth.session_data['_flashes'] = flashes
-                        response = RedirectResponse('/libraries', status_code=302)
+                        response = flask_redirect_response('/library', status_code=302)
                 except Exception:
                     flask_app.logger.warning('legacy image refresh queue failed', exc_info=True)
                     response = _api_error('Could not queue the image refresh', 'internal')
