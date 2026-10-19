@@ -155,10 +155,22 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
                 code=first_query_value(request.query_params, 'code'),
                 code_verifier=verifier,
             )
-            claims = None
-            if token.get('id_token'):
-                claims = await client.parse_id_token(token, nonce=nonce)
-            claims = claims if isinstance(claims, dict) else {}
+            id_token = token.get('id_token') if isinstance(token, dict) else None
+            if not isinstance(id_token, str) or not id_token.strip():
+                raise ValueError(
+                    'SSO response did not include a valid identity token. '
+                    'Please contact an administrator.'
+                )
+            claims = await client.parse_id_token(token, nonce=nonce)
+            if (
+                not isinstance(claims, dict)
+                or not isinstance(claims.get('sub'), str)
+                or not claims['sub'].strip()
+            ):
+                raise ValueError(
+                    'SSO response did not contain a valid identity. '
+                    'Please contact an administrator.'
+                )
             userinfo = token.get('userinfo')
             # The legacy Authlib callback prefers its validated userinfo claim
             # set. The native flow parses the ID token directly, so recover
@@ -176,19 +188,16 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
                 except Exception:
                     app.logger.warning('OIDC UserInfo lookup failed; using validated ID token claims.', exc_info=True)
             if isinstance(userinfo, dict) and userinfo:
-                subject = claims.get('sub')
+                subject = claims['sub']
                 userinfo_subject = userinfo.get('sub')
-                if subject is not None and userinfo_subject != subject:
+                if userinfo_subject != subject:
                     raise ValueError('SSO identity claims did not match. Please contact an administrator.')
-                if subject is None:
-                    claims = dict(userinfo)
-                else:
-                    for key, value in userinfo.items():
-                        if key not in claims and key not in {
-                            'iss', 'sub', 'aud', 'azp', 'exp', 'iat',
-                            'auth_time', 'nonce', 'at_hash', 'c_hash',
-                        }:
-                            claims[key] = value
+                for key, value in userinfo.items():
+                    if key not in claims and key not in {
+                        'iss', 'sub', 'aud', 'azp', 'exp', 'iat',
+                        'auth_time', 'nonce', 'at_hash', 'c_hash',
+                    }:
+                        claims[key] = value
             user = data.provision(claims, config, app)
         except ValueError as exc:
             data.rollback()

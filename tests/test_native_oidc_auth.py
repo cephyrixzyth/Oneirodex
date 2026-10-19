@@ -19,6 +19,7 @@ class FakeOidcClient:
         self.access = None
         self.nonce = None
         self.userinfo_claims = None
+        self.userinfo_calls = 0
 
     async def create_authorization_url(self, **kwargs):
         self.authorize = kwargs
@@ -33,6 +34,7 @@ class FakeOidcClient:
         return {'sub': 'subject-1', 'email': 'user@example.test', 'email_verified': True}
 
     async def userinfo(self, *, token):
+        self.userinfo_calls += 1
         return self.userinfo_claims or {}
 
 
@@ -177,6 +179,124 @@ def test_native_oidc_rejects_state_mismatch_and_clears_state(native_client):
     assert 'oidc_auth_state' not in session
 
 
+@pytest.mark.parametrize('userinfo_source', ['token_response', 'userinfo_endpoint'])
+def test_native_oidc_rejects_userinfo_without_validated_id_token(
+    native_client, monkeypatch, userinfo_source,
+):
+    runtime, data = native_client
+    claims = {
+        'sub': 'subject-without-id-token',
+        'email': 'untrusted@example.test',
+        'email_verified': True,
+        'preferred_username': 'Untrusted',
+    }
+    data.client.userinfo_claims = claims
+
+    async def fetch_access_token(**kwargs):
+        data.client.access = kwargs
+        token = {'access_token': 'synthetic-access-token'}
+        if userinfo_source == 'token_response':
+            token['userinfo'] = claims
+        return token
+
+    monkeypatch.setattr(data.client, 'fetch_access_token', fetch_access_token)
+
+    async def flow():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='https://app.example',
+        ) as client:
+            await client.get('/login/oidc')
+            session = load_session_cookie(
+                client.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+            )
+            return await client.get(
+                '/login/oidc/callback?code=auth-code&state=' + session['oidc_auth_state']
+            )
+
+    callback = asyncio.run(flow())
+    assert callback.status_code == 302
+    assert callback.headers['location'] == '/login'
+    assert not data.provisioned
+    assert not data.logged
+    assert data.client.userinfo_calls == 0
+    assert 'remember_token=' not in callback.headers.get('set-cookie', '')
+    session = load_session_cookie(
+        callback.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+    )
+    assert '_user_id' not in session
+    assert 'oidc_auth_state' not in session
+    assert data.client.nonce is None
+
+
+@pytest.mark.parametrize('id_token_value', ['', 7])
+def test_native_oidc_rejects_invalid_id_token_before_parsing(
+    native_client, monkeypatch, id_token_value,
+):
+    runtime, data = native_client
+    data.client.userinfo_claims = {'sub': 'subject-1', 'email': 'user@example.test'}
+
+    async def fetch_access_token(**kwargs):
+        data.client.access = kwargs
+        return {'access_token': 'synthetic-access-token', 'id_token': id_token_value}
+
+    monkeypatch.setattr(data.client, 'fetch_access_token', fetch_access_token)
+
+    async def flow():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='https://app.example',
+        ) as client:
+            await client.get('/login/oidc')
+            session = load_session_cookie(
+                client.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+            )
+            return await client.get(
+                '/login/oidc/callback?code=auth-code&state=' + session['oidc_auth_state']
+            )
+
+    callback = asyncio.run(flow())
+    assert callback.headers['location'] == '/login'
+    assert data.client.nonce is None
+    assert data.client.userinfo_calls == 0
+    assert not data.provisioned
+
+
+@pytest.mark.parametrize('parsed_subject', [None, '', 7])
+def test_native_oidc_rejects_missing_or_invalid_parsed_subject_before_userinfo(
+    native_client, monkeypatch, parsed_subject,
+):
+    runtime, data = native_client
+    data.client.userinfo_claims = {
+        'sub': 'subject-from-userinfo', 'email': 'userinfo@example.test',
+    }
+
+    async def parse_id_token(_token, *, nonce):
+        data.client.nonce = nonce
+        claims = {'email': 'token@example.test'}
+        if parsed_subject is not None:
+            claims['sub'] = parsed_subject
+        return claims
+
+    monkeypatch.setattr(data.client, 'parse_id_token', parse_id_token)
+
+    async def flow():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='https://app.example',
+        ) as client:
+            await client.get('/login/oidc')
+            session = load_session_cookie(
+                client.cookies.get('session'), 'oidc-secret', max_age=31_536_000,
+            )
+            return await client.get(
+                '/login/oidc/callback?code=auth-code&state=' + session['oidc_auth_state']
+            )
+
+    callback = asyncio.run(flow())
+    assert callback.headers['location'] == '/login'
+    assert data.client.nonce
+    assert data.client.userinfo_calls == 0
+    assert not data.provisioned
+
+
 @pytest.mark.parametrize('userinfo_subject, expected_status', [
     ('subject-1', 302),
     ('different-subject', 302),
@@ -221,6 +341,7 @@ def test_native_oidc_sparse_id_token_userinfo_is_subject_bound(
     else:
         assert callback.headers['location'] == '/login'
         assert not data.provisioned
+    assert data.client.userinfo_calls == 1
 
 
 def test_native_oidc_successful_callback_matches_checked_in_flask_fallback_contract(

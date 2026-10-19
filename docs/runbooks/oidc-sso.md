@@ -191,7 +191,7 @@ JIT provisioning creates users with role `user` unless a mapped claim is present
 1. User clicks **Sign in with SSO** on `/login`.
 2. Oneirodex redirects to IdP with authorization code + PKCE.
 3. IdP redirects to `/login/oidc/callback` with `code` and `state`.
-4. Oneirodex exchanges code, reads claims, JIT-provisions user, establishes Flask-Login session.
+4. Oneirodex exchanges the code, validates the signed ID token against the configured issuer and client with the authorization nonce, and requires a nonempty subject before provisioning. UserInfo can supplement profile/role claims only when its subject matches the validated ID-token subject. Missing or invalid identity tokens return the user to login without provisioning or signing in.
 5. User lands on Discover (or `next` URL if safe).
 
 ## Troubleshooting
