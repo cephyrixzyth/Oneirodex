@@ -100,6 +100,10 @@ class LibraryToolsMutationData:
                     'removed_from_unmatched': bool(unmatched)}, None
         except SQLAlchemyError:
             db.session.rollback()
+            log_system_event(
+                f"Database error linking existing game '{game_uuid}' to folder "
+                f"by admin {actor_name}",
+                event_type='error', event_level='error', audit_user=actor_id)
             return None, 'internal'
 
     def validate_rename_plan(self, plan, root):
@@ -345,6 +349,11 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                                 )
                                 if error_code == 'not_found':
                                     message, category = 'Selected game could not be found.', 'error'
+                                elif error_code == 'internal':
+                                    message, category = (
+                                        'An error occurred while linking the game. Please try again.',
+                                        'error',
+                                    )
                                 elif error_code:
                                     message, category = 'Unable to link this folder to the selected game.', 'error'
                                 else:

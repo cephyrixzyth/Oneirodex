@@ -74,6 +74,50 @@ def test_native_library_data_methods_use_scoped_session_without_app_context(monk
     assert freshness_calls == [(('l1',), {'limit': 7, 'only_missing': False, 'app': app})]
 
 
+def test_link_existing_game_database_failure_rolls_back_and_logs_sanitized_event(monkeypatch):
+    import oneirodex
+    from sqlalchemy.exc import SQLAlchemyError
+    from oneirodex.models import Game
+
+    game = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
+    rolled_back = []
+    events = []
+
+    def execute(query):
+        model = query.column_descriptions[0]['entity']
+        row = game if model is Game else None
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: row))
+
+    def fail_commit():
+        raise SQLAlchemyError('postgresql://user:private@db/library')
+
+    fake_session = SimpleNamespace(
+        execute=execute, commit=fail_commit,
+        rollback=lambda: rolled_back.append(True), delete=lambda _row: None,
+    )
+    monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=fake_session))
+    monkeypatch.setattr('oneirodex.utils.rom_language.apply_rom_language_fields', lambda *_: None)
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event',
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    linked, error = LibraryToolsMutationData().link_existing_game(
+        Flask('link-existing-game-db-failure'), 'g1', '/safe/NewFolder', 'Admin', 42,
+    )
+
+    assert linked is None and error == 'internal'
+    assert rolled_back == [True]
+    assert len(events) == 1
+    assert events[0][0] == (
+        "Database error linking existing game 'g1' to folder by admin Admin",
+    )
+    assert events[0][1] == {
+        'event_type': 'error', 'event_level': 'error', 'audit_user': 42,
+    }
+    assert 'private' not in events[0][0][0]
+
+
 def test_native_steam_backfill_uses_scoped_session_without_app_context(monkeypatch):
     import oneirodex
 
@@ -102,6 +146,7 @@ class FakeData:
     def __init__(self):
         self.calls = []
         self.game_row = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
+        self.link_error_code = None
 
     def safe_path(self, _app, path):
         return str(path).startswith('/safe'), 'outside allowed roots'
@@ -129,6 +174,8 @@ class FakeData:
 
     def link_existing_game(self, _app, game_uuid, path, actor, _actor_id):
         self.calls.append(('link_existing_game', game_uuid, path, actor))
+        if self.link_error_code:
+            return None, self.link_error_code
         return {'game_uuid': game_uuid, 'game_name': 'Original',
                 'full_disk_path': path, 'removed_from_unmatched': True}, None
 
@@ -329,6 +376,33 @@ def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):
     assert response.headers['location'] == '/add_game_manual?from_unmatched=false'
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert b'<a href="/add_game_manual?from_unmatched=false">' in response.content
+
+
+def test_legacy_link_existing_game_database_failure_uses_legacy_flash(runtime):
+    from http.cookies import SimpleCookie
+    from starlette.testclient import TestClient
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    app, data, cookies = runtime
+    data.link_error_code = 'internal'
+    with TestClient(app) as client:
+        client.cookies.set('session', cookies['admin'])
+        response = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+        }, follow_redirects=False)
+        cookie = SimpleCookie()
+        cookie.load(next(value for value in response.headers.get_list('set-cookie')
+                         if value.startswith('session=')))
+        session_cookie = cookie['session'].value
+
+    session = load_session_cookie(session_cookie, 'mutation-secret', max_age=31_536_000)
+    assert response.status_code == 302
+    assert response.headers['location'] == (
+        '/add_game_manual?full_disk_path=/safe/NewFolder&from_unmatched=false'
+    )
+    assert (
+        'error', 'An error occurred while linking the game. Please try again.'
+    ) in session['_flashes']
 
 
 def test_rename_apply_validates_plan_before_adapter_mutation(runtime):
