@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { getJson, postJson } from '../api/adminApi'
@@ -12,6 +12,15 @@ vi.mock('../api/adminApi', () => ({
 afterEach(() => vi.resetAllMocks())
 
 test('renders a paginated scan table, carries link feedback, and requests the next page', async () => {
+  const allRows = Array.from({ length: 51 }, (_, index) => ({
+    id: `folder-${index}`,
+    folder_path: `/storage/review/page-${index}`,
+    status: 'Unmatched',
+    library_uuid: 'library-1',
+    library_name: 'Review Library',
+    platform_name: 'PCWIN',
+    rom_region: 'USA',
+  }))
   vi.mocked(getJson).mockImplementation(async (url) => {
     const value = String(url)
     if (value === '/api/get_libraries') {
@@ -19,19 +28,10 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     }
     const params = new URL(value, 'http://oneirodex.test').searchParams
     const offset = Number(params.get('offset') || 0)
+    if (params.get('paginate') === '0') return allRows
     return {
-      items: [
-        {
-          id: `folder-${offset}`,
-          folder_path: `/storage/review/page-${offset}`,
-          status: 'Unmatched',
-          library_uuid: 'library-1',
-          library_name: 'Review Library',
-          platform_name: 'PCWIN',
-          rom_region: 'USA',
-        },
-      ],
-      total: 151,
+      items: [allRows[offset]],
+      total: allRows.length,
       count: 1,
     }
   })
@@ -54,7 +54,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
   expect(screen.getByText("Linked existing game 'Review Game' to this folder.")).toBeInTheDocument()
   expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
   expect(getJson).toHaveBeenCalledWith(
-    expect.stringContaining('limit=150&offset=0&paginate=1'),
+    expect.stringContaining('paginate=1&limit=150&offset=0'),
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   )
   expect(screen.getByRole('group', { name: 'Layout filter' })).toBeInTheDocument()
@@ -64,6 +64,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     'ascending',
   )
 
+  fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))
   expect(await screen.findByText('No folders for this filter.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Folder library' }))
@@ -79,14 +80,20 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     }),
   )
 
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'Layout filter' })).getByRole('button', {
+      name: 'All',
+    }),
+  )
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'Next' }))
   await waitFor(() =>
     expect(getJson).toHaveBeenCalledWith(
-      expect.stringContaining('limit=150&offset=150&paginate=1'),
+      expect.stringContaining('paginate=1&limit=50&offset=50'),
       expect.anything(),
     ),
   )
-  expect(await screen.findByText('/storage/review/page-150')).toBeInTheDocument()
+  expect(await screen.findByText('/storage/review/page-50')).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledTimes(1)
 })
 
@@ -118,6 +125,45 @@ test('disk deletion requires confirmation before the destructive request', async
     'Are you sure you want to delete the folder /storage/review/delete-me FROM DISK?',
   )
   expect(postJson).not.toHaveBeenCalled()
+})
+
+test('computed filters paginate across every matching row and report the filtered total', async () => {
+  const allRows = Array.from({ length: 51 }, (_, index) => ({
+    id: `rom-${index}`,
+    folder_path: `/storage/review/Game-${index}.nes`,
+    status: 'Unmatched',
+    library_name: 'Review Library',
+    platform_name: 'NES',
+  }))
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    if (String(url) === '/api/get_libraries') return []
+    const params = new URL(String(url), 'http://oneirodex.test').searchParams
+    if (params.get('paginate') === '0') return allRows
+    return { items: [allRows[0]], total: allRows.length, count: 1 }
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+      <ScanUnmatchedPage />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('/storage/review/Game-0.nes')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
+  fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))
+
+  expect(await screen.findByText('Showing 1–50 of 51')).toBeInTheDocument()
+  expect(screen.getByText('/storage/review/Game-0.nes')).toBeInTheDocument()
+  expect(screen.queryByText('/storage/review/Game-50.nes')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+  expect(await screen.findByText('Showing 51–51 of 51')).toBeInTheDocument()
+  expect(screen.getByText('/storage/review/Game-50.nes')).toBeInTheDocument()
+  expect(screen.queryByText('/storage/review/Game-0.nes')).not.toBeInTheDocument()
+  expect(getJson).toHaveBeenCalledWith(
+    expect.stringContaining('paginate=0'),
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  )
 })
 
 test('saves the legacy soft search name without renaming the folder path', async () => {

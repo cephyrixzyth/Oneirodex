@@ -87,6 +87,9 @@ export function ScanUnmatchedPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [searchNames, setSearchNames] = useState<Record<string, string>>({})
   const [reloadKey, setReloadKey] = useState(0)
+  const clientPagination = layout !== 'all' || triage !== 'all' || kind === 'none'
+  const requestLimit = clientPagination ? 0 : pageSize
+  const requestOffset = clientPagination ? 0 : offset
   const [sort, setSort] = useState<{
     key: 'folder' | 'status' | 'library' | 'system' | 'region'
     dir: 1 | -1
@@ -130,12 +133,11 @@ export function ScanUnmatchedPage() {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({
-      status,
-      limit: String(pageSize),
-      offset: String(offset),
-      paginate: '1',
-    })
+    const params = new URLSearchParams({ status, paginate: clientPagination ? '0' : '1' })
+    if (!clientPagination) {
+      params.set('limit', String(requestLimit))
+      params.set('offset', String(requestOffset))
+    }
     if (libraryUuid) params.set('library_uuid', libraryUuid)
     if (platform) params.set('platform', platform)
     if (region) params.set('rom_region', region)
@@ -144,8 +146,13 @@ export function ScanUnmatchedPage() {
     if (kind !== 'all' && kind !== 'none') params.set('suggested_kind', kind)
     void getJson(`/api/unmatched_folders?${params}`, { signal: controller.signal })
       .then((value: PageResult) => {
-        setRows(Array.isArray(value?.items) ? value.items : [])
-        setTotal(Number(value?.total) || 0)
+        if (Array.isArray(value)) {
+          setRows(value)
+          setTotal(value.length)
+        } else {
+          setRows(Array.isArray(value?.items) ? value.items : [])
+          setTotal(Number(value?.total) || 0)
+        }
         setError(null)
       })
       .catch((reason) => {
@@ -158,13 +165,25 @@ export function ScanUnmatchedPage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [status, libraryUuid, platform, region, searchQuery, why, kind, pageSize, offset, reloadKey])
+  }, [
+    status,
+    libraryUuid,
+    platform,
+    region,
+    searchQuery,
+    why,
+    kind,
+    clientPagination,
+    requestLimit,
+    requestOffset,
+    reloadKey,
+  ])
 
   const systems = useMemo(
     () => [...new Set(libraries.map((row) => row.platform).filter(Boolean))].sort(),
     [libraries],
   )
-  const visibleRows = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const filtered = rows.filter((row) => {
       const rowKind =
         String(row.suggested_kind || '')
@@ -206,6 +225,12 @@ export function ScanUnmatchedPage() {
       return a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }) * sort.dir
     })
   }, [rows, kind, layout, triage, sort])
+
+  const visibleRows = useMemo(
+    () => (clientPagination ? filteredRows.slice(offset, offset + pageSize) : filteredRows),
+    [clientPagination, filteredRows, offset, pageSize],
+  )
+  const displayTotal = clientPagination ? filteredRows.length : total
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -552,8 +577,8 @@ export function ScanUnmatchedPage() {
     setSort((current) => ({ key, dir: current.key === key ? (current.dir === 1 ? -1 : 1) : 1 }))
   }
 
-  const start = total ? offset + 1 : 0
-  const end = Math.min(offset + visibleRows.length, total)
+  const start = displayTotal ? offset + 1 : 0
+  const end = Math.min(offset + visibleRows.length, displayTotal)
 
   return (
     <Page
@@ -785,7 +810,7 @@ export function ScanUnmatchedPage() {
         </div>
         <div className="od-scan-unmatched__pager">
           <span>
-            Showing {start}–{end} of {total}
+            Showing {start}–{end} of {displayTotal}
           </span>
           <div>
             <Button
@@ -796,12 +821,12 @@ export function ScanUnmatchedPage() {
               Previous
             </Button>
             <span>
-              Page {total ? Math.floor(offset / pageSize) + 1 : 0} of{' '}
-              {Math.max(1, Math.ceil(total / pageSize))}
+              Page {displayTotal ? Math.floor(offset / pageSize) + 1 : 0} of{' '}
+              {Math.max(1, Math.ceil(displayTotal / pageSize))}
             </span>
             <Button
               type="button"
-              disabled={loading || offset + pageSize >= total}
+              disabled={loading || offset + pageSize >= displayTotal}
               onClick={() => setOffset((value) => value + pageSize)}
             >
               Next
