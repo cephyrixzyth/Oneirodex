@@ -134,6 +134,7 @@ def test_outer_asgi_dispatch_keeps_play_redirect_off_wsgi(monkeypatch):
     game = SimpleNamespace(uuid='game-uuid')
     native_client, _ = _client(monkeypatch, game=game, playable=True)
     runtime = asgi.LazyASGIApp()
+    runtime._flask_app = SimpleNamespace(config={'WTF_CSRF_ENABLED': False})
     runtime._native_read_api_app = native_client.app
 
     async def initialized():
