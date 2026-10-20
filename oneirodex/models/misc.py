@@ -7,6 +7,15 @@ from uuid import uuid4
 from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
+
+def _utc_isoformat(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 class ReleaseGroup(db.Model):
     __tablename__ = 'filters'
 
@@ -302,8 +311,8 @@ class GameRequest(db.Model):
             'title': self.title,
             'notes': self.notes,
             'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'created_at': _utc_isoformat(self.created_at),
+            'resolved_at': _utc_isoformat(self.resolved_at),
             'resolved_by_user_id': self.resolved_by_user_id,
             'linked_game_uuid': self.linked_game_uuid,
         }
