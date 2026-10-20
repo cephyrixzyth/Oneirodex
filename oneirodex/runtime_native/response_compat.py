@@ -117,10 +117,17 @@ def _native_allowed_methods(request) -> list[str]:
     methods = set()
     path_scope = dict(request.scope)
     path_scope['method'] = 'GET'
-    for route in getattr(router, 'routes', ()):
-        match, _child_scope = route.matches(path_scope)
-        if match is not Match.NONE:
+    def collect(routes, scope) -> None:
+        for route in routes:
+            match, child_scope = route.matches(scope)
+            if match is Match.NONE:
+                continue
             methods.update(getattr(route, 'methods', ()) or ())
+            child_router = getattr(getattr(route, 'app', None), 'router', None)
+            if child_router is not None:
+                collect(getattr(child_router, 'routes', ()), {**scope, **child_scope})
+
+    collect(getattr(router, 'routes', ()), path_scope)
     if 'GET' in methods:
         methods.add('HEAD')
     if methods:
