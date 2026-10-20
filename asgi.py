@@ -4256,52 +4256,17 @@ class LazyASGIApp:
             'more_body': False,
         })
 
-    async def _handle_service_worker(self, scope, send, path: str):
-        """Serve origin-scoped PWA workers with the same no-cache policy."""
-        root = self._static_root or (
-            Path(__file__).resolve().parent / 'oneirodex' / 'static'
-        )
-        filename, allowed_scope = (
-            ('app-sw.js', '/') if path == '/sw.js'
-            else ('vr-sw.js', '/vr')
-        )
-        # Service workers have origin-wide authority. Do not let mutable
-        # library static overrides replace the shipped worker script.
-        candidate = resolve_static_path(root, f'/static/{filename}')
-        if candidate is None or not candidate.is_file():
-            await self._send_error(send, 404, 'Not Found')
-            return
-        try:
-            payload = await asyncio.to_thread(candidate.read_bytes)
-        except OSError:
-            await self._send_error(send, 404, 'Not Found')
-            return
-
-        header_values = {
-            'Content-Type': 'application/javascript; charset=utf-8',
-            'Content-Length': str(len(payload)),
-            'Cache-Control': 'no-cache',
-            'Service-Worker-Allowed': allowed_scope,
-            **self._configured_security_headers(),
-        }
-        headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
-                   for key, value in header_values.items()]
-        await send({'type': 'http.response.start', 'status': 200, 'headers': headers})
-        await send({
-            'type': 'http.response.body',
-            'body': b'' if scope.get('method') == 'HEAD' else payload,
-            'more_body': False,
-        })
-
-    async def _handle_favicon(self, scope, send):
-        """Serve the browser icon with Werkzeug's conditional and range semantics."""
-        root = self._static_root or (
-            Path(__file__).resolve().parent / 'oneirodex' / 'static'
-        )
-        candidate = resolve_static_path(root, '/static/icons/favicon.ico')
-        if candidate is None or not candidate.is_file():
-            await self._send_error(send, 404, 'Not Found')
-            return
+    async def _send_conditional_static_file(
+        self,
+        scope,
+        send,
+        candidate: Path,
+        *,
+        mimetype: str,
+        max_age: int | None,
+        additional_headers: dict[str, str] | None = None,
+    ):
+        """Send a trusted static file with Werkzeug-compatible validators and ranges."""
         try:
             headers_in = {
                 key.decode('latin-1').upper().replace('-', '_'): value.decode('latin-1')
@@ -4310,7 +4275,7 @@ class LazyASGIApp:
             environ = {
                 'REQUEST_METHOD': scope.get('method', 'GET'),
                 'SCRIPT_NAME': '',
-                'PATH_INFO': '/favicon.ico',
+                'PATH_INFO': scope.get('path', ''),
                 'QUERY_STRING': '',
                 'SERVER_NAME': 'localhost',
                 'SERVER_PORT': '80',
@@ -4335,18 +4300,20 @@ class LazyASGIApp:
                 werkzeug_send_file,
                 candidate,
                 environ,
-                mimetype='image/vnd.microsoft.icon',
-                max_age=3600,
+                mimetype=mimetype,
+                max_age=max_age,
             )
         except RequestedRangeNotSatisfiable as exc:
             response = exc.get_response(environ)
         except OSError:
             await self._send_error(send, 404, 'Not Found')
             return
+
         response.direct_passthrough = False
         payload = response.get_data()
         response_headers = response.get_wsgi_headers(environ)
         response_headers.extend(self._configured_security_headers().items())
+        response_headers.extend((additional_headers or {}).items())
         headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
                    for key, value in response_headers]
         status_code = response.status_code
@@ -4361,6 +4328,47 @@ class LazyASGIApp:
             'body': b'' if scope.get('method') == 'HEAD' or status_code == 304 else payload,
             'more_body': False,
         })
+
+    async def _handle_service_worker(self, scope, send, path: str):
+        """Serve origin-scoped PWA workers with the same no-cache policy."""
+        root = self._static_root or (
+            Path(__file__).resolve().parent / 'oneirodex' / 'static'
+        )
+        filename, allowed_scope = (
+            ('app-sw.js', '/') if path == '/sw.js'
+            else ('vr-sw.js', '/vr')
+        )
+        # Service workers have origin-wide authority. Do not let mutable
+        # library static overrides replace the shipped worker script.
+        candidate = resolve_static_path(root, f'/static/{filename}')
+        if candidate is None or not candidate.is_file():
+            await self._send_error(send, 404, 'Not Found')
+            return
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype='application/javascript; charset=utf-8',
+            max_age=None,
+            additional_headers={'Service-Worker-Allowed': allowed_scope},
+        )
+
+    async def _handle_favicon(self, scope, send):
+        """Serve the browser icon with Werkzeug's conditional and range semantics."""
+        root = self._static_root or (
+            Path(__file__).resolve().parent / 'oneirodex' / 'static'
+        )
+        candidate = resolve_static_path(root, '/static/icons/favicon.ico')
+        if candidate is None or not candidate.is_file():
+            await self._send_error(send, 404, 'Not Found')
+            return
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype='image/vnd.microsoft.icon',
+            max_age=3600,
+        )
 
     async def _handle_confirmation_shell(self, scope, send):
         """Serve the read-only confirmation document for a fresh visitor."""

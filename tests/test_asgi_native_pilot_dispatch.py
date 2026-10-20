@@ -1291,9 +1291,13 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
             root_worker = await client.get('/sw.js')
             vr_worker = await client.get('/vr/sw.js')
             root_head = await client.head('/sw.js')
-        return root_worker, vr_worker, root_head
+            root_not_modified = await client.get('/sw.js', headers={
+                'If-None-Match': root_worker.headers['etag'],
+            })
+            root_range = await client.get('/sw.js', headers={'Range': 'bytes=0-9'})
+        return root_worker, vr_worker, root_head, root_not_modified, root_range
 
-    root_worker, vr_worker, root_head = asyncio.run(run())
+    root_worker, vr_worker, root_head, root_not_modified, root_range = asyncio.run(run())
     assert root_worker.status_code == vr_worker.status_code == 200
     assert root_worker.headers['service-worker-allowed'] == '/'
     assert vr_worker.headers['service-worker-allowed'] == '/vr'
@@ -1302,6 +1306,11 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     assert root_worker.headers['content-security-policy']
     assert root_head.content == b''
     assert root_head.headers['content-length'] == str(len(root_worker.content))
+    assert root_not_modified.status_code == 304
+    assert root_not_modified.content == b''
+    assert root_range.status_code == 206
+    assert root_range.headers['content-range'] == f'bytes 0-9/{len(root_worker.content)}'
+    assert root_range.content == root_worker.content[:10]
 
 
 def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
