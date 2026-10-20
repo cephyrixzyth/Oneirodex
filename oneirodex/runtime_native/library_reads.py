@@ -57,6 +57,13 @@ class LibraryReadData:
         }
 
     @classmethod
+    def batch_edit_fields(cls, library) -> dict:
+        """Keep the batch-edit result contract aligned with the legacy route."""
+        fields = cls.public_fields(library)
+        fields.pop('image_url', None)
+        return fields
+
+    @classmethod
     def watch_fields(cls, library) -> dict:
         values = cls.public_fields(library)
         return {
@@ -168,7 +175,7 @@ class LibraryReadData:
                     results.append({
                         'uuid': library_uuid, 'name': library.name, 'ok': True,
                         'status': 'unchanged', 'changed': [],
-                        **self.public_fields(library),
+                        **self.batch_edit_fields(library),
                     })
                     skipped += 1
                     continue
@@ -176,7 +183,7 @@ class LibraryReadData:
                 updated += 1
                 results.append({
                     'uuid': library_uuid, 'ok': True, 'status': 'updated',
-                    'changed': changed, **self.public_fields(library),
+                    'changed': changed, **self.batch_edit_fields(library),
                 })
             except (TypeError, ValueError) as exc:
                 db.session.rollback()
