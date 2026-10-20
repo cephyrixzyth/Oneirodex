@@ -160,6 +160,23 @@ class TestTokenExpiry:
         assert public['expires_at'] is not None
         assert public['expired'] is False
 
+    def test_public_dict_serializes_aware_timestamps_as_legacy_utc(self):
+        row = ApiToken(
+            name='aware timestamps',
+            token_prefix='deadbeef',
+            token_hash='x',
+            scopes=['read:library'],
+            created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+            last_used_at=datetime(2026, 1, 1, 5, 0, tzinfo=timezone(timedelta(hours=5))),
+            expires_at=datetime(2026, 1, 1, 6, 0, tzinfo=timezone(timedelta(hours=5))),
+        )
+
+        public = row.to_public_dict()
+
+        assert public['created_at'] == '2026-01-01T00:00:00'
+        assert public['last_used_at'] == '2026-01-01T00:00:00'
+        assert public['expires_at'] == '2026-01-01T01:00:00'
+
 
 # --- S10: session-cookie scopes -------------------------------------------
 

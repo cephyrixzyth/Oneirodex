@@ -162,16 +162,25 @@ class ApiToken(db.Model):
             return True
         return scope in scopes
 
+    @staticmethod
+    def _legacy_timestamp(value):
+        """Serialize token timestamps like the legacy naive-UTC columns."""
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.isoformat()
+
     def to_public_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'token_prefix': self.token_prefix,
             'scopes': self.scopes or [],
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'created_at': self._legacy_timestamp(self.created_at),
+            'last_used_at': self._legacy_timestamp(self.last_used_at),
             'revoked': self.revoked_at is not None,
-            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'expires_at': self._legacy_timestamp(self.expires_at),
             'expired': self.is_expired(),
         }
 
