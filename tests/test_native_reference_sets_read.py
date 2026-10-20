@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect
+from flask_login import LoginManager
 
 from oneirodex.runtime_native.reference_sets_read import create_reference_sets_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -155,6 +156,33 @@ def test_reference_set_delete_checks_csrf_and_keeps_not_found_contract():
     assert deleted.json()['id'] == 17
     assert missing.status_code == 404
     assert calls == [17, 18]
+
+
+def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_match():
+    from oneirodex.routes_apis.reference_sets import apis_bp
+
+    legacy_app = Flask(__name__)
+    legacy_app.config['SECRET_KEY'] = 'legacy-reference-sets-secret'
+    login_manager = LoginManager()
+    login_manager.init_app(legacy_app)
+    login_manager.login_view = 'login'
+    login_manager.user_loader(lambda _user_id: None)
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    native_client = _client()
+
+    for path in (
+        '/api/reference-sets/not-an-integer',
+        '/api/reference-sets/-1',
+        '/api/admin/reference-sets/not-an-integer',
+        '/api/admin/reference-sets/-1',
+    ):
+        legacy = legacy_client.delete(path)
+        native = native_client.delete(path)
+        assert native.status_code == legacy.status_code == 404
+        assert native.headers['content-type'] == legacy.headers['Content-Type']
+        assert native.content == legacy.get_data()
+        assert native.headers.get('location') == legacy.headers.get('Location')
 
 
 def test_reference_sets_member_api_keeps_legacy_bare_list_and_upload_shape():

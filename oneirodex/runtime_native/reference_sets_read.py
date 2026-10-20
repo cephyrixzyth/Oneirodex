@@ -18,6 +18,24 @@ from .response_compat import flask_redirect_response
 MAX_DAT_BYTES = 32 * 1024 * 1024
 
 
+def _legacy_integer_route_not_found(flask_app):
+    """Return Flask's normal HTML 404 for paths rejected by ``<int:...>``."""
+    from starlette.responses import Response
+    from werkzeug.exceptions import NotFound
+
+    legacy_response = NotFound().get_response()
+    response = Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers=dict(legacy_response.headers),
+    )
+    from oneirodex.utils.security_headers import security_header_values
+
+    for key, value in security_header_values(flask_app.config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
 class ReferenceSetsData:
     def read_sets(self) -> dict:
         from oneirodex.utils.set_completion import list_reference_sets
@@ -313,7 +331,10 @@ def create_reference_sets_router(
 
     @router.api_route('/api/reference-sets', methods=['GET', 'HEAD', 'POST'])
     @router.api_route('/api/reference-sets/{set_id}', methods=['DELETE'])
-    async def api_reference_sets(request: Request, set_id: int | None = None):
+    async def api_reference_sets(request: Request, set_id: str | None = None):
+        if request.method == 'DELETE' and set_id is not None and not set_id.isdecimal():
+            return _legacy_integer_route_not_found(flask_app)
+
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
@@ -448,7 +469,10 @@ def create_reference_sets_router(
     @router.post('/admin/reference_sets')
     @router.api_route('/api/admin/reference-sets', methods=['GET', 'HEAD', 'POST'])
     @router.api_route('/api/admin/reference-sets/{set_id}', methods=['DELETE'])
-    async def reference_sets(request: Request, set_id: int | None = None):
+    async def reference_sets(request: Request, set_id: str | None = None):
+        if request.method == 'DELETE' and set_id is not None and not set_id.isdecimal():
+            return _legacy_integer_route_not_found(flask_app)
+
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             legacy_form = request.url.path == '/admin/reference_sets'
