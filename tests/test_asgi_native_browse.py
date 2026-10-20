@@ -2118,6 +2118,18 @@ def test_lazy_asgi_acquire_status_preserves_login_redirect_and_flash(monkeypatch
     assert decoded['_flashes'] == [('message', 'Please log in to access this page.')]
 
 
+def test_lazy_asgi_path_open_login_redirect_preserves_encoded_query(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    response = _run(
+        runtime, '/api/path/open?path=%2Fstorage%2Flibrary'
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == (
+        '/login?next=%2Fapi%2Fpath%2Fopen%3Fpath%3D%2Fstorage%2Flibrary'
+    )
+
+
 def test_lazy_asgi_dispatches_acquire_search_without_provider_network(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     asyncio.run(runtime._ensure_flask())
