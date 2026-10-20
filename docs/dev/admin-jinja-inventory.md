@@ -791,6 +791,8 @@ Accepted browser slices cover phone and desktop widths against an isolated local
 
 **P17 Scan Filters redirect, 2026-10-14:** Native GET/HEAD `/delete_filter/<id>` now preserves the admin login/role/token-scope gates and warning redirect to Scan Filters. The POST deletion remains on the legacy CSRF-protected mutation path. Focused admin redirect tests passed 4/4.
 
+**Missing Scan Filter redirect parity, 2026-10-20:** An exact authenticated v1.1.8/current replay found the safe GET guard redirected even when the requested filter ID did not exist; v1.1.8 returned 404. Current now verifies the ID before showing the confirmation warning. Missing-ID GET and HEAD match v1.1.8's 404 HTML, body and Content-Length; existing IDs still redirect to the React confirmation page without deletion. Focused admin redirect tests pass 4/4. Evidence: `.artifacts/parity-v1.1.8/delete-filter-missing-get-head-exact-current-20261020.json`.
+
 **P17 Scan Filters mutation follow-up, 2026-10-14:** The legacy POST `/delete_filter/<id>` now shares the native admin scan-filter data adapter and CSRF validator. Successful deletion commits, flashes the same message, and redirects to `/admin/edit_filters`; missing rows and failures retain 404/500 behavior. Focused scan-filter/admin redirect tests passed 7/7.
 
 **P17 member download deletion form, 2026-10-14:** Migrated `/delete_download/<id>` POST to FastAPI. The route applies CSRF validation, limits parsed form fields/size, scopes deletion to the current user, commits via native session, and preserves the redirect/flash and missing-row 404. Focused download tests passed 6/6.

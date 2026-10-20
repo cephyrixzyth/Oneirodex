@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, Request
-from .response_compat import flask_redirect_response
+from .response_compat import flask_http_error_response, flask_redirect_response
 
 
 ADMIN_REDIRECTS = {
@@ -29,6 +29,7 @@ def create_admin_redirect_router(
     commit_token_touch,
     login_manager=None,
     database_scope=None,
+    filter_exists=None,
 ):
     router = APIRouter()
 
@@ -123,6 +124,10 @@ def create_admin_redirect_router(
                 response = _native_json_error(
                     'This token does not have the admin scope', 'forbidden', 403,
                 )
+            elif not _filter_exists(filter_id, filter_exists):
+                response = flask_http_error_response(
+                    404, head=request.method == 'HEAD',
+                )
             else:
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('warning', 'Open Scan Filters and confirm removal there.'))
@@ -146,3 +151,12 @@ def create_admin_redirect_router(
 def mount_admin_redirect_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_admin_redirect_router(flask_app, **kwargs))
     return app
+
+
+def _filter_exists(filter_id: int, lookup=None) -> bool:
+    if lookup is not None:
+        return bool(lookup(filter_id))
+    from oneirodex.models import ReleaseGroup
+    from oneirodex.runtime_native.db_session import native_db as db
+
+    return db.session.get(ReleaseGroup, filter_id) is not None

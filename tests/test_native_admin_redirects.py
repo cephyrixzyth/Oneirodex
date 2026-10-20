@@ -43,6 +43,7 @@ def make_app():
         commit_token_touch=lambda _token: None,
         login_manager=login_manager,
         database_scope=lambda _app: nullcontext(),
+        filter_exists=lambda filter_id: filter_id == 42,
     ))
     return flask_app, adapter, users
 
@@ -117,3 +118,17 @@ def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():
     member = fetch(app, '/delete_filter/42', signed_cookie(flask_app, users[8]))
     assert member.status_code == 302
     assert member.headers['location'] == '/login'
+
+
+def test_get_delete_filter_missing_id_matches_legacy_not_found_without_deleting():
+    flask_app, app, users = make_app()
+    cookie = signed_cookie(flask_app, users[7])
+
+    get_response = fetch(app, '/delete_filter/43', cookie)
+    head_response = fetch(app, '/delete_filter/43', cookie, method='HEAD')
+
+    assert get_response.status_code == head_response.status_code == 404
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
