@@ -9198,7 +9198,7 @@ def test_lazy_asgi_dispatches_support_ticket_reads_natively(monkeypatch):
         ticket=lambda ticket_id: calls.append(('ticket', ticket_id)) or ticket,
     )
     monkeypatch.setattr(native_support_reads, 'SupportReadsData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/support/tickets', cookie=_signed_session())
 

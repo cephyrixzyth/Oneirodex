@@ -174,6 +174,7 @@ def test_game_details_missing_resource_keeps_legacy_html_error_for_get_and_head(
     assert head_response.headers['content-type'] == 'text/html; charset=utf-8'
     assert get_response.content == NotFound().get_response().get_data()
     assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
 
 
 def test_library_shell_preserves_filters_preferences_and_empty_state(monkeypatch):

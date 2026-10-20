@@ -51,6 +51,4 @@ def flask_http_error_response(status_code: int, description: str | None = None, 
     legacy_response = error.get_response()
     body = b'' if head else legacy_response.get_data()
     headers = dict(legacy_response.headers)
-    if head:
-        headers['Content-Length'] = '0'
     return Response(content=body, status_code=status_code, headers=headers)
