@@ -120,6 +120,7 @@ def create_admin_pilot(
     shell_path: Path,
     chrome_fields: Callable[..., dict] | None = None,
     database_scope: Callable[[Any], Any] | None = None,
+    shell_entity_exists: Callable[[Request], bool] | None = None,
 ) -> FastAPI:
     """Create a local pilot; callers own routing, lifecycle and static assets.
 
@@ -175,7 +176,16 @@ def create_admin_pilot(
             else:
                 flashes = list(auth.session_data.pop('_flashes', []) or [])
                 response_shell = _shell_with_admin_flashes(shell, flashes)
-                response = Response(response_shell, media_type='text/html')
+                exists = (
+                    shell_entity_exists(request)
+                    if shell_entity_exists is not None
+                    else _admin_shell_entity_exists(request)
+                )
+                response = Response(
+                    response_shell,
+                    status_code=200 if exists else 404,
+                    media_type='text/html',
+                )
             if auth.user is not None and (auth.should_set_session_cookie or flashes):
                 _set_session_cookie(response, flask_app, auth)
         response.headers['Cache-Control'] = 'no-store'
@@ -394,6 +404,32 @@ def create_admin_pilot(
         return response
 
     return app
+
+
+def _admin_shell_entity_exists(request: Request) -> bool:
+    """Preserve legacy 404 status for dynamic editor shells with missing rows."""
+    import re
+
+    path = request.url.path
+    newsletter = re.fullmatch(r'/admin/newsletter/([0-9]+)', path)
+    library = re.fullmatch(r'/admin/library/edit/([^/]+)', path)
+    game = re.fullmatch(r'/(?:game_edit|edit_game_images)/([^/]+)', path)
+    if not any((newsletter, library, game)):
+        return True
+
+    from sqlalchemy import select
+    from oneirodex.models import Game, Library, Newsletter
+    from oneirodex.runtime_native.db_session import native_db as db
+
+    if newsletter:
+        return db.session.get(Newsletter, int(newsletter.group(1))) is not None
+    if library:
+        return db.session.execute(
+            select(Library).filter_by(uuid=library.group(1))
+        ).scalar_one_or_none() is not None
+    return db.session.execute(
+        select(Game).filter_by(uuid=game.group(1))
+    ).scalar_one_or_none() is not None
 
 
 def _shell_with_admin_flashes(shell: str, flashes) -> str:
