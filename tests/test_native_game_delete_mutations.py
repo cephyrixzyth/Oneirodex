@@ -221,6 +221,39 @@ def test_game_image_adapter_rejects_paths_outside_image_root(tmp_path, monkeypat
     assert session_calls == []
 
 
+def test_game_image_adapter_restores_file_when_database_commit_fails(tmp_path):
+    from oneirodex.runtime_native.db_session import _native_session
+    from oneirodex.runtime_native.game_delete_mutations import GameDeleteMutationData
+
+    root = tmp_path / 'images'
+    root.mkdir()
+    image_path = root / 'commit-failure.png'
+    image_path.write_bytes(b'keep-after-failed-commit')
+    calls = []
+
+    def fail_commit():
+        calls.append('commit')
+        raise RuntimeError('synthetic commit failure')
+
+    fake_session = SimpleNamespace(
+        get=lambda _model, _key: SimpleNamespace(url=image_path.name),
+        delete=lambda _image: calls.append('delete'),
+        commit=fail_commit,
+    )
+    token = _native_session.set(fake_session)
+    try:
+        with pytest.raises(RuntimeError, match='synthetic commit failure'):
+            GameDeleteMutationData().delete_image_record_and_file(
+                1, config={'IMAGE_SAVE_PATH': str(root)},
+            )
+    finally:
+        _native_session.reset(token)
+
+    assert calls == ['delete', 'commit']
+    assert image_path.read_bytes() == b'keep-after-failed-commit'
+    assert list(root.iterdir()) == [image_path]
+
+
 def _request_json(runtime, path, body, *, csrf=None, cookie=None):
     async def send():
         async with httpx.AsyncClient(

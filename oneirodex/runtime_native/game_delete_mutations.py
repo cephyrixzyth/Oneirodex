@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import logging
 import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
@@ -103,10 +105,34 @@ class GameDeleteMutationData:
             target.relative_to(root)
         except ValueError as exc:
             raise ValueError('Invalid image path') from exc
+        staged = None
         if target.exists():
-            target.unlink()
-        db.session.delete(image)
-        db.session.commit()
+            if target.is_dir():
+                # Preserve the existing failure for directories.
+                target.unlink()
+            staged = target.with_name(f'.{target.name}.delete-{uuid4().hex}')
+            os.replace(target, staged)
+        try:
+            db.session.delete(image)
+            db.session.commit()
+        except Exception:
+            if staged is not None and staged.exists():
+                try:
+                    os.replace(staged, target)
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not restore image after a failed database delete'
+                    )
+            raise
+        if staged is not None:
+            try:
+                staged.unlink()
+            except OSError:
+                # The record is committed. Leave the unreferenced staged file
+                # for operator cleanup rather than report a false DB failure.
+                logging.getLogger(__name__).warning(
+                    'Image delete committed but staged file cleanup failed'
+                )
         return image
 
     def rollback(self):
