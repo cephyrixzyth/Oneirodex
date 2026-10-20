@@ -14,6 +14,7 @@ import asgi
 from oneirodex.runtime_native.system_file_types import (
     _handle_file_type_request,
     create_system_file_types_router,
+    validate_file_type_value,
 )
 
 
@@ -109,4 +110,8 @@ def test_file_types_head_uses_read_result():
 
     assert response.status_code == 200
     assert json.loads(response.body) == [{'id': 1, 'value': 'nes'}]
+
+
+def test_file_type_value_dot_only_is_rejected():
+    assert validate_file_type_value('.') is None
 

@@ -86,6 +86,8 @@ def validate_file_type_value(value):
         return None
     if value.startswith('.'):
         value = value[1:]
+    if not value:
+        return None
     if len(value) > 10:
         return None
     return value
