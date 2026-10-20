@@ -341,7 +341,7 @@ the page theme. See the
 [current image-editor capture](../media/screenshots/admin-image-editor.png).
 
 
-Admin → **Image queue** (`/admin/images`) manages artwork downloads with queue health counts, compact filters, retry/download controls, and artwork search/actions (kinds below). The scan management **Image Queue** tab remains available for the legacy table and its row-level tools; use the dedicated page for the redesigned queue workflow.
+Admin → **Image queue** (`/admin/images`) manages artwork downloads with queue health counts, compact filters, retry/download controls, and artwork search/actions (kinds below). Deleting a downloaded queue item also deletes its saved image file; the confirmation explains both effects. The scan management **Image Queue** tab remains available for the legacy table and its row-level tools; use the dedicated page for the redesigned queue workflow.
 Prefer **Admin → Settings → Art studio → Pick & queue** (`/admin/art_studio#images`) for the React artwork picker + mass queue chrome.
 For library hero / site-wide fallback variety, use **Art studio → Backup & stock** (`/admin/art_studio#stock`) — platform packs + stock motifs. Library create/edit forms include a **Choose image** link to that tab.
 

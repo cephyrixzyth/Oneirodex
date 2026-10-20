@@ -230,10 +230,10 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
 
   const removeOne = async (imageId: string) => {
     const ok = await confirmAction({
-      title: 'Remove this image from the queue?',
-      body: 'The file on disk stays where it is.',
-      confirmLabel: 'Remove from queue',
-      cancelLabel: 'Keep it',
+      title: 'Delete this image?',
+      body: 'If the image has been saved on disk, its file will be deleted too.',
+      confirmLabel: 'Delete image and file',
+      cancelLabel: 'Cancel',
     })
     if (!ok) return
     setQueueBusy(`del-${imageId}`)

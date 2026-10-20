@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { confirmAction } from '@oneirodex/ui'
 import { ImagesPage } from './ImagesPage'
+
+vi.mock('@oneirodex/ui', async (original) => ({ ...(await original()), confirmAction: vi.fn() }))
 
 test('auto-pick posts covers/batch/apply with best-available policy', async () => {
   const user = userEvent.setup()
@@ -155,6 +158,14 @@ test('auto-pick posts covers/batch/apply with best-available policy', async () =
     expect(auto.body.platform).toBe('SNES')
     expect(auto.body.service).toBe('epic')
     expect(await screen.findByText(/applied 2/i)).toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Delete this image?',
+      body: 'If the image has been saved on disk, its file will be deleted too.',
+      confirmLabel: 'Delete image and file',
+      cancelLabel: 'Cancel',
+    }))
   } finally {
     globalThis.fetch = originalFetch
   }
