@@ -14,6 +14,26 @@ _URLENCODED_BODY_LIMIT = 1024 * 1024
 _MULTIPART_BODY_DEFAULT_LIMIT = 128 * 1024 * 1024
 
 
+def native_route_matches(native_app, scope: Mapping) -> bool:
+    """Return whether FastAPI recognizes this exact path and method.
+
+    Flask's CSRF middleware does not preempt requests that fail URL matching.
+    The ASGI preflight must preserve that ordering for 404/405 responses.
+    """
+    from starlette.routing import Match
+
+    router = getattr(native_app, 'router', None)
+    if router is None:
+        # Compatibility fixtures can replace ASGI initialization without a
+        # native route table; preserve the established preflight behavior.
+        return True
+    for route in getattr(router, 'routes', ()):
+        match, _child_scope = route.matches(scope)
+        if match is Match.FULL:
+            return True
+    return False
+
+
 async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping):
     """Read and replay a small URL-encoded body so CSRF precedes route auth.
 

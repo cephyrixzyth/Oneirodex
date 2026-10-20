@@ -9,6 +9,7 @@ from oneirodex.runtime_native.admin_csrf_preflight import (
     empty_admin_mutation_csrf_error,
     inspect_multipart_csrf_body,
     inspect_urlencoded_csrf_body,
+    native_route_matches,
 )
 
 
@@ -64,6 +65,25 @@ def test_empty_theme_font_path_miss_is_not_masked_by_csrf_preflight():
     assert empty_admin_mutation_csrf_error(
         _scope(path='/admin/api/theme/fonts/', method='DELETE'), {},
     ) is None
+
+
+def test_native_route_match_distinguishes_path_misses_from_method_misses():
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.add_api_route(
+        '/admin/api/discovery_sections/{section_id:int}',
+        lambda section_id: {'id': section_id},
+        methods=['PUT', 'DELETE'],
+    )
+    scope = _scope(path='/admin/api/discovery_sections/9', method='DELETE')
+    assert native_route_matches(app, scope)
+    assert native_route_matches(
+        app, _scope(path='/admin/api/discovery_sections/not-an-integer', method='DELETE'),
+    ) is False
+    assert native_route_matches(
+        app, _scope(path='/admin/api/discovery_sections/9', method='POST'),
+    ) is False
 
 
 def test_valid_header_token_uses_signed_flask_session():

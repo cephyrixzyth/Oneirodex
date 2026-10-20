@@ -3049,10 +3049,13 @@ class LazyASGIApp:
                 empty_admin_mutation_csrf_error,
                 inspect_multipart_csrf_body,
                 inspect_urlencoded_csrf_body,
+                native_route_matches,
             )
 
-            csrf_error = empty_admin_mutation_csrf_error(
-                scope, self._flask_app.config,
+            csrf_error = (
+                empty_admin_mutation_csrf_error(scope, self._flask_app.config)
+                if native_route_matches(self._native_read_api_app, scope)
+                else None
             )
             if (
                 csrf_error is None
