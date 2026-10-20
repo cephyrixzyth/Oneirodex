@@ -14,7 +14,7 @@ from typing import Callable
 from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from . import ADMIN_STATIC_ROUTES, ADMIN_BOOTSTRAP_ROUTE
 
@@ -151,6 +151,7 @@ def create_admin_pilot(
     def admin_shell(request: Request):
         from .acquire_status import _login_redirect, _set_session_cookie
         from .request_auth import request_auth_context
+        from .response_compat import flask_redirect_response
         from oneirodex.utils.security_headers import security_header_values
 
         with open_database_scope():
@@ -168,7 +169,7 @@ def create_admin_pilot(
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('danger', 'You must be an admin to access this page.'))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif not auth.has_scope('admin'):
                 response = _native_json_error(
                     'This token does not have the admin scope', 'forbidden', 403,

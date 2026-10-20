@@ -193,6 +193,20 @@ def test_shell_uses_login_redirect(pilot):
     assert len(response.headers.get_list('set-cookie')) == 1
 
 
+def test_member_admin_shell_uses_werkzeug_redirect(pilot):
+    from oneirodex.runtime_native.response_compat import flask_redirect_response
+
+    flask_app, app = pilot
+    response = fetch(app, '/admin/users', signed_cookie(flask_app, 'member'))
+    expected = flask_redirect_response('/login', status_code=302)
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert response.headers['content-type'] == expected.headers['content-type']
+    assert response.content == expected.body
+    assert len(response.headers.get_list('set-cookie')) == 1
+
+
 def test_admin_shell_page_skips_flask_request_context(pilot, monkeypatch):
     flask_app, app = pilot
     monkeypatch.setattr(
