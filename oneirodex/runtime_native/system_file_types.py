@@ -171,13 +171,21 @@ async def _handle_file_type_request(request, category, data):
         body = await request.json()
     except Exception:
         return _error(400, 'bad_request', 'Invalid JSON format')
-    if not isinstance(body, dict):
+    if body is None:
         return _error(400, 'bad_request', 'Invalid JSON format')
 
     required = {'POST': ('value',), 'PUT': ('id', 'value'), 'DELETE': ('id',)}.get(method, ())
-    for field in required:
-        if field not in body:
-            return _error(400, 'bad_request', f'Missing required field: {field}')
+    try:
+        for field in required:
+            if field not in body:
+                return _error(400, 'bad_request', f'Missing required field: {field}')
+    except TypeError:
+        return _error(400, 'bad_request', 'Invalid JSON format')
+
+    if not isinstance(body, dict):
+        if method == 'POST':
+            return _error(500, 'internal', 'An error occurred while processing your request')
+        return _error(400, 'bad_request', 'Invalid ID format')
     if method == 'POST':
         value = validate_file_type_value(body.get('value'))
         if value is None:

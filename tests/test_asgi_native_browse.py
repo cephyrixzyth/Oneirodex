@@ -5589,6 +5589,51 @@ def test_native_file_type_json_media_type_matches_flask_rules(monkeypatch):
     assert runtime._fake_file_types.calls == [('create', 'allowed', 'fixturex')]
 
 
+def test_native_file_type_non_object_json_matches_legacy_validation(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    headers = {'X-CSRFToken': csrf_token}
+
+    post_missing = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    post_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers=headers, json_body=['value'],
+    )
+    put_missing = _run(
+        runtime, '/api/file_types/allowed', method='PUT', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    put_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='PUT', cookie=cookie,
+        headers=headers, json_body=['id', 'value'],
+    )
+    delete_missing = _run(
+        runtime, '/api/file_types/allowed', method='DELETE', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    delete_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='DELETE', cookie=cookie,
+        headers=headers, json_body=['id'],
+    )
+
+    assert post_missing.status_code == 400
+    assert post_missing.json()['message'] == 'Missing required field: value'
+    assert post_indexing_error.status_code == 500
+    assert post_indexing_error.json()['message'] == 'An error occurred while processing your request'
+    assert put_missing.status_code == 400
+    assert put_missing.json()['message'] == 'Missing required field: id'
+    assert put_indexing_error.status_code == 400
+    assert put_indexing_error.json()['message'] == 'Invalid ID format'
+    assert delete_missing.status_code == 400
+    assert delete_missing.json()['message'] == 'Missing required field: id'
+    assert delete_indexing_error.status_code == 400
+    assert delete_indexing_error.json()['message'] == 'Invalid ID format'
+    assert runtime._fake_file_types.calls == []
+
+
 def test_native_emulator_profile_admin_read_and_save_require_admin_and_csrf(monkeypatch):
     _flask_app, member_runtime = _runtime(monkeypatch)
     denied = _run(
