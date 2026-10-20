@@ -159,7 +159,13 @@ async def _handle_file_type_request(request, category, data):
             data.rollback()
             return _error(500, 'internal', 'An error occurred while processing your request')
 
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if not is_json:
         return _error(400, 'bad_request', 'Request must be JSON')
     try:
         body = await request.json()

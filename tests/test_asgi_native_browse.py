@@ -5562,6 +5562,33 @@ def test_native_file_type_crud_preserves_admin_csrf_and_validation(monkeypatch):
     ]
 
 
+def test_native_file_type_json_media_type_matches_flask_rules(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    vendor_json = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers={
+            'X-CSRFToken': csrf_token,
+            'Content-Type': 'application/vnd.api+json',
+        },
+        json_body={'value': 'fixturex'},
+    )
+    jsonp_lookalike = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers={
+            'X-CSRFToken': csrf_token,
+            'Content-Type': 'application/jsonp',
+        },
+        json_body={'value': 'fixturey'},
+    )
+
+    assert vendor_json.status_code == 201
+    assert vendor_json.json() == {'id': 2, 'value': 'fixturex'}
+    assert jsonp_lookalike.status_code == 400
+    assert jsonp_lookalike.json()['message'] == 'Request must be JSON'
+    assert runtime._fake_file_types.calls == [('create', 'allowed', 'fixturex')]
+
+
 def test_native_emulator_profile_admin_read_and_save_require_admin_and_csrf(monkeypatch):
     _flask_app, member_runtime = _runtime(monkeypatch)
     denied = _run(
