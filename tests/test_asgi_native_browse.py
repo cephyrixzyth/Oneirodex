@@ -8259,6 +8259,31 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
     assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup'
 
 
+def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):
+    data = SimpleNamespace(
+        required=lambda: False,
+        in_progress=lambda: False,
+        current_step=lambda: None,
+        start=lambda: pytest.fail('completed setup must not restart'),
+        redirect_url=lambda: pytest.fail('completed setup has no active step'),
+    )
+    monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    igdb = _run(runtime, '/setup/igdb', cookie=_signed_session())
+    integrations = _run(runtime, '/setup/integrations', cookie=_signed_session())
+
+    assert igdb.status_code == integrations.status_code == 302
+    assert igdb.headers['location'] == integrations.headers['location'] == '/login'
+    for response in (igdb, integrations):
+        session = load_session_cookie(
+            response.cookies.get('session'), 'native-asgi-browse-secret', max_age=3600,
+        )
+        assert session['_flashes'] == [
+            ('warning', 'Setup already completed.'),
+        ]
+
+
 def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(monkeypatch):
     calls = []
     admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
