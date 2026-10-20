@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, Response
 
 
 class AuthConfirmationData:
-    def confirm(self, token, secret_key):
+    def _resolve_user(self, token, secret_key):
         from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
         from sqlalchemy import func, select
 
@@ -19,16 +19,29 @@ class AuthConfirmationData:
         try:
             email = serializer.loads(token, salt='email-confirm', max_age=900)
         except SignatureExpired:
-            return 'expired'
+            return None, 'expired'
         except BadSignature:
-            return 'invalid'
+            return None, 'invalid'
         user = db.session.execute(
             select(User).where(func.lower(User.email) == email.lower())
         ).scalar_one_or_none()
         if user is None:
-            return 'not_found'
+            return None, 'not_found'
         if user.is_email_verified:
-            return 'already_confirmed'
+            return user, 'already_confirmed'
+        return user, 'confirmed'
+
+    def inspect(self, token, secret_key):
+        """Resolve confirmation state without changing it, for safe HEAD requests."""
+        _user, outcome = self._resolve_user(token, secret_key)
+        return outcome
+
+    def confirm(self, token, secret_key):
+        from oneirodex.runtime_native.db_session import native_db as db
+
+        user, outcome = self._resolve_user(token, secret_key)
+        if outcome != 'confirmed':
+            return outcome
         user.is_email_verified = True
         db.session.add(user)
         db.session.commit()
@@ -47,7 +60,11 @@ def create_auth_confirmation_router(*, data_access=None, database_scope=None, ap
                 secret = app_config.get('SECRET_KEY') if app_config else None
                 if not secret:
                     return _error('Confirmation is unavailable.', 'internal', 500)
-                outcome = data.confirm(token, secret)
+                outcome = (
+                    data.inspect(token, secret)
+                    if request.method == 'HEAD'
+                    else data.confirm(token, secret)
+                )
             except Exception:  # noqa: BLE001 — keep token/database internals private
                 return _error('Confirmation is unavailable.', 'internal', 500)
             if outcome == 'expired':

@@ -7944,9 +7944,14 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
 
 def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeypatch):
     calls = []
-    data = SimpleNamespace(confirm=lambda token, secret: calls.append(
-        (token, bool(secret))
-    ) or 'confirmed')
+    data = SimpleNamespace(
+        confirm=lambda token, secret: calls.append(
+            ('confirm', token, bool(secret))
+        ) or 'confirmed',
+        inspect=lambda token, secret: calls.append(
+            ('inspect', token, bool(secret))
+        ) or 'confirmed',
+    )
     monkeypatch.setattr(native_auth_confirmation, 'AuthConfirmationData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch)
 
@@ -7957,7 +7962,19 @@ def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeyp
     assert response.json()['confirmed'] is True
     assert response.json()['already_confirmed'] is False
     assert head.status_code == 200 and head.content == b''
-    assert calls == [('signed-token', True), ('signed-token', True)]
+    assert calls == [
+        ('confirm', 'signed-token', True),
+        ('inspect', 'signed-token', True),
+    ]
+
+
+def test_email_confirmation_inspect_does_not_verify_user(monkeypatch):
+    user = SimpleNamespace(is_email_verified=False)
+    data = native_auth_confirmation.AuthConfirmationData()
+    monkeypatch.setattr(data, '_resolve_user', lambda _token, _secret: (user, 'confirmed'))
+
+    assert data.inspect('signed-token', 'test-secret') == 'confirmed'
+    assert user.is_email_verified is False
 
 
 def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monkeypatch):
