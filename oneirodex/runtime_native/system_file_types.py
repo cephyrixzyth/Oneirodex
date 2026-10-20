@@ -110,12 +110,17 @@ def create_system_file_types_router(
     @router.api_route('/api/file_types/{type_category}', methods=['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'])
     async def manage_file_types(type_category: str, request: Request):
         if request.method == 'OPTIONS':
-            return Response(
+            response = Response(
                 content=b'',
                 status_code=200,
                 headers={'Allow': 'GET, DELETE, POST, OPTIONS, HEAD, PUT'},
                 media_type='text/html',
             )
+            from oneirodex.utils.security_headers import security_header_values
+
+            for key, value in security_header_values(flask_app.config).items():
+                response.headers.setdefault(key, value)
+            return response
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth = request_auth_context(

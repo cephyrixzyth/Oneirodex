@@ -46,6 +46,10 @@ def test_file_types_options_matches_flask_automatic_response():
         legacy_response.headers['Allow'].split(', ')
     )
     assert current_response.content == legacy_response.get_data() == b''
+    assert current_response.headers['x-content-type-options'] == 'nosniff'
+    assert current_response.headers['referrer-policy'] == 'strict-origin-when-cross-origin'
+    assert current_response.headers['x-frame-options'] == 'SAMEORIGIN'
+    assert 'content-security-policy' in current_response.headers
 
 
 def test_file_types_api_method_error_does_not_leak_allow_header():
