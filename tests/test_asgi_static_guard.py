@@ -10,9 +10,12 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
+from flask import Flask, request
+from werkzeug.exceptions import HTTPException
 
 from asgi import LazyASGIApp
 from oneirodex.utils.static_files import library_access
+from oneirodex.utils.error_envelope import http_error_code, wants_json_error
 
 
 @pytest.mark.parametrize('url, access', [
@@ -53,6 +56,77 @@ def _serve(tmp_path, path, user_id):
     asyncio.run(app._handle_static({'type': 'http', 'method': 'GET', 'path': path, 'headers': []},
                                    receive, send, path))
     return next(m['status'] for m in sent if m['type'] == 'http.response.start')
+
+
+def _serve_response(tmp_path, path, *, method='GET', accept='*/*'):
+    static = tmp_path / 'static-response'
+    static.mkdir(exist_ok=True)
+    app = LazyASGIApp()
+    app._ensure_flask = AsyncMock()
+    app._static_root = static.resolve()
+    app._runtime_config = {'CSP_ENABLED': False}
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        return {'type': 'http.request'}
+
+    scope = {
+        'type': 'http', 'method': method, 'path': path,
+        'headers': [(b'accept', accept.encode('ascii'))],
+    }
+    asyncio.run(app._handle_static(scope, receive, send, path))
+    start = next(message for message in sent if message['type'] == 'http.response.start')
+    body = b''.join(
+        message.get('body', b'') for message in sent
+        if message['type'] == 'http.response.body'
+    )
+    return start['status'], dict(start['headers']), body
+
+
+def _legacy_static_client(tmp_path):
+    static = tmp_path / 'legacy-static'
+    static.mkdir(exist_ok=True)
+    app = Flask('static-error-parity', static_folder=str(static), static_url_path='/static')
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        if not wants_json_error(request):
+            return error.get_response()
+        from oneirodex.utils.api_response import api_error
+
+        return api_error(
+            error.description or error.name or 'Request failed',
+            code=http_error_code(error.code), status=error.code or 500,
+        )
+
+    return app.test_client()
+
+
+@pytest.mark.parametrize(('path', 'method', 'accept'), [
+    ('/static/', 'GET', '*/*'),
+    ('/static/', 'HEAD', '*/*'),
+    ('/static/missing-parity-asset.css', 'GET', '*/*'),
+    ('/static/missing-parity-asset.css', 'POST', '*/*'),
+    ('/static/missing-parity-asset.css', 'GET', 'application/json'),
+])
+def test_static_route_errors_match_legacy_flask(tmp_path, path, method, accept):
+    legacy = _legacy_static_client(tmp_path).open(
+        path, method=method, headers={'Accept': accept},
+    )
+    status, headers, body = _serve_response(
+        tmp_path, path, method=method, accept=accept,
+    )
+    assert status == legacy.status_code
+    assert headers[b'content-type'].decode() == legacy.headers['Content-Type']
+    if headers[b'content-type'].startswith(b'application/json'):
+        import json
+
+        assert json.loads(body) == legacy.get_json()
+    else:
+        assert body == legacy.get_data()
 
 
 def test_private_files_are_never_served(tmp_path, monkeypatch):

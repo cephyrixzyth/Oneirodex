@@ -240,6 +240,7 @@ def test_empty_path_converter_values_match_legacy_route_misses():
 
     cases = (
         ('GET', '/api/games/test/cheats/'),
+        ('DELETE', '/api/games/test/cheats/'),
         ('GET', '/api/discover/hubs/genre/'),
         ('DELETE', '/admin/api/theme/fonts/'),
     )

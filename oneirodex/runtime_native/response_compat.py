@@ -56,22 +56,44 @@ def flask_http_error_response(status_code: int, description: str | None = None, 
 
 def flask_route_not_found_response(flask_app, request) -> Response:
     """Match Flask's 404 when a route converter rejects a request path."""
-    from werkzeug.exceptions import NotFound
+    return flask_http_exception_response(flask_app, request, 404)
+
+
+def flask_http_exception_response(flask_app, request, status_code: int) -> Response:
+    """Match Flask's configured HTTP exception response for a native path."""
+    from werkzeug.exceptions import default_exceptions
 
     from oneirodex.utils.error_envelope import wants_json_error
 
-    error = NotFound()
+    error_type = default_exceptions.get(status_code)
+    if error_type is None:
+        raise ValueError(f'Unsupported HTTP error status: {status_code}')
+    error = error_type()
     if wants_json_error(request):
         from starlette.responses import JSONResponse
 
+        from oneirodex.utils.error_envelope import http_error_code
         from oneirodex.utils.api_contract import api_error_payload
 
         payload, status = api_error_payload(
-            error.description, code='not_found', status=error.code or 404,
+            error.description,
+            code=http_error_code(error.code),
+            status=error.code or status_code,
         )
         response = JSONResponse(payload, status_code=status)
     else:
-        response = flask_http_error_response(404)
+        response = flask_http_error_response(
+            status_code,
+            head=getattr(request, 'method', '').upper() == 'HEAD',
+        )
+
+    if getattr(request, 'method', '').upper() == 'HEAD' and response.body:
+        from starlette.responses import Response
+
+        response = Response(
+            content=b'', status_code=response.status_code,
+            headers=dict(response.headers),
+        )
 
     from oneirodex.utils.security_headers import security_header_values
 

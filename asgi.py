@@ -4563,10 +4563,21 @@ class LazyASGIApp:
             except Exception:
                 pass
 
+    async def _send_flask_static_error(self, scope, receive, send, status_code: int):
+        """Preserve Flask's HTTP error envelope for its former static route."""
+        from starlette.requests import Request
+
+        from oneirodex.runtime_native.response_compat import flask_http_exception_response
+
+        request = Request(scope, receive)
+        config = self._runtime_config or {}
+        response = flask_http_exception_response(config, request, status_code)
+        await response(scope, receive, send)
+
     async def _handle_static(self, scope, receive, send, path: str):
         """Stream static files with path-traversal protection."""
         if scope.get("method") not in ("GET", "HEAD"):
-            await self._send_error(send, 405, "Method Not Allowed")
+            await self._send_flask_static_error(scope, receive, send, 405)
             return
 
         root = self._static_root
@@ -4596,11 +4607,11 @@ class LazyASGIApp:
 
         candidate = resolve_served_static(root, path)
         if candidate is None:
-            await self._send_error(send, 404, "Not Found")
+            await self._send_flask_static_error(scope, receive, send, 404)
             return
 
         if not candidate.is_file():
-            await self._send_error(send, 404, "Not Found")
+            await self._send_flask_static_error(scope, receive, send, 404)
             return
 
         content_type, _ = mimetypes.guess_type(str(candidate))
@@ -4624,7 +4635,7 @@ class LazyASGIApp:
         try:
             size = candidate.stat().st_size
         except OSError:
-            await self._send_error(send, 404, "Not Found")
+            await self._send_flask_static_error(scope, receive, send, 404)
             return
 
         # Two families of file are rewritten in place at a stable path, so an
