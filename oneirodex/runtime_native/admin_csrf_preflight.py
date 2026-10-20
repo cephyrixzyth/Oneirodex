@@ -1,6 +1,7 @@
 """Match Flask-WTF's early CSRF rejection for empty admin mutations."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from collections.abc import Mapping
 from datetime import timedelta
 from http.cookies import SimpleCookie
@@ -112,7 +113,7 @@ async def inspect_multipart_csrf_body(scope: Mapping, receive, config: Mapping):
     except (MultiPartException, ValueError):
         return None, _replay_spooled_receive(messages, body_file, receive), False
     field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
-    value = form.get(field_name)
+    value = first_form_value(form, field_name)
     token = value if isinstance(value, str) else None
     for _, item in form.multi_items():
         close = getattr(item, 'close', None)
@@ -172,6 +173,13 @@ def empty_admin_mutation_csrf_error(
         return None
     path = str(scope.get('path') or '')
     if path != '/admin' and not path.startswith('/admin/'):
+        return None
+    # Werkzeug's <path:filename> converter rejects an empty filename before
+    # CSRF runs. Let the native equivalent reach its route-miss response too.
+    if (
+        str(scope.get('method') or '').upper() == 'DELETE'
+        and path == '/admin/api/theme/fonts/'
+    ):
         return None
 
     headers = {key.lower(): value for key, value in scope.get('headers', ())}

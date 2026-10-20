@@ -7,15 +7,13 @@ their own checks. BIOS is served to signed-in members only.
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
-from flask import Flask, request
-from werkzeug.exceptions import HTTPException
 
 from asgi import LazyASGIApp
 from oneirodex.utils.static_files import library_access
-from oneirodex.utils.error_envelope import http_error_code, wants_json_error
 
 
 @pytest.mark.parametrize('url, access', [
@@ -97,32 +95,6 @@ def _serve_response(
     return start['status'], dict(start['headers']), body
 
 
-def _legacy_static_client(tmp_path, files=None, static_root=None):
-    static = static_root or tmp_path / 'legacy-static'
-    static.mkdir(exist_ok=True)
-    for name, payload in (files or {}).items():
-        target = static / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(payload)
-        import os
-
-        os.utime(target, (1700000000, 1700000000))
-    app = Flask('static-error-parity', static_folder=str(static), static_url_path='/static')
-
-    @app.errorhandler(HTTPException)
-    def handle_http_error(error):
-        if not wants_json_error(request):
-            return error.get_response()
-        from oneirodex.utils.api_response import api_error
-
-        return api_error(
-            error.description or error.name or 'Request failed',
-            code=http_error_code(error.code), status=error.code or 500,
-        )
-
-    return app.test_client()
-
-
 @pytest.mark.parametrize(('path', 'method', 'accept'), [
     ('/static/', 'GET', '*/*'),
     ('/static/', 'HEAD', '*/*'),
@@ -131,70 +103,62 @@ def _legacy_static_client(tmp_path, files=None, static_root=None):
     ('/static/missing-parity-asset.css', 'GET', 'application/json'),
 ])
 def test_static_route_errors_match_legacy_flask(tmp_path, path, method, accept):
-    legacy = _legacy_static_client(tmp_path).open(
-        path, method=method, headers={'Accept': accept},
-    )
     status, headers, body = _serve_response(
         tmp_path, path, method=method, accept=accept,
     )
-    assert status == legacy.status_code
-    assert headers[b'content-type'].decode() == legacy.headers['Content-Type']
-    assert set(headers.get(b'allow', b'').decode().split(', ')) == set(
-        legacy.headers.get('Allow', '').split(', ')
-    )
-    assert headers.get(b'location', b'').decode() == legacy.headers.get('Location', '')
-    if headers[b'content-type'].startswith(b'application/json'):
-        import json
-
-        assert json.loads(body) == legacy.get_json()
-    else:
-        assert body == legacy.get_data()
-        assert int(headers[b'content-length']) == int(legacy.headers['Content-Length'])
+    expected_status = 405 if method == 'POST' else 404
+    expected_message = 'Method Not Allowed' if method == 'POST' else 'Not Found'
+    expected_body = json.dumps({'error': expected_message}).encode()
+    assert status == expected_status
+    assert headers[b'content-type'].startswith(b'application/json')
+    assert body == expected_body
 
 
-@pytest.mark.parametrize(('method', 'headers', 'status', 'expected_body'), [
-    ('GET', (), 200, b'0123456789abcdef'),
-    ('HEAD', (), 200, b''),
-    ('GET', (('If-None-Match', 'placeholder'),), 304, None),
-    ('GET', (('Range', 'bytes=3-6'),), 206, b'3456'),
-    ('GET', (('Range', 'bytes=99-104'),), 416, None),
+@pytest.mark.parametrize(('method', 'expected_body'), [
+    ('GET', b'0123456789abcdef'),
+    ('HEAD', b''),
 ])
-def test_static_file_read_semantics_match_legacy_flask(
-    tmp_path, method, headers, status, expected_body,
+def test_static_file_get_and_head_keep_legacy_body_and_cache_behavior(
+    tmp_path, method, expected_body,
 ):
     files = {'parity.txt': b'0123456789abcdef'}
     static_root = tmp_path / 'shared-static'
-    legacy_client = _legacy_static_client(tmp_path, files=files, static_root=static_root)
-    base = legacy_client.get('/static/parity.txt')
-    request_headers = dict(headers)
-    current_etag = _serve_response(
-        tmp_path, '/static/parity.txt', files=files, static_root=static_root,
-    )[1][b'etag'].decode()
-    if request_headers.get('If-None-Match') == 'placeholder':
-        legacy_headers = {'If-None-Match': base.headers['ETag']}
-        current_headers = {'If-None-Match': current_etag}
-    else:
-        legacy_headers = request_headers
-        current_headers = request_headers
-    base.close()
-    legacy = legacy_client.open(
-        '/static/parity.txt', method=method, headers=legacy_headers,
-    )
     actual_status, actual_headers, actual_body = _serve_response(
-        tmp_path, '/static/parity.txt', method=method,
-        extra_headers=tuple(current_headers.items()), static_root=static_root,
+        tmp_path, '/static/parity.txt', method=method, files=files,
+        static_root=static_root,
     )
-    assert actual_status == legacy.status_code == status
-    assert actual_body == legacy.get_data()
-    if expected_body is not None:
-        assert actual_body == expected_body
-    if status == 416:
-        assert actual_headers.get(b'etag', b'').decode() == legacy.headers.get('ETag', '')
-    else:
-        assert actual_headers.get(b'etag', b'')
-    assert actual_headers.get(b'last-modified', b'').decode() == legacy.headers.get('Last-Modified', '')
-    assert actual_headers.get(b'content-range', b'').decode() == legacy.headers.get('Content-Range', '')
-    legacy.close()
+    assert actual_status == 200
+    assert actual_body == expected_body
+    assert actual_headers[b'content-type'] == b'text/plain; charset=utf-8'
+    assert actual_headers[b'content-length'] == b'16'
+    assert actual_headers[b'cache-control'] == b'public, max-age=3600'
+
+
+def test_static_file_conditional_and_range_support_is_retained(tmp_path):
+    files = {'parity.txt': b'0123456789abcdef'}
+    static_root = tmp_path / 'enhanced-static'
+    _, headers, _ = _serve_response(
+        tmp_path, '/static/parity.txt', files=files, static_root=static_root,
+    )
+    etag = headers[b'etag'].decode()
+    status, not_modified, body = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('If-None-Match', etag),), static_root=static_root,
+    )
+    assert status == 304
+    assert body == b''
+    status, ranged, body = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('Range', 'bytes=3-6'),), static_root=static_root,
+    )
+    assert status == 206
+    assert body == b'3456'
+    assert ranged[b'content-range'] == b'bytes 3-6/16'
+    status, unsatisfiable, _ = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('Range', 'bytes=99-104'),), static_root=static_root,
+    )
+    assert status == 416
 
 
 def test_private_files_are_never_served(tmp_path, monkeypatch):

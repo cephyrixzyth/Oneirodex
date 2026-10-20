@@ -60,6 +60,12 @@ def test_admin_csrf_preflight_is_scoped_by_method_path_and_config():
     ) is None
 
 
+def test_empty_theme_font_path_miss_is_not_masked_by_csrf_preflight():
+    assert empty_admin_mutation_csrf_error(
+        _scope(path='/admin/api/theme/fonts/', method='DELETE'), {},
+    ) is None
+
+
 def test_valid_header_token_uses_signed_flask_session():
     from oneirodex.runtime_native.session_compat import (
         dump_session_cookie,
