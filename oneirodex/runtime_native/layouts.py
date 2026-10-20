@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 from .csrf_compat import csrf_error_response
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_integer_route_not_found_response
 
 
 class LayoutData:
@@ -298,7 +299,10 @@ def create_layout_router(
             return finish(response, request, auth)
 
     @router.delete('/api/layouts/detail/presets/{preset_id}')
-    def delete_layout_preset(request: Request, preset_id: int):
+    def delete_layout_preset(request: Request, preset_id: str):
+        if not preset_id.isdecimal():
+            return flask_integer_route_not_found_response(flask_app)
+        preset_id = int(preset_id)
         with auth_scope(request):
             auth = make_auth(request)
             response = write_scope_error(auth)

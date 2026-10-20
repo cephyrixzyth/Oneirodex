@@ -52,3 +52,13 @@ def flask_http_error_response(status_code: int, description: str | None = None, 
     body = b'' if head else legacy_response.get_data()
     headers = dict(legacy_response.headers)
     return Response(content=body, status_code=status_code, headers=headers)
+
+
+def flask_integer_route_not_found_response(flask_app) -> Response:
+    """Match Flask's default 404 when a ``<int:...>`` route converter rejects a path."""
+    response = flask_http_error_response(404)
+    from oneirodex.utils.security_headers import security_header_values
+
+    for key, value in security_header_values(flask_app.config).items():
+        response.headers.setdefault(key, value)
+    return response
