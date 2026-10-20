@@ -98,8 +98,9 @@ def flask_http_exception_response(
             headers=dict(legacy_response.headers),
         )
 
-    for key, value in (extra_headers or {}).items():
-        response.headers.setdefault(key, value)
+    if not wants_json_error(request):
+        for key, value in (extra_headers or {}).items():
+            response.headers.setdefault(key, value)
 
     if getattr(request, 'method', '').upper() == 'HEAD' and response.body:
         response = Response(
