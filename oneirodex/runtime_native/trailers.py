@@ -296,7 +296,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context):
         # safe path fallback for malformed configuration.
         target = '/login'
 
-    current_url = str(request.url)
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_target = urlsplit(target)
     parsed_current = urlsplit(current_url)
     same_origin = (

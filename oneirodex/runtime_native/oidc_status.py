@@ -140,14 +140,17 @@ def _login_redirect(
         login_url = rule.rule if rule is not None else '/login'
         parsed_login = urlsplit(login_url)
     if include_next:
-        parsed_current = urlsplit(str(request.url))
+        from .url_compat import request_url_iri
+
+        current_url = request_url_iri(request)
+        parsed_current = urlsplit(current_url)
         same_origin = (
             (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)
             and (not parsed_login.netloc or parsed_login.netloc == parsed_current.netloc)
         )
         next_url = (
             urlunsplit(('', '', parsed_current.path, parsed_current.query, ''))
-            if same_origin else str(request.url)
+            if same_origin else current_url
         )
         query = parse_qs(parsed_login.query, keep_blank_values=True)
         query['next'] = [next_url]

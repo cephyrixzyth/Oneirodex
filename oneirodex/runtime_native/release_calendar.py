@@ -140,7 +140,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth: RequestAut
         login_url = rule.rule if rule is not None else '/login'
         parsed_login = urlsplit(login_url)
 
-    current_url = str(request.url)
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_current = urlsplit(current_url)
     same_origin = (
         (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)

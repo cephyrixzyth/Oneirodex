@@ -8,7 +8,6 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
-from werkzeug.urls import uri_to_iri
 
 from .request_auth import RequestAuthContext, request_auth_context
 from .response_compat import add_vary_header, flask_redirect_response
@@ -123,7 +122,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
     # query characters are decoded before Flask-Login encodes ``next``. Starlette
     # keeps the original URI escapes, which would double-encode them in the
     # redirect unless we normalize to the same IRI representation first.
-    current_url = uri_to_iri(str(request.url))
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_current = urlsplit(current_url)
     same_origin = (
         (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)
