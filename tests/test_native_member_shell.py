@@ -160,6 +160,22 @@ def test_game_details_shell_keeps_uuid_existence_and_library_acl(monkeypatch):
     assert denied.get(f'/game_details/{valid_uuid}').status_code == 403
 
 
+def test_game_details_missing_resource_keeps_legacy_html_error_for_get_and_head(monkeypatch):
+    from werkzeug.exceptions import NotFound
+
+    valid_uuid = '7de1040c-42d9-4f42-904b-f469e68a9673'
+    client, _ = _native_client(monkeypatch, query_result=None)
+
+    get_response = client.get(f'/game_details/{valid_uuid}')
+    head_response = client.head(f'/game_details/{valid_uuid}')
+
+    assert get_response.status_code == head_response.status_code == 404
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert get_response.content == NotFound().get_response().get_data()
+    assert head_response.content == b''
+
+
 def test_library_shell_preserves_filters_preferences_and_empty_state(monkeypatch):
     from oneirodex.utils.helpers import counts
     import json

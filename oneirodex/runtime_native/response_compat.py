@@ -38,3 +38,19 @@ def flask_redirect_response(location: str, *, status_code: int = 302) -> Respons
         headers={'Location': location},
         media_type='text/html',
     )
+
+
+def flask_http_error_response(status_code: int, description: str | None = None, *, head: bool = False) -> Response:
+    """Return the Werkzeug HTML error page used by legacy non-API routes."""
+    from werkzeug.exceptions import default_exceptions
+
+    error_type = default_exceptions.get(status_code)
+    if error_type is None:
+        raise ValueError(f'Unsupported HTTP error status: {status_code}')
+    error = error_type(description=description) if description is not None else error_type()
+    legacy_response = error.get_response()
+    body = b'' if head else legacy_response.get_data()
+    headers = dict(legacy_response.headers)
+    if head:
+        headers['Content-Length'] = '0'
+    return Response(content=body, status_code=status_code, headers=headers)

@@ -312,6 +312,7 @@ def create_member_shell_router(flask_app, *, database_scope):
                 return response
             game_details = re.fullmatch(r'/game_details/([^/]+)', path)
             if game_details:
+                from oneirodex.runtime_native.response_compat import flask_http_error_response
                 from sqlalchemy import select
                 from oneirodex.models import Game
                 from oneirodex.runtime_native.db_session import native_db
@@ -321,14 +322,14 @@ def create_member_shell_router(flask_app, *, database_scope):
                 try:
                     valid_uuid = str(uuid.UUID(raw_uuid, version=4))
                 except (TypeError, ValueError, AttributeError):
-                    return Response(status_code=404)
+                    return flask_http_error_response(404, head=request.method == 'HEAD')
                 game = native_db.session.execute(
                     select(Game).filter_by(uuid=valid_uuid)
                 ).scalars().first()
                 if game is None:
-                    return Response(status_code=404)
+                    return flask_http_error_response(404, head=request.method == 'HEAD')
                 if not user_can_access_game(auth.user, game):
-                    return Response(status_code=403)
+                    return flask_http_error_response(403, head=request.method == 'HEAD')
             if path == '/activity' and not _legacy_feature_enabled(
                 flask_app.config, 'ENABLE_ACTIVITY_FEED', 'true',
             ):
