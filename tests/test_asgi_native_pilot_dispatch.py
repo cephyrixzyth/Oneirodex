@@ -1295,9 +1295,21 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
                 'If-None-Match': root_worker.headers['etag'],
             })
             root_range = await client.get('/sw.js', headers={'Range': 'bytes=0-9'})
-        return root_worker, vr_worker, root_head, root_not_modified, root_range
+            root_if_range = await client.get('/sw.js', headers={
+                'Range': 'bytes=0-9', 'If-Range': root_worker.headers['etag'],
+            })
+            root_stale_if_range = await client.get('/sw.js', headers={
+                'Range': 'bytes=0-9', 'If-Range': '"stale"',
+            })
+        return (
+            root_worker, vr_worker, root_head, root_not_modified, root_range,
+            root_if_range, root_stale_if_range,
+        )
 
-    root_worker, vr_worker, root_head, root_not_modified, root_range = asyncio.run(run())
+    (
+        root_worker, vr_worker, root_head, root_not_modified, root_range,
+        root_if_range, root_stale_if_range,
+    ) = asyncio.run(run())
     assert root_worker.status_code == vr_worker.status_code == 200
     assert root_worker.headers['service-worker-allowed'] == '/'
     assert vr_worker.headers['service-worker-allowed'] == '/vr'
@@ -1311,6 +1323,10 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     assert root_range.status_code == 206
     assert root_range.headers['content-range'] == f'bytes 0-9/{len(root_worker.content)}'
     assert root_range.content == root_worker.content[:10]
+    assert root_if_range.status_code == 206
+    assert root_if_range.content == root_worker.content[:10]
+    assert root_stale_if_range.status_code == 200
+    assert root_stale_if_range.content == root_worker.content
 
 
 def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
@@ -1365,12 +1381,24 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
                 'If-Modified-Since': full.headers['last-modified'],
             })
             ranged = await client.get('/favicon.ico', headers={'Range': 'bytes=10-109'})
+            if_range = await client.get('/favicon.ico', headers={
+                'Range': 'bytes=10-109', 'If-Range': full.headers['etag'],
+            })
+            stale_if_range = await client.get('/favicon.ico', headers={
+                'Range': 'bytes=10-109', 'If-Range': '"stale"',
+            })
             unsatisfiable = await client.get('/favicon.ico', headers={
                 'Range': f'bytes={len(icon_payload)}-',
             })
-        return full, head, not_modified_etag, not_modified_date, ranged, unsatisfiable
+        return (
+            full, head, not_modified_etag, not_modified_date, ranged,
+            if_range, stale_if_range, unsatisfiable,
+        )
 
-    full, head, not_modified_etag, not_modified_date, ranged, unsatisfiable = asyncio.run(run())
+    (
+        full, head, not_modified_etag, not_modified_date, ranged,
+        if_range, stale_if_range, unsatisfiable,
+    ) = asyncio.run(run())
     assert full.status_code == 200
     assert full.headers['content-type'] == 'image/vnd.microsoft.icon'
     assert full.headers['cache-control'] == 'public, max-age=3600'
@@ -1386,6 +1414,10 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     assert ranged.status_code == 206
     assert ranged.headers['content-range'] == f'bytes 10-109/{len(icon_payload)}'
     assert ranged.content == icon_payload[10:110]
+    assert if_range.status_code == 206
+    assert if_range.content == icon_payload[10:110]
+    assert stale_if_range.status_code == 200
+    assert stale_if_range.content == icon_payload
     assert unsatisfiable.status_code == 416
     assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
 
