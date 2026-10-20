@@ -123,6 +123,35 @@ def test_native_oidc_pkce_flow_sets_state_nonce_and_remember_session(native_clie
     assert 'remember_token=' in callback.headers.get('set-cookie', '')
 
 
+@pytest.mark.parametrize('path', ['/login/oidc', '/login/oidc/callback'])
+def test_native_oidc_head_matches_get_redirect_headers_without_body(native_client, path):
+    runtime, _data = native_client
+
+    async def request(method):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='https://app.example',
+        ) as client:
+            return await client.request(method, path)
+
+    get_response, head_response = asyncio.run(
+        _gather_requests(request('GET'), request('HEAD'))
+    )
+
+    assert head_response.status_code == get_response.status_code == 302
+    if path == '/login/oidc':
+        assert head_response.headers['location'].startswith('https://idp.example/authorize?state=')
+        assert get_response.headers['location'].startswith('https://idp.example/authorize?state=')
+        assert head_response.headers.get('set-cookie')
+        assert get_response.headers.get('set-cookie')
+    else:
+        assert head_response.headers['location'] == get_response.headers['location'] == '/login'
+    assert head_response.content == b''
+
+
+async def _gather_requests(*awaitables):
+    return await asyncio.gather(*awaitables)
+
+
 def test_native_oidc_client_does_not_require_flask_authlib(monkeypatch):
     from oneirodex.runtime_native.oidc_auth import _make_oidc_client
     from oneirodex.utils import oidc

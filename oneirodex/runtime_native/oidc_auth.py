@@ -56,13 +56,13 @@ def create_oidc_auth_router(
     router = APIRouter()
     data = data_access or OidcAuthData()
 
-    @router.get('/login/oidc')
+    @router.api_route('/login/oidc', methods=['GET', 'HEAD'])
     async def oidc_start(request: Request):
         return await _start(request, app, data, find_user, find_token,
                             commit_token_touch, load_user_id, login_manager,
                             database_scope, client_factory)
 
-    @router.get('/login/oidc/callback')
+    @router.api_route('/login/oidc/callback', methods=['GET', 'HEAD'])
     async def oidc_callback(request: Request):
         return await _callback(request, app, data, find_user, find_token,
                                commit_token_touch, load_user_id, login_manager,
