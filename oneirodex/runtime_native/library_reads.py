@@ -63,6 +63,18 @@ class LibraryReadData:
         fields.pop('image_url', None)
         return fields
 
+    @staticmethod
+    def batch_edit_cap_error(cap: int) -> tuple[dict, int]:
+        """Return the legacy batch-edit selection-cap error envelope."""
+        from oneirodex.utils.api_contract import api_error_payload
+
+        return api_error_payload(
+            f'library_uuids cap is {cap}',
+            code='bad_request',
+            body_status='rejected',
+            cap=cap,
+        )
+
     @classmethod
     def watch_fields(cls, library) -> dict:
         values = cls.public_fields(library)
@@ -104,11 +116,7 @@ class LibraryReadData:
         if error:
             return _batch_rejection(error[0], error[1])
         if len(uuids) > LIBRARY_BATCH_UUID_CAP:
-            body, status = api_error_payload(
-                f'No more than {LIBRARY_BATCH_UUID_CAP} libraries may be selected',
-                code='bad_request', status=400, body_status='rejected',
-            )
-            return body, status
+            return self.batch_edit_cap_error(LIBRARY_BATCH_UUID_CAP)
 
         item_map = {}
         raw_items = payload.get('items')
