@@ -121,12 +121,17 @@ def test_static_route_errors_match_legacy_flask(tmp_path, path, method, accept):
     )
     assert status == legacy.status_code
     assert headers[b'content-type'].decode() == legacy.headers['Content-Type']
+    assert set(headers.get(b'allow', b'').decode().split(', ')) == set(
+        legacy.headers.get('Allow', '').split(', ')
+    )
+    assert headers.get(b'location', b'').decode() == legacy.headers.get('Location', '')
     if headers[b'content-type'].startswith(b'application/json'):
         import json
 
         assert json.loads(body) == legacy.get_json()
     else:
         assert body == legacy.get_data()
+        assert int(headers[b'content-length']) == int(legacy.headers['Content-Length'])
 
 
 def test_private_files_are_never_served(tmp_path, monkeypatch):

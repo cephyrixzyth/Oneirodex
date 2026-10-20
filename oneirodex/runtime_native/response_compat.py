@@ -68,7 +68,10 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
     error_type = default_exceptions.get(status_code)
     if error_type is None:
         raise ValueError(f'Unsupported HTTP error status: {status_code}')
-    error = error_type()
+    error = (
+        error_type(valid_methods=['OPTIONS', 'GET', 'HEAD'])
+        if status_code == 405 else error_type()
+    )
     if wants_json_error(request):
         from starlette.responses import JSONResponse
 
@@ -82,14 +85,17 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
         )
         response = JSONResponse(payload, status_code=status)
     else:
-        response = flask_http_error_response(
-            status_code,
-            head=getattr(request, 'method', '').upper() == 'HEAD',
+        legacy_response = error.get_response()
+        body = (
+            b'' if getattr(request, 'method', '').upper() == 'HEAD'
+            else legacy_response.get_data()
+        )
+        response = Response(
+            content=body, status_code=status_code,
+            headers=dict(legacy_response.headers),
         )
 
     if getattr(request, 'method', '').upper() == 'HEAD' and response.body:
-        from starlette.responses import Response
-
         response = Response(
             content=b'', status_code=response.status_code,
             headers=dict(response.headers),
