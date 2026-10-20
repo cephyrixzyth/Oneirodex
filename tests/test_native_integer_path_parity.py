@@ -108,11 +108,17 @@ def test_native_api_unmatched_route_uses_legacy_flask_not_found_message():
         current_app, {'CSP_ENABLED': False}, logging.getLogger('route-parity-test')
     )
 
-    legacy = legacy_app.test_client().get('/api/route-that-does-not-exist')
-    current = TestClient(current_app).get('/api/route-that-does-not-exist')
-    assert current.status_code == legacy.status_code == 404
-    assert current.headers['content-type'] == legacy.headers['Content-Type']
-    assert current.json() == legacy.json
+    legacy_client = legacy_app.test_client()
+    current_client = TestClient(current_app)
+    for path in ('/api/route-that-does-not-exist', '/route-that-does-not-exist'):
+        legacy = legacy_client.get(path)
+        current = current_client.get(path)
+        assert current.status_code == legacy.status_code == 404
+        assert current.headers['content-type'] == legacy.headers['Content-Type']
+        if current.headers['content-type'].startswith('application/json'):
+            assert current.json() == legacy.json
+        else:
+            assert current.content == legacy.get_data()
 
 
 def test_integer_route_converter_misses_match_flask_for_social_chat_and_ownership():
@@ -190,3 +196,62 @@ def test_integer_route_converter_misses_match_flask_for_social_chat_and_ownershi
             assert current.content == legacy.get_data() == b'', (method, path)
         else:
             assert current.json() == legacy.json, (method, path)
+
+
+def test_empty_path_converter_values_match_legacy_route_misses():
+    import asgi
+
+    import oneirodex.routes_admin_ext.images
+    from oneirodex.routes_admin_ext import admin2_bp
+    from oneirodex.runtime_native.admin_theme_fonts import create_admin_theme_font_router
+    from oneirodex.runtime_native.discover_reads import create_discover_reads_router
+    from oneirodex.runtime_native.emulator_mutations import create_emulator_mutations_router
+    from oneirodex.routes_apis import apis_bp
+
+    legacy_app = Flask(__name__)
+    legacy_app.config.update(SECRET_KEY='path-route-parity-secret', CSP_ENABLED=False)
+    login_manager = LoginManager()
+    login_manager.init_app(legacy_app)
+    login_manager.login_view = 'login'
+    login_manager.user_loader(lambda _user_id: None)
+    _install_legacy_error_envelope(legacy_app)
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_app.register_blueprint(admin2_bp)
+
+    current_flask_app = Flask('path-route-parity-current')
+    current_flask_app.config.update(SECRET_KEY='path-route-parity-secret', CSP_ENABLED=False)
+    router_args = {
+        'find_user': lambda _user_id: None,
+        'find_token': lambda _prefix: None,
+        'commit_token_touch': lambda _token: None,
+        'database_scope': lambda _app: nullcontext(),
+    }
+    current_app = FastAPI()
+    current_app.include_router(create_admin_theme_font_router(current_flask_app, **router_args))
+    current_app.include_router(create_discover_reads_router(
+        current_flask_app, **router_args, data_access=SimpleNamespace(),
+    ))
+    current_app.include_router(create_emulator_mutations_router(
+        current_flask_app, **router_args, data_access=SimpleNamespace(),
+    ))
+    asgi._install_native_api_error_handlers(
+        current_app, current_flask_app.config, logging.getLogger('path-route-parity-test')
+    )
+
+    cases = (
+        ('GET', '/api/games/test/cheats/'),
+        ('GET', '/api/discover/hubs/genre/'),
+        ('DELETE', '/admin/api/theme/fonts/'),
+    )
+    legacy_client = legacy_app.test_client()
+    current_client = TestClient(current_app)
+    for method, path in cases:
+        legacy = legacy_client.open(path, method=method)
+        current = current_client.request(method, path)
+        assert current.status_code == legacy.status_code == 404, (method, path)
+        assert current.headers['content-type'] == legacy.headers['Content-Type'], (method, path)
+        assert current.headers.get('location') == legacy.headers.get('Location'), (method, path)
+        if current.headers['content-type'].startswith('application/json'):
+            assert current.json() == legacy.json, (method, path)
+        else:
+            assert current.content == legacy.get_data(), (method, path)

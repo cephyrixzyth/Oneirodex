@@ -14,8 +14,8 @@ from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
 from .response_compat import (
-    flask_integer_route_not_found_response,
     flask_redirect_response,
+    flask_route_not_found_response,
 )
 
 MAX_DAT_BYTES = 32 * 1024 * 1024
@@ -318,7 +318,7 @@ def create_reference_sets_router(
     @router.api_route('/api/reference-sets/{set_id}', methods=['DELETE'])
     async def api_reference_sets(request: Request, set_id: str | None = None):
         if request.method == 'DELETE' and set_id is not None and not set_id.isdecimal():
-            return flask_integer_route_not_found_response(flask_app)
+            return flask_route_not_found_response(flask_app, request)
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -456,7 +456,7 @@ def create_reference_sets_router(
     @router.api_route('/api/admin/reference-sets/{set_id}', methods=['DELETE'])
     async def reference_sets(request: Request, set_id: str | None = None):
         if request.method == 'DELETE' and set_id is not None and not set_id.isdecimal():
-            return flask_integer_route_not_found_response(flask_app)
+            return flask_route_not_found_response(flask_app, request)
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:

@@ -34,6 +34,10 @@ def create_admin_theme_font_router(
 
     @router.delete('/admin/api/theme/fonts/{filename:path}')
     async def delete_font(filename: str, request: Request):
+        if not filename:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         return await _handle(request, flask_app, 'delete', filename, find_user, find_token,
                              commit_token_touch, load_user_id, login_manager,
                              database_scope, font_store)

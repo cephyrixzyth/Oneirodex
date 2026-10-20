@@ -220,8 +220,12 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         429: 'Too many requests',
     }
 
-    async def http_error(_request: Request, exc: StarletteHTTPException):
+    async def http_error(request: Request, exc: StarletteHTTPException):
         status = int(exc.status_code or 500)
+        if status == 404 and request.scope.get('route') is None:
+            from oneirodex.runtime_native.response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(config, request)
         payload, _ = api_error_payload(
             safe_messages.get(status, 'Request failed'),
             code=http_error_code(status),

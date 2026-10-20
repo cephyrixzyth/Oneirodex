@@ -315,6 +315,10 @@ def create_emulator_mutations_router(
 
     @router.api_route('/api/games/{game_uuid}/cheats/{filename:path}', methods=['GET', 'DELETE', 'HEAD'])
     async def cheat_file(game_uuid: str, filename: str, request: Request):
+        if not filename:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         return await run(request, game_uuid, 'cheat_file', filename)
 
     @router.api_route('/api/games/{game_uuid}/saves', methods=['GET', 'POST', 'HEAD'])

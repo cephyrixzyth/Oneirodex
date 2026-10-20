@@ -223,6 +223,10 @@ def create_discover_reads_router(
 
     @router.api_route('/api/discover/hubs/genre/{genre:path}', methods=['GET', 'HEAD'])
     def discover_genre_hub(genre: str, request: Request):
+        if not genre:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         with request_scope():
             auth = authenticate(request)
             if auth.user is None:

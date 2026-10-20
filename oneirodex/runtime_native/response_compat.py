@@ -54,20 +54,28 @@ def flask_http_error_response(status_code: int, description: str | None = None, 
     return Response(content=body, status_code=status_code, headers=headers)
 
 
-def flask_integer_route_not_found_response(flask_app) -> Response:
-    """Match Flask's API 404 envelope when a ``<int:...>`` converter rejects a path."""
-    from starlette.responses import JSONResponse
+def flask_route_not_found_response(flask_app, request) -> Response:
+    """Match Flask's 404 when a route converter rejects a request path."""
     from werkzeug.exceptions import NotFound
 
-    from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.error_envelope import wants_json_error
 
     error = NotFound()
-    payload, status = api_error_payload(
-        error.description, code='not_found', status=error.code or 404,
-    )
-    response = JSONResponse(payload, status_code=status)
+    if wants_json_error(request):
+        from starlette.responses import JSONResponse
+
+        from oneirodex.utils.api_contract import api_error_payload
+
+        payload, status = api_error_payload(
+            error.description, code='not_found', status=error.code or 404,
+        )
+        response = JSONResponse(payload, status_code=status)
+    else:
+        response = flask_http_error_response(404)
+
     from oneirodex.utils.security_headers import security_header_values
 
-    for key, value in security_header_values(flask_app.config).items():
+    config = getattr(flask_app, 'config', flask_app)
+    for key, value in security_header_values(config).items():
         response.headers.setdefault(key, value)
     return response
