@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
@@ -22,7 +23,7 @@ async def parse_legacy_json(request: Request):
     )):
         raise LegacyJSONError(
             415,
-            'The server does not support the media type transmitted in the request.',
+            "Did not attempt to load JSON data because the request Content-Type was not 'application/json'.",
         )
 
     raw = bytearray()
@@ -59,7 +60,7 @@ def legacy_json_error_response(request: Request, exc: LegacyJSONError):
     heading = title.split(' ', 1)[1]
     return HTMLResponse(
         '<!doctype html>\n<html lang=en>\n<title>' + title + '</title>\n'
-        '<h1>' + heading + '</h1>\n<p>' + exc.description + '</p>\n',
+        '<h1>' + heading + '</h1>\n<p>' + escape(exc.description).replace('&#x27;', '&#39;') + '</p>\n',
         status_code=exc.status_code,
     )
 

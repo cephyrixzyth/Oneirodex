@@ -319,7 +319,11 @@ def test_legacy_smtp_post_matches_flask_json_parse_edges():
         headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'text/plain'},
     )
     assert wrong_type.status_code == 415
-    assert 'The server does not support the media type transmitted in the request.' in wrong_type.text
+    assert wrong_type.text == (
+        '<!doctype html>\n<html lang=en>\n<title>415 Unsupported Media Type</title>\n'
+        '<h1>Unsupported Media Type</h1>\n'
+        '<p>Did not attempt to load JSON data because the request Content-Type was not &#39;application/json&#39;.</p>\n'
+    )
 
     null_value = client.post(
         '/admin/smtp_settings', content='null',
