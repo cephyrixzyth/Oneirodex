@@ -201,7 +201,7 @@ def create_admin_pilot(
         app.add_api_route(route, admin_shell, methods=['GET', 'HEAD'], response_class=Response)
 
     async def admin_manage_downloads_post(request: Request):
-        from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_error_response, csrf_html_error_response
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
 
@@ -219,6 +219,7 @@ def create_admin_pilot(
             token=str(form.get('csrf_token') or ''),
         )
         if csrf_response is not None:
+            csrf_response = csrf_html_error_response(csrf_response)
             from oneirodex.utils.security_headers import security_header_values
 
             csrf_response.headers.setdefault('Cache-Control', 'no-store')

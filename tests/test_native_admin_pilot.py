@@ -579,5 +579,8 @@ def test_legacy_manage_downloads_post_preserves_admin_shell_and_csrf(pilot):
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'].startswith('text/html')
+    assert 'The CSRF token is missing.' in rejected.text
     assert accepted.status_code == 200
+    assert accepted.headers['content-type'].startswith('text/html')
     assert 'id="admin-app-root"' in accepted.text
