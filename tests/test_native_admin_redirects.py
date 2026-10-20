@@ -110,6 +110,11 @@ def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():
         'warning', 'Open Scan Filters and confirm removal there.',
     )]
 
+    head = fetch(app, '/delete_filter/42', signed_cookie(flask_app, users[7]), method='HEAD')
+    assert head.status_code == 302
+    assert head.headers['location'] == '/admin/edit_filters'
+    assert head.content == b''
+
     anonymous = fetch(app, '/delete_filter/42')
     assert anonymous.status_code == 302
     assert urlsplit(anonymous.headers['location']).path == '/login'
