@@ -59,7 +59,7 @@ def flask_route_not_found_response(flask_app, request) -> Response:
     return flask_http_exception_response(flask_app, request, 404)
 
 
-def flask_http_exception_response(flask_app, request, status_code: int) -> Response:
+def flask_http_exception_response(flask_app, request, status_code: int, *, route_app=None) -> Response:
     """Match Flask's configured HTTP exception response for a native path."""
     from werkzeug.exceptions import default_exceptions
 
@@ -69,7 +69,7 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
     if error_type is None:
         raise ValueError(f'Unsupported HTTP error status: {status_code}')
     error = error_type(
-        valid_methods=_native_allowed_methods(request),
+        valid_methods=_native_allowed_methods(request, route_app=route_app),
     ) if status_code == 405 else error_type()
     if wants_json_error(request):
         from starlette.responses import JSONResponse
@@ -108,11 +108,11 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
     return response
 
 
-def _native_allowed_methods(request) -> list[str]:
+def _native_allowed_methods(request, *, route_app=None) -> list[str]:
     """Collect all FastAPI methods for the path, then apply Flask defaults."""
     from starlette.routing import Match
 
-    app = getattr(request, 'app', None)
+    app = route_app or getattr(request, 'app', None)
     router = getattr(app, 'router', None)
     methods = set()
     path_scope = dict(request.scope)

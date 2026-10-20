@@ -229,7 +229,7 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         if status == 405:
             from oneirodex.runtime_native.response_compat import flask_http_exception_response
 
-            return flask_http_exception_response(config, request, status)
+            return flask_http_exception_response(config, request, status, route_app=native_app)
         payload, _ = api_error_payload(
             safe_messages.get(status, 'Request failed'),
             code=http_error_code(status),
