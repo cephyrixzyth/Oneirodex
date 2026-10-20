@@ -5,11 +5,13 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask, redirect as flask_redirect
+from flask import Flask, redirect as flask_redirect, request
 from flask_login import LoginManager
+from werkzeug.exceptions import HTTPException
 
 from oneirodex.runtime_native.reference_sets_read import create_reference_sets_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.utils.error_envelope import http_error_code, wants_json_error
 
 
 def _client(*, role='admin', data=None):
@@ -54,6 +56,19 @@ def _client(*, role='admin', data=None):
         dump_session_cookie(session_data, flask_app.config['SECRET_KEY']),
     )
     return client
+
+
+def _install_legacy_error_envelope(app):
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        if not wants_json_error(request):
+            return error.get_response()
+        from oneirodex.utils.api_response import api_error
+
+        return api_error(
+            error.description or error.name or 'Request failed',
+            code=http_error_code(error.code), status=error.code or 500,
+        )
 
 
 def test_reference_sets_read_keeps_payload_cache_and_head_contract():
@@ -167,6 +182,7 @@ def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_mat
     login_manager.init_app(legacy_app)
     login_manager.login_view = 'login'
     login_manager.user_loader(lambda _user_id: None)
+    _install_legacy_error_envelope(legacy_app)
     legacy_app.register_blueprint(apis_bp, url_prefix='/api')
     legacy_client = legacy_app.test_client()
     native_client = _client()
@@ -180,8 +196,9 @@ def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_mat
         legacy = legacy_client.delete(path)
         native = native_client.delete(path)
         assert native.status_code == legacy.status_code == 404
+        assert native.headers['content-type'].startswith('application/json')
         assert native.headers['content-type'] == legacy.headers['Content-Type']
-        assert native.content == legacy.get_data()
+        assert native.json() == legacy.json
         assert native.headers.get('location') == legacy.headers.get('Location')
 
 

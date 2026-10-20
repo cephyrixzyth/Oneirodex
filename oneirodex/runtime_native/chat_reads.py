@@ -521,7 +521,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/mute')
+    @router.post('/api/chat/channels/{channel_id:int}/mute')
     async def chat_channel_mute(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -655,11 +655,11 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/archive')
+    @router.post('/api/chat/channels/{channel_id:int}/archive')
     def chat_channel_archive(channel_id: int, request: Request):
         return channel_action(request, channel_id, 'archive')
 
-    @router.post('/api/chat/channels/{channel_id}/leave')
+    @router.post('/api/chat/channels/{channel_id:int}/leave')
     def chat_channel_leave(channel_id: int, request: Request):
         return channel_action(request, channel_id, 'leave')
 
@@ -813,13 +813,13 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.options('/api/chat/channels/{channel_id}/attachments')
+    @router.options('/api/chat/channels/{channel_id:int}/attachments')
     async def chat_attachment_upload_options(channel_id: int):
         # Flask automatically exposes OPTIONS for the legacy POST endpoint.
         # Chat probes this route to decide whether to show attachment controls.
         return Response(status_code=200, headers={'Allow': 'OPTIONS, POST'})
 
-    @router.post('/api/chat/channels/{channel_id}/attachments')
+    @router.post('/api/chat/channels/{channel_id:int}/attachments')
     async def chat_attachment_upload(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -976,7 +976,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/messages')
+    @router.post('/api/chat/channels/{channel_id:int}/messages')
     async def chat_message_post(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1047,7 +1047,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/messages/{message_id}/reactions')
+    @router.post('/api/chat/messages/{message_id:int}/reactions')
     async def chat_message_reaction(request: Request, message_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1245,7 +1245,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/channels')
+    @router.post('/api/chat/spaces/{space_id:int}/channels')
     async def chat_space_channel_create(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1313,7 +1313,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.api_route('/api/chat/spaces/{space_id}/members', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/spaces/{space_id:int}/members', methods=['GET', 'HEAD'])
     def chat_space_members(request: Request, space_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -1363,7 +1363,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/members')
+    @router.post('/api/chat/spaces/{space_id:int}/members')
     async def chat_space_member_add(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1431,7 +1431,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.delete('/api/chat/spaces/{space_id}/members/{user_id}')
+    @router.delete('/api/chat/spaces/{space_id:int}/members/{user_id:int}')
     def chat_space_member_remove(request: Request, space_id: int, user_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1484,7 +1484,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.api_route('/api/chat/spaces/{space_id}/invites', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/spaces/{space_id:int}/invites', methods=['GET', 'HEAD'])
     def chat_space_invites(request: Request, space_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -1536,7 +1536,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/invites')
+    @router.post('/api/chat/spaces/{space_id:int}/invites')
     async def chat_space_invite_create(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1632,7 +1632,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/spaces/invites/{invite_id}/revoke')
+    @router.post('/api/chat/spaces/invites/{invite_id:int}/revoke')
     def chat_space_invite_revoke(request: Request, invite_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1832,7 +1832,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.api_route('/api/chat/channels/{channel_id}/messages', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/channels/{channel_id:int}/messages', methods=['GET', 'HEAD'])
     def chat_messages(request: Request, channel_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:

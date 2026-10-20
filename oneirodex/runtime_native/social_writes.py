@@ -162,22 +162,22 @@ def create_social_writes_router(
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.post('/api/social/friends/{friendship_id}/reject')
+    @router.post('/api/social/friends/{friendship_id:int}/reject')
     def reject_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'reject', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.post('/api/social/friends/{friendship_id}/block')
+    @router.post('/api/social/friends/{friendship_id:int}/block')
     def block_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'block', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.post('/api/social/friends/{friendship_id}/accept')
+    @router.post('/api/social/friends/{friendship_id:int}/accept')
     def accept_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'accept', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.delete('/api/social/friends/{friendship_id}')
+    @router.delete('/api/social/friends/{friendship_id:int}')
     def remove_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'delete', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)

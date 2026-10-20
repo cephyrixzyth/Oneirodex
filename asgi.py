@@ -200,6 +200,7 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
     from fastapi import Request
     from starlette.exceptions import HTTPException as StarletteHTTPException
     from starlette.responses import JSONResponse, Response
+    from werkzeug.exceptions import NotFound
 
     from oneirodex.utils.api_contract import api_error_payload
     from oneirodex.utils.error_envelope import http_error_code
@@ -209,7 +210,9 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         400: 'Bad request',
         401: 'Unauthorized',
         403: 'Forbidden',
-        404: 'Not found',
+        # Flask's API HTTPException envelope uses the Werkzeug description for
+        # unmatched routes. Keep ASGI route misses on the same client contract.
+        404: NotFound().description,
         405: 'Method not allowed',
         409: 'Conflict',
         413: 'Request payload is too large',

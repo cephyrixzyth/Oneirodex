@@ -188,7 +188,7 @@ def create_wishlist_router(
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.delete('/api/requests/{request_id}')
+    @router.delete('/api/requests/{request_id:int}')
     def cancel_request(request_id: int, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -216,7 +216,7 @@ def create_wishlist_router(
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.patch('/api/requests/{request_id}')
+    @router.patch('/api/requests/{request_id:int}')
     async def resolve_request(request_id: int, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
