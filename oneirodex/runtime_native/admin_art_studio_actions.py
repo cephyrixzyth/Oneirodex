@@ -193,7 +193,9 @@ def create_admin_art_studio_action_router(
             response = _api_error('Failed to write stock packs', 'internal')
         return _finish(response, flask_app, auth, scope)
 
-    @router.get('/admin/api/art-studio/download/{pack_id}')
+    @router.api_route(
+        '/admin/api/art-studio/download/{pack_id}', methods=['GET', 'HEAD'],
+    )
     async def download(pack_id: str, request: Request):
         auth, denied, scope = _authorize(request, flask_app, find_user, find_token,
                                          commit_token_touch, load_user_id, login_manager,

@@ -249,7 +249,7 @@ def create_emulator_mutations_router(
                     response = _error(403, 'forbidden', 'This token does not have the admin scope')
                 else:
                     try:
-                        if operation == 'overview' and request.method == 'GET':
+                        if operation == 'overview' and request.method in {'GET', 'HEAD'}:
                             response = JSONResponse(data.bios_overview(flask_app))
                         elif operation == 'scan':
                             source, error = await _firmware_source(data, flask_app, request)

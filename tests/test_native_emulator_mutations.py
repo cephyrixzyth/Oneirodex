@@ -246,6 +246,7 @@ def test_bios_admin_reads_scan_install_and_upload_use_fake_storage(native):
     cookie, csrf = _cookie(app, csrf=True)
 
     overview = _request(api, 'GET', '/api/emulator-bios', cookie=cookie)
+    overview_head = _request(api, 'HEAD', '/api/emulator-bios', cookie=cookie)
     scan = _request(api, 'POST', '/api/emulator-bios/scan', cookie=cookie, csrf=csrf,
                     json={'source': '/allowed/firmware'})
     install = _request(api, 'POST', '/api/emulator-bios/install', cookie=cookie, csrf=csrf,
@@ -255,6 +256,8 @@ def test_bios_admin_reads_scan_install_and_upload_use_fake_storage(native):
                       files={'file': ('bios.bin', b'fixture')})
 
     assert overview.status_code == 200 and overview.json()['files'] == []
+    assert overview_head.status_code == 200 and overview_head.content == b''
+    assert overview_head.headers['content-type'] == overview.headers['content-type']
     assert scan.json()['files'] == [{'name': 'bios.bin'}]
     assert install.json()['installed'] == 1
     assert upload.status_code == 201 and upload.json()['filename'] == 'bios.bin'

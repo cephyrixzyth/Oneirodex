@@ -100,10 +100,16 @@ def test_stock_pack_generation_normalizes_ids_and_format():
 def test_art_pack_download_is_an_attachment_and_validates_pack_id():
     client, actions, _events = _client()
     response = client.get('/admin/api/art-studio/download/abc123')
+    head = client.head('/admin/api/art-studio/download/abc123')
     assert response.status_code == 200 and response.content == b'zip-bytes'
     assert response.headers['content-type'] == 'application/zip'
     assert response.headers['content-disposition'] == 'attachment; filename="oneirodex-art-abc123.zip"'
-    assert actions.calls[0][0:2] == ('download', 'abc123')
+    assert head.status_code == response.status_code and head.content == b''
+    assert head.headers['content-type'] == response.headers['content-type']
+    assert head.headers['content-disposition'] == response.headers['content-disposition']
+    assert [call[0:2] for call in actions.calls] == [
+        ('download', 'abc123'), ('download', 'abc123'),
+    ]
 
 
 def test_system_mark_generation_preserves_validation_and_uses_fake_adapter():
