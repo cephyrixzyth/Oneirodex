@@ -111,11 +111,13 @@ def create_batch_favorite_router(
                     payload, status = refusal
                     response = JSONResponse(payload, status_code=status)
                 elif not uuids:
-                    response = JSONResponse({
+                    from oneirodex.utils.api_contract import api_ok_payload
+
+                    response = JSONResponse(api_ok_payload({
                         'ok': True, 'updated': [], 'skipped': [], 'errors': [],
                         'limit': BATCH_FAVORITE_MAX, 'favorite': body.favorite,
                         'requested': 0,
-                    })
+                    }))
                 else:
                     try:
                         games, already = data.state(auth.user, uuids)

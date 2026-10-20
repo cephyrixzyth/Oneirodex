@@ -3406,6 +3406,9 @@ def test_native_batch_favorite_and_status_empty_actions_are_flask_context_free(m
 
     assert favorite.status_code == status.status_code == 200
     assert favorite.json()['requested'] == status.json()['requested'] == 0
+    assert favorite.json()['success'] is True
+    assert favorite.json()['error'] is None
+    assert favorite.json()['error_code'] is None
 
 
 def test_native_batch_wishlist_rejects_child_and_invalid_action(monkeypatch):

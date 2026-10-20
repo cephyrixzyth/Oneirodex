@@ -19,6 +19,12 @@ Do **not** `--update` the ratchet to hide these. Do **not** wrap them to make th
 
 New routes still must use `api_ok` / `api_error`. Classic admin JS that needs a body `status` uses `body_status=` on `api_error`.
 
+The empty-input branch of `POST /api/games/batch/favorite` is the narrow
+exception: with no per-item results to report, it retains the established
+`api_ok` success fields (`success`, `error`, and `error_code`). Non-empty batch
+responses keep `ok` as the all-items-succeeded flag so partial outcomes remain
+visible to callers.
+
 ## The crash path is covered too
 
 `api_ok` / `api_error` only shape responses a route **chooses** to return. An
