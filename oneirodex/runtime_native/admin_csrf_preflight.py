@@ -205,9 +205,15 @@ def empty_admin_mutation_csrf_error(
     headers = {key.lower(): value for key, value in scope.get('headers', ())}
     authorization = headers.get(b'authorization', b'').lower()
     path_parts = path.strip('/').split('/')
+    method = str(scope.get('method') or '').upper()
+    bearer_admin_user_create = (
+        authorization.startswith(b'bearer ')
+        and method == 'PUT'
+        and path == '/admin/api/user/0'
+    )
     bearer_admin_user_mutation = (
         authorization.startswith(b'bearer ')
-        and str(scope.get('method') or '').upper() in {'PUT', 'DELETE'}
+        and method in {'PUT', 'DELETE'}
         and len(path_parts) == 4
         and path_parts[:3] == ['admin', 'api', 'user']
         and path_parts[3].isdigit()
@@ -215,7 +221,11 @@ def empty_admin_mutation_csrf_error(
     )
     if (
         authorization.startswith(b'bearer ')
-        and (path == '/admin/api/system_logs/clear' or bearer_admin_user_mutation)
+        and (
+            path == '/admin/api/system_logs/clear'
+            or bearer_admin_user_create
+            or bearer_admin_user_mutation
+        )
     ):
         # These routes authenticate the token and check its admin scope before
         # mutation. Let that authorization run instead of rejecting a
