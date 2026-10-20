@@ -195,7 +195,7 @@ def _rom_location(rom_path, cache_dir, real_game, game_is_dir):
 _CLIENT_GONE = (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
 
 
-def _install_native_api_error_handlers(native_app, config, logger) -> None:
+def _install_native_api_error_handlers(native_app, config, logger, *, routing_app=None) -> None:
     """Keep native API failures in the shared envelope without Flask context."""
     from fastapi import Request
     from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -229,7 +229,9 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         if status == 405:
             from oneirodex.runtime_native.response_compat import flask_http_exception_response
 
-            return flask_http_exception_response(config, request, status, route_app=native_app)
+            return flask_http_exception_response(
+                config, request, status, route_app=native_app, routing_app=routing_app,
+            )
         payload, _ = api_error_payload(
             safe_messages.get(status, 'Request failed'),
             code=http_error_code(status),
@@ -1456,6 +1458,7 @@ class LazyASGIApp:
                 self._native_read_api_app,
                 self._flask_app.config,
                 self._flask_app.logger,
+                routing_app=self._flask_app,
             )
             mount_trailers_routes(
                 self._native_read_api_app,

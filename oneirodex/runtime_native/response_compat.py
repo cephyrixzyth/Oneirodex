@@ -59,7 +59,9 @@ def flask_route_not_found_response(flask_app, request) -> Response:
     return flask_http_exception_response(flask_app, request, 404)
 
 
-def flask_http_exception_response(flask_app, request, status_code: int, *, route_app=None) -> Response:
+def flask_http_exception_response(
+    flask_app, request, status_code: int, *, route_app=None, routing_app=None,
+) -> Response:
     """Match Flask's configured HTTP exception response for a native path."""
     from werkzeug.exceptions import default_exceptions
 
@@ -69,7 +71,8 @@ def flask_http_exception_response(flask_app, request, status_code: int, *, route
     if error_type is None:
         raise ValueError(f'Unsupported HTTP error status: {status_code}')
     error = error_type(
-        valid_methods=_native_allowed_methods(request, route_app=route_app),
+        valid_methods=_legacy_allowed_methods(request, routing_app)
+        or _native_allowed_methods(request, route_app=route_app),
     ) if status_code == 405 else error_type()
     if wants_json_error(request):
         from starlette.responses import JSONResponse
@@ -106,6 +109,28 @@ def flask_http_exception_response(flask_app, request, status_code: int, *, route
     for key, value in security_header_values(config).items():
         response.headers.setdefault(key, value)
     return response
+
+
+def _legacy_allowed_methods(request, routing_app) -> list[str]:
+    """Use Flask's route map to retain its exact 405 Allow header."""
+    if routing_app is None:
+        return []
+    from werkzeug.exceptions import MethodNotAllowed
+
+    url_map = getattr(routing_app, 'url_map', None)
+    if url_map is None:
+        return []
+    adapter = url_map.bind(
+        str(getattr(getattr(request, 'url', None), 'netloc', '') or 'localhost'),
+        url_scheme=str(getattr(getattr(request, 'url', None), 'scheme', '') or 'http'),
+    )
+    try:
+        adapter.match(request.url.path, method=getattr(request, 'method', 'GET'))
+    except MethodNotAllowed as exc:
+        return list(exc.valid_methods or ())
+    except Exception:
+        return []
+    return []
 
 
 def _native_allowed_methods(request, *, route_app=None) -> list[str]:

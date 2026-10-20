@@ -155,6 +155,7 @@ def test_native_admin_method_misses_match_legacy_html_and_allowed_methods():
     )
     asgi._install_native_api_error_handlers(
         current_app, legacy_app.config, logging.getLogger('admin-method-parity-test'),
+        routing_app=legacy_app,
     )
 
     legacy_client = legacy_app.test_client()
