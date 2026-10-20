@@ -151,7 +151,10 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
             if match is Match.NONE:
                 continue
             methods.update(getattr(route, 'methods', ()) or ())
-            child_router = getattr(getattr(route, 'app', None), 'router', None)
+            child_router = (
+                getattr(route, 'original_router', None)
+                or getattr(getattr(route, 'app', None), 'router', None)
+            )
             if child_router is not None:
                 collect(getattr(child_router, 'routes', ()), {**scope, **child_scope})
 

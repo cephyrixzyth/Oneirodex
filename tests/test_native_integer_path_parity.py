@@ -4,7 +4,7 @@ import logging
 from contextlib import nullcontext
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, request
 from flask_login import LoginManager
@@ -141,18 +141,20 @@ def test_native_admin_method_misses_match_legacy_html_and_allowed_methods():
     )
 
     current_app = FastAPI()
-    current_app.add_api_route(
+    nested_router = APIRouter()
+    nested_router.add_api_route(
         '/admin/api/delete_image/{image_id:int}', lambda image_id: '',
         methods=['DELETE'],
     )
-    current_app.add_api_route(
+    nested_router.add_api_route(
         '/admin/api/user/{user_id:int}', lambda user_id: '',
         methods=['GET', 'DELETE'],
     )
-    current_app.add_api_route(
+    nested_router.add_api_route(
         '/admin/api/user/{user_id:int}', lambda user_id: '',
         methods=['PUT'],
     )
+    current_app.include_router(nested_router)
     asgi._install_native_api_error_handlers(
         current_app, legacy_app.config, logging.getLogger('admin-method-parity-test'),
         routing_app=legacy_app,
