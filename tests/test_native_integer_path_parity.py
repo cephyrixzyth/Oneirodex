@@ -121,6 +121,58 @@ def test_native_api_unmatched_route_uses_legacy_flask_not_found_message():
             assert current.content == legacy.get_data()
 
 
+def test_native_admin_method_misses_match_legacy_html_and_allowed_methods():
+    import asgi
+
+    legacy_app = Flask(__name__)
+    legacy_app.config.update(SECRET_KEY='admin-method-parity-secret', CSP_ENABLED=False)
+    _install_legacy_error_envelope(legacy_app)
+    legacy_app.add_url_rule(
+        '/admin/api/delete_image/<int:image_id>', 'delete_image',
+        lambda image_id: '', methods=['DELETE'],
+    )
+    legacy_app.add_url_rule(
+        '/admin/api/user/<int:user_id>', 'manage_user_get_delete',
+        lambda user_id: '', methods=['GET', 'DELETE'],
+    )
+    legacy_app.add_url_rule(
+        '/admin/api/user/<int:user_id>', 'manage_user_put',
+        lambda user_id: '', methods=['PUT'],
+    )
+
+    current_app = FastAPI()
+    current_app.add_api_route(
+        '/admin/api/delete_image/{image_id:int}', lambda image_id: '',
+        methods=['DELETE'],
+    )
+    current_app.add_api_route(
+        '/admin/api/user/{user_id:int}', lambda user_id: '',
+        methods=['GET', 'DELETE'],
+    )
+    current_app.add_api_route(
+        '/admin/api/user/{user_id:int}', lambda user_id: '',
+        methods=['PUT'],
+    )
+    asgi._install_native_api_error_handlers(
+        current_app, legacy_app.config, logging.getLogger('admin-method-parity-test'),
+    )
+
+    legacy_client = legacy_app.test_client()
+    current_client = TestClient(current_app)
+    for method, path in (
+        ('PUT', '/admin/api/delete_image/1'),
+        ('POST', '/admin/api/user/1'),
+    ):
+        legacy = legacy_client.open(path, method=method)
+        current = current_client.request(method, path)
+        assert current.status_code == legacy.status_code == 405
+        assert current.headers['content-type'] == legacy.headers['Content-Type']
+        assert current.content == legacy.get_data()
+        assert set(current.headers['allow'].split(', ')) == set(
+            legacy.headers['Allow'].split(', ')
+        )
+
+
 def test_integer_route_converter_misses_match_flask_for_social_chat_and_ownership():
     import asgi
 

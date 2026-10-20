@@ -68,10 +68,9 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
     error_type = default_exceptions.get(status_code)
     if error_type is None:
         raise ValueError(f'Unsupported HTTP error status: {status_code}')
-    error = (
-        error_type(valid_methods=['OPTIONS', 'GET', 'HEAD'])
-        if status_code == 405 else error_type()
-    )
+    error = error_type(
+        valid_methods=_native_allowed_methods(request),
+    ) if status_code == 405 else error_type()
     if wants_json_error(request):
         from starlette.responses import JSONResponse
 
@@ -107,3 +106,23 @@ def flask_http_exception_response(flask_app, request, status_code: int) -> Respo
     for key, value in security_header_values(config).items():
         response.headers.setdefault(key, value)
     return response
+
+
+def _native_allowed_methods(request) -> list[str]:
+    """Collect all FastAPI methods for the path, then apply Flask defaults."""
+    from starlette.routing import Match
+
+    app = getattr(request, 'app', None)
+    router = getattr(app, 'router', None)
+    methods = set()
+    path_scope = dict(request.scope)
+    path_scope['method'] = 'GET'
+    for route in getattr(router, 'routes', ()):
+        match, _child_scope = route.matches(path_scope)
+        if match is not Match.NONE:
+            methods.update(getattr(route, 'methods', ()) or ())
+    if 'GET' in methods:
+        methods.add('HEAD')
+    if methods:
+        methods.add('OPTIONS')
+    return sorted(methods)
