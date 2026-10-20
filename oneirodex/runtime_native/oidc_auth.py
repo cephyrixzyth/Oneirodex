@@ -7,11 +7,10 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
-
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+from .response_compat import flask_redirect_response
 
 _NONCE_KEY = 'oidc_nonce'
 
@@ -82,14 +81,14 @@ async def _start(request, app, data, find_user, find_token, commit_token_touch,
     with scope:
         auth = _auth(request, app, find_user, find_token, commit_token_touch, load_user_id, login_manager)
         if auth.user is not None:
-            return _finish(RedirectResponse('/discover', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/discover', status_code=302), app, auth, request)
         config = build_oidc_config(data.settings())
         if not config:
             _flash(auth, 'warning', 'Single sign-on is not enabled.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request)
         if not AUTHLIB_NATIVE_AVAILABLE:
             _flash(auth, 'error', 'SSO is configured but authlib is not installed. Contact an administrator.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request)
         try:
             client = (client_factory or _make_oidc_client)(config)
             verifier, challenge = generate_pkce_pair()
@@ -102,11 +101,11 @@ async def _start(request, app, data, find_user, find_token, commit_token_touch,
                 redirect_uri=config.redirect_uri, state=state,
                 code_challenge=challenge, code_challenge_method='S256', nonce=nonce,
             )
-            response = RedirectResponse(authorization['url'], status_code=302)
+            response = flask_redirect_response(authorization['url'], status_code=302)
         except Exception:
             app.logger.exception('OIDC authorization initialization failed')
             _flash(auth, 'error', 'SSO client failed to initialize.')
-            response = RedirectResponse('/login', status_code=302)
+            response = flask_redirect_response('/login', status_code=302)
         return _finish(response, app, auth, request, force_session=True)
 
 
@@ -124,18 +123,18 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
     with scope:
         auth = _auth(request, app, find_user, find_token, commit_token_touch, load_user_id, login_manager)
         if auth.user is not None:
-            return _finish(RedirectResponse('/discover', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/discover', status_code=302), app, auth, request)
         config = build_oidc_config(data.settings())
         if not config:
             _flash(auth, 'warning', 'Single sign-on is not enabled.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request)
         if not AUTHLIB_NATIVE_AVAILABLE:
             _flash(auth, 'error', 'SSO is configured but authlib is not installed.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request)
         idp_error = first_query_value(request.query_params, 'error')
         if idp_error:
             _flash(auth, 'error', format_oidc_idp_error(idp_error, first_query_value(request.query_params, 'error_description')))
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request)
 
         state = auth.session_data.pop(OIDC_SESSION_STATE_KEY, None)
         verifier = auth.session_data.pop(OIDC_SESSION_VERIFIER_KEY, None)
@@ -143,10 +142,10 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         callback_state = first_query_value(request.query_params, 'state')
         if not state or not callback_state or not secrets.compare_digest(str(state), str(callback_state)):
             _flash(auth, 'error', 'Invalid SSO state. Please try again.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request, force_session=True)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request, force_session=True)
         if not verifier or not nonce:
             _flash(auth, 'error', 'SSO session expired or was reused. Please start sign-in again.')
-            return _finish(RedirectResponse('/login', status_code=302), app, auth, request, force_session=True)
+            return _finish(flask_redirect_response('/login', status_code=302), app, auth, request, force_session=True)
 
         try:
             client = (client_factory or _make_oidc_client)(config)
@@ -202,13 +201,13 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         except ValueError as exc:
             data.rollback()
             _flash(auth, 'error', str(exc))
-            response = RedirectResponse('/login', status_code=302)
+            response = flask_redirect_response('/login', status_code=302)
             return _finish(response, app, auth, request, force_session=True)
         except Exception as exc:
             data.rollback()
             app.logger.exception('OIDC callback failed')
             _flash(auth, 'error', format_oidc_callback_error(exc))
-            response = RedirectResponse('/login', status_code=302)
+            response = flask_redirect_response('/login', status_code=302)
             return _finish(response, app, auth, request, force_session=True)
 
         auth.session_data['_user_id'] = str(user.get_id())
@@ -220,7 +219,7 @@ async def _callback(request, app, data, find_user, find_token, commit_token_touc
         )
         auth.session_data['_remember'] = 'set'
         data.log_login(user)
-        response = RedirectResponse(_safe_next(first_query_value(request.query_params, 'next')), status_code=302)
+        response = flask_redirect_response(_safe_next(first_query_value(request.query_params, 'next')), status_code=302)
         from oneirodex.runtime_native.auth_login import _write_remember_cookie
         _write_remember_cookie(response, auth.session_data, app.config)
         return _finish(response, app, auth, request, force_session=True)
@@ -278,6 +277,8 @@ def _finish(response, app, auth, request, *, force_session=False):
     from oneirodex.utils.security_headers import security_header_values
     for key, value in security_header_values(app.config).items():
         response.headers.setdefault(key, value)
+    if request.method == 'HEAD':
+        response.body = b''
     return response
 
 

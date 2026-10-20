@@ -138,6 +138,9 @@ def test_native_oidc_head_matches_get_redirect_headers_without_body(native_clien
     )
 
     assert head_response.status_code == get_response.status_code == 302
+    assert head_response.headers.get('content-type', '').split(';')[0] == 'text/html'
+    assert get_response.headers.get('content-type', '').split(';')[0] == 'text/html'
+    assert head_response.headers['content-length'] == str(len(get_response.content))
     if path == '/login/oidc':
         assert head_response.headers['location'].startswith('https://idp.example/authorize?state=')
         assert get_response.headers['location'].startswith('https://idp.example/authorize?state=')
