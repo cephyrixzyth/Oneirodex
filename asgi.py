@@ -4272,6 +4272,7 @@ class LazyASGIApp:
         mimetype: str,
         max_age: int | None,
         additional_headers: dict[str, str] | None = None,
+        security_headers: dict[str, str] | None = None,
     ):
         """Send a trusted static file with Werkzeug-compatible validators and ranges."""
         try:
@@ -4316,25 +4317,29 @@ class LazyASGIApp:
             await self._send_error(send, 404, 'Not Found')
             return
 
-        response.direct_passthrough = False
-        payload = response.get_data()
         response_headers = response.get_wsgi_headers(environ)
-        response_headers.extend(self._configured_security_headers().items())
-        response_headers.extend((additional_headers or {}).items())
+        for key, value in (security_headers or self._configured_security_headers()).items():
+            response_headers.set(key, value)
+        for key, value in (additional_headers or {}).items():
+            response_headers.set(key, value)
         headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
                    for key, value in response_headers]
         status_code = response.status_code
-        response.close()
         await send({
             'type': 'http.response.start',
             'status': status_code,
             'headers': headers,
         })
-        await send({
-            'type': 'http.response.body',
-            'body': b'' if scope.get('method') == 'HEAD' or status_code == 304 else payload,
-            'more_body': False,
-        })
+        try:
+            if scope.get('method') == 'HEAD' or status_code == 304:
+                await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
+                return
+            for chunk in response.response:
+                if chunk:
+                    await send({'type': 'http.response.body', 'body': chunk, 'more_body': True})
+            await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
+        finally:
+            response.close()
 
     async def _handle_service_worker(self, scope, send, path: str):
         """Serve origin-scoped PWA workers with the same no-cache policy."""
@@ -4666,44 +4671,24 @@ class LazyASGIApp:
         )
 
         # Static is served directly by ASGI, so Flask's after_request never
-        # sees it — these have to be stamped here instead.
-        # Baseline only, no CSP: webretro.html is a static document whose
-        # Emscripten cores would need 'unsafe-eval' anyway.
-        headers = [
-            (b"content-type", content_type.encode("ascii", "ignore")),
-            (b"content-length", str(size).encode()),
-            (b"cache-control", cache_control),
-            *baseline_static_headers(),
-        ]
-
-        await send({
-            "type": "http.response.start",
-            "status": 200,
-            "headers": headers,
-        })
-
-        if scope.get("method") == "HEAD":
-            await send({"type": "http.response.body", "body": b"", "more_body": False})
-            return
-
-        try:
-            async with aiofiles.open(candidate, "rb") as fh:
-                while True:
-                    chunk = await fh.read(65536)
-                    if not chunk:
-                        break
-                    await send({
-                        "type": "http.response.body",
-                        "body": chunk,
-                        "more_body": True,
-                    })
-            await send({"type": "http.response.body", "body": b"", "more_body": False})
-        except Exception as exc:
-            print(f"Error streaming static {path}: {exc}")
-            try:
-                await send({"type": "http.response.body", "body": b"", "more_body": False})
-            except Exception:
-                pass
+        # sees it. Preserve the established cache/security policy while using
+        # Werkzeug for ETag, conditional and byte-range behavior.
+        baseline = {
+            key.decode('ascii').title(): value.decode('latin-1')
+            for key, value in baseline_static_headers()
+        }
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype=content_type,
+            max_age=3600 if cache_control == b'public, max-age=3600' else None,
+            additional_headers={
+                **baseline,
+                'Cache-Control': cache_control.decode('ascii'),
+            },
+            security_headers=baseline,
+        )
 
     async def _handle_download(self, scope, receive, send):
         """Handle download routes with async file streaming"""

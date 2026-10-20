@@ -58,9 +58,19 @@ def _serve(tmp_path, path, user_id):
     return next(m['status'] for m in sent if m['type'] == 'http.response.start')
 
 
-def _serve_response(tmp_path, path, *, method='GET', accept='*/*'):
-    static = tmp_path / 'static-response'
+def _serve_response(
+    tmp_path, path, *, method='GET', accept='*/*', extra_headers=(), files=None,
+    static_root=None,
+):
+    static = static_root or tmp_path / 'static-response'
     static.mkdir(exist_ok=True)
+    for name, payload in (files or {}).items():
+        target = static / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        import os
+
+        os.utime(target, (1700000000, 1700000000))
     app = LazyASGIApp()
     app._ensure_flask = AsyncMock()
     app._static_root = static.resolve()
@@ -75,7 +85,8 @@ def _serve_response(tmp_path, path, *, method='GET', accept='*/*'):
 
     scope = {
         'type': 'http', 'method': method, 'path': path,
-        'headers': [(b'accept', accept.encode('ascii'))],
+        'headers': [(b'accept', accept.encode('ascii'))]
+        + [(key.lower().encode('ascii'), value.encode('latin-1')) for key, value in extra_headers],
     }
     asyncio.run(app._handle_static(scope, receive, send, path))
     start = next(message for message in sent if message['type'] == 'http.response.start')
@@ -86,9 +97,16 @@ def _serve_response(tmp_path, path, *, method='GET', accept='*/*'):
     return start['status'], dict(start['headers']), body
 
 
-def _legacy_static_client(tmp_path):
-    static = tmp_path / 'legacy-static'
+def _legacy_static_client(tmp_path, files=None, static_root=None):
+    static = static_root or tmp_path / 'legacy-static'
     static.mkdir(exist_ok=True)
+    for name, payload in (files or {}).items():
+        target = static / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        import os
+
+        os.utime(target, (1700000000, 1700000000))
     app = Flask('static-error-parity', static_folder=str(static), static_url_path='/static')
 
     @app.errorhandler(HTTPException)
@@ -132,6 +150,51 @@ def test_static_route_errors_match_legacy_flask(tmp_path, path, method, accept):
     else:
         assert body == legacy.get_data()
         assert int(headers[b'content-length']) == int(legacy.headers['Content-Length'])
+
+
+@pytest.mark.parametrize(('method', 'headers', 'status', 'expected_body'), [
+    ('GET', (), 200, b'0123456789abcdef'),
+    ('HEAD', (), 200, b''),
+    ('GET', (('If-None-Match', 'placeholder'),), 304, None),
+    ('GET', (('Range', 'bytes=3-6'),), 206, b'3456'),
+    ('GET', (('Range', 'bytes=99-104'),), 416, None),
+])
+def test_static_file_read_semantics_match_legacy_flask(
+    tmp_path, method, headers, status, expected_body,
+):
+    files = {'parity.txt': b'0123456789abcdef'}
+    static_root = tmp_path / 'shared-static'
+    legacy_client = _legacy_static_client(tmp_path, files=files, static_root=static_root)
+    base = legacy_client.get('/static/parity.txt')
+    request_headers = dict(headers)
+    current_etag = _serve_response(
+        tmp_path, '/static/parity.txt', files=files, static_root=static_root,
+    )[1][b'etag'].decode()
+    if request_headers.get('If-None-Match') == 'placeholder':
+        legacy_headers = {'If-None-Match': base.headers['ETag']}
+        current_headers = {'If-None-Match': current_etag}
+    else:
+        legacy_headers = request_headers
+        current_headers = request_headers
+    base.close()
+    legacy = legacy_client.open(
+        '/static/parity.txt', method=method, headers=legacy_headers,
+    )
+    actual_status, actual_headers, actual_body = _serve_response(
+        tmp_path, '/static/parity.txt', method=method,
+        extra_headers=tuple(current_headers.items()), static_root=static_root,
+    )
+    assert actual_status == legacy.status_code == status
+    assert actual_body == legacy.get_data()
+    if expected_body is not None:
+        assert actual_body == expected_body
+    if status == 416:
+        assert actual_headers.get(b'etag', b'').decode() == legacy.headers.get('ETag', '')
+    else:
+        assert actual_headers.get(b'etag', b'')
+    assert actual_headers.get(b'last-modified', b'').decode() == legacy.headers.get('Last-Modified', '')
+    assert actual_headers.get(b'content-range', b'').decode() == legacy.headers.get('Content-Range', '')
+    legacy.close()
 
 
 def test_private_files_are_never_served(tmp_path, monkeypatch):
