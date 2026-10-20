@@ -8872,7 +8872,12 @@ def test_lazy_asgi_public_demo_keeps_disabled_and_missing_user_responses(monkeyp
     _flask_app, disabled_runtime = _runtime(monkeypatch)
     disabled = _run(disabled_runtime, '/demo')
     assert disabled.status_code == 404
+    assert disabled.headers['content-type'] == 'text/html; charset=utf-8'
+    assert disabled.text.startswith('<!doctype html>')
     assert disabled.headers['cache-control'] == 'no-store'
+    disabled_head = _run(disabled_runtime, '/demo', method='HEAD')
+    assert disabled_head.status_code == 404 and disabled_head.content == b''
+    assert disabled_head.headers['content-type'] == disabled.headers['content-type']
 
     monkeypatch.setenv('ONEIRODEX_PUBLIC_DEMO', 'yes')
     _flask_app, missing_runtime = _runtime(monkeypatch)
@@ -8881,6 +8886,8 @@ def test_lazy_asgi_public_demo_keeps_disabled_and_missing_user_responses(monkeyp
     )
     missing = _run(missing_runtime, '/demo')
     assert missing.status_code == 503
+    assert missing.headers['content-type'] == 'text/html; charset=utf-8'
+    assert missing.text.startswith('<!doctype html>')
     assert missing.headers['cache-control'] == 'no-store'
 
 
