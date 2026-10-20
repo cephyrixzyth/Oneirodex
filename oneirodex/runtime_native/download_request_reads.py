@@ -150,27 +150,27 @@ def create_download_request_read_router(
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
+            auth = request_auth_context(
+                request, flask_app.config, find_user=find_user, find_token=find_token,
+                commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                login_manager=login_manager,
+            )
             if is_delete:
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
 
-                cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
-                session = load_session_cookie(
-                    request.cookies.get(cookie_name), flask_app.config.get('SECRET_KEY'),
-                    max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
-                    fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
-                )
-                csrf_response = csrf_error_response(request, session, flask_app.config)
+                if auth.source != 'bearer':
+                    cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
+                    session = load_session_cookie(
+                        request.cookies.get(cookie_name), flask_app.config.get('SECRET_KEY'),
+                        max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
+                        fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
+                    )
+                    csrf_response = csrf_error_response(request, session, flask_app.config)
             if csrf_response is not None:
                 response = csrf_response
                 auth = None
-            else:
-                auth = request_auth_context(
-                    request, flask_app.config, find_user=find_user, find_token=find_token,
-                    commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                    login_manager=login_manager,
-                )
             from oneirodex.utils.role_catalog import normalize_role
             from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
 
