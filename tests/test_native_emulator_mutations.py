@@ -19,6 +19,7 @@ class FakeData:
         self.game_row = SimpleNamespace(uuid='game-1')
         self.surface = 'retroarch'
         self.allowed = True
+        self.fail_pc_cheat_delete = False
         self.calls = []
         self.saves = []
 
@@ -85,6 +86,8 @@ class FakeData:
 
     def delete_pc_cheat(self, game_uuid, cheat_id):
         self.calls.append(('delete_pc_cheat', game_uuid, cheat_id))
+        if self.fail_pc_cheat_delete:
+            raise RuntimeError('injected delete failure')
         return cheat_id == 42
 
     def bios_overview(self, flask_app):
@@ -238,6 +241,22 @@ def test_child_cannot_write_cheats_and_pc_cheat_librarian_rules(native):
     assert created.status_code == 201
     saved = next(call[1] for call in data.calls if call[0] == 'create_pc_cheat')
     assert saved['label'] == 'helpful note' and saved['notes'] == 'details'
+
+
+def test_pc_cheat_delete_keeps_legacy_denial_and_database_error_messages(native):
+    app, api, data, user = native
+    cookie, csrf = _cookie(app, csrf=True)
+    data.surface = 'pc_wand'
+
+    denied = _request(api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf)
+    assert denied.status_code == 403
+    assert denied.json()['error'] == 'Librarian or admin required'
+
+    user.role = 'admin'
+    data.fail_pc_cheat_delete = True
+    failed = _request(api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf)
+    assert failed.status_code == 500
+    assert failed.json()['error'] == 'Something went wrong on our end. The error has been logged.'
 
 
 def test_bios_admin_reads_scan_install_and_upload_use_fake_storage(native):

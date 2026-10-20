@@ -206,13 +206,17 @@ def create_emulator_mutations_router(
                     needed = 'write:library' if request.method in {'POST', 'DELETE'} else 'read:library'
                     scope_ok = auth.has_scope(needed)
                 if not scope_ok:
-                    response = _error(403, 'forbidden', 'This token does not have the required library scope')
+                    message = (
+                        'This token does not have the required library scope'
+                        if auth.token is not None else 'Librarian or admin required'
+                    )
+                    response = _error(403, 'forbidden', message)
                 else:
                     try:
                         response = await _dispatch(data, auth, request, game_uuid, operation, filename, flask_app)
                     except Exception:
                         flask_app.logger.exception('Emulator API request failed')
-                        response = _error(500, 'internal', 'An error occurred while processing your request')
+                        response = _error(500, 'internal', 'Something went wrong on our end. The error has been logged.')
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             return _finish(response, flask_app, request)
