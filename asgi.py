@@ -21,6 +21,7 @@ from oneirodex.runtime_native import (
 )
 
 import asyncio
+import io
 import json
 import mimetypes
 import os
@@ -32,7 +33,8 @@ from pathlib import Path
 from importlib import import_module
 
 import aiofiles
-from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestedRangeNotSatisfiable
+from werkzeug.utils import secure_filename, send_file as werkzeug_send_file
 
 from sqlalchemy import select
 
@@ -4292,7 +4294,7 @@ class LazyASGIApp:
         })
 
     async def _handle_favicon(self, scope, send):
-        """Serve the browser fallback icon with its existing short cache TTL."""
+        """Serve the browser icon with Werkzeug's conditional and range semantics."""
         root = self._static_root or (
             Path(__file__).resolve().parent / 'oneirodex' / 'static'
         )
@@ -4301,23 +4303,62 @@ class LazyASGIApp:
             await self._send_error(send, 404, 'Not Found')
             return
         try:
-            payload = await asyncio.to_thread(candidate.read_bytes)
+            headers_in = {
+                key.decode('latin-1').upper().replace('-', '_'): value.decode('latin-1')
+                for key, value in scope.get('headers', ())
+            }
+            environ = {
+                'REQUEST_METHOD': scope.get('method', 'GET'),
+                'SCRIPT_NAME': '',
+                'PATH_INFO': '/favicon.ico',
+                'QUERY_STRING': '',
+                'SERVER_NAME': 'localhost',
+                'SERVER_PORT': '80',
+                'SERVER_PROTOCOL': 'HTTP/1.1',
+                'wsgi.version': (1, 0),
+                'wsgi.url_scheme': scope.get('scheme', 'http'),
+                'wsgi.input': io.BytesIO(),
+                'wsgi.errors': io.StringIO(),
+                'wsgi.multithread': True,
+                'wsgi.multiprocess': False,
+                'wsgi.run_once': False,
+            }
+            for key, value in headers_in.items():
+                if key == 'CONTENT_TYPE':
+                    environ['CONTENT_TYPE'] = value
+                elif key == 'CONTENT_LENGTH':
+                    environ['CONTENT_LENGTH'] = value
+                else:
+                    environ[f'HTTP_{key}'] = value
+
+            response = await asyncio.to_thread(
+                werkzeug_send_file,
+                candidate,
+                environ,
+                mimetype='image/vnd.microsoft.icon',
+                max_age=3600,
+            )
+        except RequestedRangeNotSatisfiable as exc:
+            response = exc.get_response(environ)
         except OSError:
             await self._send_error(send, 404, 'Not Found')
             return
-
-        header_values = {
-            'Content-Type': 'image/vnd.microsoft.icon',
-            'Content-Length': str(len(payload)),
-            'Cache-Control': 'public, max-age=3600',
-            **self._configured_security_headers(),
-        }
+        response.direct_passthrough = False
+        payload = response.get_data()
+        response_headers = response.get_wsgi_headers(environ)
+        response_headers.extend(self._configured_security_headers().items())
         headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
-                   for key, value in header_values.items()]
-        await send({'type': 'http.response.start', 'status': 200, 'headers': headers})
+                   for key, value in response_headers]
+        status_code = response.status_code
+        response.close()
+        await send({
+            'type': 'http.response.start',
+            'status': status_code,
+            'headers': headers,
+        })
         await send({
             'type': 'http.response.body',
-            'body': b'' if scope.get('method') == 'HEAD' else payload,
+            'body': b'' if scope.get('method') == 'HEAD' or status_code == 304 else payload,
             'more_body': False,
         })
 

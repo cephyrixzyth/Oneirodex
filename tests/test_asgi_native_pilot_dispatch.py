@@ -1329,24 +1329,56 @@ def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
     assert response.text == '/* shipped worker */'
 
 
-def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch):
+def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     def forbidden_create_app():
         raise AssertionError('favicon must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    static_root = tmp_path / 'static'
+    icon_path = static_root / 'icons' / 'favicon.ico'
+    icon_path.parent.mkdir(parents=True)
+    icon_payload = bytes(range(256)) * 8
+    icon_path.write_bytes(icon_payload)
+    runtime = asgi.LazyASGIApp()
+    runtime._static_root = static_root
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
-            return await client.get('/favicon.ico')
+            full = await client.get('/favicon.ico')
+            head = await client.head('/favicon.ico')
+            not_modified_etag = await client.get('/favicon.ico', headers={
+                'If-None-Match': full.headers['etag'],
+            })
+            not_modified_date = await client.get('/favicon.ico', headers={
+                'If-Modified-Since': full.headers['last-modified'],
+            })
+            ranged = await client.get('/favicon.ico', headers={'Range': 'bytes=10-109'})
+            unsatisfiable = await client.get('/favicon.ico', headers={
+                'Range': f'bytes={len(icon_payload)}-',
+            })
+        return full, head, not_modified_etag, not_modified_date, ranged, unsatisfiable
 
-    response = asyncio.run(run())
-    assert response.status_code == 200
-    assert response.headers['content-type'] == 'image/vnd.microsoft.icon'
-    assert response.headers['cache-control'] == 'public, max-age=3600'
-    assert response.content
+    full, head, not_modified_etag, not_modified_date, ranged, unsatisfiable = asyncio.run(run())
+    assert full.status_code == 200
+    assert full.headers['content-type'] == 'image/vnd.microsoft.icon'
+    assert full.headers['cache-control'] == 'public, max-age=3600'
+    assert full.content == icon_payload
+    assert full.headers['etag']
+    assert full.headers['last-modified']
+    assert full.headers['accept-ranges'] == 'bytes'
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(icon_payload))
+    assert not_modified_etag.status_code == not_modified_date.status_code == 304
+    assert not_modified_etag.content == not_modified_date.content == b''
+    assert ranged.status_code == 206
+    assert ranged.headers['content-range'] == f'bytes 10-109/{len(icon_payload)}'
+    assert ranged.content == icon_payload[10:110]
+    assert unsatisfiable.status_code == 416
+    assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
 
 
 def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch, tmp_path):
