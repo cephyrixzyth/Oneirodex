@@ -47,6 +47,42 @@ def test_image_delete_rejects_path_outside_image_root(tmp_path, monkeypatch):
     assert session.committed is False
 
 
+def test_image_delete_restores_file_when_database_commit_fails(tmp_path, monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    image_path = image_root / 'cover.png'
+    image_path.write_bytes(b'keep image if the row delete fails')
+    image = SimpleNamespace(is_downloaded=True, url='cover.png')
+
+    class Session:
+        delete_calls = 0
+        commit_calls = 0
+
+        def get(self, _model, image_id):
+            return image if image_id == 92 else None
+
+        def delete(self, _image):
+            self.delete_calls += 1
+
+        def commit(self):
+            self.commit_calls += 1
+            raise RuntimeError('synthetic database failure')
+
+    session = Session()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+
+    with pytest.raises(RuntimeError, match='synthetic database failure'):
+        ImageMutationsData().delete({'IMAGE_SAVE_PATH': str(image_root)}, 92)
+
+    assert image_path.read_bytes() == b'keep image if the row delete fails'
+    assert list(image_root.glob('.cover.png.delete-*')) == []
+    assert session.delete_calls == 1
+    assert session.commit_calls == 1
+
+
 class FakeImageMutations:
     def __init__(self):
         self.deleted = []

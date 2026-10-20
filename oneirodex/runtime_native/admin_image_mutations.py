@@ -1,10 +1,12 @@
 """Native FastAPI admin image queue mutation routes."""
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
@@ -27,17 +29,44 @@ class ImageMutationsData:
         image = db.session.get(Image, image_id)
         if image is None:
             return False
+        staged_path = None
+        image_path = None
         if image.is_downloaded and image.url:
             root = config.get('IMAGE_SAVE_PATH')
             if root:
                 base = Path(root).resolve()
-                path = (base / image.url).resolve()
-                if path == base or base not in path.parents:
+                image_path = (base / image.url).resolve()
+                if image_path == base or base not in image_path.parents:
                     raise ValueError('Stored image path is invalid')
-                if path.exists():
-                    path.unlink()
-        db.session.delete(image)
-        db.session.commit()
+                if image_path.exists():
+                    if not image_path.is_file():
+                        image_path.unlink()
+                    staged_path = image_path.with_name(
+                        f'.{image_path.name}.delete-{uuid4().hex}'
+                    )
+                    os.replace(image_path, staged_path)
+        try:
+            db.session.delete(image)
+            db.session.commit()
+        except Exception:
+            if staged_path is not None and staged_path.exists():
+                try:
+                    os.replace(staged_path, image_path)
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not restore image after a failed database delete'
+                    )
+            raise
+        if staged_path is not None:
+            try:
+                staged_path.unlink()
+            except OSError:
+                # The database delete committed; report success and leave the
+                # unreferenced file for operator cleanup rather than imply the
+                # row is still present.
+                logging.getLogger(__name__).warning(
+                    'Image delete committed but staged file cleanup failed'
+                )
         return True
 
     def rollback(self):
