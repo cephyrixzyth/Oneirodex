@@ -400,12 +400,21 @@ async def _delete_image(request, app, data):
     from oneirodex.schemas.admin_game_images import DeleteGameImageBody
     from oneirodex.utils.validation import format_validation_errors
 
-    try:
-        body = await request.json()
-    except Exception:
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if is_json:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+    else:
         body = {}
     try:
-        parsed = DeleteGameImageBody.model_validate(body if isinstance(body, dict) else {})
+        parsed = DeleteGameImageBody.model_validate({} if body is None else body)
     except ValidationError as exc:
         from oneirodex.utils.api_contract import api_error_payload
 

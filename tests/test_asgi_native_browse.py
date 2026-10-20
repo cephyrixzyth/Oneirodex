@@ -7456,6 +7456,61 @@ def test_lazy_asgi_dispatches_game_image_delete_natively(monkeypatch):
     assert calls == [(5, True)]
 
 
+def test_legacy_game_image_delete_rejects_json_with_non_json_content_type(monkeypatch):
+    calls = []
+
+    class FakeGameImageDeleteData:
+        def scan_running(self):
+            return False
+
+        def delete_image_record_and_file(self, image_id, *, config):
+            calls.append(image_id)
+            return SimpleNamespace(id=image_id)
+
+    monkeypatch.setattr(
+        native_game_delete_mutations, 'GameDeleteMutationData', FakeGameImageDeleteData,
+    )
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run(
+        runtime, '/delete_image', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'text/plain'},
+        json_body={'image_id': 5},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {'image_id': 'Field required'}
+    assert calls == []
+
+
+def test_legacy_game_image_delete_preserves_non_object_json_validation(monkeypatch):
+    calls = []
+
+    class FakeGameImageDeleteData:
+        def scan_running(self):
+            return False
+
+        def delete_image_record_and_file(self, image_id, *, config):
+            calls.append(image_id)
+            return SimpleNamespace(id=image_id)
+
+    monkeypatch.setattr(
+        native_game_delete_mutations, 'GameDeleteMutationData', FakeGameImageDeleteData,
+    )
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run(
+        runtime, '/delete_image', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body=[5],
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of DeleteGameImageBody',
+    }
+    assert calls == []
+
+
 def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
     calls = []
     library = SimpleNamespace(uuid='lib-1', name='Original')
