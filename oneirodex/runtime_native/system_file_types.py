@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
@@ -105,8 +105,15 @@ def create_system_file_types_router(
     router = APIRouter()
     data = data_access or SystemFileTypeData()
 
-    @router.api_route('/api/file_types/{type_category}', methods=['GET', 'POST', 'PUT', 'DELETE', 'HEAD'])
+    @router.api_route('/api/file_types/{type_category}', methods=['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'])
     async def manage_file_types(type_category: str, request: Request):
+        if request.method == 'OPTIONS':
+            return Response(
+                content=b'',
+                status_code=200,
+                headers={'Allow': 'GET, DELETE, POST, OPTIONS, HEAD, PUT'},
+                media_type='text/html',
+            )
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth = request_auth_context(
