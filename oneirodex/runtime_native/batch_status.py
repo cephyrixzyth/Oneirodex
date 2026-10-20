@@ -188,8 +188,8 @@ def create_batch_status_router(
                                     else:
                                         existing[uuid] = status_out
                                     updated.append({'uuid': uuid, 'status': status_out})
-                                except Exception as exc:  # noqa: BLE001 — item-level outcome
-                                    errors.append({'uuid': uuid, 'error': str(exc)})
+                                except Exception:  # noqa: BLE001 — keep database details private
+                                    errors.append({'uuid': uuid, 'error': 'Could not update play status'})
                             try:
                                 data.commit()
                             except Exception:  # noqa: BLE001 — do not expose DB exception text

@@ -143,8 +143,8 @@ def create_batch_favorite_router(
                                 else:
                                     already.discard(uuid)
                                 updated.append({'uuid': uuid, 'favorite': body.favorite})
-                            except Exception as exc:  # noqa: BLE001 — report item-level failure
-                                errors.append({'uuid': uuid, 'error': str(exc)})
+                            except Exception:  # noqa: BLE001 — keep database details private
+                                errors.append({'uuid': uuid, 'error': 'Could not update favorite'})
                         try:
                             data.commit()
                         except Exception:  # noqa: BLE001 — keep exception details private

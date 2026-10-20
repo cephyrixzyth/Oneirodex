@@ -201,8 +201,8 @@ def create_batch_wishlist_router(
                                     'uuid': uuid, 'request_id': row.id,
                                     'title': row.title, 'status': row.status,
                                 })
-                            except Exception as exc:  # noqa: BLE001 — item-level result parity
-                                errors.append({'uuid': uuid, 'error': str(exc)})
+                            except Exception:  # noqa: BLE001 — keep database details private
+                                errors.append({'uuid': uuid, 'error': 'Could not create request'})
                         try:
                             data.commit()
                         except Exception:  # noqa: BLE001 — do not expose DB exceptions

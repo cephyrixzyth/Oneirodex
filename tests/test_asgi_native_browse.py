@@ -458,6 +458,7 @@ class FakeBatchFavoriteData:
         self.calls = []
         self.forbidden = {'blocked'}
         self.commit_fails = False
+        self.update_error = None
 
     def state(self, user, uuids):
         self.calls.append(('state', user.id, list(uuids)))
@@ -472,6 +473,8 @@ class FakeBatchFavoriteData:
 
     def set_favorite(self, user, game, favorite):
         self.calls.append(('set', user.id, game.uuid, favorite))
+        if self.update_error:
+            raise RuntimeError(self.update_error)
 
     def commit(self):
         self.calls.append(('commit',))
@@ -486,6 +489,7 @@ class FakeBatchStatusData:
     def __init__(self):
         self.calls = []
         self.forbidden = {'blocked'}
+        self.write_error = None
 
     def state(self, user, uuids):
         self.calls.append(('state', user.id, list(uuids)))
@@ -499,6 +503,8 @@ class FakeBatchStatusData:
 
     def write(self, user_id, uuid, *, current, status, now):
         self.calls.append(('write', user_id, uuid, current, status, now.tzinfo is not None))
+        if self.write_error:
+            raise RuntimeError(self.write_error)
 
     def status_info(self, status):
         return {'status': status}
@@ -516,6 +522,7 @@ class FakeBatchWishlistData:
         self.pending = [SimpleNamespace(
             id=11, title='Already pending', linked_game_uuid='pending', status='pending',
         )]
+        self.create_error = None
 
     def can_request_games(self, user):
         return user.role != 'child'
@@ -533,6 +540,8 @@ class FakeBatchWishlistData:
 
     def create(self, user_id, title, uuid):
         self.calls.append(('create', user_id, title, uuid))
+        if self.create_error:
+            raise RuntimeError(self.create_error)
         return SimpleNamespace(id=22, title=title[:255], status='pending')
 
     def delete(self, row):
@@ -3274,6 +3283,45 @@ def test_native_batch_favorite_validation_caps_and_commit_error_are_safe(monkeyp
     assert failed.json()['error'] == 'Could not save the change'
     assert 'private db info' not in failed.text
     assert runtime._fake_batch_favorite.calls[-1] == ('rollback',)
+
+
+def test_native_batch_item_errors_do_not_expose_database_details(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    runtime._fake_batch_favorite.update_error = 'private db info'
+    runtime._fake_batch_status.write_error = 'private db info'
+    runtime._fake_batch_wishlist.create_error = 'private db info'
+
+    async def send(path, payload):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, json=payload, headers={'X-CSRFToken': csrf},
+            )
+
+    favorite = asyncio.run(send(
+        '/api/games/batch/favorite', {'uuids': ['game-a'], 'favorite': True}
+    ))
+    status = asyncio.run(send(
+        '/api/games/batch/status', {'uuids': ['game-a'], 'status': 'completed'}
+    ))
+    wishlist = asyncio.run(send(
+        '/api/games/batch/wishlist', {'uuids': ['game-a']}
+    ))
+
+    assert favorite.status_code == status.status_code == wishlist.status_code == 200
+    assert favorite.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not update favorite'},
+    ]
+    assert status.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not update play status'},
+    ]
+    assert wishlist.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not create request'},
+    ]
+    assert all('private db info' not in response.text for response in (favorite, status, wishlist))
 
 
 def test_native_batch_status_keeps_acl_partial_success_and_empty_clear(monkeypatch):
