@@ -6,9 +6,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import PlainTextResponse
-
-from .response_compat import flask_redirect_response
+from .response_compat import flask_http_error_response, flask_redirect_response
 
 
 class PublicDemoData:
@@ -37,16 +35,16 @@ def create_public_demo_router(
         if os.getenv('ONEIRODEX_PUBLIC_DEMO', '').strip().lower() not in {
             '1', 'true', 'yes', 'on',
         }:
-            return _secure_error(flask_app, 'Not found.', 404)
+            return _secure_error(flask_app, 404, head=request.method == 'HEAD')
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             try:
                 demo_user = data.demo_user()
             except Exception:  # noqa: BLE001 — do not expose demo account lookup failures
-                return _secure_error(flask_app, 'Demo sign-in is unavailable.', 503)
+                return _secure_error(flask_app, 503, head=request.method == 'HEAD')
         if demo_user is None:
-            return _secure_error(flask_app, 'Demo sign-in is unavailable.', 503)
+            return _secure_error(flask_app, 503, head=request.method == 'HEAD')
 
         from oneirodex.runtime_native.auth_login import _session_data
         from oneirodex.runtime_native.auth_resolver import session_identifier
@@ -80,10 +78,10 @@ def mount_public_demo_routes(app: FastAPI, flask_app, **kwargs):
     return app
 
 
-def _secure_error(flask_app, message: str, status: int):
+def _secure_error(flask_app, status: int, *, head: bool = False):
     from oneirodex.utils.security_headers import security_header_values
 
-    response = PlainTextResponse(message, status_code=status)
+    response = flask_http_error_response(status, head=head)
     response.headers.setdefault('Cache-Control', 'no-store')
     for key, value in security_header_values(flask_app.config).items():
         response.headers.setdefault(key, value)
