@@ -46,6 +46,7 @@ class FakePasswordData:
         self.commit_error = commit_error
         self.commits = 0
         self.rollbacks = 0
+        self.token_touches = []
 
     def get_user(self, user_id):
         return self.user if user_id == self.user.id else None
@@ -59,14 +60,28 @@ class FakePasswordData:
         self.rollbacks += 1
 
 
-def make_client(*, data=None):
+class FakeToken:
+    def __init__(self):
+        self.user_id = 167
+        self.token_prefix = 'deadbeef'
+        self.token_hash = hashlib.sha256(b'token-secret').hexdigest()
+        self.scopes = ['read:library']
+        self.revoked_at = None
+        self.expires_at = None
+        self.last_used_at = None
+
+    def is_expired(self, now=None):
+        return False
+
+
+def make_client(*, data=None, token=None, csrf_enabled=True):
     user = data.user if data else FakeUser()
     data = data or FakePasswordData(user)
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY=SECRET,
         TESTING=True,
-        WTF_CSRF_ENABLED=True,
+        WTF_CSRF_ENABLED=csrf_enabled,
         SESSION_COOKIE_NAME='session',
         REMEMBER_COOKIE_NAME='remember_token',
         REMEMBER_COOKIE_DURATION=timedelta(days=365),
@@ -82,8 +97,8 @@ def make_client(*, data=None):
     router = create_account_password_router(
         flask_app,
         find_user=lambda user_id: user if user_id == 167 else None,
-        find_token=lambda _prefix: None,
-        commit_token_touch=lambda _token: None,
+        find_token=lambda prefix: token if token and prefix == token.token_prefix else None,
+        commit_token_touch=data.token_touches.append,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '167' else None,
         login_manager=login_manager,
         data_access=data,
@@ -194,6 +209,47 @@ def test_invalid_csrf_rejects_password_change_before_adapter():
     assert data.commits == 0
 
 
+def test_invalid_csrf_does_not_touch_bearer_token_usage():
+    token = FakeToken()
+    client, user, data = make_client(token=token)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'OldPassword1!',
+            'new_password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        headers={'Authorization': 'Bearer gt_deadbeef_token-secret'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'The CSRF token is missing.'
+    assert token.last_used_at is None
+    assert data.token_touches == []
+    assert user.password == 'OldPassword1!'
+
+
+def test_csrf_disabled_password_request_still_touches_authenticated_bearer():
+    token = FakeToken()
+    client, _user, data = make_client(token=token, csrf_enabled=False)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'wrong',
+            'new_password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        headers={'Authorization': 'Bearer gt_deadbeef_token-secret'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Current password is incorrect.'
+    assert token.last_used_at is not None
+    assert data.token_touches == [token]
+
+
 def test_commit_failure_rolls_back_and_does_not_leak_exception():
     user = FakeUser()
     data = FakePasswordData(user, commit_error=RuntimeError('database secret'))
@@ -238,6 +294,26 @@ def test_legacy_password_form_uses_hidden_csrf_and_refreshes_session():
     assert user.password == 'NewPassword2!'
     assert data.commits == 1
     assert response.cookies.get('remember_token') == encode_cookie(user.get_id(), key=SECRET)
+
+
+def test_legacy_password_form_keeps_html_csrf_failure_contract():
+    client, user, data = make_client()
+
+    response = client.post(
+        '/settings_password',
+        data={
+            'current_password': 'OldPassword1!',
+            'password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
+    assert b'The CSRF token is missing.' in response.content
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
 
 
 def test_legacy_password_form_requires_csrf():

@@ -113,6 +113,7 @@ def resolve_authentication(
     remember_cookie_name: str = "remember_token",
     authorization_header_name: str = "Authorization",
     allow_legacy_id: bool = False,
+    touch_bearer: bool = True,
 ) -> AuthResolution:
     """Resolve session, remember cookie, then Bearer auth in Flask-Login order.
 
@@ -168,7 +169,9 @@ def resolve_authentication(
     if not authorization.lower().startswith("bearer "):
         return AuthResolution(None)
     raw = authorization.split(" ", 1)[1].strip()
-    user, token = _verify_bearer(raw, find_user, find_token, commit_token_touch, now=now)
+    user, token = _verify_bearer(
+        raw, find_user, find_token, commit_token_touch, now=now, touch=touch_bearer,
+    )
     if user is None:
         return AuthResolution(None)
     return AuthResolution(user, token=token, source="bearer")
@@ -200,6 +203,7 @@ def _verify_bearer(
     commit_token_touch: Callable[[Any], None],
     *,
     now: datetime | None,
+    touch: bool = True,
 ) -> tuple[Any | None, Any | None]:
     if not raw or not raw.startswith("gt_"):
         return None, None
@@ -229,8 +233,9 @@ def _verify_bearer(
     # rejected there. Session and remember resolution use User.is_active parity.
     if user is None or not getattr(user, "state", False):
         return None, None
-    token.last_used_at = now or datetime.now(timezone.utc)
-    commit_token_touch(token)
+    if touch:
+        token.last_used_at = now or datetime.now(timezone.utc)
+        commit_token_touch(token)
     return user, token
 
 

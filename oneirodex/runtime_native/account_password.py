@@ -11,10 +11,10 @@ from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response
+from .csrf_compat import csrf_error_response, csrf_html_error_response
 from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, touch_resolved_bearer
 
 _logger = logging.getLogger(__name__)
 
@@ -65,8 +65,11 @@ def create_account_password_router(
                 commit_token_touch=commit_token_touch,
                 load_user_id=load_user_id,
                 login_manager=login_manager,
+                touch_bearer=False,
             )
             response = csrf_error_response(request, auth.session_data, flask_app.config)
+            if response is None:
+                touch_resolved_bearer(auth, commit_token_touch)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
@@ -137,7 +140,7 @@ def create_account_password_router(
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                login_manager=login_manager,
+                login_manager=login_manager, touch_bearer=False,
             )
             form, body_error = await _legacy_password_form(request)
             response = body_error
@@ -146,6 +149,10 @@ def create_account_password_router(
                     request, auth.session_data, flask_app.config,
                     token=first_form_value(form, 'csrf_token'),
                 )
+                if response is not None:
+                    response = csrf_html_error_response(response)
+            if response is None:
+                touch_resolved_bearer(auth, commit_token_touch)
             remember_cookie = False
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)

@@ -84,6 +84,7 @@ def request_auth_context(
     login_manager: Any | None = None,
     now: datetime | None = None,
     allow_bearer: bool = True,
+    touch_bearer: bool = True,
 ) -> RequestAuthContext:
     """Resolve a request using Flask's session, remember, and Bearer rules.
 
@@ -138,6 +139,7 @@ def request_auth_context(
         remember_cookie_name=remember_cookie_name,
         authorization_header_name=str(config.get("AUTH_HEADER_NAME") or "Authorization"),
         allow_legacy_id=bool(config.get("TESTING")),
+        touch_bearer=touch_bearer,
     )
     return RequestAuthContext(
         session_data=session_data,
@@ -147,6 +149,24 @@ def request_auth_context(
         remember_cookie_name=remember_cookie_name,
         session_refresh_each_request=bool(config.get("SESSION_REFRESH_EACH_REQUEST", True)),
     )
+
+
+def touch_resolved_bearer(
+    auth: RequestAuthContext,
+    commit_token_touch: Callable[[Any], None],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Persist a resolved bearer token's usage after request preflight passes.
+
+    Routes that validate CSRF after authentication can defer the token's
+    last-used write until the CSRF gate succeeds, matching Flask's before-
+    request ordering. Other callers retain the eager default.
+    """
+    if auth.source != "bearer" or auth.token is None:
+        return
+    auth.token.last_used_at = now or datetime.now(timezone.utc)
+    commit_token_touch(auth.token)
 
 
 def _mapping_attr(obj: Any, name: str) -> Mapping[str, str]:
