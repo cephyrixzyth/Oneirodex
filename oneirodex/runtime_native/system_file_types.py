@@ -158,7 +158,7 @@ def create_system_file_types_router(
 
 
 async def _handle_file_type_request(request, category, data):
-    method = request.method
+    method = 'GET' if request.method == 'HEAD' else request.method
     if method == 'GET':
         try:
             return JSONResponse(data.list(category))
