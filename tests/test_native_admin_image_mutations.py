@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -10,6 +11,40 @@ from starlette.requests import Request
 
 from oneirodex.runtime_native.admin_image_mutations import create_admin_image_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+
+
+def test_image_delete_rejects_path_outside_image_root(tmp_path, monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    outside_file = tmp_path / 'sentinel.png'
+    outside_file.write_bytes(b'keep this file')
+    image = SimpleNamespace(is_downloaded=True, url='../sentinel.png')
+
+    class Session:
+        deleted = False
+        committed = False
+
+        def get(self, _model, image_id):
+            return image if image_id == 91 else None
+
+        def delete(self, _image):
+            self.deleted = True
+
+        def commit(self):
+            self.committed = True
+
+    session = Session()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+
+    with pytest.raises(ValueError, match='Stored image path is invalid'):
+        ImageMutationsData().delete({'IMAGE_SAVE_PATH': str(image_root)}, 91)
+
+    assert outside_file.read_bytes() == b'keep this file'
+    assert session.deleted is False
+    assert session.committed is False
 
 
 class FakeImageMutations:
@@ -129,6 +164,21 @@ def test_download_and_batch_upload_use_authenticated_csrf_routes_and_fake_storag
     assert data.download_body == {'image_ids': [4]}
     assert upload.status_code == 200 and upload.json()['stored'] == 1
     assert data.uploads == (['g1_cover.png'], 'cover', 'g1')
+
+
+def test_batch_upload_ignores_text_fields_with_same_name_as_uploads():
+    client, data = _client()
+    response = client.post(
+        '/admin/api/images/batch_upload',
+        files=[
+            ('files', (None, 'not-an-upload')),
+            ('files', ('invalid.txt', b'not an image', 'text/plain')),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()['stored'] == 1
+    assert data.uploads == (['invalid.txt'], 'cover', '')
 
 
 def test_image_batch_upload_rejects_missing_csrf():
