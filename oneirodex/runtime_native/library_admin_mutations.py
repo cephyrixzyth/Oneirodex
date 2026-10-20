@@ -206,15 +206,15 @@ class LibraryAdminMutationData:
 
         return enqueue_library_refresh_jobs(queue)
 
-    def promote_refresh(self, app):
+    def promote_refresh(self, app, *, database_scope=None):
         from oneirodex.utils.scan_queue import promote_next_queued_scan
 
-        return promote_next_queued_scan(app)
+        return promote_next_queued_scan(app, database_scope=database_scope)
 
     def force_refresh(self, queue, app, *, database_scope=None):
         from threading import Thread
 
-        from oneirodex.utilities import scan_and_add_games
+        from oneirodex.utils.services.scan_orchestration import scan_and_add_games
         from contextlib import nullcontext
 
         def run_queue():
@@ -1008,7 +1008,7 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         busy = data.refresh_busy()
         result = data.enqueue_refresh(queue)
         if not busy:
-            promoted = data.promote_refresh(app)
+            promoted = data.promote_refresh(app, database_scope=database_scope)
             if promoted:
                 result['status'] = 'started'
                 result['job_id'] = promoted.id

@@ -80,7 +80,8 @@ class FakeLibraryAdminMutations:
         self.calls.append(('enqueue_refresh', queue))
         return {'status': 'queued', 'jobs': [{'job_id': 'refresh-job', 'position': 1}]}
 
-    def promote_refresh(self, _app):
+    def promote_refresh(self, _app, *, database_scope=None):
+        self.calls.append(('promote_refresh', database_scope))
         return SimpleNamespace(id='refresh-job')
 
     def force_refresh(self, queue, _app, *, database_scope=None):
@@ -398,6 +399,8 @@ def test_refresh_all_enqueues_and_promotes_fifo_job(native_client):
     assert body['job_id'] == 'refresh-job'
     assert body['jobs'][0]['status'] == 'started'
     assert body['jobs'][0]['position'] is None
+    promote_call = next(call for call in data.calls if call[0] == 'promote_refresh')
+    assert callable(promote_call[1])
     assert [call[0] for call in data.calls if call[0] in ('refresh_busy', 'enqueue_refresh')] == [
         'refresh_busy', 'enqueue_refresh',
     ]
@@ -418,7 +421,7 @@ def test_force_refresh_passes_native_database_scope_to_worker(native_client):
 def test_force_refresh_opens_native_scope_around_scan_worker(monkeypatch):
     from contextlib import contextmanager
     import threading
-    import oneirodex.utilities
+    import oneirodex.utils.services.scan_orchestration as scan_orchestration
 
     class NativeApp:
         config = {}
@@ -448,7 +451,7 @@ def test_force_refresh_opens_native_scope_around_scan_worker(monkeypatch):
 
     monkeypatch.setattr(threading, 'Thread', ImmediateThread)
     monkeypatch.setattr(
-        oneirodex.utilities, 'scan_and_add_games',
+        scan_orchestration, 'scan_and_add_games',
         lambda *args, **kwargs: scan_calls.append((args, kwargs, tuple(scope_events))),
     )
 
