@@ -203,6 +203,14 @@ def empty_admin_mutation_csrf_error(
         return None
 
     headers = {key.lower(): value for key, value in scope.get('headers', ())}
+    if (
+        path == '/admin/api/system_logs/clear'
+        and headers.get(b'authorization', b'').lower().startswith(b'bearer ')
+    ):
+        # This route validates the token and its admin scope before mutation.
+        # Let that authorization run instead of rejecting a non-cookie client
+        # at the browser-session CSRF gate.
+        return None
     content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
     content_length = headers.get(b'content-length')
     form_encoded = content_type in {

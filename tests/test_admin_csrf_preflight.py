@@ -53,12 +53,20 @@ def test_admin_csrf_preflight_is_scoped_by_method_path_and_config():
     assert empty_admin_mutation_csrf_error(
         _scope(path='/adminish/mutate'), {},
     ) is None
-    assert empty_admin_mutation_csrf_error(
-        _scope(method='GET'), {},
-    ) is None
+    assert empty_admin_mutation_csrf_error(_scope(method='GET'), {}) is None
     assert empty_admin_mutation_csrf_error(
         _scope(), {'WTF_CSRF_ENABLED': False},
     ) is None
+
+
+def test_system_log_clear_bearer_reaches_route_scope_check_only():
+    bearer = (b'authorization', b'Bearer synthetic-token')
+    assert empty_admin_mutation_csrf_error(
+        _scope(path='/admin/api/system_logs/clear', method='DELETE', headers=[bearer]), {},
+    ) is None
+    assert empty_admin_mutation_csrf_error(
+        _scope(path='/admin/api/users', method='DELETE', headers=[bearer]), {},
+    ) == 'The CSRF token is missing.'
 
 
 def test_empty_theme_font_path_miss_is_not_masked_by_csrf_preflight():
