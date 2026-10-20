@@ -143,7 +143,7 @@ def create_download_request_read_router(
 
     @router.api_route('/api/my_downloads', methods=['GET', 'HEAD'])
     @router.api_route('/api/admin/download-requests', methods=['GET', 'HEAD'])
-    @router.delete('/api/delete_download/{request_id}')
+    @router.delete('/api/delete_download/{request_id:int}')
     def download_requests(request: Request):
         is_delete = request.method == 'DELETE'
         is_admin_route = is_delete or request.url.path.endswith('/admin/download-requests')
@@ -199,6 +199,11 @@ def create_download_request_read_router(
                 try:
                     request_id = int(request.path_params['request_id'])
                     if request_id <= 0:
+                        from oneirodex.utils.event_logging import log_system_event
+                        log_system_event(
+                            f'Invalid request ID: {request_id}',
+                            event_type='download_api', event_level='warning',
+                        )
                         payload, status = api_error_payload('Invalid request ID', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     elif not data.delete(request_id):
@@ -209,6 +214,11 @@ def create_download_request_read_router(
                 except Exception:
                     from oneirodex.runtime_native.db_session import native_db as db
                     db.session.rollback()
+                    from oneirodex.utils.event_logging import log_system_event
+                    log_system_event(
+                        f'Error deleting download request {request_id}: Could not delete the download request',
+                        event_type='download_api', event_level='error',
+                    )
                     import logging
                     logging.getLogger(__name__).warning('Delete download request failed')
                     payload, status = api_error_payload('Could not delete the download request', code='internal')

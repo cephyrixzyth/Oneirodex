@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect
+import pytest
 
 from oneirodex.runtime_native.download_request_reads import create_download_request_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -93,6 +94,26 @@ def test_admin_delete_uses_csrf_and_reports_missing_requests():
     assert accepted.json()['message'] == 'Download request deleted successfully'
     assert missing.status_code == 404
     assert missing.json()['error_code'] == 'not_found'
+
+
+@pytest.mark.parametrize('request_id', ['-1', 'not-an-id'])
+def test_admin_delete_rejects_paths_outside_legacy_integer_converter(request_id):
+    response = make_client().delete(f'/api/delete_download/{request_id}')
+
+    assert response.status_code == 404
+
+
+def test_admin_delete_zero_id_logs_invalid_id_and_returns_bad_request(monkeypatch):
+    from oneirodex.utils import event_logging
+
+    events = []
+    monkeypatch.setattr(event_logging, 'log_system_event', lambda *args, **kwargs: events.append((args, kwargs)))
+
+    response = make_client().delete('/api/delete_download/0')
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Invalid request ID'
+    assert events == [(('Invalid request ID: 0',), {'event_type': 'download_api', 'event_level': 'warning'})]
 
 
 def test_member_download_status_preserves_success_and_error_contracts(monkeypatch):
