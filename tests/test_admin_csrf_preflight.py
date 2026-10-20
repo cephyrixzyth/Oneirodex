@@ -69,6 +69,23 @@ def test_system_log_clear_bearer_reaches_route_scope_check_only():
     ) == 'The CSRF token is missing.'
 
 
+def test_admin_user_mutation_bearer_reaches_route_scope_check_only():
+    bearer = (b'authorization', b'Bearer synthetic-token')
+    for method in ('PUT', 'DELETE'):
+        assert empty_admin_mutation_csrf_error(
+            _scope(path='/admin/api/user/42', method=method, headers=[bearer]), {},
+        ) is None
+        assert empty_admin_mutation_csrf_error(
+            _scope(path='/admin/api/user/42', method=method), {},
+        ) == 'The CSRF token is missing.'
+    assert empty_admin_mutation_csrf_error(
+        _scope(path='/admin/api/user/not-an-id', method='PUT', headers=[bearer]), {},
+    ) == 'The CSRF token is missing.'
+    assert empty_admin_mutation_csrf_error(
+        _scope(path='/admin/api/users', method='DELETE', headers=[bearer]), {},
+    ) == 'The CSRF token is missing.'
+
+
 def test_empty_theme_font_path_miss_is_not_masked_by_csrf_preflight():
     assert empty_admin_mutation_csrf_error(
         _scope(path='/admin/api/theme/fonts/', method='DELETE'), {},
