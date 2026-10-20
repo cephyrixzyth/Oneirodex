@@ -231,6 +231,7 @@ def _install_native_api_error_handlers(native_app, config, logger, *, routing_ap
 
             return flask_http_exception_response(
                 config, request, status, route_app=native_app, routing_app=routing_app,
+                extra_headers=exc.headers,
             )
         payload, _ = api_error_payload(
             safe_messages.get(status, 'Request failed'),

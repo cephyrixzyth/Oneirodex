@@ -61,6 +61,7 @@ def flask_route_not_found_response(flask_app, request) -> Response:
 
 def flask_http_exception_response(
     flask_app, request, status_code: int, *, route_app=None, routing_app=None,
+    extra_headers=None,
 ) -> Response:
     """Match Flask's configured HTTP exception response for a native path."""
     from werkzeug.exceptions import default_exceptions
@@ -97,6 +98,9 @@ def flask_http_exception_response(
             headers=dict(legacy_response.headers),
         )
 
+    for key, value in (extra_headers or {}).items():
+        response.headers.setdefault(key, value)
+
     if getattr(request, 'method', '').upper() == 'HEAD' and response.body:
         response = Response(
             content=b'', status_code=response.status_code,
@@ -122,7 +126,6 @@ def _legacy_allowed_methods(request, routing_app) -> list[str]:
         return []
     adapter = url_map.bind(
         str(getattr(getattr(request, 'url', None), 'netloc', '') or 'localhost'),
-        url_scheme=str(getattr(getattr(request, 'url', None), 'scheme', '') or 'http'),
     )
     try:
         adapter.match(request.url.path, method=getattr(request, 'method', 'GET'))
