@@ -9,7 +9,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
-from oneirodex.runtime_native.account_summary import create_account_summary_router
+from oneirodex.runtime_native.account_summary import (
+    AccountInvitesData,
+    create_account_summary_router,
+)
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie,
     generate_csrf_token,
@@ -158,6 +161,34 @@ def csrf_session(secret='native-account-summary-secret'):
     state = {'_user_id': '167:fp', '_fresh': True}
     token = generate_csrf_token(state, secret)
     return dump_session_cookie(state, secret), token
+
+
+def test_admin_invite_delete_reports_no_numeric_remaining_quota(monkeypatch):
+    from oneirodex.runtime_native import db_session
+
+    invite = SimpleNamespace(token='admin-invite')
+
+    class FakeSession:
+        def execute(self, _statement):
+            return SimpleNamespace(scalar_one_or_none=lambda: invite)
+
+        def delete(self, deleted):
+            assert deleted is invite
+
+        def commit(self):
+            return None
+
+        def scalar(self, _statement):
+            return 0
+
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=FakeSession()))
+
+    result = AccountInvitesData().delete(
+        SimpleNamespace(user_id='admin-1', role='admin', invite_quota=0),
+        'admin-invite',
+    )
+
+    assert result == {'revoked': 'admin-invite', 'remaining': None}
 
 
 def test_invite_mail_adapter_uses_quiet_sender_with_preflight_and_audit_actor(monkeypatch):

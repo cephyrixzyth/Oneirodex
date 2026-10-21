@@ -140,7 +140,7 @@ class AccountInvitesData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import InviteToken
-        from oneirodex.utils.account_invites import unused_invite_count
+        from oneirodex.utils.account_invites import invites_unlimited, unused_invite_count
 
         invite = db.session.execute(
             select(InviteToken).filter_by(token=token, creator_user_id=user.user_id)
@@ -156,7 +156,9 @@ class AccountInvitesData:
             return {'error': 'Could not revoke the invite.', 'code': 'internal'}
         return {
             'revoked': token,
-            'remaining': max(0, (user.invite_quota or 0) - unused_invite_count(user)),
+            'remaining': None if invites_unlimited(user) else max(
+                0, (user.invite_quota or 0) - unused_invite_count(user),
+            ),
         }
 
 

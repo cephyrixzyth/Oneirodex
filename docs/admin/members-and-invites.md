@@ -38,6 +38,10 @@ was never shown to anybody.
 
 In **Admin → Invites**, choose a member under **Adjust invite quota** and enter an integer from −1000 to 1000. Positive values add quota; negative values subtract it. The saved total appears after submission and the table refreshes. Existing invite tokens are retained. This preserves the classic editor's additive behavior, including a total below zero after subtraction.
 
+Main admins are not invite-metered. Their invite list and create responses report
+`unlimited: true` with no numeric remaining count; revoking an invite also keeps
+the remaining count unset.
+
 If the invite roster fails to load, use **Retry loading invites** to request it again without leaving the page.
 
 ## Registration whitelist
