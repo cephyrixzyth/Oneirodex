@@ -4,7 +4,7 @@ import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useScanControls, type Schedule } from './useScanControls'
 import './ScanControlsPage.css'
 
-export function ScanControlsPage() {
+export function ScanControlsPage({ combined = false }: { combined?: boolean }) {
   const {
     manualMode,
     libraries,
@@ -82,13 +82,16 @@ export function ScanControlsPage() {
     activeRoot,
     browseParts,
   } = useScanControls()
+  const manualOnly = manualMode && !combined
   return (
     <Page
-      title={manualMode ? 'Manual scan / identify' : 'Automatic scan'}
+      title={combined ? 'Scans' : manualMode ? 'Manual scan / identify' : 'Automatic scan'}
       lede={
-        manualMode
-          ? 'List game folders or files for identification without starting a scan.'
-          : 'Choose a library and server folder, then start or schedule a scan.'
+        combined
+          ? 'Choose a library and scan location, run an automatic scan, or identify folders manually from this page.'
+          : manualMode
+            ? 'List game folders or files for identification without starting a scan.'
+            : 'Choose a library and server folder, then start or schedule a scan.'
       }
     >
       <PageStatus
@@ -180,8 +183,8 @@ export function ScanControlsPage() {
           </select>
         </label>
         <fieldset className="od-scan-controls__options">
-          <legend>{manualMode ? 'Manual identify options' : 'Scan options'}</legend>
-          {!manualMode ? (
+          <legend>{manualOnly ? 'Manual identify options' : 'Scan options'}</legend>
+          {!manualOnly ? (
             <>
               <label>
                 <input
@@ -231,7 +234,7 @@ export function ScanControlsPage() {
             Refetch HowLongToBeat for existing games
           </label>
         </fieldset>
-        {!manualMode ? (
+        {!manualOnly ? (
           <div className="od-scan-controls__schedule">
             <label className="od-admin-field">
               Repeat schedule
@@ -293,7 +296,7 @@ export function ScanControlsPage() {
             ) : null}
           </div>
         ) : null}
-        {!manualMode ? (
+        {!manualOnly ? (
           <Button
             type="submit"
             variant="primary"
@@ -304,9 +307,10 @@ export function ScanControlsPage() {
         ) : null}
       </form>
       <section
+        id="manual-identify"
         className="od-admin-panel"
         aria-labelledby="od-manual-identify-title"
-        hidden={!manualMode}
+        hidden={!combined && !manualMode}
       >
         <h2 id="od-manual-identify-title">Manual identify</h2>
         <p className="od-admin-lede">

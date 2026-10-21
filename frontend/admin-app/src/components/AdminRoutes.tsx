@@ -125,7 +125,7 @@ function ScanManagementRoute() {
   if (tab === 'scan_filters') return <ScanFiltersPage />
   if (tab === 'file_extensions') return <ExtensionsPage />
   if (tab === 'image_queue') return <ImagesPage />
-  return <ScanControlsPage />
+  return <ScanControlsPage combined />
 }
 
 export function AdminRoutes() {

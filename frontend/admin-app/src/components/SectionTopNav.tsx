@@ -55,8 +55,12 @@ export function SectionTopNav() {
           : ''
   if (['auto', 'manual', 'jobs'].includes(scanView)) {
     const scanPages = [
-      { id: 'auto', href: '/scan_management?active_tab=auto', label: 'Automatic scan' },
-      { id: 'manual', href: '/scan_management?active_tab=manual', label: 'Manual scan' },
+      { id: 'auto', href: '/scan_management?active_tab=auto', label: 'Scanning' },
+      {
+        id: 'manual',
+        href: '/scan_management?active_tab=manual#manual-identify',
+        label: 'Manual identify',
+      },
       { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
     ]
     return (
@@ -66,7 +70,9 @@ export function SectionTopNav() {
             key={item.id}
             className={`od-cbtn od-cbtn--section${scanView === item.id ? ' is-active' : ''}`}
             to={item.href}
-            aria-current={scanView === item.id ? 'page' : undefined}
+            aria-current={
+              scanView === item.id ? (item.id === 'manual' ? 'location' : 'page') : undefined
+            }
           >
             {item.label}
           </Link>
