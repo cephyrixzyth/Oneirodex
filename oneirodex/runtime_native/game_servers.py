@@ -48,6 +48,11 @@ class GameServersData:
         server = GameServer(**values)
         db.session.add(server)
         db.session.commit()
+        # Match Flask-SQLAlchemy's post-commit behavior: the legacy session
+        # expires the instance and reloads database values before serialization.
+        # Native sessions deliberately keep instances alive across commit, so
+        # refresh here to avoid returning an aware timestamp only on create.
+        db.session.refresh(server)
         return server
 
     def save_server(self, server):

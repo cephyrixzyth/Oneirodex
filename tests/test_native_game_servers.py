@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -10,7 +11,7 @@ from fastapi import FastAPI
 from flask import Flask
 from flask_login import LoginManager
 
-from oneirodex.runtime_native.game_servers import create_game_servers_router
+from oneirodex.runtime_native.game_servers import GameServersData, create_game_servers_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
@@ -243,3 +244,37 @@ def test_missing_server_returns_legacy_not_found_envelope(runtime):
     response = _request(app, '/api/game-servers/missing', cookie=cookies['member'])
     assert response.status_code == 404
     assert response.json()['error_code'] == 'not_found'
+
+
+def test_database_adapter_refreshes_created_server_after_commit(monkeypatch):
+    class Session:
+        def __init__(self):
+            self.server = None
+            self.refreshed = []
+
+        def add(self, server):
+            self.server = server
+
+        def commit(self):
+            created = datetime(2026, 10, 21, 22, 35, tzinfo=timezone.utc)
+            self.server.created_at = created
+            self.server.updated_at = created
+
+        def refresh(self, server):
+            self.refreshed.append(server)
+            server.created_at = server.created_at.replace(tzinfo=None)
+            server.updated_at = server.updated_at.replace(tzinfo=None)
+
+    session = Session()
+    monkeypatch.setattr(
+        'oneirodex.runtime_native.db_session.native_db',
+        SimpleNamespace(session=session),
+    )
+
+    server = GameServersData().create_server(
+        display_name='Parity', connect_string='host:7',
+    )
+
+    assert session.refreshed == [server]
+    assert server.to_dict(admin=True)['created_at'] == '2026-10-21T22:35:00'
+    assert server.to_dict(admin=True)['updated_at'] == '2026-10-21T22:35:00'
