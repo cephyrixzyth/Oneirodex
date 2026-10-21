@@ -305,6 +305,14 @@ class ChatReadData:
         row['room'] = voice_room_name(channel.id)
         return {'room': voice_room_name(channel.id), 'channel': row}
 
+    def voice_space_visible(self, user, space_id: int) -> bool:
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import ChatSpace
+        from oneirodex.utils.chat_spaces import user_is_space_member
+
+        space = db.session.get(ChatSpace, space_id)
+        return bool(space is not None and user_is_space_member(user, space))
+
     def create_space_invite(self, space_id: int, user_id: int, expires_at, max_uses):
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatSpace
@@ -1758,18 +1766,27 @@ def create_chat_reads_router(
                 response = JSONResponse(body, status_code=status)
             else:
                 try:
-                    payload = data.voice_room(auth.user, space_id, channel_id)
-                    if payload is None:
+                    if (
+                        hasattr(data, 'voice_space_visible')
+                        and not data.voice_space_visible(auth.user, space_id)
+                    ):
                         from oneirodex.utils.api_contract import api_error_payload
 
-                        body, status = api_error_payload(
-                            'Voice channel not found', code='not_found',
-                        )
+                        body, status = api_error_payload('Space not found', code='not_found')
                         response = JSONResponse(body, status_code=status)
                     else:
-                        from oneirodex.utils.api_contract import api_ok_payload
+                        payload = data.voice_room(auth.user, space_id, channel_id)
+                        if payload is None:
+                            from oneirodex.utils.api_contract import api_error_payload
 
-                        response = JSONResponse(api_ok_payload(payload))
+                            body, status = api_error_payload(
+                                'Voice channel not found', code='not_found',
+                            )
+                            response = JSONResponse(body, status_code=status)
+                        else:
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            response = JSONResponse(api_ok_payload(payload))
                 except Exception:  # noqa: BLE001 — keep the legacy read failure private
                     from oneirodex.utils.api_contract import api_error_payload
 

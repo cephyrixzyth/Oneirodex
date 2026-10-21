@@ -6356,12 +6356,16 @@ def test_native_chat_voice_room_read_uses_member_acl_adapter(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     calls = []
 
+    def voice_space_visible(_self, _user, space_id):
+        return space_id != 9
+
     def voice_room(_self, user, space_id, channel_id):
         calls.append((user.id, space_id, channel_id))
         return None if channel_id == 99 else {
             'room': 'od-voice-17', 'channel': {'id': channel_id, 'kind': 'voice'},
         }
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'voice_space_visible', voice_space_visible)
     monkeypatch.setattr(chat_reads.ChatReadData, 'voice_room', voice_room)
     asyncio.run(runtime._ensure_flask())
     flask_app.app_context = lambda: (_ for _ in ()).throw(
@@ -6374,10 +6378,15 @@ def test_native_chat_voice_room_read_uses_member_acl_adapter(monkeypatch):
     missing = _run(
         runtime, '/api/chat/spaces/8/voice/99/room', cookie=_signed_session(),
     )
+    denied_space = _run(
+        runtime, '/api/chat/spaces/9/voice/17/room', cookie=_signed_session(),
+    )
 
     assert response.status_code == 200
     assert response.json()['room'] == 'od-voice-17'
     assert missing.status_code == 404
+    assert denied_space.status_code == 404
+    assert denied_space.json()['error'] == 'Space not found'
     assert calls == [(7, 8, 17), (7, 8, 99)]
 
 
