@@ -349,6 +349,40 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
     assert 'set-cookie' in update.headers
 
 
+def test_legacy_unmatched_form_csrf_errors_keep_html_while_json_callers_keep_envelopes(runtime):
+    app, flask_app, data, _users, _cookies = runtime
+    flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {'_user_id': '1:fp', '_fresh': True}
+    cookie = dump_session_cookie(session, 'unmatched-mutation-secret')
+    form_requests = [
+        ('/delete_all_unmatched_folders', {}),
+        ('/clear_unmatched_entry/8', {}),
+        ('/toggle_ignore_status/8', {}),
+        ('/update_unmatched_folder_status', {'folder_id': '8'}),
+    ]
+
+    responses = [
+        _request(app, path, cookie=cookie, method='POST', form=form)
+        for path, form in form_requests
+    ]
+
+    assert all(response.status_code == 400 for response in responses)
+    assert all(response.headers['content-type'] == 'text/html; charset=utf-8' for response in responses)
+    assert all(response.text == (
+        '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n<p>The CSRF token is missing.</p>\n'
+    ) for response in responses)
+    assert data.calls == []
+
+    json_response = _request(
+        app, '/toggle_ignore_status/8', cookie=cookie, method='POST', json={},
+    )
+    assert json_response.status_code == 400
+    assert json_response.headers['content-type'] == 'application/json'
+    assert json_response.json()['error_code'] == 'bad_request'
+    assert data.calls == []
+
+
 def test_batch_mark_kind_validation_alias_and_partial_results(runtime):
     app, _flask_app, data, _users, cookies = runtime
     valid = _request(

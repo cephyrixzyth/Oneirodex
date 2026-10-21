@@ -470,26 +470,28 @@ def create_scan_unmatched_mutations_router(
     async def clear_all_legacy(request: Request):
         return await _run(
             request, **options, handler=_compat_clear_all, privilege='admin',
+            csrf_html_for_form=True,
         )
 
     @router.post('/clear_unmatched_entry/{folder_id:str}')
     async def clear_one_legacy(folder_id: str, request: Request):
         return await _run(
             request, **options, handler=_compat_clear_one,
-            folder_id=folder_id, privilege='admin',
+            folder_id=folder_id, privilege='admin', csrf_html_for_form=True,
         )
 
     @router.post('/toggle_ignore_status/{folder_id:str}')
     async def toggle_ignore_legacy(folder_id: str, request: Request):
         return await _run(
             request, **options, handler=_compat_toggle_ignore,
-            folder_id=folder_id, privilege='admin',
+            folder_id=folder_id, privilege='admin', csrf_html_for_form=True,
         )
 
     @router.post('/update_unmatched_folder_status')
     async def update_status_legacy(request: Request):
         return await _run(
             request, **options, handler=_compat_update_status, privilege='admin',
+            csrf_html_for_form=True,
         )
 
     return router
@@ -503,7 +505,7 @@ def mount_scan_unmatched_mutation_routes(app: FastAPI, flask_app, **kwargs):
 async def _run(
     request, *, flask_app, data, find_user, find_token, commit_token_touch,
     load_user_id, login_manager, database_scope, handler, privilege,
-    folder_id=None, schema=None,
+    folder_id=None, schema=None, csrf_html_for_form=False,
 ):
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
@@ -524,6 +526,12 @@ async def _run(
         response = csrf_error_response(
             request, auth.session_data, flask_app.config, token=csrf_token,
         )
+        if response is not None and csrf_html_for_form:
+            content_type = (request.headers.get('content-type') or '').split(';', 1)[0].strip().lower()
+            if not (content_type.endswith('/json') or content_type.endswith('+json')):
+                from .csrf_compat import csrf_html_error_response
+
+                response = csrf_html_error_response(response)
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         if response is None and privilege == 'admin':
