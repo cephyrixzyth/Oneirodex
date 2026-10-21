@@ -75,8 +75,8 @@ def test_scan_job_cancel_requires_csrf_and_keeps_admin_redirect_flash():
 
     accepted = client.post('/cancel_scan_job/job-1', data={'csrf_token': csrf})
     assert accepted.status_code == 302
-    assert accepted.headers['location'] == '/scan_management'
-    expected = flask_redirect('/scan_management', code=302)
+    assert accepted.headers['location'] == '/scan_management?active_tab=jobs'
+    expected = flask_redirect('/scan_management?active_tab=jobs', code=302)
     assert accepted.headers['content-type'] == expected.headers['Content-Type']
     assert accepted.content == expected.get_data()
     assert 'session=' in accepted.headers['set-cookie']
@@ -123,15 +123,14 @@ def test_scan_job_delete_and_clear_preserve_not_found_and_status_rules():
     assert cleared_status.status_code == 302
     assert restarted.status_code == 302
     expected_jobs = flask_redirect('/scan_management?active_tab=jobs', code=302)
-    expected_scan = flask_redirect('/scan_management', code=302)
     for response in (cleared_all, invalid_clear, cleared_status):
         assert response.headers['location'] == expected_jobs.headers['Location']
         assert response.headers['content-type'] == expected_jobs.headers['Content-Type']
         assert response.content == expected_jobs.get_data()
     for response in (deleted, restarted):
-        assert response.headers['location'] == expected_scan.headers['Location']
-        assert response.headers['content-type'] == expected_scan.headers['Content-Type']
-        assert response.content == expected_scan.get_data()
+        assert response.headers['location'] == expected_jobs.headers['Location']
+        assert response.headers['content-type'] == expected_jobs.headers['Content-Type']
+        assert response.content == expected_jobs.get_data()
     assert data.calls == [
         ('delete', 'job-1'), ('delete', 'missing'), ('clear', None), ('clear', 'Failed'),
         ('restart', 'job-1', 'force', True, True),

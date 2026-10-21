@@ -578,7 +578,7 @@ def _compat_flash_redirect(auth, message, category):
     auth.session_data['_flashes'] = flashes
     from starlette.responses import RedirectResponse
 
-    return RedirectResponse('/scan_management', status_code=303)
+    return RedirectResponse('/scan_management?active_tab=unmatched', status_code=303)
 
 
 def _compat_is_ajax(request):

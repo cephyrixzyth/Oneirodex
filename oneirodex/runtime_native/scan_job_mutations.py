@@ -244,10 +244,9 @@ async def _handle(
                         count, label = data.clear(status)
                         message = f'Cleared {count} {label}.'
                         auth.session_data.setdefault('_flashes', []).append(('success', message))
-                    target = (
-                        '/scan_management?active_tab=jobs'
-                        if action in {'clear', 'clear_all'} else '/scan_management'
-                    )
+                    # Keep legacy form actions in the scan-jobs context. The
+                    # native scan page defaults to Auto when the tab is absent.
+                    target = '/scan_management?active_tab=jobs'
                     response = flask_redirect_response(target, status_code=302)
                 except HTTPException:
                     raise

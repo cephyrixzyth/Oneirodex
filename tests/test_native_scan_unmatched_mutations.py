@@ -297,7 +297,7 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
         form={'csrf_token': csrf},
     )
     assert clear_all.status_code == 303
-    assert clear_all.headers['location'] == '/scan_management'
+    assert clear_all.headers['location'] == '/scan_management?active_tab=unmatched'
     assert ('clear_all_compat',) in data.calls
 
     toggled_ajax = _request(
@@ -314,6 +314,13 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
     )
     assert cleared_ajax.status_code == 200
     assert cleared_ajax.json()['message'] == 'Entry cleared successfully'
+
+    cleared_form = _request(
+        app, '/clear_unmatched_entry/8', cookie=cookie, method='POST',
+        form={'csrf_token': csrf},
+    )
+    assert cleared_form.status_code == 303
+    assert cleared_form.headers['location'] == '/scan_management?active_tab=unmatched'
 
     update = _request(
         app, '/update_unmatched_folder_status', cookie=cookie, method='POST',
