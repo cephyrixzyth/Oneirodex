@@ -53,6 +53,22 @@ test('creates a link without email, then refreshes and exposes it for copying', 
   expect(listInvites).toHaveBeenCalledTimes(2)
 })
 
+test('shows a quota denial when the invite allowance changes after loading', async () => {
+  vi.mocked(listInvites).mockResolvedValue({ ...emptyState, remaining: 1 })
+  vi.mocked(createInvite).mockRejectedValue(
+    new Error("You're out of invites. An admin can raise your limit."),
+  )
+
+  render(<InvitesPanel />)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Create invite link' }))
+
+  expect(
+    await screen.findByText("You're out of invites. An admin can raise your limit."),
+  ).toBeInTheDocument()
+  expect(listInvites).toHaveBeenCalledTimes(1)
+})
+
 test('revokes an outstanding invite and refreshes the empty state', async () => {
   vi.mocked(listInvites)
     .mockResolvedValueOnce({ ...emptyState, invites: [invite], remaining: 4 })
