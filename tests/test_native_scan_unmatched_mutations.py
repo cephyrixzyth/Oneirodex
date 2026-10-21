@@ -260,6 +260,25 @@ def test_auth_librarian_admin_and_csrf_order(runtime):
     assert not any(call[0] == 'clear' for call in data.calls)
 
 
+def test_legacy_unmatched_form_mutations_require_admin(runtime):
+    app, _flask_app, data, _users, cookies = runtime
+    requests = [
+        ('/clear_unmatched_entry/8', {}),
+        ('/update_unmatched_folder_status', {'folder_id': '8'}),
+        ('/toggle_ignore_status/8', {}),
+        ('/delete_all_unmatched_folders', {}),
+    ]
+
+    responses = [
+        _request(app, path, cookie=cookies['member'], method='POST', form=form)
+        for path, form in requests
+    ]
+
+    assert all(response.status_code == 302 for response in responses)
+    assert all(response.headers['location'] == '/login' for response in responses)
+    assert data.calls == []
+
+
 def test_name_alias_soft_amend_and_batch_clear_cap_dedupe(runtime):
     app, flask_app, data, _users, cookies = runtime
     flask_app.config['WTF_CSRF_ENABLED'] = False
