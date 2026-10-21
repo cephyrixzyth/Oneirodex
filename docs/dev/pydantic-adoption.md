@@ -101,6 +101,11 @@ Flask blueprints (`/api` for `routes_apis/`).
 | `routes_apis/client.py` | `POST /api/client/lifecycle` (`client_lifecycle_post`) | `ClientLifecycleBody` |
 | `routes_apis/wanted.py` | `POST /api/updates/wanted` (`updates_wanted_add`) | `AddWantedBody` |
 | `routes_apis/wanted.py` | `POST /api/updates/wanted/fulfill` (`updates_wanted_fulfill`) | `FulfillWantedBody` |
+
+The native wanted-update adapter accepts `application/json` and structured
+`application/*+json` bodies, matching Flask's JSON media-type check. A body
+with another or missing content type is treated as an empty object and fails
+required-field validation without mutating the wanted list.
 | `routes_apis/vr.py` | `PATCH /api/games/<uuid>/vr_compat` (`game_vr_compat_patch`) | `VrCompatBody` |
 | `routes_apis/storage.py` | `POST /api/storage/hardlink/preview` (`hardlink_preview`) | `HardlinkBody` |
 | `routes_apis/storage.py` | `POST /api/storage/hardlink/apply` (`hardlink_apply`) | `HardlinkBody` |

@@ -6922,6 +6922,31 @@ def test_native_wanted_update_mutations_use_csrf_and_asgi_dispatch(
     assert runtime._fake_wanted.calls
 
 
+def test_native_wanted_update_requires_json_content_type(monkeypatch):
+    runtime = _runtime(monkeypatch)[1]
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(content_type):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/updates/wanted',
+                content=b'{"game_uuid":"game-1","kind":"dlc"}',
+                headers={'X-CSRFToken': csrf, 'Content-Type': content_type},
+            )
+
+    unsupported = asyncio.run(send('text/plain'))
+    assert unsupported.status_code == 422
+    assert unsupported.json()['detail'] == {'game_uuid': 'Field required'}
+    assert runtime._fake_wanted.calls == []
+
+    vendor_json = asyncio.run(send('application/vnd.api+json'))
+    assert vendor_json.status_code == 201
+    assert runtime._fake_wanted.calls == [('add', 7, 'game-1', 'dlc')]
+
+
 def test_native_updates_inbox_preserves_first_query_values(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     response = _run(

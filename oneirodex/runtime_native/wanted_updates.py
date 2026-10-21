@@ -169,7 +169,11 @@ async def _validated(request, operation):
 
     model = AddWantedBody if operation == 'add' else FulfillWantedBody
     try:
-        raw = json.loads(await request.body() or b'{}')
+        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+        is_json = content_type == 'application/json' or (
+            content_type.startswith('application/') and content_type.endswith('+json')
+        )
+        raw = json.loads(await request.body() or b'{}') if is_json else {}
     except (TypeError, ValueError):
         raw = {}
     try:
