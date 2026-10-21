@@ -84,7 +84,65 @@ describe('ScansPage queued jobs', () => {
     expect(screen.getByText('PS2')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/Scanning/i)
     expect(screen.getByRole('region', { name: 'Scan jobs table' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel queue' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
+  })
+
+  test('cancels a queued scan and refreshes the job list', async () => {
+    const user = userEvent.setup()
+    let jobs = [
+      {
+        id: 'queued-job-1',
+        library_name: 'PS2',
+        status: 'Queued',
+        queue_position: 1,
+        scan_folder: '/storage/ps2',
+      },
+    ]
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes('/api/scan_jobs_status')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          text: async () => JSON.stringify(jobs),
+          json: async () => jobs,
+        }
+      }
+      if (String(url) === '/cancel_scan_job/queued-job-1') {
+        jobs = [{ ...jobs[0], status: 'Cancelled' }]
+        return {
+          ok: true,
+          status: 200,
+          redirected: true,
+          url: 'http://localhost/scan_management',
+          headers: new Headers({ 'content-type': 'text/html' }),
+        }
+      }
+      return {
+        ok: false,
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => '{}',
+        json: async () => ({}),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel queue' }))
+    expect(await screen.findByText(/Queued scan job queued-job-1 cancelled/i)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/cancel_scan_job/queued-job-1',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(await screen.findByText('Cancelled')).toBeInTheDocument()
   })
 
   test('labels a cancelled running job as stopping while it waits for its worker', async () => {

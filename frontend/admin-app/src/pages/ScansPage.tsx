@@ -25,6 +25,7 @@ export function ScansPage() {
   const [actionError, setActionError] = useState('')
   const [actionMessage, setActionMessage] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [busyJobKey, setBusyJobKey] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [jobQuery, setJobQuery] = useState('')
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
@@ -145,6 +146,45 @@ export function ScansPage() {
   function statusCount(filter: string) {
     if (filter === 'All') return jobs.length
     return jobs.filter((job) => matchesStatus(job, filter)).length
+  }
+
+  async function cancelScanJob(job: Record<string, unknown>) {
+    if (actionBusy || busyJobKey) return
+    const id = String(job.id || '')
+    if (!id) return
+    const queued = isScanQueuedStatus(job.status)
+    setBusyJobKey(id)
+    setActionError('')
+    setActionMessage('')
+    try {
+      const response = await fetch(`/cancel_scan_job/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: csrfHeaders(),
+      })
+      if (!response.ok) throw await errorFromResponse(response, 'Cancel scan job')
+      if (response.redirected && new URL(response.url).pathname === '/login') {
+        throw new Error('Your admin session expired. Sign in and retry the action.')
+      }
+      setActionMessage(
+        queued
+          ? `Queued scan job ${id} cancelled.`
+          : 'Scan is stopping. Waiting for threads to complete…',
+      )
+      try {
+        const fresh = await getJson('/api/scan_jobs_status')
+        setStatus(fresh)
+        setUpdatedAt(new Date())
+        jobsSnapshotKeyRef.current = ''
+      } catch (err) {
+        jobsSnapshotKeyRef.current = ''
+        setActionError(errorText(err) || 'Scan action sent; the list will refresh automatically.')
+      }
+    } catch (err) {
+      setActionError(errorText(err) || 'Could not cancel the scan job.')
+    } finally {
+      setBusyJobKey('')
+    }
   }
 
   async function clearJobs(target: 'Completed' | 'Failed' | 'All') {
@@ -525,6 +565,39 @@ export function ScansPage() {
                         }
                       >
                         {scanBusyKey === job.id ? 'Starting…' : 'Scan again'}
+                      </Button>
+                    )
+                  },
+                },
+                {
+                  key: 'action',
+                  label: 'Action',
+                  sortable: false,
+                  render: (job) => {
+                    const jobStatus = String(job.status || '').toLowerCase()
+                    if (jobStatus === 'stopping') {
+                      return <span className="od-admin-lede">Stopping…</span>
+                    }
+                    if (jobStatus !== 'running' && !isScanQueuedStatus(job.status)) {
+                      return <span className="od-admin-lede">—</span>
+                    }
+                    const queued = isScanQueuedStatus(job.status)
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="od-btn--secondary"
+                        disabled={Boolean(busyJobKey) || actionBusy}
+                        title={queued ? 'Cancel queued scan before it starts' : 'Stop this scan'}
+                        onClick={() => void cancelScanJob(job)}
+                      >
+                        {busyJobKey === job.id
+                          ? queued
+                            ? 'Cancelling…'
+                            : 'Stopping…'
+                          : queued
+                            ? 'Cancel queue'
+                            : 'Stop'}
                       </Button>
                     )
                   },
