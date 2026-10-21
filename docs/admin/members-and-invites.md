@@ -21,6 +21,10 @@ An invite is a **link**. Email is one way of delivering it, not what it is:
 Links last **48 hours** and hold a quota slot until they are used or revoked.
 Revoking one frees the slot immediately.
 
+When an email is supplied, it must be a syntactically valid address. Invalid
+addresses are rejected before an invite link or quota slot is created. Leave
+the field blank to create a link without a recipient.
+
 > **Set the site URL first.** Invite links are built from **Admin → Settings →
 > site URL**. Left at the default, every link points at `127.0.0.1` and works
 > only on the server itself. The invites panel says so when it is unset.
