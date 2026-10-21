@@ -185,9 +185,37 @@ def test_legacy_profile_edit_post_accepts_hidden_csrf_and_redirects():
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/library?account=avatar'
+    assert response.headers['location'] == '/settings_profile_edit'
+    assert response.headers['content-type'].startswith('text/html')
+    assert response.content
     assert data.calls == [('face.png', b'image-bytes', 167)]
     assert data.commits == 1
+
+
+def test_legacy_profile_edit_rejects_unsupported_extension_with_legacy_form_feedback():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    session = {'_user_id': '167:fp', '_fresh': True}
+    token = generate_csrf_token(session, SECRET)
+    client.cookies.set('session', dump_session_cookie(session, SECRET))
+
+    response = client.post(
+        '/settings_profile_edit',
+        data={'csrf_token': token},
+        files={'avatar': ('invalid.txt', b'plain text', 'text/plain')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    assert "Error in field 'Profile Avatar': Images only!" in response.text
+    assert 'Your avatar was not changed.' in response.text
+    assert f'name="csrf_token" value="{token}"' in response.text
+    assert 'action="/settings_profile_edit" method="post"' in response.text
+    assert 'href="/library?account=avatar"' in response.text
+    assert data.calls == []
+    assert data.commits == 0
+    assert data.rollbacks == 0
 
 
 def test_legacy_profile_edit_post_rejects_missing_hidden_csrf():
@@ -201,5 +229,6 @@ def test_legacy_profile_edit_post_rejects_missing_hidden_csrf():
     )
 
     assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
     assert data.calls == []
     assert data.commits == 0

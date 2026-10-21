@@ -4,15 +4,16 @@ from __future__ import annotations
 from contextlib import nullcontext
 from email import policy
 from email.parser import BytesParser
+import html
 from io import BytesIO
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from werkzeug.datastructures import FileStorage
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response
+from .csrf_compat import csrf_error_response, csrf_html_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -140,9 +141,16 @@ def create_account_avatar_upload_router(
                 response = csrf_error_response(
                     request, auth.session_data, flask_app.config, token=csrf_token,
                 )
+                if response is not None:
+                    response = csrf_html_error_response(response)
                 if response is None:
                     if too_large:
                         _flash(auth.session_data, 'error', 'Image is larger than the 5MB limit.')
+                    elif file is not None and _legacy_avatar_extension_rejected(file):
+                        # v1.1.8's FileAllowed validator rendered the edit page
+                        # with HTTP 200 for an unsupported extension. Keep that
+                        # browser contract without bringing its Jinja page back.
+                        response = _legacy_avatar_validation_response(csrf_token)
                     elif file is None:
                         if not getattr(auth.user, 'avatarpath', None):
                             from oneirodex.utils.avatar import DEFAULT_AVATAR
@@ -164,7 +172,8 @@ def create_account_avatar_upload_router(
                             except Exception:
                                 data.rollback()
                                 _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
-                    response = RedirectResponse('/library?account=avatar', status_code=302)
+                    if response is None:
+                        response = _legacy_redirect_response('/settings_profile_edit')
 
             if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
                 _set_session_cookie(response, flask_app, auth)
@@ -283,3 +292,69 @@ def _flash(session_data, category, message):
     flashes = list(session_data.get('_flashes') or [])
     flashes.append((category, message))
     session_data['_flashes'] = flashes
+
+
+def _legacy_avatar_extension_rejected(file: FileStorage) -> bool:
+    """Mirror the old form's extension validator while retaining WebP support."""
+    filename = str(getattr(file, 'filename', '') or '')
+    extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+
+
+def _legacy_avatar_validation_response(csrf_token: str | None) -> Response:
+    """Return the old form-validation status and feedback without a template."""
+    message = "Error in field 'Profile Avatar': Images only!"
+    csrf = html.escape(csrf_token or '', quote=True)
+    body = f'''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Edit avatar · Oneirodex</title>
+  <style>
+    :root {{ color-scheme: dark; background: #07110e; color: #e6f2eb; font: 16px/1.5 system-ui, sans-serif; }}
+    body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; box-sizing: border-box; }}
+    main {{ width: min(100%, 38rem); padding: 2rem; border: 1px solid #254434; border-radius: 1rem; background: #10211a; box-sizing: border-box; }}
+    h1 {{ margin: 0 0 .75rem; }}
+    [role="alert"] {{ padding: .85rem 1rem; border: 1px solid #9a4c45; border-radius: .5rem; background: #351b19; color: #ffd8d2; }}
+    form {{ display: grid; gap: 1rem; margin-top: 1.25rem; }}
+    input[type="file"] {{ width: 100%; padding: .75rem; border: 1px solid #355b45; border-radius: .5rem; background: #0b1711; color: #e6f2eb; box-sizing: border-box; }}
+    .actions {{ display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }}
+    a {{ display: inline-flex; margin-top: 1rem; padding: .65rem 1rem; border-radius: .5rem; background: #185c3c; color: #f1fff6; font-weight: 650; text-decoration: none; }}
+    button {{ padding: .65rem 1rem; border: 0; border-radius: .5rem; background: #185c3c; color: #f1fff6; font: inherit; font-weight: 650; cursor: pointer; }}
+    a:hover, a:focus-visible {{ background: #24794f; }}
+    button:hover, button:focus-visible {{ background: #24794f; }}
+    a:focus-visible, button:focus-visible {{ outline: 3px solid #8ee3b1; outline-offset: 3px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Edit avatar</h1>
+    <p role="alert" aria-live="polite">{message}</p>
+    <p>Your avatar was not changed. Choose a JPG, PNG, GIF, or WebP image in account settings.</p>
+    <form action="/settings_profile_edit" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{csrf}">
+      <label for="avatar-file">Choose an image</label>
+      <input id="avatar-file" type="file" name="avatar" accept=".jpg,.jpeg,.png,.gif,.webp" required>
+      <div class="actions">
+        <button type="submit">Save changes</button>
+        <a href="/library?account=avatar">Cancel</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>'''
+    return Response(content=body, status_code=200, media_type='text/html')
+
+
+def _legacy_redirect_response(location: str) -> Response:
+    """Keep Werkzeug's HTML redirect response for classic form submissions."""
+    from werkzeug.utils import redirect
+
+    legacy_response = redirect(location)
+    return Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers=dict(legacy_response.headers),
+    )
