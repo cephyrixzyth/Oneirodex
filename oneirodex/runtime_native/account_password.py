@@ -214,11 +214,12 @@ async def _validated_body(request: Request, model):
     import json
 
     from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.validation import format_validation_errors
 
     try:
         value = json.loads(await request.body() or b'{}')
     except (TypeError, ValueError):
-        return None, _api_error('Invalid request.', code='unprocessable')
+        value = {}
     try:
         body = model.model_validate(value if isinstance(value, dict) else {})
         return body, None

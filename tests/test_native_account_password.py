@@ -117,6 +117,48 @@ def credentials():
     return dump_session_cookie(session, SECRET), csrf
 
 
+def test_password_change_missing_fields_returns_unprocessable():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password', json={}, headers={'X-CSRFToken': csrf}
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert set(response.json()['detail']) == {
+        'current_password', 'new_password', 'confirm_password'
+    }
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_password_change_malformed_json_returns_unprocessable():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        content=b'{',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert response.json()['error'] == 'Invalid request.'
+    assert set(response.json()['detail']) == {
+        'current_password', 'new_password', 'confirm_password'
+    }
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
 def test_password_change_updates_session_and_remember_cookie_fingerprint():
     client, user, data = make_client()
     cookie, csrf = credentials()
