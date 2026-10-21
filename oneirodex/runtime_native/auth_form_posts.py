@@ -43,6 +43,14 @@ def create_auth_form_post_router(
 
     invite_data = AccountInvitesData()
 
+    def setup_redirect_if_required():
+        """Match Flask's global first-run redirect for non-API invite forms."""
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
+
+        if should_redirect_to_setup():
+            return flask_redirect_response(get_setup_redirect_url(), status_code=302)
+        return None
+
     async def prepare(request):
         form = await request.form() if request.method == 'POST' else {}
         session_data = _session_data(request, flask_app.config)
@@ -281,6 +289,9 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if request.method == 'POST' and response is not None:
                 return _finish(response, flask_app)
+            setup_response = setup_redirect_if_required()
+            if setup_response is not None:
+                return _finish(setup_response, flask_app, auth)
             if auth is None:
                 response = flask_redirect_response('/login?next=%2Fuser%2Finvites', status_code=302)
                 return _finish(response, flask_app)
@@ -346,6 +357,9 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if response is not None:
                 return _finish(response, flask_app)
+            setup_response = setup_redirect_if_required()
+            if setup_response is not None:
+                return _finish(setup_response, flask_app, auth)
             if auth.user is None:
                 from .acquire_status import _login_redirect
 

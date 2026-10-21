@@ -9040,6 +9040,8 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
             return {'error': 'Invite not found.', 'code': 'not_found'}
 
     _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     monkeypatch.setattr(account_summary, 'AccountInvitesData', lambda: FakeInviteData())
     cookie, csrf = _signed_session_with_csrf()
 
@@ -9060,6 +9062,34 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
         ('create', 7, 'friend@example.com'), ('delete', 7, 'missing-token'),
     ]
     assert origins == ['http://testserver']
+
+
+def test_invite_management_forms_keep_first_run_setup_redirect(monkeypatch):
+    from oneirodex.utils import setup
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup')
+    cookie, csrf = _signed_session_with_csrf()
+
+    anonymous = _run(runtime, '/user/invites')
+    invite_post = _run(
+        runtime, '/user/invites', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'email': 'friend@example.com'},
+    )
+    delete_post = _run(
+        runtime, '/delete_invite/token', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf},
+    )
+    missing_csrf = _run(
+        runtime, '/delete_invite/token', method='POST', cookie=cookie,
+        form_body={},
+    )
+
+    for response in (anonymous, invite_post, delete_post):
+        assert response.status_code == 302
+        assert response.headers['location'] == '/setup'
+    assert missing_csrf.status_code == 400
 
 
 def test_lazy_asgi_public_demo_uses_native_lookup_and_compatible_session(monkeypatch):
