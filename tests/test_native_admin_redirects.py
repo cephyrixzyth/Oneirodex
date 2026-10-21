@@ -73,6 +73,8 @@ def test_admin_redirect_targets_and_query_compatibility():
         '/admin/server_logs': '/admin/ops?open=full-log',
         '/admin/system_logs': '/admin/ops?open=full-log',
         '/admin/server_status_page': '/admin/ops',
+        '/admin/scan_management': '/scan_management?active_tab=jobs',
+        '/admin/scan_management?other=x': '/scan_management?other=x&active_tab=jobs',
         '/admin/scan_management?active_tab=manual&other=x': '/scan_management?active_tab=manual&other=x',
     }
 
@@ -95,6 +97,13 @@ def test_admin_redirect_head_has_empty_body():
     assert response.status_code == 302
     assert response.content == b''
     assert response.headers['location'] == '/admin/ops'
+
+    scan_jobs = fetch(
+        app, '/admin/scan_management', signed_cookie(flask_app, users[7]), method='HEAD',
+    )
+    assert scan_jobs.status_code == 302
+    assert scan_jobs.content == b''
+    assert scan_jobs.headers['location'] == '/scan_management?active_tab=jobs'
 
 
 def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():

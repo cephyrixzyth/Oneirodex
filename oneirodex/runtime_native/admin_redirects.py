@@ -15,6 +15,7 @@ ADMIN_REDIRECTS = {
     '/admin/server_status_page': '/admin/ops',
 }
 ADMIN_QUERY_REDIRECTS = {'/admin/scan_management': '/scan_management'}
+ADMIN_QUERY_REDIRECT_DEFAULTS = {'/admin/scan_management': {'active_tab': 'jobs'}}
 
 
 def is_admin_redirect_path(path: str) -> bool:
@@ -74,6 +75,10 @@ def create_admin_redirect_router(
                     target = ADMIN_QUERY_REDIRECTS[request.url.path]
                     query = {}
                     for key, value in request.query_params.multi_items():
+                        query.setdefault(key, value)
+                    for key, value in ADMIN_QUERY_REDIRECT_DEFAULTS.get(
+                        request.url.path, {},
+                    ).items():
                         query.setdefault(key, value)
                     if query:
                         target += '?' + urlencode(query)
