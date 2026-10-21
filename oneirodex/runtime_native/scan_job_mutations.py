@@ -190,15 +190,18 @@ async def _handle(
                 )
                 response = JSONResponse(body, status_code=status)
             else:
-                from starlette.exceptions import HTTPException
-
                 try:
                     if action == 'cancel':
                         message, category = data.cancel(job_id)
                         auth.session_data.setdefault('_flashes', []).append((category, message))
                     elif action == 'delete':
                         if not data.delete(job_id):
-                            raise HTTPException(status_code=404, detail='Not Found')
+                            from .response_compat import flask_http_exception_response
+
+                            return _finish(
+                                flask_http_exception_response(app, request, 404),
+                                app, auth, request,
+                            )
                         auth.session_data.setdefault('_flashes', []).append(
                             ('success', 'Scan job deleted successfully.'),
                         )
@@ -218,7 +221,12 @@ async def _handle(
                             database_scope=database_scope,
                         )
                         if result is None:
-                            raise HTTPException(status_code=404, detail='Not Found')
+                            from .response_compat import flask_http_exception_response
+
+                            return _finish(
+                                flask_http_exception_response(app, request, 404),
+                                app, auth, request,
+                            )
                         auth.session_data.setdefault('_flashes', []).append((
                             'error' if result.get('status') == 'rejected' else 'success',
                             result['message'],
@@ -248,8 +256,6 @@ async def _handle(
                     # native scan page defaults to Auto when the tab is absent.
                     target = '/scan_management?active_tab=jobs'
                     response = flask_redirect_response(target, status_code=302)
-                except HTTPException:
-                    raise
                 except Exception:
                     if action in {'delete', 'clear', 'clear_all'}:
                         from oneirodex.runtime_native.db_session import native_db as db

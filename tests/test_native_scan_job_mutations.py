@@ -29,6 +29,8 @@ class FakeScanJobs:
 
     def restart(self, job_id, *, queue_policy, app, database_scope):
         self.calls.append(('restart', job_id, queue_policy, app is not None, callable(database_scope)))
+        if job_id == 'missing':
+            return None
         return {'status': 'queued', 'message': 'Scan queued.'}
 
 
@@ -115,9 +117,24 @@ def test_scan_job_delete_and_clear_preserve_not_found_and_status_rules():
         '/restart_scan_job/job-1',
         data={'csrf_token': csrf, 'queue_policy': 'queue', 'force_parallel': '1'},
     )
+    missing_restart = client.post(
+        '/restart_scan_job/missing', data={'csrf_token': csrf},
+    )
+    missing_json = client.post(
+        '/delete_scan_job/missing', data={'csrf_token': csrf},
+        headers={'Accept': 'application/json'},
+    )
 
     assert deleted.status_code == 302
     assert missing.status_code == 404
+    from oneirodex.runtime_native.response_compat import flask_http_error_response
+    expected_not_found = flask_http_error_response(404)
+    for response in (missing, missing_restart):
+        assert response.headers['content-type'] == expected_not_found.headers['content-type']
+        assert response.content == expected_not_found.body
+    assert missing_restart.status_code == 404
+    assert missing_json.status_code == 404
+    assert missing_json.headers['content-type'].startswith('application/json')
     assert cleared_all.status_code == 302
     assert invalid_clear.status_code == 302
     assert cleared_status.status_code == 302
@@ -133,7 +150,8 @@ def test_scan_job_delete_and_clear_preserve_not_found_and_status_rules():
         assert response.content == expected_jobs.get_data()
     assert data.calls == [
         ('delete', 'job-1'), ('delete', 'missing'), ('clear', None), ('clear', 'Failed'),
-        ('restart', 'job-1', 'force', True, True),
+        ('restart', 'job-1', 'force', True, True), ('restart', 'missing', 'queue', True, True),
+        ('delete', 'missing'),
     ]
 
 
