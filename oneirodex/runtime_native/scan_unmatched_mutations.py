@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from .request_auth import request_auth_context
 
@@ -430,6 +430,12 @@ def create_scan_unmatched_mutations_router(
     @router.api_route('/api/unmatched_folders/{folder_id:str}/name', methods=['PATCH', 'POST'])
     async def amend_name(folder_id: str, request: Request):
         return await _run(request, **options, handler=_amend_name, folder_id=folder_id, privilege='librarian')
+
+    @router.options('/api/unmatched_folders/{folder_id:str}/name')
+    async def amend_name_options(folder_id: str):
+        # Flask generated this unauthenticated OPTIONS response automatically.
+        # Keep its empty HTML response and Allow header for compatibility.
+        return HTMLResponse('', status_code=200, headers={'Allow': 'OPTIONS, PATCH, POST'})
 
     @router.api_route('/api/unmatched_folders/batch/clear', methods=['POST'])
     async def batch_clear(request: Request):

@@ -302,6 +302,18 @@ def test_name_alias_soft_amend_and_batch_clear_cap_dedupe(runtime):
     assert too_many.status_code == 400 and too_many.json()['requested'] == 101
 
 
+def test_soft_name_options_matches_flask_auto_options_without_auth(runtime):
+    app, _flask_app, data, _users, _cookies = runtime
+
+    response = _request(app, '/api/unmatched_folders/8/name', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['allow'] == 'OPTIONS, PATCH, POST'
+    assert response.content == b''
+    assert data.calls == []
+
+
 def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runtime):
     from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
