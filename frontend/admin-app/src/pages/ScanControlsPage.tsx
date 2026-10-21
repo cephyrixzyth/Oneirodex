@@ -4,7 +4,7 @@ import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useScanControls, type Schedule } from './useScanControls'
 import './ScanControlsPage.css'
 
-export function ScanControlsPage({ combined = false }: { combined?: boolean }) {
+export function ScanControlsPage() {
   const {
     manualMode,
     libraries,
@@ -82,16 +82,14 @@ export function ScanControlsPage({ combined = false }: { combined?: boolean }) {
     activeRoot,
     browseParts,
   } = useScanControls()
-  const manualOnly = manualMode && !combined
+  const manualOnly = manualMode
   return (
     <Page
-      title={combined ? 'Scans' : manualMode ? 'Manual scan / identify' : 'Automatic scan'}
+      title={manualMode ? 'Manual scan / identify' : 'Automatic scan'}
       lede={
-        combined
-          ? 'Choose a library and scan location, run an automatic scan, or identify folders manually from this page.'
-          : manualMode
-            ? 'List game folders or files for identification without starting a scan.'
-            : 'Choose a library and server folder, then start or schedule a scan.'
+        manualMode
+          ? 'List game folders or files for identification without starting a scan.'
+          : 'Choose a library and server folder, then start or schedule a scan.'
       }
     >
       <PageStatus
@@ -310,7 +308,7 @@ export function ScanControlsPage({ combined = false }: { combined?: boolean }) {
         id="manual-identify"
         className="od-admin-panel"
         aria-labelledby="od-manual-identify-title"
-        hidden={!combined && !manualMode}
+        hidden={!manualMode}
       >
         <h2 id="od-manual-identify-title">Manual identify</h2>
         <p className="od-admin-lede">

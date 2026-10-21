@@ -77,9 +77,9 @@ const CASES = [
   ['/admin/library/edit/123e4567-e89b-12d3-a456-426614174000', 'Edit library'],
   ['/libraries/legacy', 'Libraries & scans'],
   ['/admin/library/tools', 'Libraries & scans'],
-  ['/scan_management?active_tab=auto', 'Scans'],
-  ['/scan_management?active_tab=manual', 'Scans'],
-  ['/scan_manual_folder', 'Scans'],
+  ['/scan_management?active_tab=auto', 'Automatic scan'],
+  ['/scan_management?active_tab=manual', 'Manual scan / identify'],
+  ['/scan_manual_folder', 'Manual scan / identify'],
   ['/scan_management?active_tab=jobs', 'Scan jobs'],
   ['/scan_management?active_tab=unmatched', 'Unmatched folders'],
   ['/scan_management?active_tab=scan_filters', 'Game scanning filters'],
@@ -97,12 +97,24 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
   })
 
-  test('the scan management page keeps automatic scanning and manual identification together', () => {
-    mountAt('/scan_management?active_tab=manual')
-    expect(screen.getByRole('heading', { name: 'Scans', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+  test('automatic scan tab does not append the manual identification page', () => {
+    mountAt('/scan_management?active_tab=auto')
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Manual identify', level: 2 })).toBeNull()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'List games to identify' })).toBeNull()
+    expect(screen.queryByText('Dupe glance')).toBeNull()
+  })
+
+  test('manual identify tab renders its controls without automatic scan options', () => {
+    mountAt('/scan_management?active_tab=manual')
+    expect(
+      screen.getByRole('heading', { name: 'Manual scan / identify', level: 1 }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start scan' })).toBeNull()
+    expect(screen.queryByLabelText('Repeat schedule')).toBeNull()
   })
 
   test('catch-all lede matches the old switch default', () => {
