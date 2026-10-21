@@ -252,22 +252,41 @@ def create_account_summary_router(
                     )
                 else:
                     body = _json_mapping(await request.body())
-                    raw_email = body.get('email') or ''
-                    email = raw_email.strip() or None
-                    from oneirodex.utils.public_origin import public_origin_for_request
+                    raw_email = body.get('email')
+                    email = None
+                    invalid_email = False
+                    if raw_email is not None:
+                        if not isinstance(raw_email, str):
+                            invalid_email = True
+                        else:
+                            email = raw_email.strip() or None
+                            if email:
+                                from email_validator import EmailNotValidError, validate_email
 
-                    result = mutations.create(
-                        auth.user, email,
-                        origin=public_origin_for_request(request, flask_app.config),
-                    )
-                    if 'error' in result:
+                                try:
+                                    validate_email(email, check_deliverability=False)
+                                except EmailNotValidError:
+                                    invalid_email = True
+
+                    if invalid_email:
                         response = _native_error(
-                            result['error'], result['code'], config=flask_app.config,
+                            'Invalid email.', 'bad_request', config=flask_app.config,
                         )
                     else:
-                        response = _native_success(
-                            result, status=201, config=flask_app.config,
+                        from oneirodex.utils.public_origin import public_origin_for_request
+
+                        result = mutations.create(
+                            auth.user, email,
+                            origin=public_origin_for_request(request, flask_app.config),
                         )
+                        if 'error' in result:
+                            response = _native_error(
+                                result['error'], result['code'], config=flask_app.config,
+                            )
+                        else:
+                            response = _native_success(
+                                result, status=201, config=flask_app.config,
+                            )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:

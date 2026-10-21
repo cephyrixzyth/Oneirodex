@@ -80,7 +80,7 @@ class FakeAccountInviteMutations:
         self.deleted = []
         self.origins = []
         self.create_result = {
-            'invite': {'token': 'new-invite', 'email': 'friend@example.test'},
+            'invite': {'token': 'new-invite', 'email': 'friend@example.com'},
             'emailed': False,
             'remaining': 2,
             'unlimited': False,
@@ -348,7 +348,7 @@ def test_create_invite_requires_csrf_and_returns_created_payload():
 
     response = client.post(
         '/api/account/invites',
-        json={'email': ' friend@example.test '},
+        json={'email': ' friend@example.com '},
         headers={'X-CSRFToken': csrf},
     )
 
@@ -360,8 +360,27 @@ def test_create_invite_requires_csrf_and_returns_created_payload():
         'error_code': None,
         'success': True,
     }
-    assert mutations.created == [(167, 'friend@example.test')]
+    assert mutations.created == [(167, 'friend@example.com')]
     assert mutations.origins == ['http://testserver']
+
+
+def test_create_invite_rejects_invalid_email_values_without_mutating():
+    mutations = FakeAccountInviteMutations()
+    client = make_client(invites_data=mutations, mutations_data=mutations)
+    cookie, csrf = csrf_session()
+    client.cookies.set('session', cookie)
+
+    for email in ('not-an-email', 123):
+        response = client.post(
+            '/api/account/invites',
+            json={'email': email},
+            headers={'X-CSRFToken': csrf},
+        )
+        assert response.status_code == 400
+        assert response.json()['error'] == 'Invalid email.'
+        assert response.json()['error_code'] == 'bad_request'
+
+    assert mutations.created == []
 
 
 def test_create_invite_rejects_missing_csrf_before_mutating():

@@ -4797,14 +4797,14 @@ def test_lazy_asgi_dispatches_invite_creation_with_csrf_without_flask(monkeypatc
             client.cookies.set('session', cookie)
             return await client.post(
                 '/api/account/invites',
-                json={'email': 'friend@example.test'},
+                json={'email': 'friend@example.com'},
                 headers={'X-CSRFToken': csrf},
             )
 
     response = asyncio.run(perform_post())
     assert response.status_code == 201
     assert response.json()['invite'] == {
-        'token': 'created-invite', 'email': 'friend@example.test'
+        'token': 'created-invite', 'email': 'friend@example.com'
     }
     assert response.headers['x-content-type-options'] == 'nosniff'
 
