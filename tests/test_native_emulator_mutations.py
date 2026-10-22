@@ -345,14 +345,31 @@ def test_writes_reject_missing_csrf_before_authentication(native):
     ('/api/emulator-bios/scan', {'source': '/allowed/firmware'}),
     ('/api/emulator-bios/install', {'source': '/allowed/firmware'}),
 ])
-def test_anonymous_firmware_posts_redirect_before_csrf(native, path, payload):
+def test_anonymous_firmware_posts_reject_missing_csrf_before_auth(native, path, payload):
     app, api, data, _ = native
     app.login_manager.login_view = 'login.login'
 
     response = _request(api, 'POST', path, json=payload)
 
+    assert response.status_code == 400
+    assert 'CSRF token is missing' in response.json()['error']
+    assert data.calls == []
+
+
+def test_anonymous_firmware_post_with_valid_csrf_redirects_to_login(native):
+    app, api, data, _ = native
+    app.login_manager.login_view = 'login.login'
+    session = {}
+    csrf = generate_csrf_token(session, app.secret_key)
+    cookie = dump_session_cookie(session, app.secret_key)
+
+    response = _request(
+        api, 'POST', '/api/emulator-bios/scan', cookie=cookie, csrf=csrf,
+        json={'source': '/allowed/firmware'},
+    )
+
     assert response.status_code == 302
-    assert response.headers['location'] == f'/login?next={path.replace('/', '%2F')}'
+    assert response.headers['location'] == '/login?next=%2Fapi%2Femulator-bios%2Fscan'
     assert data.calls == []
 
 

@@ -97,10 +97,12 @@ def create_member_meta_router(
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth, response = authenticate(request)
-            if response is None and auth.token is None:
+            if auth.token is None:
                 from .csrf_compat import csrf_error_response
 
-                response = csrf_error_response(request, auth.session_data, flask_app.config)
+                csrf_response = csrf_error_response(request, auth.session_data, flask_app.config)
+                if csrf_response is not None:
+                    response = csrf_response
             if response is None:
                 from pydantic import ValidationError
 

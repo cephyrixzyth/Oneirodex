@@ -3900,6 +3900,11 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
         'POST', '/api/check_username', {'username': 'free'}, with_csrf=False,
     ))
     assert no_csrf.status_code == 400
+    anonymous_no_csrf = _run(
+        runtime, '/api/check_username', method='POST', json_body={'username': 'free'},
+    )
+    assert anonymous_no_csrf.status_code == 400
+    assert anonymous_no_csrf.json()['message'] == 'The CSRF token is missing.'
 
 
 def test_native_current_user_role_does_not_push_flask_context(monkeypatch):
