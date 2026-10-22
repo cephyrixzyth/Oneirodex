@@ -719,9 +719,19 @@ async def _preview_cropped_image(request, data):
     from oneirodex.utils.validation import format_validation_errors
     from pydantic import ValidationError
 
-    try:
-        body = await request.json()
-    except Exception:
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    is_json = (
+        content_type == 'application/json'
+        or (content_type.startswith('application/') and content_type.endswith('+json'))
+    )
+    if is_json:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+    else:
+        # Flask request.get_json(silent=True) used by @validate_body returns
+        # no payload for non-JSON media types; keep its missing-field 422.
         body = {}
     try:
         model = PreviewCroppedImageBody.model_validate(body if isinstance(body, dict) else {})
