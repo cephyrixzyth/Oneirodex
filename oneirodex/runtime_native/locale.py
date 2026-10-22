@@ -139,7 +139,9 @@ async def _locale_from_request(request: Request) -> str | None:
         return form.get('locale')
 
     raw = await request.body()
-    if content_type == 'application/json':
+    if content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         try:
             payload = json.loads(raw or b'{}')
         except (TypeError, ValueError):

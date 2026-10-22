@@ -384,7 +384,10 @@ Leave these until the contract can be preserved; do not force them.
   success**.
 - `routes_apis/rtc.py` — every field optional with defaults.
 - `routes_apis/assists.py` PUT — every field optional.
-- `routes_apis/locale.py` — also reads `request.form`.
+- `routes_apis/locale.py` — also reads `request.form`; vendor
+  `application/*+json` follows Flask's JSON parser, while non-application
+  `+json` remains a form parse. Evidence:
+  `.artifacts/parity-v1.1.8/locale-json-media-20261022.json`.
 - `routes_apis/notifications.py` — all-optional toggles.
 - `routes_apis/download.py` — JSON + query args.
 - `routes_apis/imports_playnite.py` — file or JSON.
