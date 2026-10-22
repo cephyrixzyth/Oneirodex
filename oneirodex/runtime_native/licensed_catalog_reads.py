@@ -191,7 +191,10 @@ def create_licensed_catalog_reads_router(
                 else:
                     try:
                         content_type = request.headers.get('content-type', '').lower()
-                        if 'application/json' in content_type:
+                        if content_type == 'application/json' or (
+                            content_type.startswith('application/')
+                            and content_type.endswith('+json')
+                        ):
                             raw = await request.json()
                         elif 'application/x-www-form-urlencoded' in content_type or 'multipart/form-data' in content_type:
                             raw = dict(await request.form())

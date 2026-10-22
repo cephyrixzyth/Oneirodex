@@ -393,7 +393,10 @@ Leave these until the contract can be preserved; do not force them.
 - `routes_apis/imports_playnite.py` — file or JSON.
 - `routes_apis/game_mods_api.py` create — all fields optional.
 - `routes_apis/licensed_catalog.py` refresh / `reference_sets.py` rehash —
-  also `request.form`.
+  also `request.form`. Licensed-catalog refresh uses Flask's
+  `application/json` / `application/*+json` classifier; `application/jsonp`
+  cannot trigger a refresh. Evidence:
+  `.artifacts/parity-v1.1.8/licensed-catalog-json-media-20261022.json`.
 - GET+PUT sharing one view: `remote_play`, `ambient_lighting`,
   `challenge_solver`, `loading_icons`, `metadata_providers`, `scan_match`
   config.

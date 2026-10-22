@@ -120,3 +120,41 @@ def test_refresh_rejects_missing_csrf_without_provider_action():
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
     assert data.statuses == []
+
+
+def test_refresh_uses_flask_json_media_type_classification(monkeypatch):
+    from flask import request as flask_request
+    from oneirodex.utils import event_logging
+
+    monkeypatch.setattr(event_logging, 'log_system_event', lambda *_args, **_kwargs: None)
+    legacy = Flask('legacy-licensed-catalog-media')
+    body = b'{"library_platform":"NES"}'
+    with legacy.test_request_context(
+        '/api/licensed-catalog/refresh', method='POST',
+        content_type='application/vnd.oneirodex+json', data=body,
+    ):
+        assert flask_request.is_json is True
+        assert flask_request.get_json(silent=True) == {'library_platform': 'NES'}
+    with legacy.test_request_context(
+        '/api/licensed-catalog/refresh', method='POST',
+        content_type='application/jsonp', data=body,
+    ):
+        assert flask_request.is_json is False
+        assert flask_request.get_json(silent=True) is None
+
+    client, data, csrf = _client(role='admin')
+    headers = {'X-CSRFToken': csrf}
+    vendor_json = client.post(
+        '/api/licensed-catalog/refresh', content=body,
+        headers={**headers, 'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+    misleading_jsonp = client.post(
+        '/api/licensed-catalog/refresh', content=body,
+        headers={**headers, 'Content-Type': 'application/jsonp'},
+    )
+
+    assert vendor_json.status_code == 200
+    assert vendor_json.json()['unique_titles'] == 4
+    assert misleading_jsonp.status_code == 400
+    assert misleading_jsonp.json()['error_code'] == 'bad_request'
+    assert data.statuses == ['refresh:NES']
