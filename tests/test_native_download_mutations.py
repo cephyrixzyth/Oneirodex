@@ -375,6 +375,90 @@ def test_download_api_acl_and_version_errors_match_legacy_flask(scenario, monkey
     assert current_data.created is None
 
 
+@pytest.mark.parametrize('kind', ['base', 'update', 'extra'])
+def test_download_api_success_matches_legacy_flask(kind, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis import apis_bp
+    import oneirodex.routes_apis.download as legacy_routes
+
+    secret = 'download-api-success-parity-secret'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(
+        uuid='12345678-1234-1234-1234-123456789abc', name='Fixture',
+        full_disk_path='/storage/fixture',
+    )
+    file_location = f'/storage/fixture/{kind}.bin'
+    zip_hint = file_location
+    version_uuid = f'{kind}-version'
+    legacy_calls = []
+
+    monkeypatch.setattr(legacy_routes, '_downloadable_game', lambda _uuid: (game, None))
+    monkeypatch.setattr(
+        legacy_routes, 'resolve_version_file',
+        lambda _game, *, kind, version_uuid: (file_location, zip_hint, version_uuid),
+    )
+    monkeypatch.setattr(legacy_routes, '_resolve_zip_file_path', lambda _game, path: path)
+    monkeypatch.setattr(legacy_routes, 'get_allowed_base_directories', lambda _app: ['/storage'])
+    monkeypatch.setattr(legacy_routes, 'is_safe_path', lambda _path, _bases: (True, None))
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        legacy_routes, '_create_or_get_download_request',
+        lambda target, **kwargs: (
+            legacy_calls.append((target.uuid, kwargs))
+            or SimpleNamespace(id=81, status='available')
+        ),
+    )
+
+    legacy_app = Flask(f'legacy-download-api-success-{kind}')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(legacy_routes.os.path, 'isfile', lambda path: path == file_location)
+        scoped.setattr(legacy_routes.os.path, 'isdir', lambda _path: False)
+        legacy = legacy_client.post(
+            f'/api/downloads/games/{game.uuid}', json={'kind': kind, 'version_uuid': version_uuid},
+            follow_redirects=False,
+        )
+
+    current_data = FakeDownloads()
+    current_data.resolve_version = lambda _game, *, kind, version_uuid: (
+        file_location, zip_hint, version_uuid,
+    )
+    current_data.zip_path = lambda _game, target, **_kwargs: target
+    current_calls = []
+    current_data.create_request = lambda target, _user, **kwargs: (
+        current_calls.append((target.uuid, kwargs))
+        or SimpleNamespace(id=81, status='available')
+    )
+    current = make_client(data=current_data, role='user').post(
+        f'/api/downloads/games/{game.uuid}',
+        json={'kind': kind, 'version_uuid': version_uuid}, follow_redirects=False,
+    )
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.json() == legacy.get_json()
+    assert len(legacy_calls) == len(current_calls) == 1
+    assert legacy_calls[0][1]['kind'] == current_calls[0][1]['kind'] == kind
+    assert legacy_calls[0][1]['version_uuid'] == current_calls[0][1]['version_uuid'] == version_uuid
+    assert legacy_calls[0][1]['file_location'] == current_calls[0][1]['file_location'] == file_location
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
