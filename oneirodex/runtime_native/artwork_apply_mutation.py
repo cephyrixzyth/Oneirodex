@@ -96,10 +96,15 @@ def create_artwork_apply_router(
                     response = JSONResponse(payload, status_code=status)
                 else:
                     raw = bytearray()
-                    async for chunk in request.stream():
-                        raw.extend(chunk)
-                        if len(raw) > 16 * 1024:
-                            break
+                    media_type = str(request.headers.get('content-type') or '').partition(';')[0].strip().lower()
+                    is_json = media_type == 'application/json' or (
+                        media_type.startswith('application/') and media_type.endswith('+json')
+                    )
+                    if is_json:
+                        async for chunk in request.stream():
+                            raw.extend(chunk)
+                            if len(raw) > 16 * 1024:
+                                break
                     if len(raw) > 16 * 1024:
                         payload, status = api_error_payload('Request payload is too large', code='payload_too_large')
                         response = JSONResponse(payload, status_code=status)

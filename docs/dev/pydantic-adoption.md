@@ -205,6 +205,12 @@ required-field validation without mutating the wanted list.
   request-decoding cases; provider-failure, broader role, and UI branches
   remain open. Evidence: `retroachievements-match-json-edges-exact-r268-20261022.json`
   in the private parity artifacts.
+- **`artwork_apply`** — the endpoint now parses only `application/json` and
+  `application/*+json`, matching Flask for missing, text/plain, and
+  application/octet-stream Content-Type. R272 matched all 12 exact-image
+  status cases. It retains field-specific `url` errors for malformed and
+  non-object JSON instead of the legacy generic root error under the saved
+  P18 improvement decision. Provider and file outcomes remain open.
 - **`reference_sets_rehash`** — `application/*+json` vendor media types are
   parsed like Flask. The exact R269 replay matched 11 of 13 invalid/missing
   platform cases. The saved P18 decision retains the current controlled 400

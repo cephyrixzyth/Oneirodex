@@ -55,6 +55,34 @@ def test_apply_artwork_preserves_provider_and_kind_alias():
     }
 
 
+def test_apply_artwork_rejects_json_bytes_with_non_json_media_type():
+    calls = []
+    data = SimpleNamespace(
+        game_exists=lambda _uuid: True,
+        apply=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    response = make_client(data=data).post(
+        '/api/games/game-1/artwork/steamgriddb',
+        data='{"url":"https://images.invalid/game.jpg"}',
+        headers={'Content-Type': 'text/plain'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert calls == []
+
+
+def test_apply_artwork_accepts_vendor_json_media_type():
+    response = make_client().post(
+        '/api/games/game-1/artwork/steamgriddb',
+        data='{"url":"https://images.invalid/game.jpg"}',
+        headers={'Content-Type': 'application/vnd.api+json'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['url'] == 'https://images.invalid/game.jpg'
+
+
 def test_apply_artwork_validation_and_game_not_found_do_not_apply():
     calls = []
     data = SimpleNamespace(
