@@ -545,6 +545,66 @@ def test_legacy_download_invalid_file_type_redirect_and_flash_match_flask(monkey
     ]
 
 
+@pytest.mark.parametrize('scenario', ['invalid_file_id', 'missing_game', 'acl_denied'])
+def test_legacy_download_other_preflight_errors_match_flask(scenario, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+    import oneirodex.routes_downloads_ext.initiate as legacy_routes
+
+    secret = 'native-download-mutations-secret'
+    game_uuid = '12345678-1234-1234-1234-123456789abc'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(
+        uuid=game_uuid, name='Fixture', full_disk_path='/storage/fixture',
+    )
+
+    class QueryResult:
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None if scenario == 'missing_game' else game
+
+    monkeypatch.setattr(legacy_routes.db.session, 'execute', lambda _query: QueryResult())
+    monkeypatch.setattr(
+        legacy_routes, 'user_can_access_game',
+        lambda *_args: scenario != 'acl_denied',
+    )
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda *_args, **_kwargs: None)
+
+    legacy_app = Flask(f'legacy-download-other-{scenario}')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    file_id = 'not-an-id' if scenario == 'invalid_file_id' else '42'
+    path = f'/download_other/update/{game_uuid}/{file_id}'
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current_data = FakeDownloads()
+    current_data.missing_game = scenario == 'missing_game'
+    current_data.access_allowed = scenario != 'acl_denied'
+    current = make_client(data=current_data, role='user').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.headers.get('content-length') == legacy.headers.get('Content-Length')
+    assert current.content == legacy.get_data()
+    assert current_data.created is None
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
