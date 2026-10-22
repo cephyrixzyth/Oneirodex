@@ -301,6 +301,21 @@ def create_member_shell_router(flask_app, *, database_scope):
 
         scope = database_scope(flask_app)
         with scope:
+            from oneirodex.utils.setup import (
+                get_setup_redirect_url, should_redirect_to_setup,
+            )
+
+            if should_redirect_to_setup():
+                target = get_setup_redirect_url()
+                if path != target:
+                    from oneirodex.runtime_native.response_compat import flask_redirect_response
+                    from oneirodex.utils.security_headers import security_header_values
+
+                    response = flask_redirect_response(target, status_code=302)
+                    for key, value in security_header_values(flask_app.config).items():
+                        response.headers.setdefault(key, value)
+                    return response
+
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, login_manager=login_manager,

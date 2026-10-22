@@ -104,6 +104,14 @@ def create_setup_pages_router(
                         data.redirect_url(), status_code=302,
                     )
                 elif auth.user is None or _role(auth.user) != 'admin':
+                    if auth.user is not None:
+                        # The login page redirects already-authenticated users
+                        # back to Discover. Clear a non-admin session first so
+                        # the admin can sign in without cycling through the
+                        # unfinished setup guard.
+                        for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
+                            auth.session_data.pop(key, None)
+                        auth.session_data['_remember'] = 'clear'
                     _flash(
                         auth.session_data, 'warning',
                         'Sign in with the admin account you just created to finish setup.',

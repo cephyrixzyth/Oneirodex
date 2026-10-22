@@ -8490,6 +8490,31 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
     assert stale_library.headers['location'] == '/setup/integrations'
 
 
+def test_native_setup_gate_signs_out_nonadmin_before_redirecting_to_login(monkeypatch):
+    data = SimpleNamespace(current_step=lambda: 5)
+    session_data = {
+        '_user_id': '14:member-fingerprint', '_fresh': True,
+        '_id': 'member-session-id', '_remember_seconds': 3600,
+    }
+    auth = SimpleNamespace(user=SimpleNamespace(role='member'), session_data=session_data)
+    monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
+    monkeypatch.setattr(native_setup_pages, 'request_auth_context', lambda *_a, **_k: auth)
+    monkeypatch.setattr(native_setup_pages, '_finish_response', lambda *_a, **_k: None)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/setup/integrations', cookie=_signed_session())
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=/setup/integrations'
+    assert session_data == {
+        '_remember': 'clear',
+        '_flashes': [(
+            'warning',
+            'Sign in with the admin account you just created to finish setup.',
+        )],
+    }
+
+
 def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):
     data = SimpleNamespace(
         required=lambda: False,

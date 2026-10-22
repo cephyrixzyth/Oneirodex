@@ -50,7 +50,10 @@ def _app_config(**overrides):
     )
 
 
-def _native_client(monkeypatch, *, config=None, query_result=None, user=None, native_session=None):
+def _native_client(
+    monkeypatch, *, config=None, query_result=None, user=None, native_session=None,
+    setup_redirect=None,
+):
     user = user or Member()
     session_data = {
         '_user_id': '14:fingerprint',
@@ -64,6 +67,14 @@ def _native_client(monkeypatch, *, config=None, query_result=None, user=None, na
     monkeypatch.setattr(member_shell, 'request_auth_context', lambda *_args, **_kwargs: SimpleNamespace(
         user=user, session_data=session_data, should_set_session_cookie=True, token=None,
     ))
+    from oneirodex.utils import setup as setup_utils
+
+    monkeypatch.setattr(
+        setup_utils, 'should_redirect_to_setup', lambda: setup_redirect is not None,
+    )
+    monkeypatch.setattr(
+        setup_utils, 'get_setup_redirect_url', lambda: setup_redirect,
+    )
 
     @contextmanager
     def database_scope(_app):
@@ -138,6 +149,20 @@ def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
         assert member_shell.member_shell_route(path)
     assert member_shell.member_shell_route('/game_details/not-a-uuid')
     assert not member_shell.member_shell_route('/api/auth/runtime-bootstrap')
+
+
+def test_member_shell_redirects_to_active_setup_step_while_setup_is_incomplete(monkeypatch):
+    client, _session_data = _native_client(
+        monkeypatch, setup_redirect='/setup/integrations',
+    )
+
+    response = client.get('/discover', follow_redirects=False)
+    head = client.head('/library', follow_redirects=False)
+
+    assert response.status_code == head.status_code == 302
+    assert response.headers['location'] == head.headers['location'] == '/setup/integrations'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['content-security-policy']
 
 
 def test_game_details_shell_keeps_uuid_existence_and_library_acl(monkeypatch):
