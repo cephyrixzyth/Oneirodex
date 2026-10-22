@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -249,6 +250,33 @@ def test_librarian_catalog_and_mod_crud_validation(runtime):
     assert invalid.status_code == 422
     assert updated.json()['mod']['version'] == '2'
     assert deleted.json()['id'] == 'mod-1'
+
+
+def test_mod_create_accepts_vendor_json_like_legacy_validator(runtime):
+    app, flask_app, data, _users, _tokens, cookies = runtime
+    from oneirodex.schemas.game_mods import ModRowBody
+    from oneirodex.utils.validation import validate_body
+
+    @validate_body(ModRowBody)
+    def legacy_validator(body):
+        return {'payload': body.payload()}
+
+    flask_app.add_url_rule('/legacy-json-check', view_func=legacy_validator, methods=['POST'])
+    vendor_type = 'application/vnd.oneirodex+json'
+    vendor_body = {'id': 'vendor-mod', 'name': 'Vendor body'}
+    legacy = flask_app.test_client().post(
+        '/legacy-json-check', data=json.dumps(vendor_body), content_type=vendor_type,
+    )
+    current = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['librarian'], method='POST',
+        json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy.status_code == 200
+    assert legacy.json['payload'] == vendor_body
+    assert current.status_code == 201
+    assert current.json()['mod'] == vendor_body
+    assert ('create_mod', 'game-1', vendor_body) in data.calls
 
 
 def test_bulk_pack_profiles_import_export_activate_and_delete(runtime):

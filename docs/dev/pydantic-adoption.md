@@ -391,6 +391,17 @@ Leave these until the contract can be preserved; do not force them.
   `challenge_solver`, `loading_icons`, `metadata_providers`, `scan_match`
   config.
 
+### `routes_apis/game_mods_api.py` request media type
+
+The native game-mod body reader accepts both `application/json` and
+`application/*+json`, matching Flask's `request.get_json(silent=True)` used by
+`@validate_body`. A focused regression compares the legacy validator with a
+native mod create using `application/vnd.oneirodex+json`; both preserve the
+submitted `id` and `name`. See
+`.artifacts/parity-v1.1.8/game-mod-vendor-json-content-type-20261022.json`.
+This closes only the vendor-JSON request parsing case. The game-mod routes
+remain partially verified overall.
+
 ### `routes_admin_ext/system.py`
 
 - `update_discovery_section_schedule` / `update_discovery_section_pin` —

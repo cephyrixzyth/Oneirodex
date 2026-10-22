@@ -479,7 +479,10 @@ async def _validate_body(request, schema_key):
     from oneirodex.utils.validation import format_validation_errors
 
     payload = {}
-    if request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         try:
             value = await request.json()
             payload = value if isinstance(value, dict) else {}
