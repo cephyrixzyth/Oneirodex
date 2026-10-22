@@ -167,6 +167,51 @@ def _request(app, method, path, *, cookie=None, csrf=None, **kwargs):
     return asyncio.run(perform())
 
 
+@pytest.mark.parametrize('surface', ['pc_wand', 'retroarch'])
+def test_pc_cheat_list_matches_legacy_handler_empty_and_wrong_surface(native, monkeypatch, surface):
+    from oneirodex.routes_apis import emulator_cheats as legacy_routes
+    from oneirodex.utils.api_response import api_error
+
+    app, api, data, user = native
+    cookie, _csrf = _cookie(app)
+    data.surface = surface
+
+    class Scalars:
+        def all(self):
+            return []
+
+    class Result:
+        def scalars(self):
+            return Scalars()
+
+    class LegacySession:
+        def execute(self, _statement):
+            return Result()
+
+    monkeypatch.setattr(legacy_routes.db, 'session', LegacySession())
+    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (object(), None))
+    if surface == 'pc_wand':
+        monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: ('pc_wand', None))
+    else:
+        with app.app_context():
+            refusal = api_error(
+                'PC cheats apply to PC titles. This platform uses the RetroArch cheat surface.',
+                code='bad_request', cheat_surface='retroarch',
+            )
+        monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: (None, refusal))
+    legacy_list = legacy_routes.pc_cheats_list.__wrapped__.__wrapped__
+    with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
+        legacy_response = app.make_response(legacy_list('game-1'))
+
+    current_response = _request(
+        api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie,
+    )
+
+    assert legacy_response.status_code == current_response.status_code
+    assert legacy_response.mimetype == current_response.headers['content-type'].split(';', 1)[0]
+    assert legacy_response.get_json() == current_response.json()
+
+
 def test_cheat_list_download_and_create_keep_legacy_shapes(native):
     app, api, data, _ = native
     cookie, csrf = _cookie(app, csrf=True)
