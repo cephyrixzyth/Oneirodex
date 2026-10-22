@@ -165,6 +165,25 @@ def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
     assert data.calls[0][1]['watch_enabled'] is False
 
 
+def test_unauthenticated_library_api_returns_json_401_after_valid_csrf(native_client):
+    runtime, data = native_client
+    session = {}
+    csrf = generate_csrf_token(session, 'library-admin-secret')
+    session_cookie = dump_session_cookie(session, 'library-admin-secret')
+    response = _request(
+        runtime, 'PUT', '/api/admin/libraries/lib-1', cookie=False,
+        headers={'Cookie': f'session={session_cookie}', 'X-CSRFToken': csrf},
+        data={
+            'csrf_token': csrf, 'name': 'Must not update', 'platform': 'PCWIN',
+            'scan_depth': '1', 'watch_enabled': 'default',
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()['error_code'] == 'unauthorized'
+    assert not any(call[0] == 'update' for call in data.calls)
+
+
 def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client):
     runtime, data = native_client
     rejected = _request(

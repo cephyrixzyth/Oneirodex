@@ -653,7 +653,11 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
         if response is not None and delete_form_compat:
             response = csrf_html_error_response(response)
         if response is None and auth.user is None:
-            response = _login_redirect(flask_app, request, login_manager, auth)
+            # API clients follow redirects inside fetch and would consume the
+            # login HTML as a successful response. Return the JSON 401 contract
+            # so the SPA's unauthorized handler can navigate the top-level
+            # page to login while preserving its current route.
+            response = _error('Authentication required', 'unauthorized', 401)
         if response is None:
             from oneirodex.utils.role_catalog import normalize_role
 
