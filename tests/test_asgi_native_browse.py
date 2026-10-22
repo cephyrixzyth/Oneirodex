@@ -8094,6 +8094,9 @@ def test_lazy_asgi_dispatches_cropped_library_image_preview_with_admin_csrf(monk
         runtime, '/api/library/preview-cropped-image', cookie=cookie,
         method='POST', json_body={'image_data': 'x'},
     )
+    options = _run(
+        runtime, '/api/library/preview-cropped-image', method='OPTIONS',
+    )
 
     assert preview.status_code == 200
     assert preview.json()['preview_url'] == 'data:image/png;base64,processed'
@@ -8101,6 +8104,10 @@ def test_lazy_asgi_dispatches_cropped_library_image_preview_with_admin_csrf(monk
     assert wrong_content_type.status_code == 422
     assert wrong_content_type.json()['error_code'] == 'unprocessable'
     assert no_csrf.status_code == 400
+    assert options.status_code == 200
+    assert options.headers['allow'] == 'HEAD, OPTIONS, POST, GET'
+    assert options.headers['content-type'] == 'text/html; charset=utf-8'
+    assert options.content == b''
     assert fake.images == ['data:image/jpeg;base64,original']
 
 

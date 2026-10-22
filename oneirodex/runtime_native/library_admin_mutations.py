@@ -16,7 +16,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
@@ -286,6 +286,15 @@ def create_library_admin_mutations_router(
 ) -> APIRouter:
     router = APIRouter()
     data = data_access or LibraryAdminMutationData()
+
+    @router.options('/api/library/preview-cropped-image')
+    async def preview_cropped_image_options():
+        # Match Flask's automatically generated OPTIONS response for this API.
+        return Response(
+            status_code=200,
+            headers={'Allow': 'HEAD, OPTIONS, POST, GET'},
+            media_type='text/html',
+        )
 
     @router.post('/api/library/preview-cropped-image')
     async def preview_cropped_image(request: Request):
