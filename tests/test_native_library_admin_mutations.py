@@ -165,6 +165,58 @@ def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
     assert data.calls[0][1]['watch_enabled'] is False
 
 
+@pytest.mark.parametrize(
+    ('payload', 'message'),
+    [
+        ({'name': ' ', 'platform': 'PCWIN'}, 'Library name is required'),
+        ({'name': 'x' * 256, 'platform': 'PCWIN'}, 'Library name is required'),
+        ({'name': 'Invalid platform', 'platform': 'NO_SUCH_PLATFORM'}, 'supported platform'),
+        ({'name': 'Invalid depth', 'platform': 'PCWIN', 'scan_depth': 3}, 'Scan depth must be 1 or 2'),
+        ({'name': 'Invalid watch', 'platform': 'PCWIN', 'watch_enabled': 'sometimes'}, 'watch setting'),
+    ],
+)
+def test_library_create_api_rejects_invalid_fields_without_adapter_calls(native_client, payload, message):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries', json=payload)
+
+    assert response.status_code == 400
+    assert message in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_create_api_rejects_corrupt_image_without_adapter_call(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Broken image', 'platform': 'PCWIN'},
+        files={'image': ('broken.png', b'not an image', 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'could not be read' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_create_form_and_api_keep_transport_specific_admin_denial(native_client):
+    runtime, data = native_client
+    current = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        json={'name': 'Member attempt', 'platform': 'PCWIN'}, user_id=8,
+    )
+    legacy = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', 'name': 'Member attempt',
+              'platform': 'PCWIN', 'scan_depth': '1', 'watch_enabled': 'default'},
+        csrf_header=False, user_id=8,
+    )
+
+    assert current.status_code == 403
+    assert current.json()['error_code'] == 'forbidden'
+    assert legacy.status_code == 302
+    assert legacy.headers['location'] == '/login'
+    assert data.calls == []
+
+
 def test_unauthenticated_library_api_returns_json_401_after_valid_csrf(native_client):
     runtime, data = native_client
     session = {}
