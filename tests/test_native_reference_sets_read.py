@@ -274,6 +274,13 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
         '/api/reference-sets/rehash', json={'platform': 'NES'},
         headers={'X-CSRFToken': client.csrf_token},
     )
+    vendor_json_rehash = client.post(
+        '/api/reference-sets/rehash', data='{"platform":"NES"}',
+        headers={
+            'Content-Type': 'application/vnd.api+json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
     preview = client.post(
         '/api/reference-sets/repair-preview',
         json={'library_platform': 'NES', 'region': 'USA', 'limit': 5},
@@ -286,10 +293,12 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
 
     assert missing_platform.status_code == 400
     assert rehashed.json() == {'platform': 'NES', 'hashed': 2, 'skipped': 1}
+    assert vendor_json_rehash.json() == {'platform': 'NES', 'hashed': 2, 'skipped': 1}
     assert preview.json()['candidate_count'] == 3
     assert calls[0] == ('rehash', 'NES')
-    assert calls[1][0] == 'preview'
-    assert calls[1][1]['limit'] == 5
+    assert calls[1] == ('rehash', 'NES')
+    assert calls[2][0] == 'preview'
+    assert calls[2][1]['limit'] == 5
     assert invalid_preview.status_code == 422
     assert 'unknown' in invalid_preview.json()['detail']
 

@@ -205,6 +205,12 @@ required-field validation without mutating the wanted list.
   request-decoding cases; provider-failure, broader role, and UI branches
   remain open. Evidence: `retroachievements-match-json-edges-exact-r268-20261022.json`
   in the private parity artifacts.
+- **`reference_sets_rehash`** — `application/*+json` vendor media types are
+  parsed like Flask. The exact R269 replay matched 11 of 13 invalid/missing
+  platform cases. The saved P18 decision retains the current controlled 400
+  for malformed JSON (legacy 500) and the current URL-encoded `platform`
+  alias (legacy only accepts `library_platform`). Valid-platform file hashing
+  and UI branches remain open; see the private R269 parity artifact.
 - **`games_batch_favorite`** — missing `favorite` / `uuids` was 400 with
   `updated`/`skipped`/`errors`/`limit`. Now 422 `unprocessable` with the
   same extra keys plus `detail` naming the field. Over-limit is still 400.
