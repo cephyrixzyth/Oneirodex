@@ -81,7 +81,9 @@ def create_site_redirect_router(
                     runtime_app, request, getattr(runtime_app, 'login_manager', None), auth,
                 )
             else:
-                response = RedirectResponse('/welcome', status_code=302)
+                # The legacy route is the authenticated app entry page.
+                # `/welcome` now means first-run store setup.
+                response = RedirectResponse('/discover', status_code=302)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, runtime_app, auth)
 

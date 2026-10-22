@@ -139,7 +139,7 @@ def test_restricted_redirect_preserves_login_next_and_authenticated_welcome(monk
     authenticated, cookie = _client(monkeypatch, user=User())
     response = _request(authenticated, 'GET', '/restricted', cookie)
     assert response.status_code == 302
-    assert response.headers['location'] == '/welcome'
+    assert response.headers['location'] == '/discover'
 
 
 def test_settings_page_get_redirects_keep_legacy_account_destinations(monkeypatch):
