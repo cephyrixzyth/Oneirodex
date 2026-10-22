@@ -95,11 +95,20 @@ def create_setup_pages_router(
                     else:
                         response = flask_redirect_response('/setup', status_code=302)
                 elif step != expected_steps[page]:
-                    # Flask's global setup guard sends requests for a stale
-                    # wizard page straight to the currently active step. Keep
-                    # this router's parity with that behavior instead of
-                    # bouncing through /setup (which adds a request and can
-                    # restart setup state on installations still on step 1).
+                    # Keep the shorter current hop to the active wizard step.
+                    # Legacy /setup/smtp and /setup/igdb bounce through /setup
+                    # here (unlike its other setup routes), so preserve their
+                    # warning while avoiding the extra request.
+                    if page == '/setup/smtp':
+                        _flash(
+                            auth.session_data, 'warning',
+                            'Please complete the admin account setup first.',
+                        )
+                    elif page == '/setup/igdb':
+                        _flash(
+                            auth.session_data, 'warning',
+                            'Please complete the previous setup steps first.',
+                        )
                     response = flask_redirect_response(
                         data.redirect_url(), status_code=302,
                     )
