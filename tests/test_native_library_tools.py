@@ -10,6 +10,7 @@ from flask import Flask
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.library_tools import create_library_tools_router
+from oneirodex.runtime_native.library_tools_mutations import create_library_tools_mutations_router
 from oneirodex.runtime_native.library_tools import LibraryToolsData
 from oneirodex.runtime_native.library_tools_manual_identify import ManualIdentifyListData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -112,6 +113,12 @@ def runtime():
         load_user_id=lambda identity: manager.user_callback(identity),
         login_manager=manager, data_access=fake,
     ))
+    app.include_router(create_library_tools_mutations_router(
+        flask_app, find_user=lambda uid: next((u for u in users.values() if u.id == uid), None),
+        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        load_user_id=lambda identity: manager.user_callback(identity),
+        login_manager=manager, data_access=fake,
+    ))
     app.state.legacy_flask_app = flask_app
     app.add_api_route('/api/options-mixed', lambda: 'ok', methods=['GET', 'POST'])
     app.state.legacy_options_allow = flask_app.test_client().options(
@@ -189,7 +196,12 @@ def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtim
 
 
 @pytest.mark.parametrize('identity', [None, 'member'])
-def test_doctor_dry_run_auth_matches_legacy_flask(runtime, identity):
+@pytest.mark.parametrize('path', [
+    '/api/library_tools/doctor/dry_run',
+    '/api/library_tools/doctor/write_proposals',
+    '/api/library_tools/doctor/apply_renames',
+])
+def test_library_doctor_auth_matches_legacy_flask(runtime, identity, path):
     app, _data, cookies = runtime
     legacy_client = app.state.legacy_flask_app.test_client()
     cookie = cookies[identity] if identity else None
@@ -199,11 +211,11 @@ def test_doctor_dry_run_auth_matches_legacy_flask(runtime, identity):
             session['_fresh'] = True
 
     legacy = legacy_client.post(
-        '/api/library_tools/doctor/dry_run', json={'roots': ['/safe']},
+        path, json={'roots': ['/safe'], 'rows': []},
     )
     native = _request(
-        app, '/api/library_tools/doctor/dry_run', cookie=cookie,
-        method='POST', json={'roots': ['/safe']},
+        app, path, cookie=cookie, method='POST',
+        json={'roots': ['/safe'], 'rows': []},
     )
 
     assert native.status_code == legacy.status_code
