@@ -190,7 +190,7 @@ def create_emulator_reads_router(
             elif response is None and auth.token is not None and not auth.has_scope('admin'):
                 response = _error(403, 'forbidden', 'This token does not have the admin scope')
             elif response is None and request.method in ('POST', 'PUT'):
-                payload = await _json_any(request)
+                payload = (await _json_any(request)) or {}
                 if not isinstance(payload, dict):
                     response = _error(400, 'bad_request', 'JSON object required')
                 else:
@@ -248,6 +248,11 @@ async def _json_body(request):
 async def _json_any(request):
     import json
 
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
+        return None
     try:
         return json.loads(await request.body() or b'{}')
     except (TypeError, ValueError):

@@ -5746,6 +5746,43 @@ def test_native_browser_player_settings_preserve_admin_csrf_and_validation(monke
     assert saved.status_code == 200 and saved.json()['engine'] == 'webretro'
 
 
+def test_native_browser_player_settings_matches_flask_silent_json(monkeypatch):
+    _flask_app, admin_runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    headers = {'Content-Type': 'application/json', 'X-CSRFToken': csrf_token}
+
+    async def send_raw(content, content_type='application/json'):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=admin_runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.put(
+                '/api/browser-player-settings', content=content,
+                headers={**headers, 'Content-Type': content_type},
+                follow_redirects=False,
+            )
+
+    cases = [
+        (b'{', 'application/json'),
+        (b'null', 'application/json'),
+        (b'false', 'application/json'),
+        (b'0', 'application/json'),
+        (b'""', 'application/json'),
+        (b'[]', 'application/json'),
+        (b'{"engine":"ignored"}', 'text/plain'),
+    ]
+    responses = [asyncio.run(send_raw(content, content_type))
+                 for content, content_type in cases]
+    truthy_list = asyncio.run(send_raw(b'["not", "an", "object"]'))
+
+    assert all(response.status_code == 200 for response in responses)
+    assert truthy_list.status_code == 400
+    assert truthy_list.json()['error'] == 'JSON object required'
+    assert admin_runtime._fake_emulator.saved == [
+        ('browser', {}) for _ in cases
+    ]
+
+
 def test_lazy_asgi_dispatches_wishlist_list_without_flask(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     asyncio.run(runtime._ensure_flask())
