@@ -29,15 +29,15 @@ class SetupTransitionBody(BaseModel):
     enable_malware_scan: bool = True
     igdb_client_id: str = Field(default='', max_length=255)
     igdb_client_secret: str = Field(default='', max_length=512)
-    steam_web_api_key: str = Field(default='', max_length=512)
+    steam_web_api_key: str = Field(default='', max_length=255)
     configure_steam_web_api_key: bool = False
-    steamgriddb_api_key: str = Field(default='', max_length=512)
+    steamgriddb_api_key: str = Field(default='', max_length=255)
     configure_steamgriddb_api_key: bool = False
-    giantbomb_api_key: str = Field(default='', max_length=512)
+    giantbomb_api_key: str = Field(default='', max_length=255)
     configure_giantbomb_api_key: bool = False
-    mobygames_api_key: str = Field(default='', max_length=512)
+    mobygames_api_key: str = Field(default='', max_length=255)
     configure_mobygames_api_key: bool = False
-    thegamesdb_api_key: str = Field(default='', max_length=512)
+    thegamesdb_api_key: str = Field(default='', max_length=255)
     configure_thegamesdb_api_key: bool = False
     enable_hltb_integration: bool = False
     configure_oidc: bool = False

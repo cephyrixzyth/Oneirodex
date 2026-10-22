@@ -26,6 +26,7 @@ function input(
   type = 'text',
   required = false,
   value = '',
+  maxLength?: number,
 ): ReactNode {
   return (
     <label className="auth-pilot__field" key={name}>
@@ -35,6 +36,7 @@ function input(
         type={type}
         defaultValue={value}
         autoComplete={type === 'password' ? 'new-password' : undefined}
+        maxLength={maxLength}
         required={required}
       />
     </label>
@@ -322,7 +324,14 @@ export function SetupWizard({
                 <fieldset className="auth-pilot__provider" key={key}>
                   <legend>{title}</legend>
                   {checkbox(`configure_${key}`, configure, Boolean(providerKeys[key]))}
-                  {input(key, providerKeys[key] ? 'API key (saved)' : 'API key', 'password')}
+                  {input(
+                    key,
+                    providerKeys[key] ? 'API key (saved)' : 'API key',
+                    'password',
+                    false,
+                    '',
+                    255,
+                  )}
                 </fieldset>
               ))}
               <fieldset className="auth-pilot__provider">

@@ -132,3 +132,33 @@ def test_integrations_json_transition_respects_provider_configure_checkboxes(cli
     assert settings.steam_web_api_key == 'existing-steam-key'
     assert settings.steamgriddb_api_key == 'selected-replacement'
     assert settings.giantbomb_api_key == 'existing-giantbomb-key'
+
+
+def test_integrations_reject_provider_key_larger_than_storage_column(client, db_session):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_limit_admin',
+        'email': 'provider-limit@example.com',
+        'password': 'correct horse battery',
+        'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        'configure_steam_web_api_key': True,
+        'steam_web_api_key': 'k' * 256,
+    })
+
+    assert response.status_code == 422
+    assert response.get_json()['error_code'] == 'unprocessable'
+    assert '255 characters' in str(response.get_json()['detail'])
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    assert settings.steam_web_api_key is None
+    assert settings.setup_current_step == 5
