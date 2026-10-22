@@ -52,6 +52,13 @@
   line-height: var(--od-line-tight);
 }
 
+.auth-pilot__section-title {
+  margin: 0;
+  color: var(--od-text);
+  font-size: var(--od-font-lg);
+  line-height: var(--od-line-tight);
+}
+
 .auth-pilot__lede,
 .auth-pilot__status,
 .auth-pilot__message {

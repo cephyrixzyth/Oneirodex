@@ -13,7 +13,7 @@ const STEP_URLS: Record<number, string> = {
 const STEP_TITLES: Record<number, string> = {
   1: 'Create administrator',
   2: 'Email delivery',
-  3: 'Choose features',
+  3: 'Features',
   4: 'IGDB matching',
   5: 'Optional connections',
   6: 'First library',
@@ -151,7 +151,9 @@ export function SetupWizard({
     <>
       <h1 className="auth-pilot__title">{STEP_TITLES[step] || 'Oneirodex setup'}</h1>
       <p className="auth-pilot__lede">
-        Step {step} of 6. You can change these choices later in settings.
+        {step === 3
+          ? 'Step 3 of 6. Everything useful is on by default. Uncheck anything you do not want.'
+          : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       <form className="auth-pilot__form" onSubmit={(event) => void submit(event)}>
         {step === 1 ? (
@@ -198,32 +200,35 @@ export function SetupWizard({
         ) : null}
         {step === 3 ? (
           <>
+            <h2 className="auth-pilot__section-title">Library</h2>
             <p className="auth-pilot__message">
-              Choose which optional household features should be available. Authentication providers
-              remain disabled until explicitly enabled later.
+              Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if needed.
             </p>
             {checkbox(
               'enable_game_updates',
-              'Game update notices',
+              'Game updates',
               features.enable_game_updates !== false,
             )}
             {checkbox('enable_game_extras', 'Game extras', features.enable_game_extras !== false)}
             {checkbox(
               'attract_mode_enabled',
-              'Attract Mode',
+              'Attract mode',
               features.attract_mode_enabled !== false,
             )}
             {checkbox(
               'enable_arr_module',
-              'Arr integrations',
+              'Modules Arr / indexers',
               features.enable_arr_module !== false,
             )}
-            {checkbox('enable_ai_assist', 'AI Assist', features.enable_ai_assist !== false)}
+            {checkbox('enable_ai_assist', 'AI assist', features.enable_ai_assist !== false)}
             {checkbox(
               'enable_malware_scan',
-              'Archive malware scanning',
+              'Malware scanner',
               features.enable_malware_scan !== false,
             )}
+            <p className="auth-pilot__message">
+              Change anytime under Admin → Features. Compose/.env flags apply after restart.
+            </p>
           </>
         ) : null}
         {step === 4 ? (
