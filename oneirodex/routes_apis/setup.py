@@ -209,7 +209,7 @@ def submit_setup_step(body: SetupTransitionBody):
                 'mobygames_api_key', 'thegamesdb_api_key',
             ):
                 value = getattr(body, key).strip()
-                if value:
+                if getattr(body, 'configure_' + key) and value:
                     setattr(settings, key, value)
             if body.configure_oidc:
                 for field, max_length in (

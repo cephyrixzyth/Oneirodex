@@ -94,3 +94,41 @@ def test_setup_api_requires_admin_for_wizard_state(client, db_session):
     response = client.get('/api/setup/state')
     assert response.status_code == 401
     assert response.get_json()['error_code'] == 'unauthorized'
+
+
+def test_integrations_json_transition_respects_provider_configure_checkboxes(client, db_session):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_admin', 'email': 'provider@example.com',
+        'password': 'correct horse battery', 'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    settings.steam_web_api_key = 'existing-steam-key'
+    settings.steamgriddb_api_key = 'existing-grid-key'
+    settings.giantbomb_api_key = 'existing-giantbomb-key'
+    db_session.commit()
+
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        'steam_web_api_key': 'unchecked-replacement',
+        'configure_steam_web_api_key': False,
+        'steamgriddb_api_key': 'selected-replacement',
+        'configure_steamgriddb_api_key': True,
+        'giantbomb_api_key': '',
+        'configure_giantbomb_api_key': True,
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['step'] == 6
+    db_session.refresh(settings)
+    assert settings.steam_web_api_key == 'existing-steam-key'
+    assert settings.steamgriddb_api_key == 'selected-replacement'
+    assert settings.giantbomb_api_key == 'existing-giantbomb-key'
