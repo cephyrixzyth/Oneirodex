@@ -212,6 +212,42 @@ def test_pc_cheat_list_matches_legacy_handler_empty_and_wrong_surface(native, mo
     assert legacy_response.get_json() == current_response.json()
 
 
+def test_pc_cheat_list_auth_and_game_access_match_legacy_wrappers(native, monkeypatch):
+    from flask import session as flask_session
+    from oneirodex.routes_apis import emulator_cheats as legacy_routes
+    from oneirodex.utils.api_response import api_error
+
+    app, api, data, user = native
+    app.login_manager.login_view = 'login.login'
+    cookie, _csrf = _cookie(app)
+    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (
+        None, api_error('You do not have access to that game', code='forbidden')
+    ))
+
+    def legacy_request(authenticated):
+        with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
+            if authenticated:
+                flask_session['_user_id'] = '7:fp'
+                flask_session['_fresh'] = True
+            return app.make_response(legacy_routes.pc_cheats_list('game-1'))
+
+    legacy_anonymous = legacy_request(False)
+    current_anonymous = _request(api, 'GET', '/api/games/game-1/pc_cheats')
+    assert legacy_anonymous.status_code == current_anonymous.status_code == 302
+    assert legacy_anonymous.headers['Location'] == current_anonymous.headers['location']
+    assert legacy_anonymous.mimetype == current_anonymous.headers['content-type'].split(';', 1)[0]
+    assert legacy_anonymous.get_data() == current_anonymous.content
+
+    data.allowed = False
+    legacy_denied = legacy_request(True)
+    current_denied = _request(
+        api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie,
+    )
+    assert legacy_denied.status_code == current_denied.status_code == 403
+    assert legacy_denied.mimetype == current_denied.headers['content-type'].split(';', 1)[0]
+    assert legacy_denied.get_json() == current_denied.json()
+
+
 def test_cheat_list_download_and_create_keep_legacy_shapes(native):
     app, api, data, _ = native
     cookie, csrf = _cookie(app, csrf=True)
