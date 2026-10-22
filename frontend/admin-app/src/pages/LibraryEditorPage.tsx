@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, csrfToken, putForm } from '../api/adminApi'
 import { Page } from '../components/Page'
+import { LibraryImageCropper } from '../components/LibraryImageCropper'
 import './LibraryEditorPage.css'
+import { showToast } from '../utils/toast'
 
 type LibraryEditorModel = {
   uuid: string
@@ -18,6 +20,7 @@ type Platform = { key: string; label: string }
 
 export function LibraryEditorPage() {
   const { libraryUuid = '' } = useParams()
+  const navigate = useNavigate()
   const [library, setLibrary] = useState<LibraryEditorModel | null>(null)
   const [platforms, setPlatforms] = useState<Platform[]>([])
   const [name, setName] = useState('')
@@ -25,10 +28,19 @@ export function LibraryEditorPage() {
   const [depth, setDepth] = useState('1')
   const [watch, setWatch] = useState('default')
   const [image, setImage] = useState<File | null>(null)
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [error, setError] = useState<unknown>(null)
-  const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const imagePreviewUrl = useMemo(() => (image ? URL.createObjectURL(image) : ''), [image])
+
+  useEffect(
+    () => () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+    },
+    [imagePreviewUrl],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -60,7 +72,6 @@ export function LibraryEditorPage() {
     event.preventDefault()
     if (saving) return
     setSaving(true)
-    setSaved(false)
     setError(null)
     try {
       const body = new FormData()
@@ -80,7 +91,8 @@ export function LibraryEditorPage() {
       setDepth(String(updated?.scan_depth || 1))
       setWatch(updated?.watch_enabled == null ? 'default' : updated.watch_enabled ? 'on' : 'off')
       setImage(null)
-      setSaved(true)
+      showToast('Library saved.', 'success')
+      navigate('/libraries')
     } catch (reason) {
       setError(reason)
     } finally {
@@ -104,11 +116,6 @@ export function LibraryEditorPage() {
         error={error}
         errorMessage="Unable to load or save this library."
       />
-      {saved ? (
-        <PageStatus announcement="status" className="od-admin-status">
-          Library saved.
-        </PageStatus>
-      ) : null}
       {library && !loading ? (
         <form className="od-admin-panel od-library-editor" onSubmit={(event) => void save(event)}>
           <label className="od-admin-field">
@@ -159,16 +166,32 @@ export function LibraryEditorPage() {
               <option value="off">Opt out</option>
             </select>
           </label>
-          {library.image_url ? (
-            <img src={library.image_url} alt="Current library image" width={120} height={120} />
+          {imagePreviewUrl || library.image_url ? (
+            <img
+              src={imagePreviewUrl || library.image_url}
+              alt={imagePreviewUrl ? 'Selected library image preview' : 'Current library image'}
+              width={120}
+              height={120}
+            />
           ) : null}
           <label className="od-admin-field">
             Replace library image
             <input
+              ref={imageInputRef}
               className="od-admin-input"
               type="file"
               accept="image/png,image/jpeg,image/gif,image/webp"
-              onChange={(event) => setImage(event.target.files?.[0] || null)}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (!file) return
+                if (file.size > 10 * 1024 * 1024) {
+                  setError('File is too large! Maximum size is 10MB.')
+                  return
+                }
+                setError(null)
+                setPendingImage(file)
+              }}
             />
             <span className="od-admin-hint">JPG, PNG, GIF, or WebP; up to 10 MB.</span>
           </label>
@@ -176,6 +199,17 @@ export function LibraryEditorPage() {
             {saving ? 'Saving…' : 'Save library'}
           </Button>
         </form>
+      ) : null}
+      {pendingImage ? (
+        <LibraryImageCropper
+          file={pendingImage}
+          onCancel={() => setPendingImage(null)}
+          onSave={(cropped) => {
+            setImage(cropped)
+            setPendingImage(null)
+            if (imageInputRef.current) imageInputRef.current.value = ''
+          }}
+        />
       ) : null}
     </Page>
   )

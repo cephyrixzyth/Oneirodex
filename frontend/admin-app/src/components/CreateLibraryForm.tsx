@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { getJson, postForm } from '../api/adminApi'
 import { queueLeafScan } from '../api/proposeLeafLibrariesApi'
 import { errorText } from '../utils/errorText'
+import { LibraryImageCropper } from './LibraryImageCropper'
 import './CreateLibraryForm.css'
 
 interface PlatformOption {
@@ -33,6 +34,7 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [depth, setDepth] = useState<1 | 2>(1)
   const [watch, setWatch] = useState('default')
   const [image, setImage] = useState<File | null>(null)
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ note?: string } | null>(null)
@@ -45,7 +47,16 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [browseError, setBrowseError] = useState('')
   const browseTitleId = useId()
   const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const closeBrowser = useCallback(() => setBrowseOpen(false), [])
+  const imagePreviewUrl = useMemo(() => (image ? URL.createObjectURL(image) : ''), [image])
+
+  useEffect(
+    () => () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+    },
+    [imagePreviewUrl],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -244,13 +255,29 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
         <label className="od-admin-field">
           Library image
           <input
+            ref={imageInputRef}
             className="od-admin-input"
             type="file"
             accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"
-            onChange={(event) => setImage(event.currentTarget.files?.[0] || null)}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              if (!file) return
+              if (file.size > 10 * 1024 * 1024) {
+                setError('File is too large! Maximum size is 10MB.')
+                return
+              }
+              setError('')
+              setPendingImage(file)
+            }}
           />
           <span className="od-admin-hint">Optional; JPG, PNG, GIF, or WebP up to 10 MB.</span>
         </label>
+        {imagePreviewUrl ? (
+          <figure className="od-create-library__image-preview">
+            <img src={imagePreviewUrl} alt="Selected library image preview" />
+          </figure>
+        ) : null}
         <div className="od-create-library__actions">
           <Button
             type="submit"
@@ -264,6 +291,17 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
           </span>
         </div>
       </form>
+      {pendingImage ? (
+        <LibraryImageCropper
+          file={pendingImage}
+          onCancel={() => setPendingImage(null)}
+          onSave={(cropped) => {
+            setImage(cropped)
+            setPendingImage(null)
+            if (imageInputRef.current) imageInputRef.current.value = ''
+          }}
+        />
+      ) : null}
       {result?.note ? (
         <PageStatus emptyMessage={result.note} className="od-create-library__message" />
       ) : null}
