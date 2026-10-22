@@ -903,6 +903,106 @@ def test_legacy_download_other_write_failure_matches_flask(failure_kind, monkeyp
     }
 
 
+@pytest.mark.parametrize('scenario', [
+    'missing_record', 'no_allowed_roots', 'unsafe_path', 'missing_on_disk',
+])
+def test_legacy_download_other_file_preflight_matches_flask(scenario, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+    import oneirodex.routes_downloads_ext.initiate as legacy_routes
+
+    secret = 'native-download-mutations-secret'
+    game_uuid = '12345678-1234-1234-1234-123456789abc'
+    path = '/storage/fixture/update.zip'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(uuid=game_uuid, name='Fixture', full_disk_path='/storage/fixture')
+    record = SimpleNamespace(file_path=path, times_downloaded=0)
+    game_row = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: game))
+    file_value = None if scenario == 'missing_record' else record
+    file_row = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: file_value))
+    query_results = [game_row, file_row]
+    if scenario != 'missing_record':
+        query_results.append(SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None)))
+
+    class FakeSelect:
+        def filter_by(self, **_kwargs):
+            return self
+
+    legacy_added = []
+    legacy_logs = []
+    monkeypatch.setattr(legacy_routes.db.session, 'execute', lambda _query: query_results.pop(0))
+    monkeypatch.setattr(legacy_routes, 'select', lambda _model: FakeSelect())
+    monkeypatch.setattr(legacy_routes.db.session, 'add', legacy_added.append)
+    monkeypatch.setattr(legacy_routes, 'user_can_access_game', lambda *_args: True)
+    monkeypatch.setattr(
+        legacy_routes, 'get_allowed_base_directories',
+        lambda _app: [] if scenario == 'no_allowed_roots' else ['/storage'],
+    )
+    monkeypatch.setattr(
+        legacy_routes, 'is_safe_path',
+        lambda *_args: (scenario != 'unsafe_path', 'outside allowed root'),
+    )
+    monkeypatch.setattr(
+        legacy_routes.os.path, 'exists', lambda value: value == path and scenario != 'missing_on_disk',
+    )
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda message, **kwargs: legacy_logs.append((message, kwargs)))
+
+    legacy_app = Flask(f'legacy-download-other-preflight-{scenario}')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.add_url_rule(
+        '/game_details/<game_uuid>', endpoint='games.game_details',
+        view_func=lambda game_uuid: game_uuid,
+    )
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    legacy = legacy_client.post(
+        f'/download_other/update/{game_uuid}/42', follow_redirects=False,
+    )
+    current_data = FakeDownloads()
+    current_data.other_record = file_value
+    current_data.allowed_bases = lambda _app: [] if scenario == 'no_allowed_roots' else ['/storage']
+    current_data.safe_path = lambda _path, _bases: (scenario != 'unsafe_path', 'outside allowed root')
+    current_data.exists = lambda _path: scenario != 'missing_on_disk'
+    current = make_client(data=current_data, role='user').post(
+        f'/download_other/update/{game_uuid}/42', follow_redirects=False,
+    )
+
+    assert current.status_code == legacy.status_code == 302
+    assert current.headers.get('location') == legacy.headers.get('Location') == f'/game_details/{game_uuid}'
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.content == legacy.get_data()
+    current_cookie = current.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    legacy_cookie = legacy.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    current_session = load_session_cookie(current_cookie, secret, max_age=3600)
+    legacy_session = load_session_cookie(legacy_cookie, secret, max_age=3600)
+    messages = {
+        'missing_record': 'Update file not found',
+        'no_allowed_roots': 'System configuration error. Please contact administrator.',
+        'unsafe_path': 'Access denied.',
+        'missing_on_disk': 'File not found on disk',
+    }
+    assert current_session['_flashes'] == legacy_session['_flashes'] == [
+        ('error', messages[scenario]),
+    ]
+    assert current_data.created is None
+    assert legacy_added == []
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
