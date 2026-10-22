@@ -106,12 +106,14 @@ export function CreateLibraryForm({
     setPath('')
     setImage(null)
     onCreated?.()
+    let scanQueued = false
     try {
       const scan = await queueLeafScan({ uuid, path: path.trim(), scan_mode: scanMode })
       if (!scan.ok) {
         setError(`Library created, but the first scan could not be queued: ${scan.error}`)
       } else {
         setResult({ note: scan.data?.message || 'Library created and first scan queued.' })
+        scanQueued = true
       }
     } catch (err) {
       setError(
@@ -119,7 +121,7 @@ export function CreateLibraryForm({
       )
     } finally {
       setBusy(false)
-      onComplete?.()
+      if (scanQueued) onComplete?.()
     }
   }
 

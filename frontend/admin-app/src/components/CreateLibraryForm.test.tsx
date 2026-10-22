@@ -114,3 +114,25 @@ test('crops library artwork to PNG before creating and queueing the library', as
   expect(onCreated).toHaveBeenCalledOnce()
   expect(onComplete).toHaveBeenCalledOnce()
 })
+
+test('keeps the create form visible when the first scan cannot be queued', async () => {
+  queueLeafScan.mockResolvedValue({ ok: false, error: 'queue unavailable' })
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/library_platforms'))
+      return response({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }] }) as any
+    return response({ ok: true, library_uuid: 'new-library-2' }) as any
+  }) as unknown as typeof fetch
+
+  const onComplete = vi.fn()
+  render(<CreateLibraryForm onComplete={onComplete} />)
+  await screen.findByRole('option', { name: 'Nintendo Entertainment System' })
+  fireEvent.change(screen.getByLabelText('Library name'), { target: { value: 'NES Library' } })
+  fireEvent.change(screen.getByPlaceholderText('/storage/games/nes'), {
+    target: { value: '/storage/games/nes' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Create library and start scan' }))
+
+  expect(await screen.findByText(/Library created, but the first scan could not be queued/)).toBeInTheDocument()
+  expect(onComplete).not.toHaveBeenCalled()
+})
