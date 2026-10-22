@@ -657,7 +657,7 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
         ) if auth.token is None else None
         delete_form_compat = (
             action == 'delete_single'
-            and not request.headers.get('content-type', '').lower().startswith('application/json')
+            and not _request_is_json(request)
         )
         if response is not None and delete_form_compat:
             response = csrf_html_error_response(response)
@@ -1171,7 +1171,7 @@ async def _delete_single(request, app, data, user, library_uuid, *, database_sco
 
 
 async def _json_object_or_form(request, config):
-    is_json = 'json' in request.headers.get('content-type', '').lower()
+    is_json = _request_is_json(request)
     limit = min(int(config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024), 32 * 1024 * 1024)
     if not is_json:
         limit = min(limit, 64 * 1024)
@@ -1203,6 +1203,13 @@ async def _json_object_or_form(request, config):
         return {'__form__': dict(form)}, False
     finally:
         await form.close()
+
+
+def _request_is_json(request):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    return content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
 
 
 async def _delete(request, data, user, flask_app, *, database_scope=None):

@@ -615,6 +615,20 @@ def test_single_library_delete_form_csrf_failure_matches_legacy_html(native_clie
     assert data.calls == []
 
 
+def test_single_library_delete_vendor_json_csrf_failure_keeps_json_response(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        json={}, headers={'Content-Type': 'application/vnd.oneirodex+json'},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json()['error_code'] == 'bad_request'
+    assert data.calls == []
+
+
 def test_single_library_delete_form_member_denial_redirects_to_login(native_client):
     runtime, data = native_client
     response = _request(

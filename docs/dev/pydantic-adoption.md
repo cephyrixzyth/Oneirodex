@@ -459,6 +459,9 @@ routes remain partially verified overall.
 
 - `settings.py` / `attract_mode.py` — pass-through bags / "no data provided".
 - `library_delete.py` — JSON + form + query; `body_status='error'` extras.
+  Single-delete media detection follows Flask's JSON rule (`application/json`
+  and `application/*+json`) for parser selection and JSON-vs-form CSRF errors.
+  Vendor JSON CSRF case: `.artifacts/parity-v1.1.8/library-delete-vendor-json-content-type-20261022.json`.
 
 ### `routes_arr.py`
 
