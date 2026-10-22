@@ -368,25 +368,51 @@ def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
     }
 
 
-def test_pc_cheat_delete_success_then_repeat_returns_not_found(native):
-    _app, api, data, user = native
+def test_pc_cheat_delete_success_then_repeat_matches_legacy_handler(native, monkeypatch):
+    from oneirodex.routes_apis import emulator_cheats as legacy_routes
+
+    app, api, data, user = native
     user.role = 'admin'
-    cookie, csrf = _cookie(_app, csrf=True)
+    cookie, csrf = _cookie(app, csrf=True)
 
-    deleted = _request(
+    class LegacySession:
+        def __init__(self):
+            self.rows = {42: SimpleNamespace(game_uuid='game-1')}
+
+        def get(self, _model, cheat_id):
+            return self.rows.get(cheat_id)
+
+        def delete(self, row):
+            self.rows.pop(42, None)
+
+        def commit(self):
+            pass
+
+    legacy_session = LegacySession()
+    monkeypatch.setattr(legacy_routes.db, 'session', legacy_session)
+    legacy_delete = legacy_routes.pc_cheats_delete.__wrapped__.__wrapped__
+
+    def legacy_request():
+        with app.test_request_context(
+            '/api/games/game-1/pc_cheats/42', method='DELETE',
+        ):
+            return app.make_response(legacy_delete('game-1', 42))
+
+    legacy_deleted = legacy_request()
+    current_deleted = _request(
         api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
     )
-    repeated = _request(
+    assert legacy_deleted.status_code == current_deleted.status_code == 200
+    assert legacy_deleted.get_json() == current_deleted.json()
+
+    legacy_repeated = legacy_request()
+    current_repeated = _request(
         api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
     )
-
-    assert deleted.status_code == 200
-    assert deleted.json() == {'ok': True, 'success': True, 'error': None, 'error_code': None, 'removed': 42}
-    assert repeated.status_code == 404
-    assert repeated.json()['error'] == 'Cheat not found'
+    assert legacy_repeated.status_code == current_repeated.status_code == 404
+    assert legacy_repeated.get_json() == current_repeated.json()
     assert data.pc_cheat_rows['game-1'] == set()
     assert not any(call[0] == 'game' for call in data.calls)
-
 
 def test_pc_cheat_delete_uses_cheat_game_binding_without_game_lookup(native):
     app, api, data, user = native
