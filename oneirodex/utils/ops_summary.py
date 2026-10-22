@@ -157,7 +157,7 @@ def _scan_job_payload(job):
     }
 
 
-def _scan_snapshot(app=None):
+def _scan_snapshot(app=None, database_scope=None):
     """Return active + queued + recent scan jobs (with live counters) and failure count."""
     # Safety drain only when idle+Queued. Skip while Running so a 15s Ops poll
     # does not contend with the live worker (same gate as scan_jobs_status).
@@ -172,7 +172,7 @@ def _scan_snapshot(app=None):
             app = None
     if app is not None:
         try:
-            maybe_drain_scan_queue(app)
+            maybe_drain_scan_queue(app, database_scope=database_scope)
         except Exception:
             pass
 
@@ -544,7 +544,7 @@ def _services_snapshot(*, config=None):
     }
 
 
-def build_ops_summary(app_start_time, *, app=None, config=None):
+def build_ops_summary(app_start_time, *, app=None, config=None, database_scope=None):
     """Build a single snapshot for the admin operations dashboard."""
     def get_host_section():
         cpu = get_cpu_usage()
@@ -578,7 +578,9 @@ def build_ops_summary(app_start_time, *, app=None, config=None):
 
     host_data, host_error = _section('host', get_host_section)
     network, network_error = _section('network', get_network_stats)
-    scans, scans_error = _section('scans', lambda: _scan_snapshot(app=app))
+    scans, scans_error = _section(
+        'scans', lambda: _scan_snapshot(app=app, database_scope=database_scope),
+    )
     library, library_error = _section('library', _library_pulse)
     recent_errors_data, recent_errors_error = _section('recent errors', _recent_errors)
     services, services_error = _section(

@@ -90,11 +90,53 @@ def test_ops_summary_receives_explicit_config_and_task_owner_without_context(mon
     calls = []
     monkeypatch.setattr(
         ops_summary, 'build_ops_summary',
-        lambda start, *, app, config: calls.append((start, app, config)) or expected,
+        lambda start, *, app, config, database_scope: calls.append(
+            (start, app, config, database_scope),
+        ) or expected,
     )
 
-    assert admin_ops_reads.AdminOpsReadData().summary(app) is expected
-    assert calls == [(app_start_time, app, app.config)]
+    scope = lambda _app: nullcontext()
+    assert admin_ops_reads.AdminOpsReadData().summary(app, scope) is expected
+    assert calls == [(app_start_time, app, app.config, scope)]
+
+
+def test_ops_summary_route_passes_database_scope_to_queue_drain():
+    app = Flask('ops-summary-scope-test')
+    app.config.update(SECRET_KEY='ops-summary-scope-secret', CSP_ENABLED=False)
+    app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    admin = SimpleNamespace(
+        id=9, role='admin', is_active=True, state=True, is_authenticated=True,
+        session_fingerprint=lambda: 'fingerprint',
+    )
+    calls = []
+    scope = lambda _app: nullcontext()
+    data = SimpleNamespace(
+        summary=lambda flask_app, database_scope: calls.append(
+            (flask_app, database_scope),
+        ) or {'ok': True},
+    )
+    router = admin_ops_reads.create_admin_ops_reads_router(
+        app, find_user=lambda user_id: admin if user_id == 9 else None,
+        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: admin if value == '9:fingerprint' else None,
+        login_manager=SimpleNamespace(
+            login_view='login.login', blueprint_login_views={}, login_message='Sign in',
+            login_message_category='message', localize_callback=None,
+            session_protection='basic',
+        ),
+        data_access=data, database_scope=scope,
+    )
+    native = FastAPI()
+    native.include_router(router)
+    client = TestClient(native)
+    client.cookies.set('session', dump_session_cookie(
+        {'_user_id': '9:fingerprint', '_fresh': True}, app.config['SECRET_KEY'],
+    ))
+
+    response = client.get('/admin/api/ops/summary')
+
+    assert response.status_code == 200
+    assert calls == [(app, scope)]
 
 
 def test_image_refresh_poll_preserves_cached_job_status_and_envelopes_missing_jobs():

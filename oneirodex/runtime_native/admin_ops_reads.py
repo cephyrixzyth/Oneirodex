@@ -33,12 +33,13 @@ class AdminOpsReadData:
             for row in rows
         ]}
 
-    def summary(self, flask_app):
+    def summary(self, flask_app, database_scope=None):
         from oneirodex import app_start_time
         from oneirodex.utils.ops_summary import build_ops_summary
 
         return build_ops_summary(
             app_start_time, app=flask_app, config=flask_app.config,
+            database_scope=database_scope,
         )
 
     def system(self, flask_app):
@@ -194,7 +195,7 @@ def create_admin_ops_reads_router(
 
                             payload = api_ok_payload(data.devices(limit, flask_app))
                         elif handler == 'summary':
-                            payload = data.summary(flask_app)
+                            payload = data.summary(flask_app, database_scope)
                         elif handler == 'image_refresh_progress':
                             payload = data.image_refresh_progress(
                                 request.path_params['game_uuid'],
