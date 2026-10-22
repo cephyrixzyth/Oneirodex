@@ -215,7 +215,9 @@ async def _rtc_token_request(request: Request, flask_app, data, user):
         body = await request.json()
     except Exception:
         body = {}
-    body = body if isinstance(body, dict) else {}
+    if not isinstance(body, dict):
+        payload, status = api_error_payload('Expected a JSON object', code='bad_request')
+        return JSONResponse(payload, status_code=status)
     room = data.normalize_room(body.get('room') or 'household:lobby')
     if not data.may_join(user, room):
         return _status_error('Forbidden for this room', 'forbidden', 403)

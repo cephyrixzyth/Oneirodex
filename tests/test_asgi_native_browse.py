@@ -8120,6 +8120,13 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     fake = FakeRtcData()
     _flask_app, runtime = _runtime(monkeypatch)
     monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+    anonymous = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={'room': 'household:lobby'},
+    )
+    assert anonymous.status_code == 400
+    assert 'CSRF token is missing' in anonymous.json()['error']
+    assert fake.calls == []
+
     cookie, csrf = _signed_session_with_csrf()
     headers = {'X-CSRFToken': csrf}
     minted = _run(

@@ -71,6 +71,8 @@ docs/_private/
 # Operator BIOS staging from scripts/import_bios.py (never bake dumps into the image)
 .bios-install-out/
 .bios-install-out-*/
+.bios-install-out-user-source/
+**/.bios-install-out-user-source/
 bios/
 **/bios/*.bin
 **/bios/*.rom
