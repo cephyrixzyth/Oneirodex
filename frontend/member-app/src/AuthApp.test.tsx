@@ -203,8 +203,20 @@ test('the IGDB skip action bypasses required credential fields and advances setu
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
 
-  expect(await screen.findByRole('heading', { name: 'IGDB matching' })).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+  expect(await screen.findByRole('heading', { name: 'Connect game metadata' })).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Twitch Developer Console' })).toHaveAttribute(
+    'rel',
+    'noopener noreferrer',
+  )
+  expect(screen.getByLabelText('Client ID')).toBeInTheDocument()
+  expect(screen.getByLabelText('Client Secret')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save IGDB and continue' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Skip and continue' }))
 
   await waitFor(() =>
     expect(api.submitSetupStep).toHaveBeenCalledWith({

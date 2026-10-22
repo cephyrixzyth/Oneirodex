@@ -14,7 +14,7 @@ const STEP_TITLES: Record<number, string> = {
   1: 'Create administrator',
   2: 'Email delivery',
   3: 'Features',
-  4: 'IGDB matching',
+  4: 'Connect game metadata',
   5: 'Optional connections',
   6: 'First library',
 }
@@ -153,7 +153,9 @@ export function SetupWizard({
       <p className="auth-pilot__lede">
         {step === 3
           ? 'Step 3 of 6. Everything useful is on by default. Uncheck anything you do not want.'
-          : `Step ${step} of 6. You can change these choices later in settings.`}
+          : step === 4
+            ? 'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.'
+            : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       <form className="auth-pilot__form" onSubmit={(event) => void submit(event)}>
         {step === 1 ? (
@@ -233,19 +235,34 @@ export function SetupWizard({
         ) : null}
         {step === 4 ? (
           <>
-            <p className="auth-pilot__message">
-              IGDB credentials improve title matching. You can skip this and add them later.
-            </p>
+            <details className="auth-pilot__message">
+              <summary>How do I get IGDB credentials?</summary>
+              <ol>
+                <li>
+                  Open the{' '}
+                  <a href="https://dev.twitch.tv/console" target="_blank" rel="noopener noreferrer">
+                    Twitch Developer Console
+                  </a>{' '}
+                  and sign in.
+                </li>
+                <li>
+                  Register an application with the Website Integration category and an OAuth
+                  redirect URL of <code>http://localhost</code>.
+                </li>
+                <li>Copy its Client ID and create a Client Secret. Keep both private.</li>
+              </ol>
+              <p>IGDB is owned by Twitch. You can safely finish setup without these credentials.</p>
+            </details>
             {input(
               'igdb_client_id',
-              'IGDB client ID',
+              'Client ID',
               'text',
               true,
               String(settings.igdb_client_id || ''),
             )}
             {input(
               'igdb_client_secret',
-              settings.igdb_secret_configured ? 'IGDB client secret (saved)' : 'IGDB client secret',
+              settings.igdb_secret_configured ? 'Client Secret (saved)' : 'Client Secret',
               'password',
               true,
             )}
@@ -360,7 +377,13 @@ export function SetupWizard({
           </div>
         ) : null}
         <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
-          {busy ? 'Saving…' : step === 6 ? 'Finish setup' : 'Continue'}
+          {busy
+            ? 'Saving…'
+            : step === 4
+              ? 'Save IGDB and continue'
+              : step === 6
+                ? 'Finish setup'
+                : 'Continue'}
         </Button>
         {[2, 4, 5, 6].includes(step) ? (
           <Button
@@ -376,7 +399,11 @@ export function SetupWizard({
                 )
             }}
           >
-            {step === 6 ? 'Finish without a library' : 'Skip this step'}
+            {step === 4
+              ? 'Skip and continue'
+              : step === 6
+                ? 'Finish without a library'
+                : 'Skip this step'}
           </Button>
         ) : null}
       </form>
