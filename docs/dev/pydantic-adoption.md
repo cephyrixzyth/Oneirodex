@@ -200,8 +200,11 @@ required-field validation without mutating the wanted list.
 - **`retroachievements_match`** — body decoding follows Flask's JSON media-type
   rule: `application/json` and `application/*+json` are parsed, while absent
   or non-JSON media types validate as an empty object and return the legacy
-  422 missing-`platform` error. Focused native tests cover `text/plain` and a
-  vendor `+json` type; an exact-image paired replay remains open.
+  422 missing-`platform` error. Malformed and non-object JSON retain the
+  legacy root validation error. An exact v1.1.8/current replay matched 11
+  request-decoding cases; provider-failure, broader role, and UI branches
+  remain open. Evidence: `retroachievements-match-json-edges-exact-r268-20261022.json`
+  in the private parity artifacts.
 - **`games_batch_favorite`** — missing `favorite` / `uuids` was 400 with
   `updated`/`skipped`/`errors`/`limit`. Now 422 `unprocessable` with the
   same extra keys plus `detail` naming the field. Over-limit is still 400.

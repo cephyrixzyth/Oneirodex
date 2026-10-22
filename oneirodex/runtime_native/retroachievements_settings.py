@@ -192,11 +192,11 @@ def create_retroachievements_settings_router(
                     )
                     body = await _read_json(request) if is_json else None
                     try:
-                        # Match the legacy validate_body contract: absent,
-                        # malformed, and non-object JSON validate as an empty
-                        # object and return a safe 422 field-error envelope.
+                        # Flask's validated-body decorator maps missing and
+                        # JSON null to {}, but sends malformed and non-object
+                        # JSON to model validation as a root-level error.
                         model = RetroAchievementsMatchBody.model_validate(
-                            body if isinstance(body, dict) else {}
+                            body if body is not None else {}
                         )
                         if not data.configured():
                             payload, status = api_error_payload(
@@ -219,9 +219,14 @@ def create_retroachievements_settings_router(
                                 ))
                     except ValidationError as exc:
                         from oneirodex.utils.validation import format_validation_errors
+                        detail = format_validation_errors(exc)
+                        if '__root__' in detail:
+                            detail['__root__'] = detail['__root__'].replace(
+                                'RetroAchievementsMatchBody', 'MatchBody'
+                            )
                         payload, status = api_error_payload(
                             'Invalid request.', code='unprocessable',
-                            detail=format_validation_errors(exc),
+                            detail=detail,
                         )
                         response = JSONResponse(payload, status_code=status)
                     except ValueError as exc:
@@ -325,6 +330,18 @@ async def _read_json(request):
         return value if isinstance(value, dict) else None
     except (ValueError, UnicodeDecodeError):
         return None
+
+
+async def _read_match_json(request):
+    """Preserve Flask's distinction between JSON null and parse failures."""
+    import json
+    try:
+        raw = await request.body()
+        if len(raw) > 8 * 1024:
+            return None
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return raw.decode('utf-8', errors='replace')
 
 
 def mount_retroachievements_settings_routes(app: FastAPI, flask_app, **kwargs):

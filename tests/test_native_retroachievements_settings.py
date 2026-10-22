@@ -150,11 +150,13 @@ def test_admin_match_empty_body_uses_safe_legacy_validation_envelope():
     assert 'pydantic.dev' not in response.text
 
 
-def test_admin_match_non_object_body_validates_as_missing_fields():
+def test_admin_match_non_object_body_uses_legacy_root_validation():
     response = make_client().post('/api/retroachievements/match', json=[])
 
     assert response.status_code == 422
-    assert response.json()['detail'] == {'platform': 'Field required'}
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of MatchBody'
+    }
 
 
 def test_admin_match_requires_csrf_before_body_validation():
@@ -183,3 +185,25 @@ def test_admin_match_accepts_vendor_json_content_type():
 
     assert response.status_code == 200
     assert response.json()['platform'] == 'SNES'
+
+
+
+def test_admin_match_malformed_json_uses_legacy_root_validation():
+    response = make_client().post(
+        '/api/retroachievements/match', data='{',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of MatchBody'
+    }
+
+
+def test_admin_match_false_json_uses_legacy_root_validation():
+    response = make_client().post('/api/retroachievements/match', json=False)
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of MatchBody'
+    }
