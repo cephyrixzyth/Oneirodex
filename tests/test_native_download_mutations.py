@@ -243,6 +243,61 @@ def test_orphan_cleanup_mutation_and_game_acl_match_legacy_flask(access_allowed,
     assert current_data.cleaned == ([game.uuid] if access_allowed else [])
 
 
+def test_orphan_cleanup_failure_and_rollback_match_legacy_flask(monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis import apis_bp
+    import oneirodex.routes_apis.download as legacy_routes
+
+    secret = 'orphan-cleanup-failure-parity-secret'
+    admin = SimpleNamespace(
+        id=7, role='admin', name='ParityAdmin', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(uuid='12345678-1234-1234-1234-123456789abc', name='Fixture')
+    rollback_calls = []
+    error_logs = []
+    monkeypatch.setattr(legacy_routes, '_downloadable_game', lambda _uuid: (game, None))
+    monkeypatch.setattr(
+        legacy_routes, 'cleanup_orphan_versions',
+        lambda _game: (_ for _ in ()).throw(RuntimeError('synthetic cleanup failure')),
+    )
+    monkeypatch.setattr(legacy_routes.db.session, 'rollback', lambda: rollback_calls.append('flask'))
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda message, **_kwargs: error_logs.append(message))
+
+    legacy_app = Flask('legacy-orphan-cleanup-failure-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: admin if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    path = f'/api/games/{game.uuid}/versions/cleanup_orphans'
+    legacy = legacy_client.post(path, follow_redirects=False)
+
+    current_data = FakeDownloads()
+    current_data.cleanup_orphans = lambda _game: (_ for _ in ()).throw(
+        RuntimeError('synthetic cleanup failure'),
+    )
+    current_data.log_cleanup = lambda _game, _result, error=False: error_logs.append(
+        'native-error' if error else 'native-success',
+    )
+    current = make_client(data=current_data, role='admin').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.json() == legacy.get_json()
+    assert rollback_calls == ['flask', 'flask']
+    assert error_logs[-1] == 'native-error'
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
