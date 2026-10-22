@@ -482,6 +482,29 @@ def test_rename_apply_validates_plan_before_adapter_mutation(runtime):
     assert data.calls[-1][0] == 'apply_rename'
 
 
+def test_unhandled_rename_apply_failure_is_logged_and_redacted(runtime, monkeypatch, caplog):
+    app, data, cookies = runtime
+
+    def fail_apply(*_args, **_kwargs):
+        raise RuntimeError('postgresql://parity-user:secret@db/private')
+
+    data.apply_rename = fail_apply
+    response = request(
+        app, '/api/library_tools/rename/apply', cookie=cookies['admin'],
+        json={'game_uuid': 'g1', 'plan': [{'kind': 'root_folder',
+                                           'from_path': '/safe/Original',
+                                           'to_path': '/safe/Renamed'}]},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['message'] == (
+        'Something went wrong on our end. The error has been logged.'
+    )
+    assert 'parity-user' not in response.text
+    assert any('Unhandled exception during POST /api/library_tools/rename/apply'
+               in record.getMessage() for record in caplog.records)
+
+
 def test_doctor_apply_renames_filters_paths_and_keeps_result_shape(runtime):
     app, data, cookies = runtime
     response = request(app, '/api/library_tools/doctor/apply_renames', cookie=cookies['admin'],

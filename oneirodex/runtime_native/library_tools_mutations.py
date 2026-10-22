@@ -448,7 +448,14 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                 try:
                     response = await handler(request, flask_app, data)
                 except Exception:
-                    response = _error(500, 'internal', 'An error occurred while processing your request')
+                    flask_app.logger.exception(
+                        'Unhandled exception during %s %s',
+                        request.method, request.url.path,
+                    )
+                    response = _error(
+                        500, 'internal',
+                        'Something went wrong on our end. The error has been logged.',
+                    )
         if auth.should_set_session_cookie:
             from .oidc_status import _set_session_cookie
             _set_session_cookie(response, flask_app, auth)

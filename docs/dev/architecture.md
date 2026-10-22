@@ -325,7 +325,8 @@ allowlist directly in ASGI with its JavaScript content type and five-minute
 private cache policy.
 The shared native FastAPI API app converts unmatched HTTP errors and unexpected
 handler failures into the standard API error envelope, preserves safe security
-headers and does not expose exception details to clients.
+headers, logs unexpected failures server-side, and does not expose exception
+details to clients.
 `/manifest.webmanifest` reads the configured site label through a request-local
 ORM scope and returns the shared install manifest payload directly from ASGI
 with its one-hour cache policy. `/api/loading-icon` uses the native API router
