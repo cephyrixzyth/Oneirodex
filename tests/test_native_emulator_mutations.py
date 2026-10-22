@@ -190,6 +190,34 @@ def test_writes_reject_missing_csrf_before_authentication(native):
     assert _request(api, 'POST', '/api/games/game-1/cheats', json={'name': 'new', 'codes': []}).status_code == 400
 
 
+@pytest.mark.parametrize(('path', 'payload'), [
+    ('/api/emulator-bios', {}),
+    ('/api/emulator-bios/scan', {'source': '/allowed/firmware'}),
+    ('/api/emulator-bios/install', {'source': '/allowed/firmware'}),
+])
+def test_anonymous_firmware_posts_redirect_before_csrf(native, path, payload):
+    app, api, data, _ = native
+    app.login_manager.login_view = 'login.login'
+
+    response = _request(api, 'POST', path, json=payload)
+
+    assert response.status_code == 302
+    assert response.headers['location'] == f'/login?next={path.replace('/', '%2F')}'
+    assert data.calls == []
+
+
+def test_authenticated_non_admin_firmware_post_still_checks_csrf_before_role(native):
+    app, api, data, _ = native
+    cookie, _ = _cookie(app)
+
+    response = _request(api, 'POST', '/api/emulator-bios/scan', cookie=cookie,
+                        json={'source': '/allowed/firmware'})
+
+    assert response.status_code == 400
+    assert 'CSRF token is missing' in response.json()['error']
+    assert data.calls == []
+
+
 def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     app, api, data, _ = native
     cookie, csrf = _cookie(app, csrf=True)

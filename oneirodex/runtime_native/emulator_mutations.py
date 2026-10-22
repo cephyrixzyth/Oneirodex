@@ -229,15 +229,18 @@ def create_emulator_mutations_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if request.method == 'POST':
+            # Flask-Login's route wrapper redirects anonymous callers before
+            # the admin/handler path runs. Preserve that ordering here; CSRF
+            # still runs before authorization for authenticated browser writes.
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            elif request.method == 'POST':
                 from .csrf_compat import csrf_error_response
 
                 response = csrf_error_response(request, auth.session_data, flask_app.config)
             else:
                 response = None
-            if response is None and auth.user is None:
-                response = _login_redirect(flask_app, request, login_manager, auth)
-            elif response is None:
+            if response is None:
                 from oneirodex.utils.role_catalog import normalize_role
 
                 is_admin = normalize_role(getattr(auth.user, 'role', None)) == 'admin'
