@@ -605,6 +605,98 @@ def test_legacy_download_other_preflight_errors_match_flask(scenario, monkeypatc
     assert current_data.created is None
 
 
+@pytest.mark.parametrize('file_type', ['update', 'extra'])
+def test_legacy_download_other_success_matches_flask(file_type, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+    import oneirodex.routes_downloads_ext.initiate as legacy_routes
+
+    secret = 'native-download-mutations-secret'
+    game_uuid = '12345678-1234-1234-1234-123456789abc'
+    path = f'/storage/fixture/{file_type}.zip'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(uuid=game_uuid, name='Fixture', full_disk_path='/storage/fixture')
+    record = SimpleNamespace(file_path=path, times_downloaded=0)
+    game_row = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: game))
+    file_row = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: record))
+    existing_row = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
+    query_results = [game_row, file_row, existing_row]
+    legacy_added = []
+
+    class FakeSelect:
+        def filter_by(self, **_kwargs):
+            return self
+
+    class DownloadRow:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(
+        legacy_routes.db.session, 'execute', lambda _query: query_results.pop(0),
+    )
+    monkeypatch.setattr(legacy_routes, 'select', lambda _model: FakeSelect())
+    monkeypatch.setattr(legacy_routes.db.session, 'add', legacy_added.append)
+    monkeypatch.setattr(legacy_routes.db.session, 'commit', lambda: None)
+    monkeypatch.setattr(legacy_routes, 'DownloadRequest', DownloadRow)
+    monkeypatch.setattr(legacy_routes, 'user_can_access_game', lambda *_args: True)
+    monkeypatch.setattr(legacy_routes, 'get_allowed_base_directories', lambda _app: ['/storage'])
+    monkeypatch.setattr(legacy_routes, 'is_safe_path', lambda _path, _bases: (True, None))
+    monkeypatch.setattr(legacy_routes.os.path, 'exists', lambda value: value == path)
+    monkeypatch.setattr(legacy_routes.os.path, 'isfile', lambda value: value == path)
+    monkeypatch.setattr(legacy_routes, 'get_path_size', lambda _path: 321)
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda *_args, **_kwargs: None)
+
+    legacy_app = Flask(f'legacy-download-other-success-{file_type}')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    legacy = legacy_client.post(
+        f'/download_other/{file_type}/{game_uuid}/42', follow_redirects=False,
+    )
+    current_data = FakeDownloads()
+    current_data.other_record = record
+    current_calls = []
+
+    def create_current_request(uuid, current_user, current_record, current_path):
+        current_calls.append((uuid, current_user.id, current_path, current_record.times_downloaded))
+        current_record.times_downloaded += 1
+        current_data.created = (uuid, current_user.id, current_path, current_path)
+        return SimpleNamespace(id=82, status='available')
+
+    current_data.create_other_download_request = create_current_request
+    current = make_client(data=current_data, role='user').post(
+        f'/download_other/{file_type}/{game_uuid}/42', follow_redirects=False,
+    )
+
+    assert current.status_code == legacy.status_code == 302
+    assert current.headers.get('location') == legacy.headers.get('Location') == '/downloads'
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.content == legacy.get_data()
+    assert len(legacy_added) == 1
+    created = legacy_added[0]
+    assert (created.game_uuid, created.user_id, created.file_location, created.zip_file_path) == (
+        game_uuid, 7, path, path,
+    )
+    assert (created.status, created.download_size) == ('available', 321)
+    assert current_data.created == (game_uuid, 7, path, path)
+    assert current_calls == [(game_uuid, 7, path, 1)]
+    assert record.times_downloaded == 2
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
