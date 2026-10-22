@@ -290,7 +290,13 @@ def test_mutations_reject_invalid_body_before_adapter_work(runtime):
     # A malformed JSON shape is rejected without touching an injected adapter.
     response = request(app, '/api/library_tools/doctor/write_proposals', cookie=cookies['admin'],
                        json={'rows': 'nope'})
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert not data.calls
+
+    extra = request(app, '/api/library_tools/doctor/write_proposals', cookie=cookies['admin'],
+                    json={'rows': [], 'unexpected': True})
+    assert extra.status_code == 422
+    assert 'unexpected' in extra.json()['detail']
     assert not data.calls
 
 

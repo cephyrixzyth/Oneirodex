@@ -517,12 +517,21 @@ async def _approve_proposal(request, app, data):
 
 
 async def _doctor_write_proposals(request, app, data):
-    body = await _json_body(request)
-    rows = body.get('rows', []) if body is not None else None
-    if not isinstance(rows, list):
-        return _error(400, 'bad_request', 'rows must be a list')
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import WriteProposalsBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = WriteProposalsBody.model_validate(payload)
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
     filtered = []
-    for row in rows:
+    for row in body.rows:
         if not isinstance(row, dict):
             continue
         path = row.get('path')
