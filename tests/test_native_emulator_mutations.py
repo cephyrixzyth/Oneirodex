@@ -180,6 +180,17 @@ def test_cheat_list_download_and_create_keep_legacy_shapes(native):
     assert ('create_cheat', 'game-1', 'new', [{'code': 'AA'}], None) in data.calls
 
 
+def test_pc_cheats_options_matches_legacy_allow_header(native):
+    _app, api, _data, _user = native
+
+    response = _request(api, 'OPTIONS', '/api/games/game-1/pc_cheats')
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == 'OPTIONS, GET, HEAD, POST'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.content == b''
+
+
 def test_writes_reject_missing_csrf_before_authentication(native):
     _app, api, data, _ = native
     response = _request(api, 'POST', '/api/games/game-1/cheats', json={'name': 'new', 'codes': []})

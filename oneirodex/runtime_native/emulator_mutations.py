@@ -336,6 +336,18 @@ def create_emulator_mutations_router(
     async def save_file(game_uuid: str, slot_name: str, request: Request):
         return await run(request, game_uuid, 'save_file', slot_name)
 
+    @router.options('/api/games/{game_uuid}/pc_cheats', include_in_schema=False)
+    async def pc_cheats_options(game_uuid: str):
+        # Flask's automatic OPTIONS response preserves this method order.
+        # Starlette's synthesized response sorts the same set differently.
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'OPTIONS, GET, HEAD, POST',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
+
     @router.api_route('/api/games/{game_uuid}/pc_cheats', methods=['GET', 'POST', 'HEAD'])
     async def pc_cheats(game_uuid: str, request: Request):
         return await run(request, game_uuid, 'pc_cheats')
