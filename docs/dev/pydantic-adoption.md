@@ -185,8 +185,9 @@ required-field validation without mutating the wanted list.
   naming `__root__`. Unknown uuid still 404 after a well-formed body.
 - **`quality_profiles_set_active`** — missing `id` / `active_id` /
   `profile_id` was 400, now 422 naming `__root__`. Unknown ids still 404.
-- **`patch_catalog_attach`** — missing `game_uuid` / `source_url` keeps the
-  current concise 400 (`Provide a game UUID and source URL.`) rather than the
+- **`patch_catalog_attach`** — an empty body or either individually missing
+  `game_uuid` / `source_url` keeps the current concise 400
+  (`Provide a game UUID and source URL.`) rather than the
   legacy 422 field detail. This is retained under the P18 owner decision to
   preserve clearer current behavior. Whitespace-only source URLs and unknown
   fields return the legacy 422 with field details. Exact-image replay also

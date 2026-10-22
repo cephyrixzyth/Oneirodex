@@ -9750,12 +9750,25 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf}, json_body={},
     )
+    missing_game_uuid = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={
+            'source_url': 'https://patch.test/guide',
+        },
+    )
+    missing_source_url = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={'game_uuid': 'game-1'},
+    )
 
     assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
     assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
     assert empty_attach.status_code == 400
     assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
     assert empty_attach.json()['error_code'] == 'bad_request'
+    assert missing_game_uuid.status_code == missing_source_url.status_code == 400
+    assert missing_game_uuid.json()['error_code'] == 'bad_request'
+    assert missing_source_url.json()['error_code'] == 'bad_request'
     blank_source = _run(
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf}, json_body={
