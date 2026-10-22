@@ -2988,6 +2988,9 @@ class LazyASGIApp:
                 await self._handle_readiness(scope, send)
                 return
 
+            if await self._send_legacy_setup_gate_if_required(scope, send):
+                return
+
             if path == '/manifest.webmanifest' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_app_manifest(scope, send)
                 return
@@ -4254,7 +4257,56 @@ class LazyASGIApp:
             'more_body': False,
         })
 
-    async def _send_setup_redirect_if_required(self, scope, send) -> bool:
+    async def _send_legacy_setup_gate_if_required(self, scope, send) -> bool:
+        """Apply Flask's before-request setup gate before native dispatch."""
+        path = scope.get('path', '/')
+        if (
+            not (
+                path == '/register'
+                or path == '/scan_management'
+                or path == '/admin'
+                or path.startswith('/admin/')
+            )
+        ):
+            return False
+
+        await self._ensure_flask()
+        # The native dispatcher also supports database-free route tests and
+        # shell serving. The setup gate needs a configured database to know
+        # whether setup is incomplete; leave those framework-free paths alone.
+        if self._native_sqlalchemy_engine is None:
+            return False
+
+        from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
+
+        if isinstance(self._flask_app, NativeRuntimeContext):
+            # The native runtime deliberately exposes only URL-build helpers,
+            # not Flask's full URL map. These are the concrete legacy routes
+            # that native dispatch currently intercepts ahead of Flask's gate.
+            route_exists = (
+                path in self._native_admin_routes
+                or path == '/scan_management'
+                or (path == '/register' and _is_native_auth_page_path(path))
+            )
+            if not route_exists:
+                return False
+        else:
+            from werkzeug.exceptions import HTTPException
+
+            try:
+                self._flask_app.url_map.bind('localhost').match(
+                    path, method=str(scope.get('method', 'GET')).upper(),
+                )
+            except HTTPException:
+                return False
+
+        return await self._send_setup_redirect_if_required(
+            scope, send, skip_active_step=True,
+        )
+
+    async def _send_setup_redirect_if_required(
+        self, scope, send, *, skip_active_step=False,
+    ) -> bool:
         """Apply Flask's first-run redirect to direct ASGI documents and assets."""
         from oneirodex.runtime_native.response_compat import flask_redirect_response
         from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
@@ -4263,8 +4315,11 @@ class LazyASGIApp:
         with self._native_database_scope():
             if not should_redirect_to_setup():
                 return False
+            target = get_setup_redirect_url()
+            if skip_active_step and target == scope.get('path', '/'):
+                return False
             response = flask_redirect_response(
-                get_setup_redirect_url(), status_code=302,
+                target, status_code=302,
             )
         for key, value in self._configured_security_headers().items():
             response.headers.setdefault(key, value)
