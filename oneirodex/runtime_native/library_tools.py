@@ -145,6 +145,13 @@ def create_library_tools_router(
     async def scan_proposals(request: Request):
         return await _run(request, **opts, handler=_scan_proposals)
 
+    @router.options('/api/library_tools/proposals/scan_roots')
+    async def scan_proposals_options():
+        # Match Flask's automatically generated, unauthenticated OPTIONS route.
+        from starlette.responses import HTMLResponse
+
+        return HTMLResponse('', status_code=200, headers={'Allow': 'OPTIONS, POST'})
+
     @router.api_route('/api/library_tools/doctor/dry_run', methods=['POST'])
     async def doctor_dry_run(request: Request):
         return await _run(request, **opts, handler=_doctor_dry_run)

@@ -133,6 +133,7 @@ def test_admin_read_routes_preserve_contracts_and_safe_paths(runtime):
     proposals = _request(app, '/api/library_tools/proposals', cookie=cookies['admin'])
     scan = _request(app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
                     method='POST', json={'roots': ['/safe']})
+    scan_options = _request(app, '/api/library_tools/proposals/scan_roots', method='OPTIONS')
     doctor = _request(app, '/api/library_tools/doctor/dry_run', cookie=cookies['admin'],
                       method='POST', json={'roots': ['/safe'], 'limit': 8})
 
@@ -142,6 +143,11 @@ def test_admin_read_routes_preserve_contracts_and_safe_paths(runtime):
     assert propose.json()['auto_create'] is False
     assert proposals.json()['proposals'][0]['proposal']['igdb_id'] == 44
     assert scan.json()['proposals'] == [{'path': '/safe/Game', 'proposal': {'igdb_id': 44}}]
+    assert scan_options.status_code == 200
+    assert scan_options.headers['content-type'] == 'text/html; charset=utf-8'
+    assert scan_options.headers['allow'] == 'OPTIONS, POST'
+    assert scan_options.headers['content-length'] == '0'
+    assert scan_options.content == b''
     assert doctor.json()['count'] == 1
     assert ('walk', '/safe') in data.calls
     assert ('doctor', ['/safe'], '{title}', 8) in data.calls
