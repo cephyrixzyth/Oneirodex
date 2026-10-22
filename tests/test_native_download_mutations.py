@@ -143,6 +143,49 @@ def test_orphan_version_cleanup_requires_librarian_and_reports_api_envelope():
     assert data.cleaned == ['12345678-1234-1234-1234-123456789abc']
 
 
+@pytest.mark.parametrize('role', [None, 'user', 'child'])
+def test_orphan_cleanup_auth_matches_legacy_flask(role):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis import apis_bp
+    import oneirodex.routes_apis.download  # register the legacy cleanup route
+
+    secret = 'orphan-cleanup-parity-secret'
+    user = SimpleNamespace(
+        id=7, role=role, name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    legacy_app = Flask('legacy-orphan-cleanup-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' and role is not None else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    if role is not None:
+        with legacy_client.session_transaction() as session:
+            session['_user_id'] = '7:fp'
+            session['_fresh'] = True
+
+    path = '/api/games/12345678-1234-1234-1234-123456789abc/versions/cleanup_orphans'
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current = make_client(data=FakeDownloads(), role=role or 'user')
+    if role is None:
+        current.cookies.clear()
+    native = current.post(path, follow_redirects=False)
+
+    assert native.status_code == legacy.status_code
+    assert native.headers.get('location') == legacy.headers.get('Location')
+    assert native.headers.get('content-type') == legacy.headers.get('Content-Type')
+    if role is None:
+        assert native.content == legacy.get_data()
+    else:
+        assert native.json() == legacy.get_json()
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
