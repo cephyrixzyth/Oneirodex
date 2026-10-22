@@ -37,6 +37,7 @@
 }
 
 .auth-pilot__card:has(.auth-pilot__form--providers) {
+  box-sizing: border-box;
   width: min(100%, 48rem);
 }
 
@@ -187,6 +188,11 @@
   background: var(--od-surface-2);
   color: var(--od-text);
   font: inherit;
+}
+
+.auth-pilot__form--providers .auth-pilot__field input {
+  box-sizing: border-box;
+  min-height: calc(var(--od-control-h) + var(--od-space-1));
 }
 
 .auth-pilot__check {
