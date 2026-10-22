@@ -190,8 +190,10 @@ required-field validation without mutating the wanted list.
   (`Provide a game UUID and source URL.`) rather than the
   legacy 422 field detail. This is retained under the P18 owner decision to
   preserve clearer current behavior. Whitespace-only source URLs and unknown
-  fields return the legacy 422 with field details. Exact-image replay also
-  confirms matching successful/repeated attachments, one persisted guide URL
+  fields return the legacy 422 with field details. Malformed/non-object JSON
+  and missing or non-JSON Content-Type also return legacy-shaped 422 responses;
+  JSON bytes under a wrong media type are rejected. Exact-image replay confirms
+  matching successful/repeated attachments, one persisted guide URL
   after retry, and rejection of a `file://` source; provider/database failure
   branches remain under review. Evidence is in the private parity matrix.
 - **`games_batch_favorite`** — missing `favorite` / `uuids` was 400 with

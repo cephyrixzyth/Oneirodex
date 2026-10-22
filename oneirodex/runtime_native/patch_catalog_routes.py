@@ -99,8 +99,17 @@ def create_patch_catalog_router(
                 elif is_search:
                     response = _search(request, data, api_error_payload)
                 else:
-                    body = await _read_json(request)
-                    response = _attach(body, auth.user, data, api_error_payload, api_ok_payload)
+                    content_type = str(
+                        request.headers.get('content-type') or ''
+                    ).split(';', 1)[0].strip().lower()
+                    is_json_request = (
+                        content_type == 'application/json' or content_type.endswith('+json')
+                    )
+                    body = await _read_json(request) if is_json_request else {}
+                    response = _attach(
+                        body, auth.user, data, api_error_payload, api_ok_payload,
+                        concise_missing_fields=is_json_request,
+                    )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
 

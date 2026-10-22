@@ -1488,7 +1488,7 @@ class FakeLocaleData:
         self.value = locale
 
 
-def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies=None, method='GET', json_body=None, form_body=None, headers=None, base_url='http://testserver'):
+def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies=None, method='GET', json_body=None, form_body=None, content=None, headers=None, base_url='http://testserver'):
     async def perform():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url=base_url
@@ -1498,7 +1498,7 @@ def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies
             for name, value in (extra_cookies or {}).items():
                 client.cookies.set(name, value)
             return await client.request(
-                method, path, json=json_body, data=form_body, headers=headers,
+                method, path, json=json_body, data=form_body, content=content, headers=headers,
                 follow_redirects=False,
             )
 
@@ -9782,14 +9782,40 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
             'unexpected': 'value',
         },
     )
+    wrong_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/octet-stream'},
+        content='{}',
+    )
+    json_with_wrong_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/octet-stream'},
+        content='{"game_uuid":"game-1","source_url":"https://patch.test/ignored"}',
+    )
+    missing_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, content='{}',
+    )
+    malformed_json = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+        content='{',
+    )
     assert blank_source.status_code == 422
     assert blank_source.json()['error_code'] == 'unprocessable'
     assert 'source_url' in blank_source.json()['detail']
     assert unknown_field.status_code == 422
     assert unknown_field.json()['error_code'] == 'unprocessable'
     assert 'unexpected' in unknown_field.json()['detail']
+    for response in (wrong_content_type, json_with_wrong_content_type, missing_content_type):
+        assert response.status_code == 422
+        assert response.json()['error_code'] == 'unprocessable'
+        assert set(response.json()['detail']) == {'game_uuid', 'source_url'}
+    assert malformed_json.status_code == 422
+    assert malformed_json.json()['detail']['__root__']
     assert calls[0][0:2] == ('search', 'Fixture')
     assert calls[1][0:2] == ('attach', 'game-1')
+    assert len(calls) == 2
 
 
 def test_lazy_asgi_dispatches_member_download_queue_natively(monkeypatch):
