@@ -459,6 +459,92 @@ def test_download_api_success_matches_legacy_flask(kind, monkeypatch):
     assert legacy_calls[0][1]['file_location'] == current_calls[0][1]['file_location'] == file_location
 
 
+@pytest.mark.parametrize('path', [
+    '/download_game/not-a-uuid',
+    '/download_other/update/not-a-uuid/42',
+])
+def test_legacy_download_malformed_game_uuid_matches_flask(path):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+
+    secret = 'native-download-mutations-secret'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    legacy_app = Flask('legacy-download-malformed-uuid-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current = make_client(data=FakeDownloads(), role='user').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code == 400
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.headers.get('content-length') == legacy.headers.get('Content-Length')
+    assert current.content == legacy.get_data()
+
+
+def test_legacy_download_invalid_file_type_redirect_and_flash_match_flask(monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+    import oneirodex.routes_downloads_ext.initiate as legacy_routes
+
+    secret = 'native-download-mutations-secret'
+    game_uuid = '12345678-1234-1234-1234-123456789abc'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    legacy_app = Flask('legacy-download-file-type-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.add_url_rule(
+        '/game_details/<game_uuid>', endpoint='games.game_details',
+        view_func=lambda game_uuid: game_uuid,
+    )
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda *_args, **_kwargs: None)
+
+    path = f'/download_other/mod/{game_uuid}/42'
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current = make_client(data=FakeDownloads(), role='user').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code == 302
+    assert current.headers.get('location') == legacy.headers.get('Location')
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.content == legacy.get_data()
+    current_cookie = current.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    legacy_cookie = legacy.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    current_session = load_session_cookie(current_cookie, secret, max_age=3600)
+    legacy_session = load_session_cookie(legacy_cookie, secret, max_age=3600)
+    assert current_session['_flashes'] == legacy_session['_flashes'] == [
+        ('error', 'Invalid file type'),
+    ]
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
