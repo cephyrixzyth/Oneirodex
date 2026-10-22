@@ -157,7 +157,10 @@ export function SetupWizard({
           </span>
         ))}
       </nav>
-      <h1 className="auth-pilot__title">{STEP_TITLES[step] || 'Oneirodex setup'}</h1>
+      <img className="auth-pilot__setup-mark" src="/static/newstyle/oneirodex_mark.svg" alt="" />
+      <h1 className="auth-pilot__title" id="setup-page-title">
+        {STEP_TITLES[step] || 'Oneirodex setup'}
+      </h1>
       <p className="auth-pilot__lede">
         {step === 3
           ? 'Step 3 of 6. Everything useful is on by default. Uncheck anything you do not want.'
@@ -360,20 +363,23 @@ export function SetupWizard({
                   false,
                   String(oidc.redirect_uri || ''),
                 )}
-                {input(
-                  'oidc_scopes',
-                  'OIDC scopes',
-                  'text',
-                  false,
-                  String(oidc.scopes || 'openid email profile'),
-                )}
-                {input(
-                  'oidc_role_claim',
-                  'OIDC role claim',
-                  'text',
-                  false,
-                  String(oidc.role_claim || ''),
-                )}
+                <details className="auth-pilot__advanced-oidc">
+                  <summary>Advanced OIDC settings</summary>
+                  {input(
+                    'oidc_scopes',
+                    'OIDC scopes',
+                    'text',
+                    false,
+                    String(oidc.scopes || 'openid email profile'),
+                  )}
+                  {input(
+                    'oidc_role_claim',
+                    'OIDC role claim',
+                    'text',
+                    false,
+                    String(oidc.role_claim || ''),
+                  )}
+                </details>
                 <p className="auth-pilot__message">
                   Credentials are saved for later review; SSO stays off until an operator enables
                   OIDC after setup.

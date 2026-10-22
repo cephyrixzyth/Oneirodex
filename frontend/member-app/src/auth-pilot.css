@@ -37,7 +37,11 @@
 }
 
 .auth-pilot__card:has(.auth-pilot__form--providers) {
-  width: min(100%, 56rem);
+  width: min(100%, 48rem);
+}
+
+.auth-pilot__card:has(.auth-pilot__form--providers) > .auth-pilot__brand {
+  display: none;
 }
 
 .auth-pilot__brand {
@@ -96,6 +100,14 @@
   font-weight: 650;
 }
 
+.auth-pilot__setup-mark {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-inline: auto;
+  border-radius: var(--od-radius-xl);
+}
+
 .auth-pilot__card:has(.auth-pilot__form--providers) .auth-pilot__title,
 .auth-pilot__card:has(.auth-pilot__form--providers) .auth-pilot__lede {
   text-align: center;
@@ -132,8 +144,20 @@
 
 .auth-pilot__provider legend {
   padding-inline: var(--od-space-2);
-  color: var(--od-text);
+  color: var(--od-accent);
   font-weight: 700;
+}
+
+.auth-pilot__advanced-oidc {
+  display: grid;
+  gap: var(--od-space-3);
+  color: var(--od-text);
+}
+
+.auth-pilot__advanced-oidc summary {
+  color: var(--od-text);
+  font-weight: 650;
+  cursor: pointer;
 }
 
 .auth-pilot__field {
@@ -225,7 +249,7 @@
 
 @media (max-width: 42rem) {
   .auth-pilot__card:has(.auth-pilot__form--providers) {
-    width: min(100%, 28rem);
+    width: min(100%, 48rem);
   }
 
   .auth-pilot__form--providers,
