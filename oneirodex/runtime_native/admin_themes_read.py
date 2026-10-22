@@ -209,7 +209,9 @@ def create_admin_themes_read_router(
             elif request.url.path == '/admin/themes/reset' and request.method == 'POST':
                 ok, message = data.reset(flask_app, user)
                 is_json = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-                if is_json == 'application/json' or is_json.endswith('+json'):
+                if is_json == 'application/json' or (
+                    is_json.startswith('application/') and is_json.endswith('+json')
+                ):
                     if ok:
                         response = JSONResponse(api_ok_payload({'status': 'reset', 'message': message}))
                     else:

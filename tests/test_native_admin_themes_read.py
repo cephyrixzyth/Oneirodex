@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask, redirect as flask_redirect
+from flask import Flask, redirect as flask_redirect, request as flask_request
 
 from oneirodex.runtime_native.admin_themes_read import create_admin_themes_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -172,6 +172,41 @@ def test_default_theme_reset_form_request_redirects_with_flash():
     assert response.content == expected.get_data()
     assert 'session=' in response.headers.get('set-cookie', '')
     assert data.write_calls == [('reset', 95)]
+
+
+def test_default_theme_reset_uses_flask_json_media_type_classification():
+    legacy = Flask('legacy-theme-reset')
+    with legacy.test_request_context(
+        '/admin/themes/reset', method='POST', content_type='application/vnd.oneirodex+json',
+    ):
+        assert flask_request.is_json is True
+    with legacy.test_request_context(
+        '/admin/themes/reset', method='POST', content_type='text/plain+json',
+    ):
+        assert flask_request.is_json is False
+
+    client, data = _client()
+    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    csrf = generate_csrf_token(session, 'native-themes-read-secret')
+    client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
+    headers = {'X-CSRFToken': csrf}
+
+    vendor_json = client.post(
+        '/admin/themes/reset', content=b'{}',
+        headers={**headers, 'Content-Type': 'application/vnd.oneirodex+json'},
+        follow_redirects=False,
+    )
+    text_json_suffix = client.post(
+        '/admin/themes/reset', content=b'{}',
+        headers={**headers, 'Content-Type': 'text/plain+json'},
+        follow_redirects=False,
+    )
+
+    assert vendor_json.status_code == 200
+    assert vendor_json.json()['status'] == 'reset'
+    assert text_json_suffix.status_code == 302
+    assert text_json_suffix.headers['location'] == '/admin/themes'
+    assert data.write_calls == [('reset', 95), ('reset', 95)]
 
 
 def test_classic_theme_upload_and_delete_forms_dispatch_natively():
