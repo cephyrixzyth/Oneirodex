@@ -360,6 +360,55 @@ def test_install_manifest_follows_legacy_setup_redirect_when_setup_is_incomplete
     assert head_response.headers['content-length'] == str(len(get_response.content))
 
 
+def test_pwa_assets_follow_legacy_setup_redirect_when_setup_is_incomplete(monkeypatch, tmp_path):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import setup as setup_state
+
+    app = Flask(__name__, static_folder=str(tmp_path))
+    app.config.update(CSP_ENABLED=True, CSP_ENFORCE=True, HSTS_SECONDS=0)
+    runtime = asgi.LazyASGIApp()
+    monkeypatch.setattr(asgi, 'create_app', lambda: app)
+    monkeypatch.setattr(db_session, 'native_session_scope', lambda *_args: nullcontext())
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_state, 'get_setup_redirect_url', lambda: '/setup/integrations')
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+    runtime._configured_security_headers = lambda: {
+        'Content-Security-Policy': "default-src 'self'",
+    }
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+            follow_redirects=False,
+        ) as client:
+            responses = {}
+            for path in (
+                '/manifest.webmanifest', '/offline', '/sw.js', '/vr/sw.js',
+            ):
+                responses[path] = (
+                    await client.get(path), await client.head(path),
+                )
+        return responses
+
+    responses = asyncio.run(run())
+    for get_response, head_response in responses.values():
+        assert get_response.status_code == 302
+        assert get_response.headers['location'] == '/setup/integrations'
+        assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+        assert 'Content-Security-Policy' in get_response.headers
+        assert b'/setup/integrations' in get_response.content
+        assert head_response.status_code == 302
+        assert head_response.headers['location'] == '/setup/integrations'
+        assert head_response.content == b''
+        assert head_response.headers['content-length'] == str(len(get_response.content))
+
+
 def test_loading_icon_bootstrap_uses_request_local_scope_without_flask_dispatch(monkeypatch, tmp_path):
     from oneirodex.utils import loading_icons
     from oneirodex.runtime_native import db_session
@@ -1296,14 +1345,24 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
 
 
 def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatch):
+    from oneirodex.utils import setup as setup_state
+
     def forbidden_create_app():
         raise AssertionError('the offline document must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+    runtime = asgi.LazyASGIApp()
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
             get_response = await client.get('/offline')
@@ -1323,14 +1382,24 @@ def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatc
 
 
 def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
+    from oneirodex.utils import setup as setup_state
+
     def forbidden_create_app():
         raise AssertionError('service-worker routes must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+    runtime = asgi.LazyASGIApp()
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
             root_worker = await client.get('/sw.js')
@@ -1375,6 +1444,8 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
 
 
 def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
+    from oneirodex.utils import setup as setup_state
+
     static_root = tmp_path / 'static'
     static_root.mkdir()
     shipped_worker = static_root / 'app-sw.js'
@@ -1387,6 +1458,14 @@ def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
 
     runtime = asgi.LazyASGIApp()
     runtime._static_root = static_root
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+
     async def run():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime),

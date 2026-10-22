@@ -4227,21 +4227,10 @@ class LazyASGIApp:
         """Build the install manifest in a request-local DB scope."""
         from oneirodex.utils.pwa_manifest import build_app_manifest
         from oneirodex.utils.processors import get_global_settings
-        from oneirodex.runtime_native.response_compat import flask_redirect_response
-        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
 
-        await self._ensure_native_database()
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         with self._native_database_scope():
-            if should_redirect_to_setup():
-                response = flask_redirect_response(
-                    get_setup_redirect_url(), status_code=302,
-                )
-                for key, value in self._configured_security_headers().items():
-                    response.headers.setdefault(key, value)
-                if scope.get('method') == 'HEAD':
-                    response.body = b''
-                await response(scope, None, send)
-                return
             settings = get_global_settings() or {}
         manifest = build_app_manifest(settings.get('site_name'))
         payload = json.dumps(
@@ -4265,8 +4254,29 @@ class LazyASGIApp:
             'more_body': False,
         })
 
+    async def _send_setup_redirect_if_required(self, scope, send) -> bool:
+        """Apply Flask's first-run redirect to direct ASGI documents and assets."""
+        from oneirodex.runtime_native.response_compat import flask_redirect_response
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
+
+        await self._ensure_native_database()
+        with self._native_database_scope():
+            if not should_redirect_to_setup():
+                return False
+            response = flask_redirect_response(
+                get_setup_redirect_url(), status_code=302,
+            )
+        for key, value in self._configured_security_headers().items():
+            response.headers.setdefault(key, value)
+        if scope.get('method') == 'HEAD':
+            response.body = b''
+        await response(scope, None, send)
+        return True
+
     async def _handle_offline(self, scope, send):
         """Serve the self-contained offline fallback without Flask request state."""
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         from oneirodex.utils.asset_version import asset_version
         from oneirodex.utils.offline_page import render_offline_page
 
@@ -4374,6 +4384,8 @@ class LazyASGIApp:
 
     async def _handle_service_worker(self, scope, send, path: str):
         """Serve origin-scoped PWA workers with the same no-cache policy."""
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         root = self._static_root or (
             Path(__file__).resolve().parent / 'oneirodex' / 'static'
         )
