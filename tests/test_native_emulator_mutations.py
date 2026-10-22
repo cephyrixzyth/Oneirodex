@@ -12,6 +12,7 @@ from flask_login import LoginManager
 
 from oneirodex.runtime_native.emulator_mutations import create_emulator_mutations_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.models import PcCheat
 
 
 class FakeData:
@@ -189,6 +190,18 @@ def test_pc_cheats_options_matches_legacy_allow_header(native):
     assert response.headers['allow'] == 'OPTIONS, GET, HEAD, POST'
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert response.content == b''
+
+
+def test_pc_cheat_created_at_keeps_legacy_naive_utc_format():
+    row = PcCheat(
+        id=1,
+        game_uuid='game-1',
+        method='note',
+        label='Example',
+        created_at=datetime(2026, 10, 22, 12, 34, 56, tzinfo=timezone.utc),
+    )
+
+    assert row.to_dict()['created_at'] == '2026-10-22T12:34:56'
 
 
 def test_writes_reject_missing_csrf_before_authentication(native):

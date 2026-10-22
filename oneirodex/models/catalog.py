@@ -341,6 +341,12 @@ class PcCheat(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     def to_dict(self):
+        created_at = self.created_at
+        if created_at is not None and created_at.tzinfo is not None:
+            # This column has no timezone and the v1.1.8 API exposes its UTC
+            # value as a naive ISO timestamp. Match that representation on
+            # create responses too; a later database read is already naive.
+            created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
         return {
             'id': self.id,
             'game_uuid': self.game_uuid,
@@ -349,7 +355,7 @@ class PcCheat(db.Model):
             'payload': self.payload,
             'notes': self.notes,
             'single_player_only': bool(self.single_player_only),
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': created_at.isoformat() if created_at else None,
         }
 
 class GameMode(db.Model):
