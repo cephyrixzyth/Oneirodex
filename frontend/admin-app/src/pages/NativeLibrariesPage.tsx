@@ -7,6 +7,22 @@ import { LibraryFreshnessPanel } from '../components/LibraryFreshnessPanel'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
+import { CreateLibraryForm } from '../components/CreateLibraryForm'
+import { useNavigate } from 'react-router-dom'
+
+export function NativeLibraryAddPage() {
+  const navigate = useNavigate()
+  return (
+    <Page title="Create library">
+      <div className="od-admin-panel__toolbar">
+        <a className="od-cbtn" href="/libraries">
+          Back to libraries
+        </a>
+      </div>
+      <CreateLibraryForm onComplete={() => navigate('/libraries')} />
+    </Page>
+  )
+}
 
 export function NativeLibrariesPage() {
   const { conflictOpen, refreshing, startRefreshAll, onConflictChoose, onConflictClose } =

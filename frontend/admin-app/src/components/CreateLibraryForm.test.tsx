@@ -78,7 +78,8 @@ test('crops library artwork to PNG before creating and queueing the library', as
   }) as unknown as typeof fetch
 
   const onCreated = vi.fn()
-  render(<CreateLibraryForm onCreated={onCreated} />)
+  const onComplete = vi.fn()
+  render(<CreateLibraryForm onCreated={onCreated} onComplete={onComplete} />)
   await screen.findByRole('option', { name: 'Nintendo Entertainment System' })
   fireEvent.change(screen.getByLabelText('Library name'), { target: { value: 'NES Library' } })
   fireEvent.change(screen.getByPlaceholderText('/storage/games/nes'), {
@@ -111,4 +112,5 @@ test('crops library artwork to PNG before creating and queueing the library', as
     scan_mode: 'folders',
   })
   expect(onCreated).toHaveBeenCalledOnce()
+  expect(onComplete).toHaveBeenCalledOnce()
 })

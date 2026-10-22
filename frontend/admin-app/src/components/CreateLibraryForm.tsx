@@ -24,7 +24,13 @@ interface BrowseItem {
 }
 
 /** A direct, single-library path through the same create + first-scan contract as bulk import. */
-export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
+export function CreateLibraryForm({
+  onCreated,
+  onComplete,
+}: {
+  onCreated?: () => void
+  onComplete?: () => void
+}) {
   const [platforms, setPlatforms] = useState<PlatformOption[]>([])
   const [platformError, setPlatformError] = useState<unknown>(null)
   const [name, setName] = useState('')
@@ -113,6 +119,7 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
       )
     } finally {
       setBusy(false)
+      onComplete?.()
     }
   }
 
