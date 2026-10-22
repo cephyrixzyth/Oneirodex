@@ -284,7 +284,7 @@ def create_reference_sets_router(
                         raw_payload = await request.json()
                     except ValueError:
                         raw_payload = {}
-                    model = RepairPreviewBody.model_validate(raw_payload if isinstance(raw_payload, dict) else {})
+                    model = RepairPreviewBody.model_validate(raw_payload)
                     report = data.repair_preview(
                         platform=model.library_platform, region=model.region,
                         user=user, limit=model.limit,

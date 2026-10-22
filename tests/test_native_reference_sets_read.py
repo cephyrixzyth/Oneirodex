@@ -290,6 +290,10 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
         '/api/reference-sets/repair-preview', json={'unknown': 'field'},
         headers={'X-CSRFToken': client.csrf_token},
     )
+    non_object_preview = client.post(
+        '/api/reference-sets/repair-preview', json=[],
+        headers={'X-CSRFToken': client.csrf_token},
+    )
 
     assert missing_platform.status_code == 400
     assert rehashed.json() == {'platform': 'NES', 'hashed': 2, 'skipped': 1}
@@ -301,6 +305,10 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
     assert calls[2][1]['limit'] == 5
     assert invalid_preview.status_code == 422
     assert 'unknown' in invalid_preview.json()['detail']
+    assert non_object_preview.status_code == 422
+    assert non_object_preview.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of RepairPreviewBody',
+    }
 
 
 def test_reference_sets_data_uses_current_catalog_helpers(monkeypatch):
