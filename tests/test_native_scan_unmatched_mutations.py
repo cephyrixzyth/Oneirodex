@@ -393,6 +393,17 @@ def test_legacy_unmatched_form_csrf_errors_keep_html_while_json_callers_keep_env
     assert json_response.status_code == 400
     assert json_response.headers['content-type'] == 'application/json'
     assert json_response.json()['error_code'] == 'bad_request'
+
+    with Flask('legacy-csrf-media').test_request_context(
+        '/toggle_ignore_status/8', method='POST', content_type='text/plain+json',
+    ):
+        assert flask_request.is_json is False
+    wrong_json_media = _request(
+        app, '/toggle_ignore_status/8', cookie=cookie, method='POST', json={},
+        headers={'Content-Type': 'text/plain+json'},
+    )
+    assert wrong_json_media.status_code == 400
+    assert wrong_json_media.headers['content-type'] == 'text/html; charset=utf-8'
     assert data.calls == []
 
 

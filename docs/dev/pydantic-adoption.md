@@ -466,6 +466,10 @@ routes remain partially verified overall.
   rule as Flask. Vendor `+json` is parsed; misleading `application/jsonp` is
   treated as non-JSON and cannot start a scan. Evidence:
   `.artifacts/parity-v1.1.8/library-scan-json-media-types-20261022.json`.
+- Legacy unmatched-form CSRF responses use Flask's full JSON media rule too:
+  `text/plain+json` remains a form-style HTML error, while
+  `application/*+json` gets the JSON error envelope. Evidence:
+  `.artifacts/parity-v1.1.8/unmatched-form-csrf-json-media-20261022.json`.
 
 ### `routes_arr.py`
 

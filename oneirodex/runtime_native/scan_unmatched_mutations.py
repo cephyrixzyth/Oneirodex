@@ -534,7 +534,9 @@ async def _run(
         )
         if response is not None and csrf_html_for_form:
             content_type = (request.headers.get('content-type') or '').split(';', 1)[0].strip().lower()
-            if not (content_type.endswith('/json') or content_type.endswith('+json')):
+            if content_type != 'application/json' and not (
+                content_type.startswith('application/') and content_type.endswith('+json')
+            ):
                 from .csrf_compat import csrf_html_error_response
 
                 response = csrf_html_error_response(response)
