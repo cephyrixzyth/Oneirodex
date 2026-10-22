@@ -9746,8 +9746,16 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
         },
     )
 
+    empty_attach = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+
     assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
     assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
+    assert empty_attach.status_code == 400
+    assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
+    assert empty_attach.json()['error_code'] == 'bad_request'
     assert calls[0][0:2] == ('search', 'Fixture')
     assert calls[1][0:2] == ('attach', 'game-1')
 
