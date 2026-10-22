@@ -91,6 +91,7 @@ curl -sS -b cookies.txt \
 
 - Title match can false-positive (shared names) or miss (IGDB-renamed library titles vs No-Intro names).
 - **Hash match** (CRC/MD5/SHA1) wins when both the DAT entry and the library file have hashes. New scans hash single-file ROM paths automatically; use **Rehash platform** on the admin page (or `POST /api/reference-sets/rehash`) for existing libraries.
+- Rehash skips a game path that is itself a symlink, as well as linked ROMs inside a game folder.
 - **First-scan identify:** a **unique** hash hit against uploaded DATs for the library platform can auto-create a custom Game after IGDB miss (before TheGamesDB propose). Ambiguous hashes and title-only DAT names never auto-import.
 - Hashes prefer the on-disk file (or the single ROM-like file inside a folder). For **zip/7z/rar**, when the outer archive digest misses DAT, Oneirodex may open the archive and hash **inner** primary dump candidate(s) (`DAT_HASH_INNER_ARCHIVE`, default ON; set `0` to disable). Exactly one unique DAT title identifies; zero or multiple distinct titles → skip (no invent). Multi-disc / cue+bin / overcrowded set archives stay skip-safe.
 - Home-brew / unlicensed / proto entries may appear in some DATs — filter upstream if you want “retail only.”

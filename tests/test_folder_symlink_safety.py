@@ -214,6 +214,13 @@ def test_folder_hashing_ignores_a_linked_rom(game_dir, secret):
     assert hash_rom_file(game_dir) is None
 
 
+def test_direct_file_hashing_ignores_a_symlinked_game_path(game_dir, secret):
+    linked_game = game_dir / 'game.nes'
+    _link(linked_game, secret)
+    assert resolve_hashable_file(linked_game) is None
+    assert hash_rom_file(linked_game) is None
+
+
 def test_folder_hashing_still_finds_the_one_real_rom(game_dir, secret):
     (game_dir / 'game.nes').write_bytes(GAME)
     _link(game_dir / 'leak.bin', secret)

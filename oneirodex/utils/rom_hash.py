@@ -39,7 +39,10 @@ def resolve_hashable_file(path: str | Path) -> Path | None:
         return None
     try:
         if root.is_file():
-            return root
+            # A Game may point directly at a planted symlink, not only at a
+            # directory containing one. Keep the direct-file case under the
+            # same plain-file rule used while resolving folder contents.
+            return root if is_plain_file_within(root.parent, root) else None
         if not root.is_dir():
             return None
     except OSError:
