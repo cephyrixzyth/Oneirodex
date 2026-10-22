@@ -146,9 +146,17 @@ export function SetupWizard({
   const features = (settings.features || {}) as Record<string, boolean>
   const providerKeys = (settings.provider_keys || {}) as Record<string, boolean>
   const oidc = (settings.oidc || {}) as Record<string, string | boolean>
+  const progressLabels = ['Admin', 'Email', 'Features', 'Metadata', 'APIs', 'Library']
 
   return (
     <>
+      <nav className="auth-pilot__setup-progress" aria-label="Setup progress">
+        {progressLabels.map((label, index) => (
+          <span key={label} aria-current={step === index + 1 ? 'step' : undefined}>
+            {index + 1} · {label}
+          </span>
+        ))}
+      </nav>
       <h1 className="auth-pilot__title">{STEP_TITLES[step] || 'Oneirodex setup'}</h1>
       <p className="auth-pilot__lede">
         {step === 3
@@ -159,7 +167,10 @@ export function SetupWizard({
               ? 'Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.'
               : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
-      <form className="auth-pilot__form" onSubmit={(event) => void submit(event)}>
+      <form
+        className={`auth-pilot__form${step === 5 ? ' auth-pilot__form--providers' : ''}`}
+        onSubmit={(event) => void submit(event)}
+      >
         {step === 1 ? (
           <>
             <p className="auth-pilot__message">
@@ -277,90 +288,98 @@ export function SetupWizard({
               Secrets are saved in the local settings database and never filled back into this form.
               Leave a credential blank to keep an existing value.
             </p>
-            {[
-              {
-                key: 'steam_web_api_key',
-                title: 'Steam Web API',
-                configure: 'Configure Steam ownership lookup',
-              },
-              {
-                key: 'steamgriddb_api_key',
-                title: 'SteamGridDB',
-                configure: 'Configure game artwork lookup',
-              },
-              {
-                key: 'giantbomb_api_key',
-                title: 'Giant Bomb',
-                configure: 'Configure metadata lookup',
-              },
-              {
-                key: 'mobygames_api_key',
-                title: 'MobyGames',
-                configure: 'Configure metadata lookup',
-              },
-              {
-                key: 'thegamesdb_api_key',
-                title: 'TheGamesDB',
-                configure: 'Configure metadata and artwork lookup',
-              },
-            ].map(({ key, title, configure }) => (
-              <fieldset className="auth-pilot__provider" key={key}>
-                <legend>{title}</legend>
-                {checkbox(`configure_${key}`, configure, Boolean(providerKeys[key]))}
-                {input(key, providerKeys[key] ? 'API key (saved)' : 'API key', 'password')}
+            <div className="auth-pilot__provider-grid">
+              {[
+                {
+                  key: 'steam_web_api_key',
+                  title: 'Steam Web API',
+                  configure: 'Configure Steam ownership lookup',
+                },
+                {
+                  key: 'steamgriddb_api_key',
+                  title: 'SteamGridDB',
+                  configure: 'Configure game artwork lookup',
+                },
+                {
+                  key: 'giantbomb_api_key',
+                  title: 'Giant Bomb',
+                  configure: 'Configure metadata lookup',
+                },
+                {
+                  key: 'mobygames_api_key',
+                  title: 'MobyGames',
+                  configure: 'Configure metadata lookup',
+                },
+                {
+                  key: 'thegamesdb_api_key',
+                  title: 'TheGamesDB',
+                  configure: 'Configure metadata and artwork lookup',
+                },
+              ].map(({ key, title, configure }) => (
+                <fieldset className="auth-pilot__provider" key={key}>
+                  <legend>{title}</legend>
+                  {checkbox(`configure_${key}`, configure, Boolean(providerKeys[key]))}
+                  {input(key, providerKeys[key] ? 'API key (saved)' : 'API key', 'password')}
+                </fieldset>
+              ))}
+              <fieldset className="auth-pilot__provider">
+                <legend>HowLongToBeat</legend>
+                {checkbox(
+                  'enable_hltb_integration',
+                  'Enable playtime estimates (no API key required)',
+                  Boolean(settings.enable_hltb_integration),
+                )}
               </fieldset>
-            ))}
-            <fieldset className="auth-pilot__provider">
-              <legend>HowLongToBeat</legend>
-              {checkbox(
-                'enable_hltb_integration',
-                'Enable playtime estimates (no API key required)',
-                Boolean(settings.enable_hltb_integration),
-              )}
-            </fieldset>
-            <fieldset className="auth-pilot__provider">
-              <legend>OIDC / SSO</legend>
-              {checkbox(
-                'configure_oidc',
-                'Save identity-provider details',
-                Boolean(oidc.issuer_url || oidc.client_id),
-              )}
-              <p className="auth-pilot__message">
-                The issuer must use HTTPS to protect discovery and client credentials.
-              </p>
-              {input('oidc_issuer_url', 'Issuer URL', 'url', false, String(oidc.issuer_url || ''))}
-              {input('oidc_client_id', 'Client ID', 'text', false, String(oidc.client_id || ''))}
-              {input(
-                'oidc_client_secret',
-                oidc.secret_configured ? 'Client secret (saved)' : 'Client secret',
-                'password',
-              )}
-              {input(
-                'oidc_redirect_uri',
-                'Redirect URI (optional)',
-                'url',
-                false,
-                String(oidc.redirect_uri || ''),
-              )}
-              {input(
-                'oidc_scopes',
-                'OIDC scopes',
-                'text',
-                false,
-                String(oidc.scopes || 'openid email profile'),
-              )}
-              {input(
-                'oidc_role_claim',
-                'OIDC role claim',
-                'text',
-                false,
-                String(oidc.role_claim || ''),
-              )}
-              <p className="auth-pilot__message">
-                Credentials are saved for later review; SSO stays off until an operator enables OIDC
-                after setup.
-              </p>
-            </fieldset>
+              <fieldset className="auth-pilot__provider">
+                <legend>OIDC / SSO</legend>
+                {checkbox(
+                  'configure_oidc',
+                  'Save identity-provider details',
+                  Boolean(oidc.issuer_url || oidc.client_id),
+                )}
+                <p className="auth-pilot__message">
+                  The issuer must use HTTPS to protect discovery and client credentials.
+                </p>
+                {input(
+                  'oidc_issuer_url',
+                  'Issuer URL',
+                  'url',
+                  false,
+                  String(oidc.issuer_url || ''),
+                )}
+                {input('oidc_client_id', 'Client ID', 'text', false, String(oidc.client_id || ''))}
+                {input(
+                  'oidc_client_secret',
+                  oidc.secret_configured ? 'Client secret (saved)' : 'Client secret',
+                  'password',
+                )}
+                {input(
+                  'oidc_redirect_uri',
+                  'Redirect URI (optional)',
+                  'url',
+                  false,
+                  String(oidc.redirect_uri || ''),
+                )}
+                {input(
+                  'oidc_scopes',
+                  'OIDC scopes',
+                  'text',
+                  false,
+                  String(oidc.scopes || 'openid email profile'),
+                )}
+                {input(
+                  'oidc_role_claim',
+                  'OIDC role claim',
+                  'text',
+                  false,
+                  String(oidc.role_claim || ''),
+                )}
+                <p className="auth-pilot__message">
+                  Credentials are saved for later review; SSO stays off until an operator enables
+                  OIDC after setup.
+                </p>
+              </fieldset>
+            </div>
             <details className="auth-pilot__message">
               <summary>Other optional services</summary>
               <p>

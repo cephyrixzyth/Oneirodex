@@ -36,6 +36,10 @@
   box-shadow: var(--od-shadow-lg);
 }
 
+.auth-pilot__card:has(.auth-pilot__form--providers) {
+  width: min(100%, 56rem);
+}
+
 .auth-pilot__brand {
   width: fit-content;
   color: var(--od-accent);
@@ -69,6 +73,49 @@
 
 .auth-pilot__form {
   display: grid;
+  gap: var(--od-space-4);
+}
+
+.auth-pilot__setup-progress {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--od-space-1);
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+  text-align: center;
+}
+
+.auth-pilot__setup-progress span {
+  padding: var(--od-space-2) var(--od-space-1);
+  border-bottom: 2px solid var(--od-border);
+}
+
+.auth-pilot__setup-progress [aria-current='step'] {
+  border-color: var(--od-accent);
+  color: var(--od-text);
+  font-weight: 650;
+}
+
+.auth-pilot__card:has(.auth-pilot__form--providers) .auth-pilot__title,
+.auth-pilot__card:has(.auth-pilot__form--providers) .auth-pilot__lede {
+  text-align: center;
+}
+
+.auth-pilot__form--providers > .auth-pilot__message,
+.auth-pilot__form--providers > .auth-pilot__provider-grid,
+.auth-pilot__form--providers > details,
+.auth-pilot__form--providers > .auth-pilot__error,
+.auth-pilot__form--providers > .auth-pilot__submit {
+  grid-column: 1 / -1;
+}
+
+.auth-pilot__form--providers {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-pilot__provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--od-space-4);
 }
 
@@ -173,5 +220,16 @@
   }
   .auth-pilot__card {
     padding: var(--od-space-4);
+  }
+}
+
+@media (max-width: 42rem) {
+  .auth-pilot__card:has(.auth-pilot__form--providers) {
+    width: min(100%, 28rem);
+  }
+
+  .auth-pilot__form--providers,
+  .auth-pilot__provider-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

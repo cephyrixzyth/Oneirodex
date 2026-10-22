@@ -106,6 +106,14 @@ test('registration preserves invite token and shows the generic account request 
   })
   render(<AuthApp />)
   fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'new-member' } })
+  expect(screen.getByRole('button', { name: 'Create account' }).closest('form')).toHaveAttribute(
+    'novalidate',
+  )
+  expect(
+    screen.getByText(
+      "You were invited to join this Oneirodex library. Choose a username and password to create your own account — you will not share the inviter's login.",
+    ),
+  ).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-password' } })
   fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
@@ -123,19 +131,71 @@ test('reset request uses the generic recovery message', async () => {
     requested: true,
     message: 'If the account exists, instructions were sent.',
   })
-  render(<AuthApp />)
+  const navigate = vi.fn()
+  const { unmount } = render(<AuthApp navigate={navigate} />)
+  expect(await screen.findByRole('heading', { name: 'Reset password' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Enter your email and we will send a reset link if an account exists.'),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('Email')).toHaveAttribute('placeholder', 'you@example.com')
+  expect(screen.getByRole('button', { name: 'Send reset link' }).closest('form')).toHaveAttribute(
+    'novalidate',
+  )
   fireEvent.change(await screen.findByLabelText('Email'), {
     target: { value: 'member@example.com' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Send reset instructions' }))
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'If the account exists, instructions were sent.',
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Send reset link' }))
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login?password_reset_requested=1'))
   expect(api.requestPasswordReset).toHaveBeenCalledWith('member@example.com')
+
+  unmount()
+  window.history.replaceState({}, '', '/login?password_reset_requested=1')
+  render(<AuthApp />)
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'If that email is registered, password reset instructions were sent.',
+  )
+})
+
+test('password reset confirmation uses the legacy form explanation and action label', async () => {
+  window.history.replaceState({}, '', '/reset_password/synthetic-token')
+  render(<AuthApp />)
+  expect(await screen.findByRole('heading', { name: 'Choose a new password' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Enter and confirm your new password to finish the reset.'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Reset password' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Reset password' }).closest('form')).toHaveAttribute(
+    'novalidate',
+  )
+})
+
+test('successful password reset returns to sign in with the legacy success notice', async () => {
+  window.history.replaceState({}, '', '/reset_password/synthetic-token')
+  api.resetPassword.mockResolvedValue({ reset: true, next_url: '/login' })
+  const navigate = vi.fn()
+  const { unmount } = render(<AuthApp navigate={navigate} />)
+  fireEvent.change(await screen.findByLabelText('New password'), {
+    target: { value: 'new-password-123' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm password'), {
+    target: { value: 'new-password-123' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login?password_reset=1'))
+
+  unmount()
+  window.history.replaceState({}, '', '/login?password_reset=1')
+  render(<AuthApp />)
+  expect(await screen.findByRole('status')).toHaveTextContent('Your password has been reset.')
 })
 
 test('expired or invalid confirmation links surface an alert and keep the back link', async () => {
   window.history.replaceState({}, '', '/confirm/bad-token')
+  api.errorFromResponse.mockResolvedValueOnce(
+    new Error(
+      'The confirmation link is invalid or has expired. Request a new activation from an admin or try registering again with a fresh invite.',
+    ),
+  )
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
@@ -147,7 +207,11 @@ test('expired or invalid confirmation links surface an alert and keep the back l
     }),
   )
   render(<AuthApp />)
-  expect(await screen.findByRole('alert')).toHaveTextContent('Request failed')
+  expect(await screen.findByRole('heading', { name: 'Link expired' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Request a new activation from an admin or try registering again with a fresh invite.'),
+  ).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent('Request a new activation from an admin')
   expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
 })
 

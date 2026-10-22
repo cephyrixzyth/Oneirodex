@@ -34,6 +34,9 @@ test('integrations setup matches provider groups and preserves explicit configur
   render(<SetupWizard navigate={navigate} />)
 
   expect(await screen.findByRole('heading', { name: 'Choose API connections' })).toBeInTheDocument()
+  const progress = screen.getByRole('navigation', { name: 'Setup progress' })
+  expect(within(progress).getAllByText(/^[1-6] · /)).toHaveLength(6)
+  expect(within(progress).getByText('5 · APIs')).toHaveAttribute('aria-current', 'step')
   expect(
     screen.getByText(
       'Secrets are saved in the local settings database and never filled back into this form. Leave a credential blank to keep an existing value.',
@@ -42,6 +45,9 @@ test('integrations setup matches provider groups and preserves explicit configur
   expect(screen.getByText('Other optional services')).toBeInTheDocument()
   expect(screen.getByText('HowLongToBeat')).toBeInTheDocument()
   expect(screen.getByText('OIDC / SSO')).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__provider-grid')).toContainElement(
+    screen.getByText('Steam Web API'),
+  )
 
   const steam = screen.getByLabelText('Configure Steam ownership lookup')
   const steamGrid = screen.getByLabelText('Configure game artwork lookup')
