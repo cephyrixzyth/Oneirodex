@@ -22,6 +22,7 @@ class FakeData:
         self.allowed = True
         self.fail_pc_cheat_delete = False
         self.pc_cheat_rows = {'game-1': {42}}
+        self.pc_cheat_list = []
         self.calls = []
         self.saves = []
 
@@ -80,7 +81,7 @@ class FakeData:
 
     def pc_cheats(self, game_uuid):
         self.calls.append(('pc_cheats', game_uuid))
-        return []
+        return list(self.pc_cheat_list)
 
     def create_pc_cheat(self, **values):
         self.calls.append(('create_pc_cheat', values))
@@ -208,6 +209,45 @@ def test_pc_cheat_list_matches_legacy_handler_empty_and_wrong_surface(native, mo
     )
 
     assert legacy_response.status_code == current_response.status_code
+    assert legacy_response.mimetype == current_response.headers['content-type'].split(';', 1)[0]
+    assert legacy_response.get_json() == current_response.json()
+
+
+def test_pc_cheat_list_populated_rows_match_legacy_handler(native, monkeypatch):
+    from oneirodex.routes_apis import emulator_cheats as legacy_routes
+
+    app, api, data, user = native
+    cookie, _csrf = _cookie(app)
+    data.surface = 'pc_wand'
+    row = PcCheat(
+        id=9, game_uuid='game-1', method='note', label='Checkpoint',
+        payload=None, notes='Synthetic evidence row', single_player_only=True,
+        created_by_user_id=7, created_at=datetime(2026, 10, 22, 12, 34, 56, tzinfo=timezone.utc),
+    )
+    data.pc_cheat_list = [row]
+
+    class Scalars:
+        def all(self):
+            return [row]
+
+    class Result:
+        def scalars(self):
+            return Scalars()
+
+    class LegacySession:
+        def execute(self, _statement):
+            return Result()
+
+    monkeypatch.setattr(legacy_routes.db, 'session', LegacySession())
+    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (object(), None))
+    monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: ('pc_wand', None))
+    legacy_list = legacy_routes.pc_cheats_list.__wrapped__.__wrapped__
+    with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
+        legacy_response = app.make_response(legacy_list('game-1'))
+
+    current_response = _request(api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie)
+
+    assert legacy_response.status_code == current_response.status_code == 200
     assert legacy_response.mimetype == current_response.headers['content-type'].split(';', 1)[0]
     assert legacy_response.get_json() == current_response.json()
 
