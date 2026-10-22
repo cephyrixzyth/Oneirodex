@@ -133,6 +133,13 @@ def create_library_tools_router(
     async def propose_leaf_libraries(request: Request):
         return await _run(request, **opts, handler=_propose_leaf)
 
+    @router.options('/api/library_tools/propose_leaf_libraries')
+    async def propose_leaf_libraries_options():
+        # Match Flask's generated, unauthenticated OPTIONS response and method order.
+        from starlette.responses import HTMLResponse
+
+        return HTMLResponse('', status_code=200, headers={'Allow': 'HEAD, GET, OPTIONS, POST'})
+
     @router.api_route('/api/library_tools/import_leaf_libraries/preview', methods=['POST'])
     async def import_leaf_libraries_preview(request: Request):
         return await _run(request, **opts, handler=_import_preview)

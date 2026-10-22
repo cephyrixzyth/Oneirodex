@@ -181,6 +181,36 @@ def test_automatic_options_preserves_flask_method_order(runtime):
     assert response.content == b''
 
 
+def test_propose_leaf_options_matches_legacy_method_order(runtime):
+    app, _data, _cookies = runtime
+    path = '/api/library_tools/propose_leaf_libraries'
+    legacy = app.state.legacy_flask_app.test_client().options(path)
+    native = _request(app, path, method='OPTIONS')
+
+    assert native.status_code == legacy.status_code == 200
+    assert native.headers['content-type'] == legacy.headers['Content-Type']
+    # Current host Flask may order this list differently than the pinned 1.1.8
+    # image; the exact-image replay fixes the compatibility order below.
+    expected_methods = {'HEAD', 'GET', 'OPTIONS', 'POST'}
+    assert set(legacy.headers['Allow'].split(', ')) == expected_methods
+    assert set(native.headers['allow'].split(', ')) == expected_methods
+    assert native.headers['content-length'] == '0'
+    assert native.content == legacy.data == b''
+
+
+def test_propose_leaf_malformed_json_keeps_structured_client_error(runtime):
+    app, data, cookies = runtime
+    response = _request(
+        app, '/api/library_tools/propose_leaf_libraries', cookie=cookies['admin'],
+        method='POST', content=b'{', headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['error'] == 'root path required'
+    assert not any(call[0] == 'propose' for call in data.calls)
+
+
 def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtime):
     app, data, cookies = runtime
     denied = _request(app, '/api/library_tools/propose_leaf_libraries?root=%2Fsafe',
