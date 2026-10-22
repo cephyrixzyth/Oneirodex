@@ -116,32 +116,67 @@ class ImageMutationsData:
             image.thumbnail((1200, 1600), PILImage.LANCZOS)
         root = Path(app.config['IMAGE_SAVE_PATH']).resolve()
         root.mkdir(parents=True, exist_ok=True)
-        if image_type in SINGULAR_IMAGE_KINDS:
-            rows = db.session.execute(select(Image).filter_by(
-                game_uuid=game_uuid, image_type=image_type,
-            )).scalars().all()
-            for row in rows:
-                old_path = (root / row.url).resolve()
-                if root not in old_path.parents:
-                    raise ValueError('Stored image path is invalid')
-                if old_path.is_file():
-                    old_path.unlink()
-                db.session.delete(row)
-        if image_type in SINGULAR_IMAGE_KINDS:
-            name = f'{game_uuid}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
-        else:
-            name = f'{game_uuid}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
-        target = (root / name).resolve()
-        if root not in target.parents:
-            raise ValueError('Image target is invalid')
-        if image.width > 1200 or image.height > 1600:
-            with target.open('wb') as output:
-                image.save(output, format=source_format or None)
-        else:
-            target.write_bytes(content)
-        row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
-        db.session.add(row)
-        db.session.commit()
+        staged_old_files = []
+        target = None
+        try:
+            if image_type in SINGULAR_IMAGE_KINDS:
+                rows = db.session.execute(select(Image).filter_by(
+                    game_uuid=game_uuid, image_type=image_type,
+                )).scalars().all()
+                for row in rows:
+                    old_path = (root / row.url).resolve()
+                    if root not in old_path.parents:
+                        raise ValueError('Stored image path is invalid')
+                    if old_path.is_file():
+                        staged_path = old_path.with_name(
+                            f'.{old_path.name}.replace-{uuid.uuid4().hex}'
+                        )
+                        os.replace(old_path, staged_path)
+                        staged_old_files.append((staged_path, old_path))
+                    db.session.delete(row)
+                # Partial unique indexes require old singular rows to be
+                # deleted in the database before inserting their replacement.
+                db.session.flush()
+            if image_type in SINGULAR_IMAGE_KINDS:
+                name = f'{game_uuid}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
+            else:
+                name = f'{game_uuid}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
+            target = (root / name).resolve()
+            if root not in target.parents:
+                raise ValueError('Image target is invalid')
+            if image.width > 1200 or image.height > 1600:
+                with target.open('wb') as output:
+                    image.save(output, format=source_format or None)
+            else:
+                target.write_bytes(content)
+            row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
+            db.session.add(row)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            if target is not None and target.exists():
+                try:
+                    target.unlink()
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not remove a new image after a failed upload'
+                    )
+            for staged_path, old_path in reversed(staged_old_files):
+                if staged_path.exists():
+                    try:
+                        os.replace(staged_path, old_path)
+                    except OSError:
+                        logging.getLogger(__name__).error(
+                            'Could not restore an image after a failed replacement'
+                        )
+            raise
+        for staged_path, _old_path in staged_old_files:
+            try:
+                staged_path.unlink()
+            except OSError:
+                logging.getLogger(__name__).warning(
+                    'Image replacement committed but staged file cleanup failed'
+                )
         return {
             'message': 'File uploaded successfully',
             'url': f'/static/library/images/{name}',

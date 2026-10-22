@@ -83,6 +83,89 @@ def test_image_delete_restores_file_when_database_commit_fails(tmp_path, monkeyp
     assert session.commit_calls == 1
 
 
+@pytest.mark.parametrize('commit_fails', [False, True])
+def test_single_image_replacement_flushes_old_row_and_recovers_files(
+    tmp_path, monkeypatch, commit_fails,
+):
+    import io
+
+    from PIL import Image as PILImage
+    from oneirodex.models import Game, Image
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    old_path = image_root / 'old-cover.png'
+    old_path.write_bytes(b'previous cover')
+    game_uuid = '33333333-3333-4333-8333-333333333333'
+    old_row = Image(game_uuid=game_uuid, image_type='cover', url=old_path.name)
+    game = SimpleNamespace(uuid=game_uuid)
+    events = []
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def first(self):
+            return self.values[0] if self.values else None
+
+        def all(self):
+            return self.values
+
+    class Session:
+        def execute(self, statement):
+            entity = statement.column_descriptions[0]['entity']
+            return Result([game] if entity is Game else [old_row])
+
+        def delete(self, row):
+            assert row is old_row
+            events.append('delete')
+
+        def flush(self):
+            events.append('flush')
+
+        def add(self, row):
+            assert row.image_type == 'cover'
+            events.append('add')
+
+        def commit(self):
+            events.append('commit')
+            if commit_fails:
+                raise RuntimeError('synthetic database failure')
+
+        def rollback(self):
+            events.append('rollback')
+
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=Session()))
+    png = io.BytesIO()
+    PILImage.new('RGB', (8, 8), (31, 125, 93)).save(png, format='PNG')
+    data = ImageMutationsData()
+
+    if commit_fails:
+        with pytest.raises(RuntimeError, match='synthetic database failure'):
+            data.upload_single(
+                SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
+                game_uuid, 'replacement.png', 'cover', png.getvalue(),
+            )
+        assert old_path.read_bytes() == b'previous cover'
+        assert list(image_root.iterdir()) == [old_path]
+        assert events == ['delete', 'flush', 'add', 'commit', 'rollback']
+    else:
+        result = data.upload_single(
+            SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
+            game_uuid, 'replacement.png', 'cover', png.getvalue(),
+        )
+        assert result['image_type'] == 'cover'
+        assert not old_path.exists()
+        assert len(list(image_root.iterdir())) == 1
+        assert events[:3] == ['delete', 'flush', 'add']
+        assert events[-1] == 'commit'
+
+
 class FakeImageMutations:
     def __init__(self):
         self.deleted = []
