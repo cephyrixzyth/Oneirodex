@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -144,6 +145,42 @@ def test_member_listing_and_detail_keep_admin_fields_private(runtime):
     assert 'invite_note' in listing.json()['servers'][0]
     assert 'health_url' not in listing.json()['servers'][0]
     assert 'health_url' not in detail.json()
+
+
+def test_game_server_create_accepts_vendor_json_like_legacy_validator(runtime):
+    app, flask_app, data, _users, _tokens, cookies = runtime
+    from oneirodex.schemas.game_servers import CreateGameServerBody
+    from oneirodex.utils.validation import validate_body
+
+    @validate_body(CreateGameServerBody)
+    def legacy_validator(body):
+        return {'payload': body.model_dump(exclude_none=True)}
+
+    flask_app.add_url_rule('/legacy-json-check', view_func=legacy_validator, methods=['POST'])
+    vendor_type = 'application/vnd.oneirodex+json'
+    vendor_body = {'display_name': 'Vendor server', 'connect_string': 'host:2456'}
+    legacy = flask_app.test_client().post(
+        '/legacy-json-check', data=json.dumps(vendor_body), content_type=vendor_type,
+    )
+    current = _request(
+        app, '/api/game-servers', cookie=cookies['admin'], method='POST',
+        json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy.status_code == 200
+    assert legacy.json['payload'] == vendor_body
+    assert current.status_code == 201
+    assert current.json()['display_name'] == vendor_body['display_name']
+    assert current.json()['connect_string'] == vendor_body['connect_string']
+    assert ('create', {
+        'display_name': vendor_body['display_name'],
+        'connect_string': vendor_body['connect_string'],
+        'game_uuid': None,
+        'health_url': None,
+        'compose_project': None,
+        'container_id': None,
+        'invite_note': None,
+    }) in data.calls
 
 
 def test_anonymous_request_redirects_and_acl_child_projection(runtime):

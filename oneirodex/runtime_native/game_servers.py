@@ -269,7 +269,10 @@ async def _write_request(request, flask_app, data, method, server_uuid):
 
 
 async def _json_body(request):
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         return {}, False
     try:
         value = await request.json()

@@ -402,6 +402,17 @@ submitted `id` and `name`. See
 This closes only the vendor-JSON request parsing case. The game-mod routes
 remain partially verified overall.
 
+### `routes_apis/game_servers.py` request media type
+
+The native game-server reader also accepts `application/json` and
+`application/*+json`, matching legacy `request.get_json(silent=True)` for
+create and update bodies. The focused create regression preserves
+`display_name` and `connect_string` under `application/vnd.oneirodex+json` on
+both the legacy validator and native route. Evidence:
+`.artifacts/parity-v1.1.8/game-server-vendor-json-content-type-20261022.json`.
+This closes only the vendor-JSON body case; game-server routes remain partially
+verified overall.
+
 ### `routes_admin_ext/system.py`
 
 - `update_discovery_section_schedule` / `update_discovery_section_pin` —
