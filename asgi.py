@@ -4227,9 +4227,21 @@ class LazyASGIApp:
         """Build the install manifest in a request-local DB scope."""
         from oneirodex.utils.pwa_manifest import build_app_manifest
         from oneirodex.utils.processors import get_global_settings
+        from oneirodex.runtime_native.response_compat import flask_redirect_response
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
 
         await self._ensure_native_database()
         with self._native_database_scope():
+            if should_redirect_to_setup():
+                response = flask_redirect_response(
+                    get_setup_redirect_url(), status_code=302,
+                )
+                for key, value in self._configured_security_headers().items():
+                    response.headers.setdefault(key, value)
+                if scope.get('method') == 'HEAD':
+                    response.body = b''
+                await response(scope, None, send)
+                return
             settings = get_global_settings() or {}
         manifest = build_app_manifest(settings.get('site_name'))
         payload = json.dumps(

@@ -279,6 +279,7 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
 
 def test_install_manifest_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):
     from oneirodex.utils import processors
+    from oneirodex.utils import setup as setup_state
     runtime = asgi.LazyASGIApp()
     monkeypatch.setattr(
         asgi, 'create_app',
@@ -292,6 +293,7 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
         'Content-Security-Policy': "default-src 'self'",
     }
     monkeypatch.setattr(processors, 'get_global_settings', lambda: {'site_name': 'Household Shelf'})
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
 
     async def run():
         async with httpx.AsyncClient(
@@ -313,6 +315,49 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert runtime._flask_app is None
+
+
+def test_install_manifest_follows_legacy_setup_redirect_when_setup_is_incomplete(monkeypatch, tmp_path):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import setup as setup_state
+
+    app = Flask(__name__, static_folder=str(tmp_path))
+    app.config.update(CSP_ENABLED=True, CSP_ENFORCE=True, HSTS_SECONDS=0)
+    runtime = asgi.LazyASGIApp()
+    monkeypatch.setattr(asgi, 'create_app', lambda: app)
+    monkeypatch.setattr(db_session, 'native_session_scope', lambda *_args: nullcontext())
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_state, 'get_setup_redirect_url', lambda: '/setup/integrations')
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+    runtime._configured_security_headers = lambda: {
+        'Content-Security-Policy': "default-src 'self'",
+    }
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+            follow_redirects=False,
+        ) as client:
+            get_response = await client.get('/manifest.webmanifest')
+            head_response = await client.head('/manifest.webmanifest')
+        return get_response, head_response
+
+    get_response, head_response = asyncio.run(run())
+    assert get_response.status_code == 302
+    assert get_response.headers['location'] == '/setup/integrations'
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Content-Security-Policy' in get_response.headers
+    assert b'/setup/integrations' in get_response.content
+    assert head_response.status_code == 302
+    assert head_response.headers['location'] == '/setup/integrations'
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
 
 
 def test_loading_icon_bootstrap_uses_request_local_scope_without_flask_dispatch(monkeypatch, tmp_path):

@@ -755,7 +755,7 @@ The scan orchestration module itself now imports without Flask/Jinja: legacy for
 
 The FastAPI worker scope also reaches game admission, identify, deferred post-identify enrichment, and image persistence/download coordinators. Their DB sessions use the direct native engine. The worker context reduction is limited to native force-refresh and its per-game orchestration; image refresh and other legacy/background entry points still use Flask app contexts.
 
-The root install manifest (`/manifest.webmanifest`) now reads site branding through the native request-local database scope and uses runtime security headers. GET/HEAD requests are handled before Flask initialization; this removes another first-request dependency on the Flask app context while preserving the public cache policy and manifest payload.
+The root install manifest (`/manifest.webmanifest`) reads site branding through the native request-local database scope and uses runtime security headers. GET/HEAD requests are handled before Flask initialization; when first-run setup is required, the route follows the same setup redirect as the legacy Flask request hook. After setup, it keeps the public cache policy and manifest payload.
 
 The legacy `/restricted` page now uses FastAPI redirect handling. Anonymous requests retain the login message and `next=/restricted` target; authenticated requests continue to `/welcome`, with cookie and security-header behavior kept in the native handler.
 
