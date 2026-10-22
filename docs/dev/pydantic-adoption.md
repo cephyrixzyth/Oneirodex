@@ -251,7 +251,10 @@ Leave these until the contract can be preserved; do not force them.
 - `routes_apis/library.py` create/edit endpoints accept multipart image uploads
   as well as JSON. They use `read_json_body()` only for the JSON branch and
   retain their existing form and field validation; a JSON-only decorator would
-  break the multipart contract.
+  break the multipart contract. Native library creation accepts only Flask's
+  JSON media types (`application/json` / `application/*+json`), not
+  `application/jsonp`. Evidence:
+  `.artifacts/parity-v1.1.8/library-create-json-media-20261022.json`.
 
 ### `routes_apis/scan.py` (+ `scan_unmatched.py`, `scan_unmatched_edit.py` since H-D.4)
 

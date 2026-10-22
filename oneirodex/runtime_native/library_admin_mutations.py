@@ -1302,7 +1302,7 @@ async def _create_payload(request, config):
         finally:
             if form is not None:
                 await form.close()
-    if 'json' in content_type:
+    if _request_is_json(request):
         try:
             value = json.loads(raw or b'{}')
             return (value if isinstance(value, dict) else {}), None, False
