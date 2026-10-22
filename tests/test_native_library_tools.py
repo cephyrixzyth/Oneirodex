@@ -13,6 +13,8 @@ from oneirodex.runtime_native.library_tools import create_library_tools_router
 from oneirodex.runtime_native.library_tools import LibraryToolsData
 from oneirodex.runtime_native.library_tools_manual_identify import ManualIdentifyListData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.routes_apis import apis_bp
+import oneirodex.routes_apis.library_tools  # register the legacy route on apis_bp
 from asgi import _install_native_api_error_handlers
 
 
@@ -101,6 +103,7 @@ def runtime():
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.add_url_rule('/api/options-mixed', endpoint='options_mixed',
                            view_func=lambda: 'ok', methods=['GET', 'POST'])
+    flask_app.register_blueprint(apis_bp, url_prefix='/api')
     fake = FakeToolsData()
     app = FastAPI()
     app.include_router(create_library_tools_router(
@@ -109,6 +112,7 @@ def runtime():
         load_user_id=lambda identity: manager.user_callback(identity),
         login_manager=manager, data_access=fake,
     ))
+    app.state.legacy_flask_app = flask_app
     app.add_api_route('/api/options-mixed', lambda: 'ok', methods=['GET', 'POST'])
     app.state.legacy_options_allow = flask_app.test_client().options(
         '/api/options-mixed'
@@ -182,6 +186,30 @@ def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtim
     assert unsafe.json()['proposals'] == []
     assert not any(call[0] == 'walk' for call in data.calls)
     assert not any(call[0] == 'propose' for call in data.calls)
+
+
+@pytest.mark.parametrize('identity', [None, 'member'])
+def test_doctor_dry_run_auth_matches_legacy_flask(runtime, identity):
+    app, _data, cookies = runtime
+    legacy_client = app.state.legacy_flask_app.test_client()
+    cookie = cookies[identity] if identity else None
+    if identity:
+        with legacy_client.session_transaction() as session:
+            session['_user_id'] = '8:fp'
+            session['_fresh'] = True
+
+    legacy = legacy_client.post(
+        '/api/library_tools/doctor/dry_run', json={'roots': ['/safe']},
+    )
+    native = _request(
+        app, '/api/library_tools/doctor/dry_run', cookie=cookie,
+        method='POST', json={'roots': ['/safe']},
+    )
+
+    assert native.status_code == legacy.status_code
+    assert native.headers.get('location') == legacy.headers.get('Location')
+    assert native.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert native.content == legacy.data
 
 
 def test_import_preview_json_and_multipart_use_injected_parser(runtime):
