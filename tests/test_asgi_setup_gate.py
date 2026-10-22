@@ -2,6 +2,7 @@
 import asyncio
 from contextlib import nullcontext
 
+from fastapi import FastAPI
 from flask import Flask
 
 import asgi
@@ -60,14 +61,14 @@ def test_global_setup_gate_covers_native_pages_and_keeps_legacy_exemptions(monke
         lambda: '/setup/integrations',
     )
 
-    async def check(path):
+    async def check(path, method='GET'):
         messages = []
 
         async def send(message):
             messages.append(message)
 
         matched = await runtime._send_legacy_setup_gate_if_required(
-            _scope(path), send,
+            _scope(path, method), send,
         )
         return matched, messages
 
@@ -95,7 +96,12 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
     runtime = asgi.LazyASGIApp()
     runtime._flask_app = NativeRuntimeContext({}, package_root=tmp_path)
     runtime._native_admin_routes = frozenset({'/admin/dashboard', '/admin/help'})
+    runtime._native_read_api_app = FastAPI()
+    runtime._native_read_api_app.add_api_route(
+        '/admin/api/users', lambda: {'users': []}, methods=['GET'],
+    )
     runtime._native_sqlalchemy_engine = object()
+
     async def initialized():
         return None
 
@@ -110,23 +116,31 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
         lambda: '/setup/integrations',
     )
 
-    async def check(path):
+    async def check(path, method='GET'):
         messages = []
 
         async def send(message):
             messages.append(message)
 
         matched = await runtime._send_legacy_setup_gate_if_required(
-            _scope(path), send,
+            _scope(path, method), send,
         )
         return matched, messages
 
-    for path in ('/admin/dashboard', '/admin/help', '/scan_management', '/register'):
+    for path in (
+        '/admin/dashboard', '/admin/help', '/admin/api/users',
+        '/scan_management', '/register',
+    ):
         matched, messages = asyncio.run(check(path))
         assert matched is True
         assert messages[0]['status'] == 302
         assert dict(messages[0]['headers'])[b'location'] == b'/setup/integrations'
 
-    matched, messages = asyncio.run(check('/admin/unknown'))
+    for path in ('/admin/unknown', '/admin/api/unknown'):
+        matched, messages = asyncio.run(check(path))
+        assert matched is False
+        assert messages == []
+
+    matched, messages = asyncio.run(check('/admin/api/users', method='POST'))
     assert matched is False
     assert messages == []

@@ -4266,6 +4266,7 @@ class LazyASGIApp:
                 or path == '/scan_management'
                 or path == '/admin'
                 or path.startswith('/admin/')
+                or path.startswith('/admin/api/')
             )
         ):
             return False
@@ -4287,6 +4288,7 @@ class LazyASGIApp:
                 path in self._native_admin_routes
                 or path == '/scan_management'
                 or (path == '/register' and _is_native_auth_page_path(path))
+                or self._matches_native_api_route(scope)
             )
             if not route_exists:
                 return False
@@ -4303,6 +4305,20 @@ class LazyASGIApp:
         return await self._send_setup_redirect_if_required(
             scope, send, skip_active_step=True,
         )
+
+    def _matches_native_api_route(self, scope) -> bool:
+        """Return whether a concrete method/path matches a mounted native route."""
+        app = self._native_read_api_app
+        if app is None:
+            return False
+
+        from starlette.routing import Match
+
+        for route in getattr(getattr(app, 'router', None), 'routes', ()):
+            match, _child_scope = route.matches(scope)
+            if match is Match.FULL:
+                return True
+        return False
 
     async def _send_setup_redirect_if_required(
         self, scope, send, *, skip_active_step=False,
