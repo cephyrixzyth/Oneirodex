@@ -164,10 +164,27 @@ async def _read_json(request):
 
 def _attach(body, user, data, api_error_payload, api_ok_payload):
     from oneirodex.schemas.patch_catalog import AttachPatchGuideBody
+    from pydantic import ValidationError
     try:
         model = AttachPatchGuideBody.model_validate(body)
-    except Exception:
-        payload, status = api_error_payload('Provide a game UUID and source URL.', code='bad_request')
+    except ValidationError as exc:
+        errors = exc.errors()
+        missing_required_fields = all(
+            error.get('type') == 'missing'
+            and tuple(error.get('loc') or ()) in {('game_uuid',), ('source_url',)}
+            for error in errors
+        )
+        if missing_required_fields:
+            payload, status = api_error_payload(
+                'Provide a game UUID and source URL.', code='bad_request'
+            )
+        else:
+            from oneirodex.utils.validation import format_validation_errors
+
+            payload, status = api_error_payload(
+                'Invalid request.', code='unprocessable',
+                detail=format_validation_errors(exc),
+            )
         return JSONResponse(payload, status_code=status)
     game = data.game(model.game_uuid)
     if not game:
