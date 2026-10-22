@@ -143,7 +143,7 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
         'scan_mode': 'folders', 'remove_missing': 'y', 'fetch_hltb': 'y',
     })
     assert auto.status_code == 302
-    assert auto.headers['location'] == '/scan_management?active_tab=auto&library_uuid=lib-1'
+    assert auto.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
     queued = next(call for call in data.calls if call[0] == 'start_scan')
     assert queued[3]['remove_missing'] is True
     assert queued[3]['fetch_hltb'] is True
@@ -153,7 +153,7 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
         'scan_mode': 'folders', 'force_updates_extras_scan': 'on',
     })
     assert manual.status_code == 302
-    assert manual.headers['location'] == '/scan_management?active_tab=manual&library_uuid=lib-1'
+    assert manual.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=manual'
     assert ('list_folders', '/safe/root/library', 'lib-1') in data.calls
 
 
@@ -167,7 +167,7 @@ def test_legacy_scan_management_rejects_invalid_scan_mode(native_client, action,
     })
 
     assert response.status_code == 302
-    assert response.headers['location'] == f'/scan_management?active_tab={tab}'
+    assert response.headers['location'] == f'/scan_management?library_uuid=lib-1&active_tab={tab}'
     assert not any(call[0] in {'start_scan', 'list_folders', 'list_files'} for call in data.calls)
 
 
@@ -193,7 +193,26 @@ def test_legacy_scan_management_rejects_padded_schedule_choice(native_client):
     })
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=auto'
+    assert response.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
+    assert not any(call[0] == 'start_scan' for call in data.calls)
+
+
+@pytest.mark.parametrize('fields', [
+    {'schedule': 'never'},
+    {'schedule': 'interval', 'schedule_interval_value': '0', 'schedule_interval_unit': 'minutes'},
+    {'schedule': 'interval', 'schedule_interval_value': '10081', 'schedule_interval_unit': 'minutes'},
+    {'schedule': 'interval', 'schedule_interval_value': '15', 'schedule_interval_unit': 'weeks'},
+    {'schedule': 'cron', 'schedule_cron': '0' * 65},
+])
+def test_schedule_wtforms_validation_errors_preserve_selected_library(native_client, fields):
+    runtime, data = native_client
+    response = _request(runtime, 'AutoScan', fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'folders', **fields,
+    })
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
     assert not any(call[0] == 'start_scan' for call in data.calls)
 
 
@@ -216,5 +235,6 @@ def test_legacy_scan_management_rejects_unknown_libraries_and_unsafe_paths(nativ
         'library_uuid': 'lib-1', 'folder_path': '/etc',
     })
     assert unknown.status_code == unsafe.status_code == 302
+    assert unknown.headers['location'] == '/scan_management?library_uuid=missing&active_tab=auto'
     assert not any(call[0] == 'start_scan' for call in data.calls)
     assert not any(call[0] == 'list_folders' for call in data.calls)

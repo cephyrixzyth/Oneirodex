@@ -285,16 +285,20 @@ async def _apply_action(request, form, app, data, auth, *, database_scope=None):
 
 
 async def _scan_action(form, app, data, auth, action, library_uuid, *, database_scope=None):
+    from urllib.parse import urlencode
     from oneirodex.utils.scan_queue import parse_force_parallel, parse_queue_policy
 
     manual = action == 'ManualScan'
     tab = 'manual' if manual else 'auto'
     redirect = f'/scan_management?active_tab={tab}'
+    redirect_with_library = '/scan_management?' + urlencode([
+        ('library_uuid', library_uuid), ('active_tab', tab),
+    ])
     flashes = auth.session_data.setdefault('_flashes', [])
     library = data.library(library_uuid) if library_uuid else None
     if library is None:
         flashes.append(('danger', 'Please select a valid library.'))
-        return redirect
+        return redirect_with_library if library_uuid else redirect
     folder = str(first_form_value(form, 'folder_path') or '').strip()
     root = str(first_form_value(form, 'library_root') or '').strip() or None
     resolved, root_error = data.resolve_path(app, folder, root)
@@ -311,7 +315,7 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
         return redirect
     if not data.readable(resolved):
         flashes.append(('danger', 'Folder does not exist or cannot be accessed.'))
-        return f'{redirect}&library_uuid={library_uuid}'
+        return redirect_with_library
     raw_mode = first_form_value(form, 'scan_mode')
     requested_mode = 'auto' if raw_mode is None else str(raw_mode)
     # AutoScanForm and ScanFolderForm are RadioFields with these exact choices.
@@ -319,7 +323,7 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
     # let resolve_scan_mode_for_path silently turn them into a folders scan.
     if requested_mode not in {'auto', 'folders', 'files'}:
         flashes.append(('danger', 'Not a valid choice.'))
-        return redirect
+        return redirect_with_library
     scan_mode = data.scan_mode(resolved, requested_mode)
     raw_schedule = first_form_value(form, 'schedule')
     schedule = raw_schedule if raw_schedule and str(raw_schedule).strip() else None
@@ -347,6 +351,8 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
         )
         if options['schedule_fields'].get('error'):
             flashes.append(('danger', options['schedule_fields']['error']))
+            if _schedule_form_validation_error(form):
+                return redirect_with_library
             return redirect
     if not manual or data.busy():
         try:
@@ -361,7 +367,7 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
             category = 'warning'
         flashes.append((category, result.get('message') or 'Scan request was rejected.'))
         auth.session_data['active_tab'] = tab
-        return f'{redirect}&library_uuid={library_uuid}'
+        return redirect_with_library
 
     if auth.session_data.get('game_paths') is not None:
         auth.session_data.pop('game_paths', None)
@@ -387,7 +393,35 @@ async def _scan_action(form, app, data, auth, action, library_uuid, *, database_
     auth.session_data['force_hltb_refetch'] = options['force_hltb_refetch']
     flashes.append(('info', 'Manual scan processed for folder: ' + resolved))
     auth.session_data['active_tab'] = 'manual'
-    return f'{redirect}&library_uuid={library_uuid}'
+    return redirect_with_library
+
+
+def _schedule_form_validation_error(form):
+    """Whether WTForms rejects the submitted schedule before legacy handling."""
+    choice = first_form_value(form, 'schedule')
+    if choice not in (None, '') and choice not in {
+        '8_hours', '24_hours', '48_hours', 'interval', 'cron',
+    }:
+        return True
+    if choice == 'interval':
+        raw_value = first_form_value(form, 'schedule_interval_value')
+        # WTForms Optional skips an explicitly blank value, so the later
+        # schedule normalizer owns that error and keeps its tab-only redirect.
+        if raw_value not in (None, ''):
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                return True
+            if value < 1 or value > 10080:
+                return True
+        unit = first_form_value(form, 'schedule_interval_unit')
+        if unit not in (None, '') and unit not in {'hours', 'minutes'}:
+            return True
+    if choice == 'cron':
+        expression = first_form_value(form, 'schedule_cron') or ''
+        if len(str(expression)) > 64:
+            return True
+    return False
 
 
 def _flag(value):
