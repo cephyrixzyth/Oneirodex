@@ -303,6 +303,27 @@ def test_name_alias_soft_amend_and_batch_clear_cap_dedupe(runtime):
     assert too_many.status_code == 400 and too_many.json()['requested'] == 101
 
 
+def test_soft_name_accepts_vendor_json_like_flask(runtime):
+    app, _flask_app, data, _users, cookies = runtime
+    legacy = Flask('legacy-unmatched-soft-name')
+    with legacy.test_request_context(
+        '/api/unmatched_folders/8/name', method='PATCH',
+        content_type='application/vnd.oneirodex+json', json={'search_name': 'Vendor name'},
+    ):
+        assert flask_request.is_json is True
+        assert flask_request.get_json(silent=True) == {'search_name': 'Vendor name'}
+
+    response = _request(
+        app, '/api/unmatched_folders/8/name', cookie=cookies['librarian'], method='PATCH',
+        json={'search_name': 'Vendor name'},
+        headers={'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['search_name'] == 'Vendor name'
+    assert data.calls == [('amend_name', '8', {'search_name': 'Vendor name'})]
+
+
 def test_soft_name_options_matches_flask_auto_options_without_auth(runtime):
     app, _flask_app, data, _users, _cookies = runtime
 
