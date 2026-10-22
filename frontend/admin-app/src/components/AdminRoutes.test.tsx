@@ -71,9 +71,9 @@ const CASES = [
   ['/admin/extensions', 'File Extensions'],
   ['/admin/ops', 'Ops'],
   ['/admin/ops/history', 'Ops'],
-  // libraries family — every legacy prefix folds onto LibrariesPage
+  // libraries family — preserve the legacy direct-add entry point
   ['/libraries', 'Libraries'],
-  ['/admin/library/add', 'Libraries'],
+  ['/admin/library/add', 'Create library'],
   ['/admin/library/edit/123e4567-e89b-12d3-a456-426614174000', 'Edit library'],
   ['/libraries/legacy', 'Libraries & scans'],
   ['/admin/library/tools', 'Libraries & scans'],
@@ -115,6 +115,18 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start scan' })).toBeNull()
     expect(screen.queryByLabelText('Repeat schedule')).toBeNull()
+  })
+
+  test('/admin/library/add opens the create form directly', () => {
+    mountAt('/admin/library/add')
+    expect(screen.getByRole('heading', { name: 'Add one library', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to libraries' })).toHaveAttribute(
+      'href',
+      '/libraries',
+    )
+    expect(
+      screen.getByRole('button', { name: 'Create library' }),
+    ).toBeInTheDocument()
   })
 
   test('catch-all lede matches the old switch default', () => {

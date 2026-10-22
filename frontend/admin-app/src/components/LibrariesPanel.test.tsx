@@ -113,7 +113,7 @@ test('the real Jinja libraries panel exposes the add-and-first-scan form', async
   expect(
     await screen.findByRole('option', { name: 'Nintendo Entertainment System (NES)' }),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Create library' })).toBeDisabled()
 })
 
 test('native libraries expose folder proposal and CSV/JSON import with previews before confirmation', async () => {

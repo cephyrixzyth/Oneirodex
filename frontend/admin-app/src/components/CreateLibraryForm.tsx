@@ -3,6 +3,7 @@ import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { getJson, postForm } from '../api/adminApi'
 import { queueLeafScan } from '../api/proposeLeafLibrariesApi'
 import { errorText } from '../utils/errorText'
+import { showToast } from '../utils/toast'
 import { LibraryImageCropper } from './LibraryImageCropper'
 import './CreateLibraryForm.css'
 
@@ -37,6 +38,7 @@ export function CreateLibraryForm({
   const [path, setPath] = useState('')
   const [platform, setPlatform] = useState('')
   const [scanMode, setScanMode] = useState<'folders' | 'files'>('folders')
+  const scanPath = path.trim()
   const [depth, setDepth] = useState<1 | 2>(1)
   const [watch, setWatch] = useState('default')
   const [image, setImage] = useState<File | null>(null)
@@ -81,7 +83,7 @@ export function CreateLibraryForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !name.trim() || !path.trim() || !platform) return
+    if (busy || !name.trim() || !platform) return
     setBusy(true)
     setError('')
     setResult(null)
@@ -106,13 +108,26 @@ export function CreateLibraryForm({
     setPath('')
     setImage(null)
     onCreated?.()
+    if (!scanPath) {
+      const note = 'Library created. Add a folder path when you are ready to scan.'
+      setResult({ note })
+      setBusy(false)
+      if (onComplete) {
+        showToast(note, 'success')
+        onComplete()
+      }
+      return
+    }
+
     let scanQueued = false
     try {
-      const scan = await queueLeafScan({ uuid, path: path.trim(), scan_mode: scanMode })
+      const scan = await queueLeafScan({ uuid, path: scanPath, scan_mode: scanMode })
       if (!scan.ok) {
         setError(`Library created, but the first scan could not be queued: ${scan.error}`)
       } else {
-        setResult({ note: scan.data?.message || 'Library created and first scan queued.' })
+        const note = scan.data?.message || 'Library created and first scan queued.'
+        setResult({ note })
+        if (onComplete) showToast(note, 'success')
         scanQueued = true
       }
     } catch (err) {
@@ -175,8 +190,8 @@ export function CreateLibraryForm({
           Add one library
         </h2>
         <p className="od-admin-lede">
-          Name a game folder, choose its platform, then Oneirodex creates the library and queues its
-          first scan.
+          Choose a name and platform. Add a folder path to queue the first scan now, or leave it
+          blank and scan later.
         </p>
       </div>
       <PageStatus
@@ -212,11 +227,10 @@ export function CreateLibraryForm({
           </select>
         </label>
         <label className="od-admin-field od-create-library__path">
-          Folder path inside the server
+          Folder path inside the server (optional)
           <span className="od-create-library__path-row">
             <input
               className="od-admin-input"
-              required
               value={path}
               onChange={(event) => setPath(event.target.value)}
               placeholder="/storage/games/nes"
@@ -291,12 +305,20 @@ export function CreateLibraryForm({
           <Button
             type="submit"
             className="od-btn--accent"
-            disabled={busy || !platforms.length || !name.trim() || !path.trim()}
+            disabled={busy || !platforms.length || !name.trim()}
           >
-            {busy ? 'Creating and queueing…' : 'Create library and start scan'}
+            {busy
+              ? scanPath
+                ? 'Creating and queueing…'
+                : 'Creating…'
+              : scanPath
+                ? 'Create library and start scan'
+                : 'Create library'}
           </Button>
           <span className="od-admin-lede od-admin-lede--tight">
-            The scan uses the server-visible path; game files stay read-only.
+            {scanPath
+              ? 'The scan uses the server-visible path; game files stay read-only.'
+              : 'You can add a server-visible folder path and scan this library later.'}
           </span>
         </div>
       </form>

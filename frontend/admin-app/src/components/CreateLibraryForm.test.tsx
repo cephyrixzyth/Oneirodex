@@ -6,6 +6,7 @@ const queueLeafScan = vi.fn()
 vi.mock('../api/proposeLeafLibrariesApi', () => ({
   queueLeafScan: (...args: unknown[]) => queueLeafScan(...args),
 }))
+vi.mock('../utils/toast', () => ({ showToast: vi.fn() }))
 
 const originalFetch = globalThis.fetch
 const originalCreateObjectUrl = URL.createObjectURL
@@ -135,4 +136,25 @@ test('keeps the create form visible when the first scan cannot be queued', async
 
   expect(await screen.findByText(/Library created, but the first scan could not be queued/)).toBeInTheDocument()
   expect(onComplete).not.toHaveBeenCalled()
+})
+
+test('creates a library without a folder and leaves first scan for later', async () => {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/library_platforms'))
+      return response({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }] }) as any
+    return response({ ok: true, library_uuid: 'new-library-without-folder' }) as any
+  }) as unknown as typeof fetch
+
+  const onComplete = vi.fn()
+  render(<CreateLibraryForm onComplete={onComplete} />)
+  await screen.findByRole('option', { name: 'Nintendo Entertainment System' })
+  fireEvent.change(screen.getByLabelText('Library name'), { target: { value: 'Unscanned NES' } })
+  expect(screen.getByRole('button', { name: 'Create library' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Create library' }))
+
+  expect(await screen.findByText('Library created. Add a folder path when you are ready to scan.'))
+    .toBeInTheDocument()
+  expect(queueLeafScan).not.toHaveBeenCalled()
+  expect(onComplete).toHaveBeenCalledOnce()
 })
