@@ -329,12 +329,7 @@ export function ScanControlsPage() {
         >
           {manualBusy ? 'Listing games…' : 'List games to identify'}
         </Button>
-        {manualError ? (
-          <PageStatus
-            error={manualError}
-            errorMessage="Unable to list games for manual identification."
-          />
-        ) : null}
+        {manualError ? <PageStatus error={manualError} /> : null}
         {manualStatus ? <PageStatus announcement="status">{manualStatus}</PageStatus> : null}
         {manualListed && manualRows.length === 0 ? (
           <PageStatus announcement="status" className="od-admin-lede">

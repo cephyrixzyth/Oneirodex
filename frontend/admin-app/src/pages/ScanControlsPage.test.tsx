@@ -141,6 +141,36 @@ test('lists manual identify candidates without starting a scan and links to the 
   expect(screen.queryByRole('link', { name: 'Identify' })).not.toBeInTheDocument()
 })
 
+test('shows a rejected manual folder as an accessible error without starting a scan', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : {
+          roots: [
+            {
+              id: 'games',
+              label: 'Games',
+              path: '/games',
+              default: true,
+              exists: true,
+              read: true,
+            },
+          ],
+        },
+  )
+  vi.mocked(postJson).mockRejectedValue(
+    new Error('The selected folder does not exist or cannot be read'),
+  )
+  renderPage('/scan_management?active_tab=manual')
+  await screen.findByRole('option', { name: 'Nintendo' })
+  fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The selected folder does not exist or cannot be read',
+  )
+  expect(scan).not.toHaveBeenCalled()
+})
+
 test('shows the busy-scan queue result from the manual list action', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'
