@@ -30,10 +30,15 @@ class SetupTransitionBody(BaseModel):
     igdb_client_id: str = Field(default='', max_length=255)
     igdb_client_secret: str = Field(default='', max_length=512)
     steam_web_api_key: str = Field(default='', max_length=512)
+    configure_steam_web_api_key: bool = False
     steamgriddb_api_key: str = Field(default='', max_length=512)
+    configure_steamgriddb_api_key: bool = False
     giantbomb_api_key: str = Field(default='', max_length=512)
+    configure_giantbomb_api_key: bool = False
     mobygames_api_key: str = Field(default='', max_length=512)
+    configure_mobygames_api_key: bool = False
     thegamesdb_api_key: str = Field(default='', max_length=512)
+    configure_thegamesdb_api_key: bool = False
     enable_hltb_integration: bool = False
     configure_oidc: bool = False
     oidc_issuer_url: str = Field(default='', max_length=512)

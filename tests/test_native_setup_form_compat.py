@@ -26,3 +26,24 @@ def test_setup_step_validation_returns_to_its_wizard_route():
     assert payload is None
     assert return_to == '/setup/library'
     assert error == 'Please check the setup form and try again.'
+
+
+def test_setup_integrations_form_carries_provider_configure_checkboxes():
+    payload, return_to, error = _setup_form_payload(
+        '/setup/integrations',
+        {
+            'steam_web_api_key': 'typed-but-unchecked',
+            'steamgriddb_api_key': 'typed-and-selected',
+            'configure_steamgriddb_api_key': 'on',
+            'configure_oidc': 'on',
+            'oidc_issuer_url': 'https://identity.example.test',
+        },
+    )
+
+    assert error is None
+    assert return_to == '/setup/integrations'
+    assert payload['steam_web_api_key'] == 'typed-but-unchecked'
+    assert payload['configure_steam_web_api_key'] is False
+    assert payload['steamgriddb_api_key'] == 'typed-and-selected'
+    assert payload['configure_steamgriddb_api_key'] is True
+    assert payload['configure_oidc'] is True

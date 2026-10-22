@@ -843,6 +843,7 @@ class TestSetupApiConnections:
         response = client.post('/setup/integrations', data={
             'configure_steam_web_api_key': 'on',
             'steam_web_api_key': 'new-steam-api-key',
+            'steamgriddb_api_key': 'typed-but-unchecked',
             'configure_oidc': 'on',
             'oidc_issuer_url': 'https://sso.example.test',
             'oidc_client_id': 'oneirodex-stage',
@@ -868,11 +869,17 @@ class TestSetupApiConnections:
 
         settings = _park_wizard_at(db_session, 5)
         settings.enable_hltb_integration = True
+        settings.steam_web_api_key = 'existing-provider-key'
         db_session.commit()
-        response = client.post('/setup/integrations', data={'skip_integrations': '1'})
+        response = client.post('/setup/integrations', data={
+            'skip_integrations': '1',
+            'configure_steam_web_api_key': 'on',
+            'steam_web_api_key': 'typed-but-skipped',
+        })
         assert response.location.endswith('/setup/library')
         db_session.refresh(settings)
         assert settings.enable_hltb_integration is True
+        assert settings.steam_web_api_key == 'existing-provider-key'
         assert get_current_setup_step() == 6
 
     def test_oidc_setup_rejects_non_http_urls_without_completing_step(

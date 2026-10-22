@@ -137,7 +137,7 @@ class SetupTransitionData:
                     'mobygames_api_key', 'thegamesdb_api_key',
                 ):
                     value = body[key].strip()
-                    if value:
+                    if body['configure_' + key] and value:
                         setattr(settings, key, value)
                 if body['configure_oidc']:
                     for field, max_length in (
@@ -560,8 +560,7 @@ def _setup_form_payload(path, form):
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
             'mobygames_api_key', 'thegamesdb_api_key',
         ):
-            if first_form_value(form, 'configure_' + key) != 'on':
-                body[key] = ''
+            body['configure_' + key] = first_form_value(form, 'configure_' + key) == 'on'
     else:
         body.update(
             skip=first_form_value(form, 'skip_library') == 'on',

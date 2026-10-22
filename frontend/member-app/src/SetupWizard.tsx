@@ -15,7 +15,7 @@ const STEP_TITLES: Record<number, string> = {
   2: 'Email delivery',
   3: 'Features',
   4: 'Connect game metadata',
-  5: 'Optional connections',
+  5: 'Choose API connections',
   6: 'First library',
 }
 const navigateWindow = (url: string) => window.location.assign(url)
@@ -155,7 +155,9 @@ export function SetupWizard({
           ? 'Step 3 of 6. Everything useful is on by default. Uncheck anything you do not want.'
           : step === 4
             ? 'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.'
-            : `Step ${step} of 6. You can change these choices later in settings.`}
+            : step === 5
+              ? 'Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.'
+              : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       <form className="auth-pilot__form" onSubmit={(event) => void submit(event)}>
         {step === 1 ? (
@@ -204,7 +206,8 @@ export function SetupWizard({
           <>
             <h2 className="auth-pilot__section-title">Library</h2>
             <p className="auth-pilot__message">
-              Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if needed.
+              Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if
+              needed.
             </p>
             {checkbox(
               'enable_game_updates',
@@ -271,60 +274,102 @@ export function SetupWizard({
         {step === 5 ? (
           <>
             <p className="auth-pilot__message">
-              Optional provider credentials are stored on this server. Blank values keep existing
-              credentials. OIDC stays disabled until an administrator turns it on.
+              Secrets are saved in the local settings database and never filled back into this form.
+              Leave a credential blank to keep an existing value.
             </p>
-            {(
-              [
-                'steam_web_api_key',
-                'steamgriddb_api_key',
-                'giantbomb_api_key',
-                'mobygames_api_key',
-                'thegamesdb_api_key',
-              ] as const
-            ).map((key) =>
-              input(
-                key,
-                `${key.replaceAll('_', ' ')}${providerKeys[key] ? ' (saved)' : ''}`,
+            {[
+              {
+                key: 'steam_web_api_key',
+                title: 'Steam Web API',
+                configure: 'Configure Steam ownership lookup',
+              },
+              {
+                key: 'steamgriddb_api_key',
+                title: 'SteamGridDB',
+                configure: 'Configure game artwork lookup',
+              },
+              {
+                key: 'giantbomb_api_key',
+                title: 'Giant Bomb',
+                configure: 'Configure metadata lookup',
+              },
+              {
+                key: 'mobygames_api_key',
+                title: 'MobyGames',
+                configure: 'Configure metadata lookup',
+              },
+              {
+                key: 'thegamesdb_api_key',
+                title: 'TheGamesDB',
+                configure: 'Configure metadata and artwork lookup',
+              },
+            ].map(({ key, title, configure }) => (
+              <fieldset className="auth-pilot__provider" key={key}>
+                <legend>{title}</legend>
+                {checkbox(`configure_${key}`, configure, Boolean(providerKeys[key]))}
+                {input(key, providerKeys[key] ? 'API key (saved)' : 'API key', 'password')}
+              </fieldset>
+            ))}
+            <fieldset className="auth-pilot__provider">
+              <legend>HowLongToBeat</legend>
+              {checkbox(
+                'enable_hltb_integration',
+                'Enable playtime estimates (no API key required)',
+                Boolean(settings.enable_hltb_integration),
+              )}
+            </fieldset>
+            <fieldset className="auth-pilot__provider">
+              <legend>OIDC / SSO</legend>
+              {checkbox(
+                'configure_oidc',
+                'Save identity-provider details',
+                Boolean(oidc.issuer_url || oidc.client_id),
+              )}
+              <p className="auth-pilot__message">
+                The issuer must use HTTPS to protect discovery and client credentials.
+              </p>
+              {input('oidc_issuer_url', 'Issuer URL', 'url', false, String(oidc.issuer_url || ''))}
+              {input('oidc_client_id', 'Client ID', 'text', false, String(oidc.client_id || ''))}
+              {input(
+                'oidc_client_secret',
+                oidc.secret_configured ? 'Client secret (saved)' : 'Client secret',
                 'password',
-              ),
-            )}
-            {checkbox(
-              'enable_hltb_integration',
-              'Enable HowLongToBeat data',
-              Boolean(settings.enable_hltb_integration),
-            )}
-            {checkbox('configure_oidc', 'Configure OIDC fields (provider remains disabled)', false)}
-            {input(
-              'oidc_issuer_url',
-              `OIDC issuer URL${oidc.secret_configured ? ' (secret saved)' : ''}`,
-              'text',
-              false,
-              String(oidc.issuer_url || ''),
-            )}
-            {input('oidc_client_id', 'OIDC client ID', 'text', false, String(oidc.client_id || ''))}
-            {input('oidc_client_secret', 'OIDC client secret', 'password')}
-            {input(
-              'oidc_redirect_uri',
-              'OIDC redirect URI',
-              'text',
-              false,
-              String(oidc.redirect_uri || ''),
-            )}
-            {input(
-              'oidc_scopes',
-              'OIDC scopes',
-              'text',
-              false,
-              String(oidc.scopes || 'openid email profile'),
-            )}
-            {input(
-              'oidc_role_claim',
-              'OIDC role claim',
-              'text',
-              false,
-              String(oidc.role_claim || ''),
-            )}
+              )}
+              {input(
+                'oidc_redirect_uri',
+                'Redirect URI (optional)',
+                'url',
+                false,
+                String(oidc.redirect_uri || ''),
+              )}
+              {input(
+                'oidc_scopes',
+                'OIDC scopes',
+                'text',
+                false,
+                String(oidc.scopes || 'openid email profile'),
+              )}
+              {input(
+                'oidc_role_claim',
+                'OIDC role claim',
+                'text',
+                false,
+                String(oidc.role_claim || ''),
+              )}
+              <p className="auth-pilot__message">
+                Credentials are saved for later review; SSO stays off until an operator enables OIDC
+                after setup.
+              </p>
+            </fieldset>
+            <details className="auth-pilot__message">
+              <summary>Other optional services</summary>
+              <p>
+                IGDB and email were offered in earlier steps. Keyless catalogue sources work
+                automatically. LiveKit voice, *arr connections, unofficial store links, support
+                integrations, and several community services use installation environment settings;
+                you can review them under Admin → Integrations after setup.
+              </p>
+            </details>
           </>
         ) : null}
         {step === 6 ? (
@@ -381,9 +426,11 @@ export function SetupWizard({
             ? 'Saving…'
             : step === 4
               ? 'Save IGDB and continue'
-              : step === 6
-                ? 'Finish setup'
-                : 'Continue'}
+              : step === 5
+                ? 'Save choices and continue'
+                : step === 6
+                  ? 'Finish setup'
+                  : 'Continue'}
         </Button>
         {[2, 4, 5, 6].includes(step) ? (
           <Button
@@ -401,9 +448,11 @@ export function SetupWizard({
           >
             {step === 4
               ? 'Skip and continue'
-              : step === 6
-                ? 'Finish without a library'
-                : 'Skip this step'}
+              : step === 5
+                ? 'Skip API setup'
+                : step === 6
+                  ? 'Finish without a library'
+                  : 'Skip this step'}
           </Button>
         ) : null}
       </form>
