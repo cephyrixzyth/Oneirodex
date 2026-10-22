@@ -413,6 +413,16 @@ both the legacy validator and native route. Evidence:
 This closes only the vendor-JSON body case; game-server routes remain partially
 verified overall.
 
+### `routes_apis/scan_unmatched.py` bad-match feedback media type
+
+The native bad-match feedback reader accepts `application/json` and
+`application/*+json`, matching the legacy route's `request.get_json(silent=True)`.
+A focused regression confirms both parsers retain the `reason` and `note` fields
+for `application/vnd.oneirodex+json`; the native route records the feedback
+instead of treating the body as an empty clear request. Evidence:
+`.artifacts/parity-v1.1.8/unmatched-feedback-vendor-json-content-type-20261022.json`.
+The unmatched-feedback route remains partially verified overall.
+
 ### `routes_admin_ext/system.py`
 
 - `update_discovery_section_schedule` / `update_discovery_section_pin` —

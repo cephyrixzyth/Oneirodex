@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+from flask import request as flask_request
 from flask_login import LoginManager
 from types import SimpleNamespace
 
@@ -90,14 +92,14 @@ def runtime():
     return app, flask_app, data, users, cookies
 
 
-def request(app, path, *, cookie=None, method='GET', json=None):
+def request(app, path, *, cookie=None, method='GET', json=None, headers=None):
     async def perform():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://testserver',
         ) as client:
             if cookie:
                 client.cookies.set('session', cookie)
-            return await client.request(method, path, json=json, follow_redirects=False)
+            return await client.request(method, path, json=json, headers=headers, follow_redirects=False)
 
     return asyncio.run(perform())
 
@@ -163,6 +165,30 @@ def test_bad_match_sets_clears_and_rejects_invalid_feedback(runtime):
                       method='POST', json={'reason': None})
     assert cleared.status_code == 200 and cleared.json()['cleared'] is True
     assert data.row.bad_match_reason is None and data.row.bad_match_at is None
+
+
+def test_bad_match_accepts_vendor_json_like_legacy_request_parser(runtime):
+    app, flask_app, data, _users, cookies = runtime
+    vendor_type = 'application/vnd.oneirodex+json'
+    body = {'reason': 'other', 'note': 'Wrong release'}
+
+    with flask_app.test_request_context(
+        '/api/unmatched/existing/bad_match',
+        method='POST', data=json.dumps(body), content_type=vendor_type,
+    ):
+        legacy_body = flask_request.get_json(silent=True)
+
+    current = request(
+        app, '/api/unmatched/existing/bad_match', cookie=cookies['librarian'],
+        method='POST', json=body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy_body == body
+    assert current.status_code == 200
+    assert current.json()['reason'] == 'other'
+    assert current.json()['note'] == 'Wrong release'
+    assert data.row.bad_match_reason == 'other'
+    assert data.row.bad_match_note == 'Wrong release'
 
 
 def test_role_and_csrf_gates_precede_data_access(runtime):
