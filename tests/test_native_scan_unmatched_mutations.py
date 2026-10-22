@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import httpx
 import pytest
 from fastapi import FastAPI
-from flask import Flask
+from flask import Flask, request as flask_request
 from flask_login import LoginManager
 from types import SimpleNamespace
 
@@ -412,6 +413,21 @@ def test_batch_mark_kind_validation_alias_and_partial_results(runtime):
     assert valid.json()['disk_io'] is False
     assert ('mark_kind_one', '1', 'emulator', 'Emulator', 'Local') in data.calls
     assert invalid.status_code == 400 and 'item_kinds' in invalid.json()
+
+    vendor_body = {'ids': ['1'], 'kind': 'emu', 'name': 'Vendor emulator', 'summary': 'Vendor body'}
+    vendor_type = 'application/vnd.oneirodex+json'
+    with Flask('legacy-json-parser').test_request_context(
+        '/api/unmatched_folders/batch/mark_kind', method='POST',
+        data=json.dumps(vendor_body), content_type=vendor_type,
+    ):
+        legacy_body = flask_request.get_json(silent=True)
+    vendor = _request(
+        app, '/api/unmatched_folders/batch/mark_kind', cookie=cookies['librarian'],
+        method='POST', json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+    assert legacy_body == vendor_body
+    assert vendor.status_code == 200 and vendor.json()['marked'] == 1
+    assert ('mark_kind_one', '1', 'emulator', 'Vendor emulator', 'Vendor body') in data.calls
 
 
 def test_batch_fix_audits_and_single_fix_response(runtime):

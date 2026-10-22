@@ -423,6 +423,17 @@ instead of treating the body as an empty clear request. Evidence:
 `.artifacts/parity-v1.1.8/unmatched-feedback-vendor-json-content-type-20261022.json`.
 The unmatched-feedback route remains partially verified overall.
 
+### `routes_apis/scan_unmatched_edit.py` batch mark-kind media type
+
+The native unmatched-mutation body reader accepts `application/json` and
+`application/*+json`, matching the legacy batch mark-kind route's
+`request.get_json(silent=True)`. A focused regression confirms the submitted
+IDs, kind, name, and summary reach the current mutation adapter for
+`application/vnd.oneirodex+json`. Evidence:
+`.artifacts/parity-v1.1.8/unmatched-mark-kind-vendor-json-content-type-20261022.json`.
+This closes only the batch mark-kind request parsing case; unmatched mutation
+routes remain partially verified overall.
+
 ### `routes_admin_ext/system.py`
 
 - `update_discovery_section_schedule` / `update_discovery_section_pin` —
