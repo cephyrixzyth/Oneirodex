@@ -225,6 +225,37 @@ def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtim
     assert not any(call[0] == 'propose' for call in data.calls)
 
 
+def test_proposal_scan_roots_matches_legacy_body_validation(runtime):
+    app, data, cookies = runtime
+    malformed = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', content=b'{', headers={'Content-Type': 'application/json'},
+    )
+    wrong_type = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={'roots': 'not-a-list'},
+    )
+    extra = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={'roots': [], 'unexpected': True},
+    )
+
+    for response, field in ((malformed, '__root__'), (wrong_type, 'roots'),
+                            (extra, 'unexpected')):
+        assert response.status_code == 422
+        assert response.json()['error'] == 'Invalid request.'
+        assert response.json()['error_code'] == 'unprocessable'
+        assert field in response.json()['detail']
+    assert not any(call[0] == 'walk' for call in data.calls)
+
+    empty = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={},
+    )
+    assert empty.status_code == 200
+    assert empty.json()['proposals'] == []
+
+
 @pytest.mark.parametrize('identity', [None, 'member'])
 @pytest.mark.parametrize('path', [
     '/api/library_tools/doctor/dry_run',

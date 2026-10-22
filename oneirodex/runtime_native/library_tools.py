@@ -320,12 +320,19 @@ async def _proposals(_request, app, data):
 
 async def _scan_proposals(request, app, data):
     try:
-        body = await request.json()
+        payload = await request.json()
     except Exception:
-        body = {}
-    roots = body.get('roots', []) if isinstance(body, dict) else None
-    if not isinstance(roots, list):
-        return _error(400, 'bad_request', 'roots must be a list')
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import ScanRootsBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = ScanRootsBody.model_validate(payload)
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
+    roots = body.roots
     found = []
     for root in roots:
         if not isinstance(root, str) or not data.safe_path(app, root)[0]:
