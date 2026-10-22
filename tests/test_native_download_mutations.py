@@ -186,6 +186,63 @@ def test_orphan_cleanup_auth_matches_legacy_flask(role):
         assert native.json() == legacy.get_json()
 
 
+@pytest.mark.parametrize('access_allowed', [True, False])
+def test_orphan_cleanup_mutation_and_game_acl_match_legacy_flask(access_allowed, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis import apis_bp
+    from oneirodex.utils.api_response import api_error
+    import oneirodex.routes_apis.download as legacy_routes
+
+    secret = 'orphan-cleanup-mutation-parity-secret'
+    admin = SimpleNamespace(
+        id=7, role='admin', name='ParityAdmin', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(uuid='12345678-1234-1234-1234-123456789abc', name='Fixture')
+    legacy_cleanup_calls = []
+    expected_result = {'removed': [{'id': 4}], 'kept': [{'id': 5}]}
+
+    def legacy_downloadable(_game_uuid):
+        if not access_allowed:
+            return None, api_error('Access denied', code='forbidden')
+        return game, None
+
+    monkeypatch.setattr(legacy_routes, '_downloadable_game', legacy_downloadable)
+    monkeypatch.setattr(
+        legacy_routes, 'cleanup_orphan_versions',
+        lambda target: legacy_cleanup_calls.append(target) or expected_result,
+    )
+    monkeypatch.setattr(legacy_routes, 'log_system_event', lambda *_args, **_kwargs: None)
+
+    legacy_app = Flask('legacy-orphan-cleanup-mutation-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: admin if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    path = f'/api/games/{game.uuid}/versions/cleanup_orphans'
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current_data = FakeDownloads()
+    current_data.can_access = lambda _user, _game: access_allowed
+    current_data.cleanup_orphans = lambda target: current_data.cleaned.append(target.uuid) or expected_result
+    current = make_client(data=current_data, role='admin').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.json() == legacy.get_json()
+    assert legacy_cleanup_calls == ([game] if access_allowed else [])
+    assert current_data.cleaned == ([game.uuid] if access_allowed else [])
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
