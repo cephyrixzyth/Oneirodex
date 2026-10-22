@@ -222,6 +222,44 @@ def test_legacy_download_denies_child_session_scope():
     assert data.created is None
 
 
+@pytest.mark.parametrize('path', [
+    '/download_game/12345678-1234-1234-1234-123456789abc',
+    '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+])
+def test_download_child_scope_denial_matches_legacy_flask(path):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_downloads_ext import download_bp
+
+    secret = 'download-child-parity-secret'
+    child = SimpleNamespace(
+        id=7, role='child', name='ParityChild', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    legacy_app = Flask('legacy-download-child-parity')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: child if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(download_bp)
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    legacy = legacy_client.post(path, follow_redirects=False)
+    current_data = FakeDownloads()
+    current = make_client(data=current_data, role='child').post(path, follow_redirects=False)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.json() == legacy.get_json()
+    assert current_data.created is None
+
+
 def test_legacy_download_bearer_requires_write_download_scope():
     data = FakeDownloads()
     client = make_client(data=data, role='user', csrf_enabled=True, token_scopes=['read:library'])

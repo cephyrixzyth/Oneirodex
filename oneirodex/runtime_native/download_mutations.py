@@ -562,7 +562,7 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
         elif auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         elif not auth.has_scope('write:download'):
-            response = Response(status_code=403)
+            response = _missing_download_scope_response()
         elif not _UUID_RE.fullmatch(game_uuid):
             from werkzeug.exceptions import BadRequest
             response = _legacy_werkzeug_error(BadRequest)
@@ -629,6 +629,17 @@ def _is_integer_token(value):
         return False
 
 
+def _missing_download_scope_response():
+    from oneirodex.utils.api_contract import api_error_payload
+    from starlette.responses import JSONResponse
+
+    payload, status = api_error_payload(
+        'Missing scope: write:download', code='forbidden',
+        detail={'required_scope': 'write:download'},
+    )
+    return JSONResponse(payload, status_code=status)
+
+
 def _run_legacy_download_other(request, *, flask_app, data, find_user, find_token,
                                commit_token_touch, load_user_id, login_manager,
                                database_scope, file_type, game_uuid, file_id):
@@ -668,7 +679,7 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
         elif auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         elif not auth.has_scope('write:download'):
-            response = Response(status_code=403)
+            response = _missing_download_scope_response()
         elif file_type not in ('update', 'extra'):
             data.log_legacy_event('Invalid download file type', event_type='security', event_level='warning')
             _flash(auth.session_data, 'error', 'Invalid file type')
