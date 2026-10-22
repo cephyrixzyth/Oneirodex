@@ -295,6 +295,21 @@ def test_child_cannot_write_cheats_and_pc_cheat_librarian_rules(native):
     assert saved['label'] == 'helpful note' and saved['notes'] == 'details'
 
 
+def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
+    _app, api, data, user = native
+    cookie, csrf = _cookie(_app, csrf=True)
+    user.role = 'librarian'
+    data.surface = 'pc_wand'
+
+    response = _request(api, 'POST', '/api/games/game-1/pc_cheats', cookie=cookie,
+                        csrf=csrf, json=[])
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of CreatePcCheatBody'
+    }
+
+
 def test_pc_cheat_delete_keeps_legacy_denial_and_database_error_messages(native):
     app, api, data, user = native
     cookie, csrf = _cookie(app, csrf=True)

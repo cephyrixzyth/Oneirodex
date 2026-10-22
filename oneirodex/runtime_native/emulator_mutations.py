@@ -508,13 +508,13 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if auth.token is not None and not auth.has_scope('admin'):
             return _error(403, 'forbidden', 'This token does not have the admin scope')
         if operation == 'pc_cheats' and method == 'POST':
-            body = await _json(request)
+            body = await _json_for_validation(request)
             from pydantic import ValidationError
             from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
             from oneirodex.utils.validation import format_validation_errors
 
             try:
-                body = CreatePcCheatBody.model_validate(body or {})
+                body = CreatePcCheatBody.model_validate(body)
             except ValidationError as exc:
                 return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
             label = body.label
@@ -554,6 +554,19 @@ async def _json(request):
     except Exception:
         return None
     return value if isinstance(value, dict) else None
+
+
+async def _json_for_validation(request):
+    """Mirror validate_body: default absent/malformed JSON to an object.
+
+    Keep a successfully parsed non-object value intact so Pydantic returns the
+    same root validation error as the Flask decorator.
+    """
+    try:
+        value = await request.json()
+    except Exception:
+        return {}
+    return {} if value is None else value
 
 
 async def _firmware_source(data, flask_app, request):
