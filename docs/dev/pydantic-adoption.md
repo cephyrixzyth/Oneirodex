@@ -188,8 +188,10 @@ required-field validation without mutating the wanted list.
 - **`patch_catalog_attach`** — missing `game_uuid` / `source_url` keeps the
   current concise 400 (`Provide a game UUID and source URL.`) rather than the
   legacy 422 field detail. This is retained under the P18 owner decision to
-  preserve clearer current behavior; exact-image evidence is in the private
-  parity matrix. Valid attachment and URL-policy branches remain under review.
+  preserve clearer current behavior. Exact-image replay also confirms matching
+  successful and repeated attachments, one persisted guide URL after retry, and
+  rejection of a `file://` source; provider and other failure branches remain
+  under review. Evidence is in the private parity matrix.
 - **`games_batch_favorite`** — missing `favorite` / `uuids` was 400 with
   `updated`/`skipped`/`errors`/`limit`. Now 422 `unprocessable` with the
   same extra keys plus `detail` naming the field. Over-limit is still 400.
