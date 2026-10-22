@@ -462,6 +462,10 @@ routes remain partially verified overall.
   Single-delete media detection follows Flask's JSON rule (`application/json`
   and `application/*+json`) for parser selection and JSON-vs-form CSRF errors.
   Vendor JSON CSRF case: `.artifacts/parity-v1.1.8/library-delete-vendor-json-content-type-20261022.json`.
+- Native single and batch library scan body parsing uses the same JSON media
+  rule as Flask. Vendor `+json` is parsed; misleading `application/jsonp` is
+  treated as non-JSON and cannot start a scan. Evidence:
+  `.artifacts/parity-v1.1.8/library-scan-json-media-types-20261022.json`.
 
 ### `routes_arr.py`
 

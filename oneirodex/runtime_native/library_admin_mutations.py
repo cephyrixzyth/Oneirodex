@@ -1399,7 +1399,7 @@ async def _input_payload(request, config):
         if len(raw) > limit:
             return {}, True
     content_type = request.headers.get('content-type', '').lower()
-    if 'json' in content_type:
+    if _request_is_json(request):
         try:
             value = json.loads(raw or b'{}')
             return (value if isinstance(value, dict) else {}), False

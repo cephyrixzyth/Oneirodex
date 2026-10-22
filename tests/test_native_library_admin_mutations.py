@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import nullcontext
 from io import BytesIO
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from flask import Flask, redirect as flask_redirect
+from flask import Flask, redirect as flask_redirect, request as flask_request
 from PIL import Image
 
 from oneirodex.runtime_native.library_admin_mutations import (
@@ -376,6 +377,38 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['download_missing_images'] is True
     assert scan[3]['force_updates_extras'] is True
     assert scan[3]['fetch_hltb'] is True
+
+
+def test_single_scan_json_media_types_match_legacy_parser(native_client):
+    runtime, data = native_client
+    vendor_type = 'application/vnd.oneirodex+json'
+    scan_body = {'library_uuid': 'lib-1', 'folder': '/safe/root/one'}
+
+    with Flask('legacy-scan-parser').test_request_context(
+        '/api/admin/libraries/scan', method='POST',
+        data=json.dumps(scan_body), content_type=vendor_type,
+    ):
+        legacy_vendor_body = flask_request.get_json(silent=True)
+    with Flask('legacy-scan-parser').test_request_context(
+        '/api/admin/libraries/scan', method='POST',
+        data=json.dumps(scan_body), content_type='application/jsonp',
+    ):
+        legacy_jsonp_body = flask_request.get_json(silent=True)
+
+    vendor = _request(
+        runtime, 'POST', '/api/admin/libraries/scan', json=scan_body,
+        headers={'Content-Type': vendor_type},
+    )
+    assert vendor.status_code == 200 and legacy_vendor_body == scan_body
+    scan_count = sum(call[0] == 'scan' for call in data.calls)
+
+    jsonp = _request(
+        runtime, 'POST', '/api/admin/libraries/scan', json=scan_body,
+        headers={'Content-Type': 'application/jsonp'},
+    )
+    assert legacy_jsonp_body is None
+    assert jsonp.status_code == 400 and jsonp.json()['error'] == 'library_uuid is required'
+    assert sum(call[0] == 'scan' for call in data.calls) == scan_count
 
 
 def test_single_scan_stringifies_legacy_scalar_folder_without_weakening_root_allowlist(native_client):
