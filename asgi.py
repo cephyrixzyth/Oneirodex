@@ -4260,6 +4260,16 @@ class LazyASGIApp:
     async def _send_legacy_setup_gate_if_required(self, scope, send) -> bool:
         """Apply Flask's before-request setup gate before native dispatch."""
         path = scope.get('path', '/')
+        method = str(scope.get('method', 'GET')).upper()
+        is_auth_page = (
+            path == '/register'
+            or (path != '/login' and _is_native_auth_page_path(path))
+        )
+        if is_auth_page and method not in {'GET', 'HEAD'}:
+            # Flask-WTF runs before the legacy setup hook on unsafe methods.
+            # Let native form handlers validate CSRF first, then apply the
+            # same setup redirect before doing any form action.
+            return False
         if (
             not (
                 path == '/register'
@@ -4267,28 +4277,31 @@ class LazyASGIApp:
                 or path == '/admin'
                 or path.startswith('/admin/')
                 or path.startswith('/admin/api/')
+                or is_auth_page
             )
         ):
             return False
 
-        await self._ensure_flask()
         # The native dispatcher also supports database-free route tests and
         # shell serving. The setup gate needs a configured database to know
-        # whether setup is incomplete; leave those framework-free paths alone.
+        # whether setup is incomplete. Normal ASGI startup initializes the
+        # native database before serving requests; leave framework-free shell
+        # requests alone instead of constructing the runtime just to check.
         if self._native_sqlalchemy_engine is None:
             return False
+
+        await self._ensure_flask()
 
         from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 
         if isinstance(self._flask_app, NativeRuntimeContext):
             # The native runtime deliberately exposes only URL-build helpers,
-            # not Flask's full URL map. These are the concrete legacy routes
-            # that native dispatch currently intercepts ahead of Flask's gate.
+            # not Flask's full URL map. Use method-aware matches from the
+            # mounted ASGI routers so unknown paths and unsupported methods
+            # retain their normal 404/405 behavior.
             route_exists = (
-                path in self._native_admin_routes
-                or path == '/scan_management'
-                or (path == '/register' and _is_native_auth_page_path(path))
-                or self._matches_native_api_route(scope)
+                self._matches_native_app_route(self._native_admin_pilot, scope)
+                or self._matches_native_app_route(self._native_read_api_app, scope)
             )
             if not route_exists:
                 return False
@@ -4297,7 +4310,7 @@ class LazyASGIApp:
 
             try:
                 self._flask_app.url_map.bind('localhost').match(
-                    path, method=str(scope.get('method', 'GET')).upper(),
+                    path, method=method,
                 )
             except HTTPException:
                 return False
@@ -4306,9 +4319,9 @@ class LazyASGIApp:
             scope, send, skip_active_step=True,
         )
 
-    def _matches_native_api_route(self, scope) -> bool:
+    @staticmethod
+    def _matches_native_app_route(app, scope) -> bool:
         """Return whether a concrete method/path matches a mounted native route."""
-        app = self._native_read_api_app
         if app is None:
             return False
 

@@ -137,6 +137,9 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if response is not None:
                 return _finish(response, flask_app)
+            setup_response = setup_redirect_if_required()
+            if setup_response is not None:
+                return _finish(setup_response, flask_app, auth)
             invite_token = first_query_value(request.query_params, 'token')
             if auth.user is not None:
                 if not invite_token:
@@ -192,6 +195,9 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if response is not None:
                 return _finish(response, flask_app)
+            setup_response = setup_redirect_if_required()
+            if setup_response is not None:
+                return _finish(setup_response, flask_app, auth)
             if auth.user is not None:
                 return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 
@@ -236,6 +242,9 @@ def create_auth_form_post_router(
                 return _finish(response, flask_app)
             if response is not None:
                 return _finish(response, flask_app)
+            setup_response = setup_redirect_if_required()
+            if setup_response is not None:
+                return _finish(setup_response, flask_app, auth)
             if auth.user is not None:
                 return _finish(flask_redirect_response('/login', status_code=302), flask_app, auth)
 

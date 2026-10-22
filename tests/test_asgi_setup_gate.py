@@ -96,10 +96,19 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
     runtime = asgi.LazyASGIApp()
     runtime._flask_app = NativeRuntimeContext({}, package_root=tmp_path)
     runtime._native_admin_routes = frozenset({'/admin/dashboard', '/admin/help'})
+    runtime._native_admin_pilot = FastAPI()
+    for path in ('/admin/dashboard', '/admin/help', '/scan_management'):
+        runtime._native_admin_pilot.add_api_route(
+            path, lambda: {'page': 'admin'}, methods=['GET', 'HEAD'],
+        )
     runtime._native_read_api_app = FastAPI()
-    runtime._native_read_api_app.add_api_route(
-        '/admin/api/users', lambda: {'users': []}, methods=['GET'],
-    )
+    for path in (
+        '/admin/api/users', '/register', '/reset_password_request',
+        '/reset_password/{token}', '/confirm/{token}',
+    ):
+        runtime._native_read_api_app.add_api_route(
+            path, lambda: {'ok': True}, methods=['GET', 'HEAD', 'POST'],
+        )
     runtime._native_sqlalchemy_engine = object()
 
     async def initialized():
@@ -129,18 +138,38 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
 
     for path in (
         '/admin/dashboard', '/admin/help', '/admin/api/users',
-        '/scan_management', '/register',
+        '/scan_management', '/register', '/reset_password_request',
+        '/reset_password/opaque-token', '/confirm/opaque-token',
     ):
         matched, messages = asyncio.run(check(path))
         assert matched is True
         assert messages[0]['status'] == 302
         assert dict(messages[0]['headers'])[b'location'] == b'/setup/integrations'
 
-    for path in ('/admin/unknown', '/admin/api/unknown'):
+    for path in (
+        '/admin/unknown', '/admin/api/unknown', '/login',
+        '/reset_password/opaque-token/extra',
+    ):
         matched, messages = asyncio.run(check(path))
         assert matched is False
         assert messages == []
 
     matched, messages = asyncio.run(check('/admin/api/users', method='POST'))
+    assert matched is True
+    assert messages[0]['status'] == 302
+
+    matched, messages = asyncio.run(check('/admin/api/users', method='DELETE'))
+    assert matched is False
+    assert messages == []
+
+    matched, messages = asyncio.run(check('/register', method='POST'))
+    assert matched is False
+    assert messages == []
+
+    matched, messages = asyncio.run(check('/reset_password_request', method='DELETE'))
+    assert matched is False
+    assert messages == []
+
+    matched, messages = asyncio.run(check('/reset_password_request', method='POST'))
     assert matched is False
     assert messages == []
