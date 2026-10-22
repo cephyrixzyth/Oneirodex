@@ -374,6 +374,18 @@ def create_emulator_mutations_router(
 async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_app):
     user = auth.user
     method = 'GET' if request.method == 'HEAD' else request.method
+    pc_cheat_body = None
+    if operation == 'pc_cheats' and method == 'POST':
+        pc_cheat_body = await _json_for_validation(request)
+        from pydantic import ValidationError
+        from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
+        from oneirodex.utils.validation import format_validation_errors
+
+        try:
+            pc_cheat_body = CreatePcCheatBody.model_validate(pc_cheat_body)
+        except ValidationError as exc:
+            return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
+
     game = data.game(game_uuid)
     if game is None:
         return _error(404, 'not_found', 'Game not found')
@@ -508,15 +520,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if auth.token is not None and not auth.has_scope('admin'):
             return _error(403, 'forbidden', 'This token does not have the admin scope')
         if operation == 'pc_cheats' and method == 'POST':
-            body = await _json_for_validation(request)
-            from pydantic import ValidationError
-            from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
-            from oneirodex.utils.validation import format_validation_errors
-
-            try:
-                body = CreatePcCheatBody.model_validate(body)
-            except ValidationError as exc:
-                return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
+            body = pc_cheat_body
             label = body.label
             method = (body.method or 'note').strip().lower()
             if method not in methods:

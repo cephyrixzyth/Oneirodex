@@ -295,6 +295,59 @@ def test_child_cannot_write_cheats_and_pc_cheat_librarian_rules(native):
     assert saved['label'] == 'helpful note' and saved['notes'] == 'details'
 
 
+@pytest.mark.parametrize('payload', [None, True, 17, 'text'])
+def test_pc_cheat_non_object_json_matches_legacy_validator(native, payload):
+    app, api, data, user = native
+    from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
+    from oneirodex.utils.validation import validate_body
+
+    user.role = 'librarian'
+    data.surface = 'pc_wand'
+    cookie, csrf = _cookie(app, csrf=True)
+
+    legacy_view = validate_body(CreatePcCheatBody)(lambda **_kwargs: {'accepted': True})
+    with app.test_request_context(
+        '/api/games/game-1/pc_cheats',
+        method='POST',
+        json=payload,
+    ):
+        legacy_response = app.make_response(legacy_view())
+
+    current_response = _request(
+        api, 'POST', '/api/games/game-1/pc_cheats', cookie=cookie,
+        csrf=csrf, json=payload,
+    )
+
+    assert legacy_response.status_code == current_response.status_code == 422
+    assert legacy_response.get_json() == current_response.json()
+    assert data.calls == []
+
+
+def test_pc_cheat_validation_precedes_game_and_surface_checks(native):
+    app, api, data, user = native
+    from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
+    from oneirodex.utils.validation import validate_body
+
+    user.role = 'librarian'
+    data.game_row = None
+    data.surface = 'retroarch'
+    cookie, csrf = _cookie(app, csrf=True)
+    legacy_view = validate_body(CreatePcCheatBody)(lambda **_kwargs: {'accepted': True})
+    with app.test_request_context(
+        '/api/games/missing-game/pc_cheats', method='POST', json=[],
+    ):
+        legacy_response = app.make_response(legacy_view())
+
+    current_response = _request(
+        api, 'POST', '/api/games/missing-game/pc_cheats', cookie=cookie,
+        csrf=csrf, json=[],
+    )
+
+    assert legacy_response.status_code == current_response.status_code == 422
+    assert legacy_response.get_json() == current_response.json()
+    assert not any(call[0] == 'create_pc_cheat' for call in data.calls)
+
+
 def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
     _app, api, data, user = native
     cookie, csrf = _cookie(_app, csrf=True)
