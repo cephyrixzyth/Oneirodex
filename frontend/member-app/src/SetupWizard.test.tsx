@@ -58,7 +58,9 @@ test('integrations setup matches provider groups and preserves explicit configur
     !(steamGridGroup instanceof HTMLFieldSetElement)
   )
     throw new Error('Provider controls must remain grouped in fieldsets.')
-  expect(within(steamGroup).getByLabelText('API key')).toHaveAttribute('maxLength', '255')
+  for (const apiKeyInput of screen.getAllByLabelText('API key')) {
+    expect(apiKeyInput).toHaveAttribute('maxLength', '255')
+  }
 
   fireEvent.change(within(steamGroup).getByLabelText('API key'), {
     target: { value: 'unchecked-provider-key' },

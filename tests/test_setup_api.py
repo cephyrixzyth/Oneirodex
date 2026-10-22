@@ -1,5 +1,7 @@
 """JSON setup state transitions preserve first-run admin/session gates."""
 
+import pytest
+
 
 def test_first_run_setup_advances_with_existing_session_without_returning_secrets(client, db_session):
     state = client.get('/api/setup/state')
@@ -134,7 +136,11 @@ def test_integrations_json_transition_respects_provider_configure_checkboxes(cli
     assert settings.giantbomb_api_key == 'existing-giantbomb-key'
 
 
-def test_integrations_reject_provider_key_larger_than_storage_column(client, db_session):
+@pytest.mark.parametrize('key_field', (
+    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
+    'mobygames_api_key', 'thegamesdb_api_key',
+))
+def test_integrations_reject_provider_key_larger_than_storage_column(client, db_session, key_field):
     from sqlalchemy import select
 
     from oneirodex.models import GlobalSettings
@@ -152,19 +158,23 @@ def test_integrations_reject_provider_key_larger_than_storage_column(client, db_
 
     response = client.post('/api/setup/step', json={
         'step': 5,
-        'configure_steam_web_api_key': True,
-        'steam_web_api_key': 'k' * 256,
+        f'configure_{key_field}': True,
+        key_field: 'k' * 256,
     })
 
     assert response.status_code == 422
     assert response.get_json()['error_code'] == 'unprocessable'
     assert '255 characters' in str(response.get_json()['detail'])
     settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    assert settings.steam_web_api_key is None
+    assert getattr(settings, key_field) is None
     assert settings.setup_current_step == 5
 
 
-def test_integrations_accept_provider_key_at_storage_column_limit(client, db_session):
+@pytest.mark.parametrize('key_field', (
+    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
+    'mobygames_api_key', 'thegamesdb_api_key',
+))
+def test_integrations_accept_provider_key_at_storage_column_limit(client, db_session, key_field):
     from sqlalchemy import select
 
     from oneirodex.models import GlobalSettings
@@ -183,11 +193,11 @@ def test_integrations_accept_provider_key_at_storage_column_limit(client, db_ses
     key = 'k' * 255
     response = client.post('/api/setup/step', json={
         'step': 5,
-        'configure_steam_web_api_key': True,
-        'steam_web_api_key': key,
+        f'configure_{key_field}': True,
+        key_field: key,
     })
 
     assert response.status_code == 200
     settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    assert settings.steam_web_api_key == key
+    assert getattr(settings, key_field) == key
     assert settings.setup_current_step == 6
