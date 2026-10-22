@@ -5771,15 +5771,21 @@ def test_native_browser_player_settings_matches_flask_silent_json(monkeypatch):
         (b'[]', 'application/json'),
         (b'{"engine":"ignored"}', 'text/plain'),
     ]
-    responses = [asyncio.run(send_raw(content, content_type))
-                 for content, content_type in cases]
-    truthy_list = asyncio.run(send_raw(b'["not", "an", "object"]'))
+    responses = [
+        asyncio.run(send_raw(method, content, content_type))
+        for method in ('POST', 'PUT')
+        for content, content_type in cases
+    ]
+    truthy_lists = [
+        asyncio.run(send_raw(method, b'["not", "an", "object"]'))
+        for method in ('POST', 'PUT')
+    ]
 
     assert all(response.status_code == 200 for response in responses)
-    assert truthy_list.status_code == 400
-    assert truthy_list.json()['error'] == 'JSON object required'
+    assert all(response.status_code == 400 for response in truthy_lists)
+    assert all(response.json()['error'] == 'JSON object required' for response in truthy_lists)
     assert admin_runtime._fake_emulator.saved == [
-        ('browser', {}) for _ in cases
+        ('browser', {}) for _ in range(2 * len(cases))
     ]
 
 
