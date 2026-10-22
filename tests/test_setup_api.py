@@ -162,3 +162,32 @@ def test_integrations_reject_provider_key_larger_than_storage_column(client, db_
     settings = db_session.execute(select(GlobalSettings)).scalars().first()
     assert settings.steam_web_api_key is None
     assert settings.setup_current_step == 5
+
+
+def test_integrations_accept_provider_key_at_storage_column_limit(client, db_session):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_boundary_admin',
+        'email': 'provider-boundary@example.com',
+        'password': 'correct horse battery',
+        'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    key = 'k' * 255
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        'configure_steam_web_api_key': True,
+        'steam_web_api_key': key,
+    })
+
+    assert response.status_code == 200
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    assert settings.steam_web_api_key == key
+    assert settings.setup_current_step == 6
