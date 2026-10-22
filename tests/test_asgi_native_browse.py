@@ -9745,6 +9745,11 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
             'notes': 'fixture notes',
         },
     )
+    vendor_json_attach = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/vnd.api+json'},
+        content='{"game_uuid":"game-1","source_url":"https://patch.test/vendor-guide"}',
+    )
 
     empty_attach = _run(
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
@@ -9763,6 +9768,8 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
 
     assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
     assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
+    assert vendor_json_attach.status_code == 201
+    assert vendor_json_attach.json()['source_url'] == 'https://patch.test/vendor-guide'
     assert empty_attach.status_code == 400
     assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
     assert empty_attach.json()['error_code'] == 'bad_request'
@@ -9815,7 +9822,8 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
     assert malformed_json.json()['detail']['__root__']
     assert calls[0][0:2] == ('search', 'Fixture')
     assert calls[1][0:2] == ('attach', 'game-1')
-    assert len(calls) == 2
+    assert calls[2][0:2] == ('attach', 'game-1')
+    assert len(calls) == 3
 
 
 def test_lazy_asgi_dispatches_member_download_queue_natively(monkeypatch):

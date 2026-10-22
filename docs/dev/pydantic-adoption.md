@@ -192,7 +192,8 @@ required-field validation without mutating the wanted list.
   preserve clearer current behavior. Whitespace-only source URLs and unknown
   fields return the legacy 422 with field details. Malformed/non-object JSON
   and missing or non-JSON Content-Type also return legacy-shaped 422 responses;
-  JSON bytes under a wrong media type are rejected. Exact-image replay confirms
+  JSON bytes under a wrong media type are rejected. `application/*+json` vendor
+  media types are accepted as in the legacy route. Exact-image replay confirms
   matching successful/repeated attachments, one persisted guide URL
   after retry, and rejection of a `file://` source; provider/database failure
   branches remain under review. Evidence is in the private parity matrix.
