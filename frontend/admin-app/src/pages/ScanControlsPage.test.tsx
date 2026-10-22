@@ -89,13 +89,16 @@ test('keeps the legacy 10080 interval maximum for both hour and minute schedules
   expect(screen.getByLabelText('Interval')).toHaveAttribute('max', '10080')
 })
 
-test('keeps the Automatic scan page focused on scan controls', async () => {
+test('keeps automatic scan and manual identification together on the scan management page', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries' ? [] : { roots: [] },
   )
   renderPage()
-  expect(await screen.findByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
-  expect(screen.queryByRole('heading', { name: 'Manual identify' })).not.toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Scan management' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
 })
 
 test('lists manual identify candidates without starting a scan and links to the native identify form', async () => {
@@ -248,14 +251,14 @@ test('manual deep link focuses identification and hides automatic scan actions',
 
   renderPage('/scan_management?active_tab=manual')
 
-  expect(await screen.findByRole('heading', { name: 'Manual scan / identify' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Scan management' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
-  expect(screen.getByRole('group', { name: 'Manual identify options' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Scan options' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
-  expect(screen.queryByLabelText('Remove games whose files are missing')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Download missing images')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Repeat schedule')).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Start scan' })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Remove games whose files are missing')).toBeInTheDocument()
+  expect(screen.getByLabelText('Download missing images')).toBeInTheDocument()
+  expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
 })
 
 test('confirms linking a listed folder to an existing game before posting', async () => {

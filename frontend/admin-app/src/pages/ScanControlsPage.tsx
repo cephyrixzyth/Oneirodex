@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
@@ -5,6 +7,7 @@ import { useScanControls, type Schedule } from './useScanControls'
 import './ScanControlsPage.css'
 
 export function ScanControlsPage() {
+  const { hash } = useLocation()
   const {
     manualMode,
     libraries,
@@ -82,15 +85,23 @@ export function ScanControlsPage() {
     activeRoot,
     browseParts,
   } = useScanControls()
-  const manualOnly = manualMode
+  useEffect(() => {
+    if (hash !== '#manual-identify') return
+    const target = document.getElementById('manual-identify')
+    if (!target) return
+
+    target.scrollIntoView({
+      block: 'start',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+    target.focus({ preventScroll: true })
+  }, [hash])
+
   return (
     <Page
-      title={manualMode ? 'Manual scan / identify' : 'Automatic scan'}
-      lede={
-        manualMode
-          ? 'List game folders or files for identification without starting a scan.'
-          : 'Choose a library and server folder, then start or schedule a scan.'
-      }
+      className={`od-scan-controls-page${manualMode ? ' is-manual' : ''}`}
+      title="Scan management"
+      lede="Configure automatic scans and identify games manually from one page. Choose a library and scan location, then use the action you need."
     >
       <PageStatus
         loading={loading}
@@ -103,6 +114,10 @@ export function ScanControlsPage() {
         </Button>
       ) : null}
       <form className="od-admin-panel od-scan-controls" onSubmit={submit}>
+        <h2>Automatic scan</h2>
+        <p className="od-admin-lede">
+          Start a scan now or set a repeat schedule for this library and location.
+        </p>
         <label className="od-admin-field">
           Library
           <select
@@ -181,29 +196,25 @@ export function ScanControlsPage() {
           </select>
         </label>
         <fieldset className="od-scan-controls__options">
-          <legend>{manualOnly ? 'Manual identify options' : 'Scan options'}</legend>
-          {!manualOnly ? (
-            <>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={removeMissing}
-                  onChange={(event) => setRemoveMissing(event.target.checked)}
-                  disabled={scanning}
-                />{' '}
-                Remove games whose files are missing
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={downloadImages}
-                  onChange={(event) => setDownloadImages(event.target.checked)}
-                  disabled={scanning}
-                />{' '}
-                Download missing images
-              </label>
-            </>
-          ) : null}
+          <legend>Scan options</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={removeMissing}
+              onChange={(event) => setRemoveMissing(event.target.checked)}
+              disabled={scanning}
+            />{' '}
+            Remove games whose files are missing
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={downloadImages}
+              onChange={(event) => setDownloadImages(event.target.checked)}
+              disabled={scanning}
+            />{' '}
+            Download missing images
+          </label>
           <label>
             <input
               type="checkbox"
@@ -232,83 +243,79 @@ export function ScanControlsPage() {
             Refetch HowLongToBeat for existing games
           </label>
         </fieldset>
-        {!manualOnly ? (
-          <div className="od-scan-controls__schedule">
-            <label className="od-admin-field">
-              Repeat schedule
-              <select
-                className="od-admin-input"
-                value={schedule}
-                onChange={(event) => setSchedule(event.target.value as Schedule)}
-                disabled={scanning}
-              >
-                <option value="">Once (no repeat)</option>
-                <option value="8_hours">Every 8 hours</option>
-                <option value="24_hours">Every 24 hours</option>
-                <option value="48_hours">Every 48 hours</option>
-                <option value="interval">Every N minutes or hours</option>
-                <option value="cron">Cron expression (UTC)</option>
-              </select>
-            </label>
-            {schedule === 'interval' ? (
-              <div className="od-scan-controls__interval">
-                <label className="od-admin-field">
-                  Interval
-                  <input
-                    className="od-admin-input"
-                    type="number"
-                    min={1}
-                    max={10080}
-                    value={interval}
-                    onChange={(event) => setInterval(Number(event.target.value))}
-                    disabled={scanning}
-                  />
-                </label>
-                <label className="od-admin-field">
-                  Unit
-                  <select
-                    className="od-admin-input"
-                    value={unit}
-                    onChange={(event) => setUnit(event.target.value as typeof unit)}
-                    disabled={scanning}
-                  >
-                    <option value="hours">Hours</option>
-                    <option value="minutes">Minutes</option>
-                  </select>
-                </label>
-              </div>
-            ) : null}
-            {schedule === 'cron' ? (
+        <div className="od-scan-controls__schedule">
+          <label className="od-admin-field">
+            Repeat schedule
+            <select
+              className="od-admin-input"
+              value={schedule}
+              onChange={(event) => setSchedule(event.target.value as Schedule)}
+              disabled={scanning}
+            >
+              <option value="">Once (no repeat)</option>
+              <option value="8_hours">Every 8 hours</option>
+              <option value="24_hours">Every 24 hours</option>
+              <option value="48_hours">Every 48 hours</option>
+              <option value="interval">Every N minutes or hours</option>
+              <option value="cron">Cron expression (UTC)</option>
+            </select>
+          </label>
+          {schedule === 'interval' ? (
+            <div className="od-scan-controls__interval">
               <label className="od-admin-field">
-                Cron expression (UTC)
+                Interval
                 <input
                   className="od-admin-input"
-                  value={cron}
-                  onChange={(event) => setCron(event.target.value)}
-                  maxLength={64}
-                  placeholder="0 */6 * * *"
-                  required
+                  type="number"
+                  min={1}
+                  max={10080}
+                  value={interval}
+                  onChange={(event) => setInterval(Number(event.target.value))}
                   disabled={scanning}
                 />
               </label>
-            ) : null}
-          </div>
-        ) : null}
-        {!manualOnly ? (
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
-          >
-            {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
-          </Button>
-        ) : null}
+              <label className="od-admin-field">
+                Unit
+                <select
+                  className="od-admin-input"
+                  value={unit}
+                  onChange={(event) => setUnit(event.target.value as typeof unit)}
+                  disabled={scanning}
+                >
+                  <option value="hours">Hours</option>
+                  <option value="minutes">Minutes</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {schedule === 'cron' ? (
+            <label className="od-admin-field">
+              Cron expression (UTC)
+              <input
+                className="od-admin-input"
+                value={cron}
+                onChange={(event) => setCron(event.target.value)}
+                maxLength={64}
+                placeholder="0 */6 * * *"
+                required
+                disabled={scanning}
+              />
+            </label>
+          ) : null}
+        </div>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
+        >
+          {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
+        </Button>
       </form>
       <section
         id="manual-identify"
-        className="od-admin-panel"
+        className="od-admin-panel od-scan-controls__manual"
+        tabIndex={-1}
         aria-labelledby="od-manual-identify-title"
-        hidden={!manualMode}
       >
         <h2 id="od-manual-identify-title">Manual identify</h2>
         <p className="od-admin-lede">

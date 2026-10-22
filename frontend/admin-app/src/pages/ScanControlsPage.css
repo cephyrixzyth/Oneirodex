@@ -1,7 +1,32 @@
+.od-scan-controls-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.od-scan-controls-page .od-scan-controls {
+  order: 1;
+}
+
+.od-scan-controls-page .od-scan-controls__manual {
+  order: 2;
+}
+
+.od-scan-controls-page.is-manual .od-scan-controls {
+  order: 2;
+}
+
+.od-scan-controls-page.is-manual .od-scan-controls__manual {
+  order: 1;
+}
+
 .od-scan-controls {
   display: grid;
   gap: var(--od-space-4);
   max-width: 58rem;
+}
+
+.od-scan-controls__manual {
+  scroll-margin-block-start: calc(2.5rem + var(--od-space-2));
 }
 
 .od-scan-controls__links,

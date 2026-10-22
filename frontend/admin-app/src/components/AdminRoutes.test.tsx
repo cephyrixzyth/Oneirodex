@@ -60,7 +60,7 @@ const CASES = [
   ['/admin/announcements', 'Announcements'],
   ['/admin/integrations', 'Integrations'],
   ['/admin/scan-jobs', 'Scan jobs'],
-  ['/admin/scan-controls', 'Automatic scan'],
+  ['/admin/scan-controls', 'Scan management'],
   ['/add_game_manual', 'Identify game'],
   ['/game_edit/123e4567-e89b-12d3-a456-426614174000', 'Edit game entry'],
   ['/edit_game_images/123e4567-e89b-12d3-a456-426614174000', 'Edit game images'],
@@ -77,9 +77,9 @@ const CASES = [
   ['/admin/library/edit/123e4567-e89b-12d3-a456-426614174000', 'Edit library'],
   ['/libraries/legacy', 'Libraries & scans'],
   ['/admin/library/tools', 'Libraries & scans'],
-  ['/scan_management?active_tab=auto', 'Automatic scan'],
-  ['/scan_management?active_tab=manual', 'Manual scan / identify'],
-  ['/scan_manual_folder', 'Manual scan / identify'],
+  ['/scan_management?active_tab=auto', 'Scan management'],
+  ['/scan_management?active_tab=manual', 'Scan management'],
+  ['/scan_manual_folder', 'Scan management'],
   ['/scan_management?active_tab=jobs', 'Scan jobs'],
   ['/scan_management?active_tab=unmatched', 'Unmatched folders'],
   ['/scan_management?active_tab=scan_filters', 'Game scanning filters'],
@@ -97,24 +97,24 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
   })
 
-  test('automatic scan tab does not append the manual identification page', () => {
+  test('automatic scan tab keeps both scan workflows on the same page', () => {
     mountAt('/scan_management?active_tab=auto')
-    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 1 })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Manual identify', level: 2 })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'List games to identify' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.queryByText('Dupe glance')).toBeNull()
   })
 
-  test('manual identify tab renders its controls without automatic scan options', () => {
+  test('manual identify deep link renders the same combined scan page', () => {
     mountAt('/scan_management?active_tab=manual')
-    expect(
-      screen.getByRole('heading', { name: 'Manual scan / identify', level: 1 }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Start scan' })).toBeNull()
-    expect(screen.queryByLabelText('Repeat schedule')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
   })
 
   test('/admin/library/add opens the create form directly', () => {
@@ -124,9 +124,7 @@ describe('AdminRoutes path -> page', () => {
       'href',
       '/libraries',
     )
-    expect(
-      screen.getByRole('button', { name: 'Create library' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create library' })).toBeInTheDocument()
   })
 
   test('catch-all lede matches the old switch default', () => {
