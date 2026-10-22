@@ -84,6 +84,65 @@ def test_setup_library_keeps_distinct_path_validation_messages(monkeypatch):
     )
 
 
+def test_setup_integrations_save_only_selected_nonblank_provider_credentials(monkeypatch):
+    import oneirodex.runtime_native.db_session as native_db_session
+    import oneirodex.runtime_native.setup_transition as setup_transition
+    import oneirodex.utils.global_settings as global_settings
+    import oneirodex.utils.setup as setup_state
+
+    settings = SimpleNamespace(
+        steam_web_api_key='existing-steam-key',
+        steamgriddb_api_key='existing-grid-key',
+        giantbomb_api_key='existing-giantbomb-key',
+        mobygames_api_key='existing-moby-key',
+        thegamesdb_api_key='existing-gamesdb-key',
+        enable_hltb_integration=False,
+        oidc_enabled=False,
+    )
+    calls = []
+    fake_db = SimpleNamespace(session=SimpleNamespace())
+    app = SimpleNamespace(logger=SimpleNamespace(error=lambda *_a: None))
+    monkeypatch.setattr(native_db_session, 'native_db', fake_db)
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+    monkeypatch.setattr(setup_state, 'is_setup_required', lambda: False)
+    monkeypatch.setattr(setup_state, 'get_current_setup_step', lambda: 5)
+    monkeypatch.setattr(setup_state, 'set_setup_step', lambda step: calls.append(('step', step)))
+    monkeypatch.setattr(
+        setup_transition, '_commit_step',
+        lambda _db, _set, step, _app, _label: calls.append(('commit', step)) or True,
+    )
+
+    body = {
+        'step': 5,
+        'skip': False,
+        'steam_web_api_key': 'unchecked-replacement',
+        'configure_steam_web_api_key': False,
+        'steamgriddb_api_key': 'selected-replacement',
+        'configure_steamgriddb_api_key': True,
+        'giantbomb_api_key': '',
+        'configure_giantbomb_api_key': True,
+        'mobygames_api_key': 'unchecked-moby',
+        'configure_mobygames_api_key': False,
+        'thegamesdb_api_key': 'selected-gamesdb',
+        'configure_thegamesdb_api_key': True,
+        'configure_oidc': False,
+        'enable_hltb_integration': True,
+    }
+
+    result, failure, new_admin = setup_transition.SetupTransitionData().transition(body, app)
+
+    assert failure is None and new_admin is None
+    assert result == {'step': 6, 'next_url': '/setup/library'}
+    assert settings.steam_web_api_key == 'existing-steam-key'
+    assert settings.steamgriddb_api_key == 'selected-replacement'
+    assert settings.giantbomb_api_key == 'existing-giantbomb-key'
+    assert settings.mobygames_api_key == 'existing-moby-key'
+    assert settings.thegamesdb_api_key == 'selected-gamesdb'
+    assert settings.enable_hltb_integration is True
+    assert settings.oidc_enabled is False
+    assert calls == [('commit', 6)]
+
+
 @pytest.mark.parametrize('duplicate', [False, True])
 @pytest.mark.parametrize('scan_status', [None, 'started'])
 def test_setup_library_completes_and_preserves_library_across_scan_outcomes(
