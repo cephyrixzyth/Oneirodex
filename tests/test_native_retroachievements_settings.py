@@ -163,3 +163,23 @@ def test_admin_match_requires_csrf_before_body_validation():
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
     assert 'detail' not in response.json()
+
+
+def test_admin_match_ignores_json_body_with_non_json_content_type():
+    response = make_client().post(
+        '/api/retroachievements/match', data='{"platform":"SNES"}',
+        headers={'Content-Type': 'text/plain'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {'platform': 'Field required'}
+
+
+def test_admin_match_accepts_vendor_json_content_type():
+    response = make_client().post(
+        '/api/retroachievements/match', data='{"platform":"snes"}',
+        headers={'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['platform'] == 'SNES'

@@ -186,7 +186,11 @@ def create_retroachievements_settings_router(
                         payload, status = api_error_payload('Could not save RetroAchievements settings.', code='internal')
                         response = JSONResponse(payload, status_code=status)
                 elif operation == 'match':
-                    body = await _read_json(request)
+                    media_type = str(request.headers.get('content-type') or '').partition(';')[0].strip().lower()
+                    is_json = media_type == 'application/json' or (
+                        media_type.startswith('application/') and media_type.endswith('+json')
+                    )
+                    body = await _read_json(request) if is_json else None
                     try:
                         # Match the legacy validate_body contract: absent,
                         # malformed, and non-object JSON validate as an empty
