@@ -89,7 +89,7 @@ class FakeData:
         self.calls.append(('delete_pc_cheat', game_uuid, cheat_id))
         if self.fail_pc_cheat_delete:
             raise RuntimeError('injected delete failure')
-        return cheat_id == 42
+        return game_uuid == 'game-1' and cheat_id == 42
 
     def bios_overview(self, flask_app):
         self.calls.append(('bios_overview', flask_app.config.get('BIOS_IMPORT_SOURCE')))
@@ -361,6 +361,23 @@ def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
     assert response.json()['detail'] == {
         '__root__': 'Input should be a valid dictionary or instance of CreatePcCheatBody'
     }
+
+
+def test_pc_cheat_delete_uses_cheat_game_binding_without_game_lookup(native):
+    app, api, data, user = native
+    user.role = 'admin'
+    cookie, csrf = _cookie(app, csrf=True)
+    data.game_row = None
+
+    response = _request(
+        api, 'DELETE', '/api/games/missing-game/pc_cheats/42',
+        cookie=cookie, csrf=csrf,
+    )
+
+    assert response.status_code == 404
+    assert response.json()['error'] == 'Cheat not found'
+    assert not any(call[0] == 'game' for call in data.calls)
+    assert ('delete_pc_cheat', 'missing-game', 42) in data.calls
 
 
 def test_pc_cheat_delete_keeps_legacy_denial_and_database_error_messages(native):

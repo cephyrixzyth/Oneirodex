@@ -386,6 +386,15 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         except ValidationError as exc:
             return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
 
+    if operation == 'pc_cheat' and method == 'DELETE':
+        try:
+            cheat_id = int(filename)
+        except (TypeError, ValueError):
+            return _error(400, 'bad_request', 'Invalid cheat id')
+        if not data.delete_pc_cheat(game_uuid, cheat_id):
+            return _error(404, 'not_found', 'Cheat not found')
+        return _ok({'removed': cheat_id})
+
     game = data.game(game_uuid)
     if game is None:
         return _error(404, 'not_found', 'Game not found')
@@ -533,14 +542,6 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                 created_by_user_id=getattr(user, 'id', None),
             )
             return _ok({'cheat': row.to_dict()}, status=201)
-        if operation == 'pc_cheat' and method == 'DELETE':
-            try:
-                cheat_id = int(filename)
-            except (TypeError, ValueError):
-                return _error(400, 'bad_request', 'Invalid cheat id')
-            if not data.delete_pc_cheat(game_uuid, cheat_id):
-                return _error(404, 'not_found', 'Cheat not found')
-            return _ok({'removed': cheat_id})
     return _error(405, 'bad_request', 'Method not allowed')
 
 
