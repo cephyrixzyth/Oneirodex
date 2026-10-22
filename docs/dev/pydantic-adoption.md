@@ -369,6 +369,10 @@ Leave these until the contract can be preserved; do not force them.
 ### `routes_apis/patch_catalog.py`
 
 - `patch_catalog_search` — `q` / `game_uuid` are query arguments, not JSON.
+- `patch_catalog_attach` treats only `application/json` and
+  `application/*+json` as JSON media types, matching Flask validation;
+  `text/plain+json` is rejected as an absent JSON body. Evidence:
+  `.artifacts/parity-v1.1.8/patch-catalog-json-media-20261022.json`.
 
 ### `routes_apis/providers.py`
 

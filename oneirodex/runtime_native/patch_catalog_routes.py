@@ -103,7 +103,10 @@ def create_patch_catalog_router(
                         request.headers.get('content-type') or ''
                     ).split(';', 1)[0].strip().lower()
                     is_json_request = (
-                        content_type == 'application/json' or content_type.endswith('+json')
+                        content_type == 'application/json' or (
+                            content_type.startswith('application/')
+                            and content_type.endswith('+json')
+                        )
                     )
                     body = await _read_json(request) if is_json_request else {}
                     response = _attach(
