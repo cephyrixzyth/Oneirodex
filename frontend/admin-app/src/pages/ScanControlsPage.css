@@ -21,8 +21,20 @@
 
 .od-scan-controls {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--od-space-4);
-  max-width: 58rem;
+  max-width: none;
+}
+
+.od-scan-controls > h2,
+.od-scan-controls > p,
+.od-scan-controls__path,
+.od-scan-controls__schedule {
+  grid-column: 1 / -1;
+}
+
+.od-scan-controls > button {
+  justify-self: end;
 }
 
 .od-scan-controls__manual {
@@ -47,6 +59,7 @@
 
 .od-scan-controls__options {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--od-space-2);
   margin: 0;
   padding: var(--od-space-4);
@@ -56,6 +69,7 @@
 }
 
 .od-scan-controls__options legend {
+  grid-column: 1 / -1;
   padding-inline: var(--od-space-2);
   color: var(--od-text);
   font-weight: 650;
@@ -94,6 +108,21 @@
 }
 
 @media (max-width: 40rem) {
+  .od-scan-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .od-scan-controls > h2,
+  .od-scan-controls > p,
+  .od-scan-controls__path,
+  .od-scan-controls__schedule {
+    grid-column: auto;
+  }
+
+  .od-scan-controls > button {
+    justify-self: stretch;
+  }
+
   .od-scan-controls__links > * {
     flex: 1 1 auto;
   }
@@ -101,5 +130,9 @@
   .od-scan-controls__schedule > *,
   .od-scan-controls__interval > * {
     width: 100%;
+  }
+
+  .od-scan-controls__options {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
