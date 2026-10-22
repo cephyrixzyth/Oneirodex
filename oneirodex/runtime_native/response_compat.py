@@ -59,6 +59,41 @@ def flask_route_not_found_response(flask_app, request) -> Response:
     return flask_http_exception_response(flask_app, request, 404)
 
 
+def flask_auto_options_response(flask_app, request, *, route_app=None, routing_app=None) -> Response | None:
+    """Return Flask's generated OPTIONS response for a native route.
+
+    Flask automatically answers OPTIONS for every route rule unless that method
+    is explicitly implemented. FastAPI instead raises 405 when a path exists
+    without an OPTIONS handler, so translate only that unmatched-method case.
+    """
+    if str(getattr(request, 'method', '')).upper() != 'OPTIONS':
+        return None
+
+    matched_route = getattr(request, 'scope', {}).get('route')
+    matched_methods = {str(method).upper() for method in (getattr(matched_route, 'methods', ()) or ())}
+    if 'OPTIONS' in matched_methods:
+        return None
+
+    allowed = _legacy_auto_options_methods(request, routing_app)
+    if not allowed:
+        allowed = _native_allowed_methods(request, route_app=route_app)
+    if not allowed or 'OPTIONS' not in allowed:
+        return None
+
+    response = Response(
+        content=b'',
+        status_code=200,
+        headers={'Allow': ', '.join(allowed)},
+        media_type='text/html',
+    )
+    from oneirodex.utils.security_headers import security_header_values
+
+    config = getattr(flask_app, 'config', flask_app)
+    for key, value in security_header_values(config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
 def flask_http_exception_response(
     flask_app, request, status_code: int, *, route_app=None, routing_app=None,
     extra_headers=None,
@@ -135,6 +170,22 @@ def _legacy_allowed_methods(request, routing_app) -> list[str]:
     except Exception:
         return []
     return []
+
+
+def _legacy_auto_options_methods(request, routing_app) -> list[str]:
+    """Use Werkzeug's method list in the same order as Flask's OPTIONS reply."""
+    if routing_app is None:
+        return []
+    url_map = getattr(routing_app, 'url_map', None)
+    if url_map is None:
+        return []
+    adapter = url_map.bind(
+        str(getattr(getattr(request, 'url', None), 'netloc', '') or 'localhost'),
+    )
+    try:
+        return list(adapter.allowed_methods(request.url.path))
+    except Exception:
+        return []
 
 
 def _native_allowed_methods(request, *, route_app=None) -> list[str]:

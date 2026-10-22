@@ -226,6 +226,14 @@ def _install_native_api_error_handlers(native_app, config, logger, *, routing_ap
             from oneirodex.runtime_native.response_compat import flask_route_not_found_response
 
             return flask_route_not_found_response(config, request)
+        if status == 405 and request.method.upper() == 'OPTIONS':
+            from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+            response = flask_auto_options_response(
+                config, request, route_app=native_app, routing_app=routing_app,
+            )
+            if response is not None:
+                return response
         if status == 405:
             from oneirodex.runtime_native.response_compat import flask_http_exception_response
 

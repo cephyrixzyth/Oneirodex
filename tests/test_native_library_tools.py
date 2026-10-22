@@ -13,6 +13,7 @@ from oneirodex.runtime_native.library_tools import create_library_tools_router
 from oneirodex.runtime_native.library_tools import LibraryToolsData
 from oneirodex.runtime_native.library_tools_manual_identify import ManualIdentifyListData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from asgi import _install_native_api_error_handlers
 
 
 class FakeToolsData:
@@ -98,6 +99,8 @@ def runtime():
         (user for user in users.values() if identity == f'{user.id}:fp'), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    flask_app.add_url_rule('/api/options-mixed', endpoint='options_mixed',
+                           view_func=lambda: 'ok', methods=['GET', 'POST'])
     fake = FakeToolsData()
     app = FastAPI()
     app.include_router(create_library_tools_router(
@@ -106,6 +109,11 @@ def runtime():
         load_user_id=lambda identity: manager.user_callback(identity),
         login_manager=manager, data_access=fake,
     ))
+    app.add_api_route('/api/options-mixed', lambda: 'ok', methods=['GET', 'POST'])
+    app.state.legacy_options_allow = flask_app.test_client().options(
+        '/api/options-mixed'
+    ).headers['Allow']
+    _install_native_api_error_handlers(app, flask_app, flask_app.logger, routing_app=flask_app)
     cookies = {name: dump_session_cookie(
         {'_user_id': f'{user.id}:fp', '_fresh': True}, 'library-tools-test-secret'
     ) for name, user in users.items()}
@@ -151,6 +159,15 @@ def test_admin_read_routes_preserve_contracts_and_safe_paths(runtime):
     assert doctor.json()['count'] == 1
     assert ('walk', '/safe') in data.calls
     assert ('doctor', ['/safe'], '{title}', 8) in data.calls
+
+
+def test_automatic_options_preserves_flask_method_order(runtime):
+    app, _data, _cookies = runtime
+    response = _request(app, '/api/options-mixed', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == app.state.legacy_options_allow
+    assert response.content == b''
 
 
 def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtime):
