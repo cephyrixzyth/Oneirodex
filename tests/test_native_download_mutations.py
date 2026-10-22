@@ -298,6 +298,83 @@ def test_orphan_cleanup_failure_and_rollback_match_legacy_flask(monkeypatch):
     assert error_logs[-1] == 'native-error'
 
 
+@pytest.mark.parametrize('scenario', ['acl_denied', 'invalid_kind', 'missing_version'])
+def test_download_api_acl_and_version_errors_match_legacy_flask(scenario, monkeypatch):
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis import apis_bp
+    from oneirodex.utils.api_response import api_error
+    import oneirodex.routes_apis.download as legacy_routes
+
+    secret = 'download-api-error-parity-secret'
+    user = SimpleNamespace(
+        id=7, role='user', name='ParityUser', is_active=True, state=True,
+        is_authenticated=True,
+    )
+    game = SimpleNamespace(
+        uuid='12345678-1234-1234-1234-123456789abc', name='Fixture',
+    )
+    if scenario == 'acl_denied':
+        monkeypatch.setattr(
+            legacy_routes, '_downloadable_game',
+            lambda _uuid: (None, api_error('Access denied', code='forbidden')),
+        )
+        body = {'kind': 'base'}
+        legacy_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError('ACL refusal must precede version resolution'),
+        )
+        current_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError('ACL refusal must precede version resolution'),
+        )
+    elif scenario == 'invalid_kind':
+        monkeypatch.setattr(legacy_routes, '_downloadable_game', lambda _uuid: (game, None))
+        body = {'kind': 'invalid'}
+        legacy_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError('Invalid download kind'),
+        )
+        current_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError('Invalid download kind'),
+        )
+    else:
+        monkeypatch.setattr(legacy_routes, '_downloadable_game', lambda _uuid: (game, None))
+        body = {'kind': 'update', 'version_uuid': 'missing-version'}
+        legacy_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            LookupError('Version not found'),
+        )
+        current_resolver = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            LookupError('Version not found'),
+        )
+
+    monkeypatch.setattr(legacy_routes, 'resolve_version_file', legacy_resolver)
+    legacy_app = Flask(f'legacy-download-api-{scenario}')
+    legacy_app.config.update(
+        SECRET_KEY=secret, TESTING=True, WTF_CSRF_ENABLED=False,
+    )
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login.login'
+    manager.user_loader(lambda key: user if key == '7:fp' else None)
+    legacy_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    with legacy_client.session_transaction() as session:
+        session['_user_id'] = '7:fp'
+        session['_fresh'] = True
+
+    path = f'/api/downloads/games/{game.uuid}'
+    legacy = legacy_client.post(path, json=body, follow_redirects=False)
+    current_data = FakeDownloads()
+    current_data.can_access = lambda _user, _game: scenario != 'acl_denied'
+    current_data.resolve_version = current_resolver
+    current = make_client(data=current_data, role='user').post(
+        path, json=body, follow_redirects=False,
+    )
+
+    assert current.status_code == legacy.status_code
+    assert current.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert current.json() == legacy.get_json()
+    assert current_data.created is None
+
+
 def test_legacy_game_download_creates_request_and_redirects_to_downloads():
     data = FakeDownloads()
     response = make_client(data=data, role='user').post(
