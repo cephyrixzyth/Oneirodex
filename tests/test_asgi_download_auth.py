@@ -143,3 +143,29 @@ def test_zip_download_invalid_non_numeric_id_matches_legacy_pre_auth_gate(path):
     assert start['status'] == 400
     assert dict(start['headers'])[b'content-type'] == b'application/json'
     assert body['body'] == b'{"error": "Invalid download ID"}'
+
+
+def test_zip_download_numeric_prefix_with_suffix_reaches_legacy_auth_gate():
+    app = LazyASGIApp()
+
+    async def ready():
+        return None
+
+    async def anonymous(_scope):
+        return None
+
+    app._ensure_flask = ready
+    app._get_user_id = anonymous
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {'path': '/download_zip/1suffix', 'method': 'GET', 'headers': []}
+    asyncio.run(app._handle_download(scope, lambda: None, send))
+
+    start = next(message for message in sent if message['type'] == 'http.response.start')
+    body = next(message for message in sent if message['type'] == 'http.response.body')
+    assert start['status'] == 401
+    assert dict(start['headers'])[b'content-type'] == b'application/json'
+    assert body['body'] == b'{"error": "Unauthorized"}'
