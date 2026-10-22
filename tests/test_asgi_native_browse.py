@@ -8462,7 +8462,9 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
         in_progress=lambda: False,
         current_step=lambda: data.step,
         start=lambda: calls.append('start') or setattr(data, 'step', 1),
-        redirect_url=lambda: '/setup/smtp',
+        redirect_url=lambda: {
+            1: '/setup', 2: '/setup/smtp', 5: '/setup/integrations',
+        }[data.step],
     )
     monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
     flask_app, runtime = _runtime(monkeypatch)
@@ -8475,13 +8477,17 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
     data.step = 2
     unauthorized = _run(runtime, '/setup/smtp', cookie=_signed_session())
     wrong_step = _run(runtime, '/setup/igdb', cookie=_signed_session())
+    data.step = 5
+    stale_library = _run(runtime, '/setup/library')
 
     assert setup.status_code == 200 and calls == ['start']
     assert unauthorized.status_code == 302
     assert unauthorized.headers['location'] == '/login?next=/setup/smtp'
     assert unauthorized.headers['content-type'] == 'text/html; charset=utf-8'
     assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in unauthorized.text
-    assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup'
+    assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup/smtp'
+    assert stale_library.status_code == 302
+    assert stale_library.headers['location'] == '/setup/integrations'
 
 
 def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):

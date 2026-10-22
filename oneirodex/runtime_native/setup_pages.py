@@ -56,13 +56,6 @@ def create_setup_pages_router(
         '/setup/integrations': 5,
         '/setup/library': 6,
     }
-    wrong_step_messages = {
-        '/setup/smtp': 'Please complete the admin account setup first.',
-        '/setup/features': 'Please complete the previous setup steps first.',
-        '/setup/igdb': 'Please complete the previous setup steps first.',
-        '/setup/integrations': 'Please complete the previous setup steps first.',
-    }
-
     @router.api_route('/setup', methods=['GET', 'HEAD'])
     def setup_home(request: Request):
         return _serve(request, '/setup')
@@ -102,10 +95,14 @@ def create_setup_pages_router(
                     else:
                         response = flask_redirect_response('/setup', status_code=302)
                 elif step != expected_steps[page]:
-                    message = wrong_step_messages.get(page)
-                    if message:
-                        _flash(auth.session_data, 'warning', message)
-                    response = flask_redirect_response('/setup', status_code=302)
+                    # Flask's global setup guard sends requests for a stale
+                    # wizard page straight to the currently active step. Keep
+                    # this router's parity with that behavior instead of
+                    # bouncing through /setup (which adds a request and can
+                    # restart setup state on installations still on step 1).
+                    response = flask_redirect_response(
+                        data.redirect_url(), status_code=302,
+                    )
                 elif auth.user is None or _role(auth.user) != 'admin':
                     _flash(
                         auth.session_data, 'warning',
