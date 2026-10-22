@@ -572,12 +572,14 @@ def _setup_form_payload(path, form):
             scan_depth=first_form_value(form, 'scan_depth') or '1',
         )
 
+    target = path if path != '/setup/submit' else '/setup'
+    if step == 1 and body['password'] != body['confirm_password']:
+        return None, target, 'Passwords must match.'
+
     try:
         validated = SetupTransitionBody.model_validate(body).model_dump()
     except ValidationError:
-        target = '/setup' if path == '/setup/submit' else path
         return None, target, 'Please check the setup form and try again.'
-    target = path if path != '/setup/submit' else '/setup'
     return validated, target, None
 
 

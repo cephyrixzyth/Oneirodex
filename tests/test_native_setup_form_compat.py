@@ -14,7 +14,7 @@ def test_setup_password_mismatch_returns_to_setup_wizard():
 
     assert payload is None
     assert return_to == '/setup'
-    assert error == 'Please check the setup form and try again.'
+    assert error == 'Passwords must match.'
 
 
 def test_setup_step_validation_returns_to_its_wizard_route():
