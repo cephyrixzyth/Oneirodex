@@ -8141,6 +8141,10 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
         runtime, '/api/rtc/token', cookie=cookie, method='POST',
         json_body={},
     )
+    malformed_body = _run(
+        runtime, '/api/rtc/token', cookie=cookie, method='POST',
+        headers=headers, json_body=['household:lobby'],
+    )
 
     assert minted.status_code == 200
     assert minted.json() == {
@@ -8150,6 +8154,8 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     }
     assert denied.status_code == 403
     assert no_csrf.status_code == 400
+    assert malformed_body.status_code == 400
+    assert malformed_body.json()['error_code'] == 'bad_request'
     assert len([call for call in fake.calls if call[0] == 'mint']) == 1
 
     _flask_app._fake_user.role = 'child'
