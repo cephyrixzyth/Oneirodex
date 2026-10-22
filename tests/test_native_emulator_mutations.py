@@ -21,6 +21,7 @@ class FakeData:
         self.surface = 'retroarch'
         self.allowed = True
         self.fail_pc_cheat_delete = False
+        self.pc_cheat_rows = {'game-1': {42}}
         self.calls = []
         self.saves = []
 
@@ -89,7 +90,11 @@ class FakeData:
         self.calls.append(('delete_pc_cheat', game_uuid, cheat_id))
         if self.fail_pc_cheat_delete:
             raise RuntimeError('injected delete failure')
-        return game_uuid == 'game-1' and cheat_id == 42
+        rows = self.pc_cheat_rows.get(game_uuid, set())
+        if cheat_id not in rows:
+            return False
+        rows.remove(cheat_id)
+        return True
 
     def bios_overview(self, flask_app):
         self.calls.append(('bios_overview', flask_app.config.get('BIOS_IMPORT_SOURCE')))
@@ -361,6 +366,26 @@ def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
     assert response.json()['detail'] == {
         '__root__': 'Input should be a valid dictionary or instance of CreatePcCheatBody'
     }
+
+
+def test_pc_cheat_delete_success_then_repeat_returns_not_found(native):
+    _app, api, data, user = native
+    user.role = 'admin'
+    cookie, csrf = _cookie(_app, csrf=True)
+
+    deleted = _request(
+        api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
+    )
+    repeated = _request(
+        api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
+    )
+
+    assert deleted.status_code == 200
+    assert deleted.json() == {'ok': True, 'success': True, 'error': None, 'error_code': None, 'removed': 42}
+    assert repeated.status_code == 404
+    assert repeated.json()['error'] == 'Cheat not found'
+    assert data.pc_cheat_rows['game-1'] == set()
+    assert not any(call[0] == 'game' for call in data.calls)
 
 
 def test_pc_cheat_delete_uses_cheat_game_binding_without_game_lookup(native):
