@@ -61,14 +61,14 @@ def test_global_setup_gate_covers_native_pages_and_keeps_legacy_exemptions(monke
         lambda: '/setup/integrations',
     )
 
-    async def check(path, method='GET'):
+    async def check(path, method='GET', *, after_csrf=False):
         messages = []
 
         async def send(message):
             messages.append(message)
 
         matched = await runtime._send_legacy_setup_gate_if_required(
-            _scope(path, method), send,
+            _scope(path, method), send, after_csrf=after_csrf,
         )
         return matched, messages
 
@@ -125,14 +125,14 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
         lambda: '/setup/integrations',
     )
 
-    async def check(path, method='GET'):
+    async def check(path, method='GET', *, after_csrf=False):
         messages = []
 
         async def send(message):
             messages.append(message)
 
         matched = await runtime._send_legacy_setup_gate_if_required(
-            _scope(path, method), send,
+            _scope(path, method), send, after_csrf=after_csrf,
         )
         return matched, messages
 
@@ -155,6 +155,12 @@ def test_global_setup_gate_uses_explicit_native_runtime_routes(monkeypatch, tmp_
         assert messages == []
 
     matched, messages = asyncio.run(check('/admin/api/users', method='POST'))
+    assert matched is False
+    assert messages == []
+
+    matched, messages = asyncio.run(check(
+        '/admin/api/users', method='POST', after_csrf=True,
+    ))
     assert matched is True
     assert messages[0]['status'] == 302
 

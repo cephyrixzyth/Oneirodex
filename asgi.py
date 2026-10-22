@@ -3073,7 +3073,10 @@ class LazyASGIApp:
 
             csrf_error = (
                 empty_admin_mutation_csrf_error(scope, self._flask_app.config)
-                if native_route_matches(self._native_read_api_app, scope)
+                if (
+                    native_route_matches(self._native_read_api_app, scope)
+                    or native_route_matches(self._native_admin_pilot, scope)
+                )
                 else None
             )
             if (
@@ -3121,6 +3124,13 @@ class LazyASGIApp:
                     )
                 response.headers.setdefault('Vary', 'Cookie')
                 await response(scope, receive, send)
+                return
+            if await self._send_legacy_setup_gate_if_required(
+                scope, send, after_csrf=True,
+            ):
+                close_replay = getattr(receive, 'close', None)
+                if close_replay is not None:
+                    close_replay()
                 return
             close_replay = getattr(receive, 'close', None)
             if close_replay is not None:
@@ -4257,7 +4267,9 @@ class LazyASGIApp:
             'more_body': False,
         })
 
-    async def _send_legacy_setup_gate_if_required(self, scope, send) -> bool:
+    async def _send_legacy_setup_gate_if_required(
+        self, scope, send, *, after_csrf=False,
+    ) -> bool:
         """Apply Flask's before-request setup gate before native dispatch."""
         path = scope.get('path', '/')
         method = str(scope.get('method', 'GET')).upper()
@@ -4270,12 +4282,21 @@ class LazyASGIApp:
             # Let native form handlers validate CSRF first, then apply the
             # same setup redirect before doing any form action.
             return False
+        is_admin_path = path == '/admin' or path.startswith('/admin/')
+        if (
+            is_admin_path
+            and method in {'POST', 'PUT', 'PATCH', 'DELETE'}
+            and not after_csrf
+        ):
+            # Flask-WTF rejects an unsafe admin request before the setup hook.
+            # Let the ASGI preflight preserve that order, then call this gate
+            # again with after_csrf=True before dispatching any admin action.
+            return False
         if (
             not (
                 path == '/register'
                 or path == '/scan_management'
-                or path == '/admin'
-                or path.startswith('/admin/')
+                or is_admin_path
                 or path.startswith('/admin/api/')
                 or is_auth_page
             )
