@@ -94,6 +94,9 @@ Thin-client tokens (browse / social) still work.
 
 Postgres holds accounts, chat, playtime, and the catalog. Game files live on the library mounts.
 Deleting a user cascades their progress, tokens, and chat authorship per schema `ON DELETE`.
+Deleting a game removes its play sessions and per-game progress; game requests, owned-title
+matches, and linked game-server records remain with their game reference cleared where the
+schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
 
 Admin → System danger-zone reset can wipe catalog / libraries / users / settings in-app; it **never

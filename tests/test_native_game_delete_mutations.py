@@ -425,6 +425,14 @@ def test_game_image_adapter_restores_file_when_database_commit_fails(tmp_path):
     assert list(root.iterdir()) == [image_path]
 
 
+def test_play_sessions_follow_game_database_delete_cascade():
+    from oneirodex.models import Game
+    from sqlalchemy.orm import configure_mappers
+
+    configure_mappers()
+    assert Game.play_sessions.property.passive_deletes == 'all'
+
+
 def _request_json(runtime, path, body, *, csrf=None, cookie=None):
     async def send():
         async with httpx.AsyncClient(

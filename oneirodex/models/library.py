@@ -210,7 +210,14 @@ class PlaySession(db.Model):
     status = db.Column(db.String(16), default='active', nullable=False)  # active | ended | orphaned
 
     user = db.relationship('User', backref=db.backref('play_sessions', lazy='dynamic'))
-    game = db.relationship('Game', backref=db.backref('play_sessions', lazy='dynamic'))
+    game = db.relationship(
+        'Game',
+        backref=db.backref(
+            'play_sessions',
+            lazy='dynamic',
+            passive_deletes='all',
+        ),
+    )
 
     def to_dict(self):
         return {
