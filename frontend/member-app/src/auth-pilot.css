@@ -54,6 +54,12 @@
   text-decoration: none;
 }
 
+.auth-pilot__brand-mark {
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
 .auth-pilot__title {
   margin: 0;
   color: var(--od-text);
@@ -242,6 +248,31 @@
 .auth-pilot__notice {
   border: 1px solid var(--od-success);
   color: var(--od-success);
+}
+
+.auth-pilot__server-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--od-space-3);
+  margin: 0;
+  padding: var(--od-space-3);
+  border: 1px solid color-mix(in srgb, var(--od-info) 45%, transparent);
+  border-radius: var(--od-radius-sm);
+  background: color-mix(in srgb, var(--od-info) 10%, var(--od-surface));
+  color: var(--od-text);
+  line-height: var(--od-line-base);
+}
+
+.auth-pilot__server-notice-dismiss {
+  flex: 0 0 auto;
+  padding: 0 var(--od-space-1);
+  border: 0;
+  background: transparent;
+  color: var(--od-text-muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
 }
 
 @media (max-width: 36rem) {

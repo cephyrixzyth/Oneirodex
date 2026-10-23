@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
-from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
@@ -163,6 +162,8 @@ def create_auth_pages_router(
 
 
 def _shell_response(app, session_data):
+    from oneirodex.utils.auth_notices import attach_auth_notices
+
     path = Path(app.static_folder or '') / 'dist' / 'member-auth' / 'auth.html'
     try:
         shell = path.read_text(encoding='utf-8')
@@ -170,19 +171,7 @@ def _shell_response(app, session_data):
         return Response(status_code=503)
     if shell.count('id="member-auth-root"') != 1 or '</body>' not in shell:
         return Response(status_code=503)
-    notices = []
-    for category, message in session_data.pop('_flashes', []) or []:
-        role = 'alert' if category in {'error', 'danger'} else 'status'
-        notices.append(
-            '<p class="auth-pilot__message" role="' + role + '">'
-            + escape(str(message), quote=True) + '</p>'
-        )
-    if notices:
-        shell = shell.replace(
-            '<div id="member-auth-root"></div>',
-            '<div class="auth-pilot__notices" aria-label="Messages">'
-            + ''.join(notices) + '</div><div id="member-auth-root"></div>', 1,
-        )
+    shell = attach_auth_notices(shell, session_data.pop('_flashes', []) or [])
     response = Response(content=shell, media_type='text/html')
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'

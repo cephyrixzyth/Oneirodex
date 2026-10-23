@@ -56,6 +56,25 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   expect(navigate).toHaveBeenCalledWith('/library')
 })
 
+test('server login notices follow account actions and can be dismissed', async () => {
+  const mount = document.createElement('div')
+  mount.id = 'member-auth-root'
+  mount.dataset.authNotices = JSON.stringify([
+    { role: 'status', message: 'Please log in to access this page.' },
+  ])
+  document.body.appendChild(mount)
+
+  render(<AuthApp />, { container: mount })
+
+  const message = await screen.findByText('Please log in to access this page.')
+  const accountActions = screen.getByRole('link', { name: 'Forgot password?' })
+  expect(
+    Boolean(accountActions.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING),
+  ).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
+})
+
 test('empty login credentials show accessible required-field feedback without an API request', async () => {
   render(<AuthApp />)
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))

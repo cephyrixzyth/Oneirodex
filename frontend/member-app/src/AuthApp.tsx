@@ -9,6 +9,7 @@ import {
   type RegistrationResult,
   errorFromResponse,
 } from '@oneirodex/ui'
+import { AuthServerNotices } from './AuthServerNotices'
 import { SetupWizard } from './SetupWizard'
 
 interface RuntimeBootstrap {
@@ -354,10 +355,17 @@ export function AuthApp({
         Skip to account form
       </a>
       <section className="auth-pilot__card" id="auth-content" aria-labelledby="auth-brand">
-        <a className="auth-pilot__brand" href="/" id="auth-brand">
-          Oneirodex
+        <a className="auth-pilot__brand" href="/" id="auth-brand" aria-label="Oneirodex">
+          <img
+            className="auth-pilot__brand-mark"
+            src="/static/newstyle/oneirodex_mark.svg"
+            alt=""
+            width="56"
+            height="56"
+          />
         </a>
         {content}
+        <AuthServerNotices />
         {error ? (
           <p className="auth-pilot__error" role="alert">
             {error}
