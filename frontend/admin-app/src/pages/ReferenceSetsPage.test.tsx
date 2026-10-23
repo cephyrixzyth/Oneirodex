@@ -161,6 +161,10 @@ test('rehash keeps progress and errors beside its action', async () => {
   fireEvent.click(rehash)
   expect(await screen.findByRole('status')).toHaveTextContent('Disk read denied')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+  vi.mocked(postJson).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+  fireEvent.click(rehash)
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Failed to fetch'))
 })
 
 test('repair dry run renders all four buckets and totals/truncation; pending work locks controls', async () => {
