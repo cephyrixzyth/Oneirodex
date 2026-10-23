@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -73,9 +74,11 @@ def native_client():
     admin = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True)
     data = FakeGameDeleteData()
     data.admin = admin
+    tokens = {}
+    data.tokens = tokens
     runtime = FastAPI()
     runtime.include_router(create_game_delete_mutation_router(
-        flask_app, find_user=lambda _id: admin, find_token=lambda _prefix: None,
+        flask_app, find_user=lambda _id: admin, find_token=lambda prefix: tokens.get(prefix),
         commit_token_touch=lambda _token: None,
         load_user_id=lambda user_id: admin if user_id == '7:fp' else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
@@ -270,6 +273,50 @@ def test_native_full_game_delete_redirects_regular_user_form_to_login(native_cli
     set_cookie = response.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
     saved_session = load_session_cookie(set_cookie, 'game-delete-secret', max_age=3600)
     assert saved_session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
+    assert data.calls == []
+
+
+@pytest.mark.parametrize(
+    ('role', 'scopes', 'expected_status', 'expected_message'),
+    [
+        ('admin', ['admin'], 404, 'Game not found.'),
+        ('admin', ['read:library'], 403, 'This token does not have the admin scope'),
+        ('user', ['admin'], 403, 'Admin required'),
+    ],
+)
+def test_native_full_game_delete_enforces_bearer_role_and_admin_scope(
+    native_client, role, scopes, expected_status, expected_message,
+):
+    runtime, data, csrf, _cookie = native_client
+    data.admin.role = role
+    data.missing = True
+    secret = 'scoped-delete-test-secret'
+    data.tokens['delete-test'] = SimpleNamespace(
+        user_id=7,
+        token_hash=hashlib.sha256(secret.encode()).hexdigest(),
+        scopes=scopes,
+        revoked_at=None,
+        expires_at=None,
+        is_expired=lambda _now: False,
+        last_used_at=None,
+    )
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_full_game', json={'game_uuid': 'game-1'},
+                headers={
+                    'Authorization': 'Bearer gt_delete-test_' + secret,
+                    'X-CSRFToken': csrf,
+                },
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == expected_status
+    assert response.json()['message'] == expected_message
     assert data.calls == []
 
 
