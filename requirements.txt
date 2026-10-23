@@ -22,7 +22,7 @@ pydantic==2.13.5
 pydantic-core==2.46.5
 
 argon2_cffi==25.1.0
-pillow==12.3.0
+pillow==13.0.0
 WTForms_SQLAlchemy==0.4.2
 requests==2.34.2
 psycopg2_binary==2.9.13
