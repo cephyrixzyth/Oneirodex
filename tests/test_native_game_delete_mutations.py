@@ -217,6 +217,29 @@ def test_native_full_game_delete_accepts_classic_form_submission(native_client):
     assert any(call[0] == 'game-1' for call in data.calls)
 
 
+def test_native_full_game_delete_treats_malformed_json_as_missing_body(native_client):
+    runtime, data, csrf, cookie = native_client
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_full_game', content=b'{not-json',
+                headers={
+                    'Cookie': f'session={cookie}',
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf,
+                },
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {'game_uuid': 'Field required'}
+    assert data.calls == []
+
+
 def test_native_image_delete_preserves_validation_scan_guard_and_cover_fallback(native_client):
     runtime, data, csrf, cookie = native_client
     data.running = True
