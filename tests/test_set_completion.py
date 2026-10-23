@@ -373,3 +373,43 @@ def test_hash_rom_file_and_rehash_api(app, client, db_session, admin, nes_lib, t
     assert game.file_crc
     assert game.file_md5
     assert game.file_sha1
+
+
+def test_rehash_api_counts_permission_denied_rom_as_skipped(
+    app, client, db_session, admin, nes_lib, tmp_path, monkeypatch,
+):
+    from pathlib import Path
+
+    rom = tmp_path / 'unreadable.nes'
+    rom.write_bytes(b'not readable by the rehash worker')
+    game = Game(
+        uuid=str(uuid4()),
+        name='Unreadable ROM',
+        library_uuid=nes_lib.uuid,
+        full_disk_path=str(rom),
+    )
+    db_session.add(game)
+    db_session.commit()
+
+    original_open = Path.open
+
+    def deny_rom_open(path, *args, **kwargs):
+        if path == rom:
+            raise PermissionError('synthetic unreadable ROM')
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', deny_rom_open)
+    with client:
+        _login(client, app, admin)
+        response = client.post(
+            '/api/reference-sets/rehash', json={'library_platform': 'NES'},
+        )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.get_json() == {
+        'platform': 'NES', 'considered': 1, 'hashed': 0, 'skipped': 1,
+    }
+    db_session.refresh(game)
+    assert game.file_crc is None
+    assert game.file_md5 is None
+    assert game.file_sha1 is None
