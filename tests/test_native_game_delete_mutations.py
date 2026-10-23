@@ -72,6 +72,7 @@ def native_client():
     )
     admin = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True)
     data = FakeGameDeleteData()
+    data.admin = admin
     runtime = FastAPI()
     runtime.include_router(create_game_delete_mutation_router(
         flask_app, find_user=lambda _id: admin, find_token=lambda _prefix: None,
@@ -241,6 +242,34 @@ def test_native_full_game_delete_renders_classic_form_csrf_errors_as_html(native
     assert invalid.headers['content-type'].startswith('text/html')
     assert '<p>The CSRF token is missing.</p>' in missing.text
     assert '<p>The CSRF token is invalid.</p>' in invalid.text
+    assert data.calls == []
+
+
+def test_native_full_game_delete_redirects_regular_user_form_to_login(native_client):
+    runtime, data, csrf, cookie = native_client
+    data.admin.role = 'user'
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_full_game',
+                data={'csrf_token': csrf, 'game_uuid': 'game-1'},
+                headers={'Cookie': f'session={cookie}'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert response.headers['content-type'].startswith('text/html')
+    assert 'session=' in response.headers['set-cookie']
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    set_cookie = response.headers['set-cookie'].split(';', 1)[0].split('=', 1)[1]
+    saved_session = load_session_cookie(set_cookie, 'game-delete-secret', max_age=3600)
+    assert saved_session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
     assert data.calls == []
 
 

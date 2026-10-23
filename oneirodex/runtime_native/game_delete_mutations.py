@@ -242,7 +242,20 @@ async def _handle(
 
             role = normalize_role(getattr(auth.user, 'role', None) or '')
             if role != 'admin':
-                response = _error('Admin required', 'forbidden', 403)
+                if (
+                    full_disk
+                    and isinstance(full_disk_payload, dict)
+                    and '__form__' in full_disk_payload
+                ):
+                    from .response_compat import flask_redirect_response
+
+                    flashes = list(auth.session_data.get('_flashes') or [])
+                    flashes.append(('danger', 'You must be an admin to access this page.'))
+                    auth.session_data['_flashes'] = flashes
+                    response = flask_redirect_response('/login')
+                    _set_session_cookie(response, app, auth)
+                else:
+                    response = _error('Admin required', 'forbidden', 403)
             elif auth.token is not None and not auth.has_scope('admin'):
                 response = _error('This token does not have the admin scope', 'forbidden', 403)
             elif folder_request:
