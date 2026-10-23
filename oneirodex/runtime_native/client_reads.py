@@ -521,9 +521,7 @@ async def _lifecycle_body(request: Request):
     except (TypeError, ValueError):
         value = {}
     try:
-        return ClientLifecycleBody.model_validate(
-            value if isinstance(value, dict) else {}
-        ), None
+        return ClientLifecycleBody.model_validate(value), None
     except ValidationError as exc:
         flask_response, status = api_error(
             'Invalid request.', code='unprocessable',

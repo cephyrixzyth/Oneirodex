@@ -213,6 +213,20 @@ def test_lifecycle_validation_runs_before_bearer_only_denial():
     assert response.json()['error'] == 'Invalid request.'
 
 
+def test_lifecycle_scalar_body_preserves_root_validation_error():
+    client = make_client()
+    response = client.post(
+        '/api/client/lifecycle',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}'},
+        json=['bad'],
+    )
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of ClientLifecycleBody'
+    }
+    assert client.data.lifecycle_calls == []
+
+
 def test_head_lifecycle_has_empty_body_and_security_headers():
     client = make_client(scopes=('read:library',))
     response = client.head(
