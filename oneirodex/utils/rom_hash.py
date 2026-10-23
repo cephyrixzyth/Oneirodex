@@ -38,6 +38,18 @@ def resolve_hashable_file(path: str | Path) -> Path | None:
     if root is None:
         return None
     try:
+        # Reject a path that reaches the file through a symlinked directory.
+        # Checking only the final file misses e.g. ``library/alias/game.nes``
+        # when ``alias`` points outside the library: the file itself is not a
+        # symlink and resolving against its lexical parent makes the escape
+        # look contained.
+        absolute = Path(os.path.abspath(root))
+        for component in (absolute, *absolute.parents):
+            if component.is_symlink():
+                return None
+            is_junction = getattr(component, 'is_junction', None)
+            if callable(is_junction) and is_junction():
+                return None
         if root.is_file():
             # A Game may point directly at a planted symlink, not only at a
             # directory containing one. Keep the direct-file case under the

@@ -88,6 +88,21 @@ test('the open tile menu exposes its native actions in keyboard tab order', asyn
   expect(screen.getByRole('button', { name: 'Download' })).toHaveFocus()
 })
 
+test('the separate Preview action follows the menu in tab order and opens by keyboard', async () => {
+  const user = userEvent.setup()
+  renderRouted(<GameCard game={baseGame} showPlayStatus={false} isAdmin={false} />)
+  const opener = screen.getByRole('button', { name: /open actions for archery kings vr/i })
+
+  opener.focus()
+  await user.tab()
+
+  const preview = screen.getByRole('button', { name: 'Preview Archery Kings VR' })
+  expect(preview).toHaveFocus()
+
+  await user.keyboard('{Enter}')
+  expect(screen.getByRole('dialog', { name: /preview of archery kings vr/i })).toBeInTheDocument()
+})
+
 test('outside click closes a tile menu without taking focus from the clicked control', async () => {
   const user = userEvent.setup()
   renderRouted(

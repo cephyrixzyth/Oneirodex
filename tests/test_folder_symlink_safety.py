@@ -221,6 +221,43 @@ def test_direct_file_hashing_ignores_a_symlinked_game_path(game_dir, secret):
     assert hash_rom_file(linked_game) is None
 
 
+def test_direct_file_hashing_skips_a_permission_denied_rom(game_dir, monkeypatch):
+    rom = game_dir / 'unreadable.nes'
+    rom.write_bytes(GAME)
+    original_open = Path.open
+
+    def deny_rom_open(path, *args, **kwargs):
+        if path == rom:
+            raise PermissionError('synthetic unreadable ROM')
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', deny_rom_open)
+    assert hash_rom_file(rom) is None
+
+
+def test_direct_file_hashing_ignores_a_symlinked_parent_directory(game_dir, tmp_path):
+    outside = tmp_path / 'outside-library'
+    outside.mkdir()
+    (outside / 'game.nes').write_bytes(SECRET)
+    linked_parent = game_dir / 'linked-parent'
+    _link(linked_parent, outside, directory=True)
+    linked_game = linked_parent / 'game.nes'
+
+    assert resolve_hashable_file(linked_game) is None
+    assert hash_rom_file(linked_game) is None
+
+
+def test_folder_hashing_ignores_a_symlinked_root_directory(tmp_path):
+    outside = tmp_path / 'outside-library'
+    outside.mkdir()
+    (outside / 'game.nes').write_bytes(GAME)
+    linked_root = tmp_path / 'linked-game'
+    _link(linked_root, outside, directory=True)
+
+    assert resolve_hashable_file(linked_root) is None
+    assert hash_rom_file(linked_root) is None
+
+
 def test_folder_hashing_still_finds_the_one_real_rom(game_dir, secret):
     (game_dir / 'game.nes').write_bytes(GAME)
     _link(game_dir / 'leak.bin', secret)
