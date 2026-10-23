@@ -36,6 +36,14 @@ async function selectFile() {
   return input
 }
 
+test('empty upload keeps the action available and relies on the required file control', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  render(<ReferenceSetsPage />)
+  const input = await screen.findByLabelText('DAT file')
+  expect(input).toBeRequired()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
+})
+
 test('upload sends multipart with shared CSRF and installs row', async () => {
   vi.mocked(getJson).mockResolvedValue(state)
   const fetcher = vi
@@ -53,7 +61,7 @@ test('upload sends multipart with shared CSRF and installs row', async () => {
   expect(init.body.get('library_platform')).toBe('NES')
   expect(init.body.get('replace')).toBeNull()
   expect(screen.getByRole('region', { name: 'Installed reference sets table' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
 })
 
 test('over-limit DAT uses the legacy message and is rejected before upload', async () => {

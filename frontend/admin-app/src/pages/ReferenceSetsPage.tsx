@@ -309,7 +309,7 @@ export function ReferenceSetsPage() {
                 after confirmation.
               </p>
             </fieldset>
-            <Button type="submit" variant="primary" disabled={disabled || !file || !platform}>
+            <Button type="submit" variant="primary" disabled={disabled || !platform}>
               Upload / replace
             </Button>
           </form>
