@@ -177,6 +177,10 @@ def test_native_full_game_delete_checks_path_before_fake_disk_and_db_effects(nat
     [
         ({}, {'game_uuid': 'Field required'}),
         ([], {'__root__': 'Input should be a valid dictionary or instance of DeleteFullGameBody'}),
+        (None, {'game_uuid': 'Field required'}),
+        (True, {'__root__': 'Input should be a valid dictionary or instance of DeleteFullGameBody'}),
+        (1, {'__root__': 'Input should be a valid dictionary or instance of DeleteFullGameBody'}),
+        ('invalid', {'__root__': 'Input should be a valid dictionary or instance of DeleteFullGameBody'}),
     ],
 )
 def test_native_full_game_delete_preserves_legacy_non_object_validation_detail(
