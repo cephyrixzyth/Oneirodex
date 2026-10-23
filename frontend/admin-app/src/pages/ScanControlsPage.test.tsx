@@ -99,10 +99,27 @@ test('keeps automatic scan and manual identification together on the scan manage
   expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Scan jobs' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
+    'href',
+    '/admin/scan-jobs',
+  )
+})
+
+test.each([
+  ['/scan_management?active_tab=auto', 'Scans · Oneirodex Admin'],
+  ['/scan_management?active_tab=manual', 'Manual scan · Oneirodex Admin'],
+])('uses the legacy browser title for %s', async (path, title) => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries' ? [] : { roots: [] },
+  )
+  renderPage(path)
+  await waitFor(() => expect(document.title).toBe(title))
 })
 
 test('lists manual identify candidates without starting a scan and links to the native identify form', async () => {
   vi.mocked(getJson).mockImplementation(async (url) => {
+    if (url === '/api/admin/scan/manual-identify/session-preview') return { games: [] }
     if (url === '/api/get_libraries')
       return [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
     if (url === '/api/library_roots')
@@ -124,7 +141,7 @@ test('lists manual identify candidates without starting a scan and links to the 
   const identify = await screen.findByRole('link', { name: 'Identify' })
   expect(identify).toHaveAttribute(
     'href',
-    '/add_game_manual?full_disk_path=%2Fgames%2FMetroid&library_uuid=lib-1',
+    '/add_game_manual?full_disk_path=%2Fgames%2FMetroid&library_uuid=lib-1&name=Metroid',
   )
   expect(postJson).toHaveBeenCalledWith(
     '/api/library_tools/manual_identify/list',
@@ -141,22 +158,49 @@ test('lists manual identify candidates without starting a scan and links to the 
   expect(screen.queryByRole('link', { name: 'Identify' })).not.toBeInTheDocument()
 })
 
+test('restores candidates from the legacy manual-folder session after its redirect', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    if (url === '/api/admin/scan/manual-identify/session-preview')
+      return {
+        games: [
+          { name: 'Parity Sample Game', full_path: '/storage/ParityRoot/Parity Sample Game' },
+        ],
+        library_uuid: 'lib-legacy',
+      }
+    if (url === '/api/get_libraries')
+      return [{ uuid: 'lib-legacy', name: 'Parity Library', last_scan_folder: '' }]
+    if (url === '/api/library_roots') return { roots: [] }
+    throw new Error(`Unexpected request: ${url}`)
+  })
+  renderPage('/scan_management?active_tab=manual')
+
+  const identify = await screen.findByRole('link', { name: 'Identify' })
+  expect(identify).toHaveAttribute(
+    'href',
+    '/add_game_manual?full_disk_path=%2Fstorage%2FParityRoot%2FParity+Sample+Game&library_uuid=lib-legacy&name=Parity+Sample+Game',
+  )
+  expect(screen.getByText('Parity Sample Game')).toBeInTheDocument()
+  expect(scan).not.toHaveBeenCalled()
+})
+
 test('shows a rejected manual folder as an accessible error without starting a scan', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
-    url === '/api/get_libraries'
-      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
-      : {
-          roots: [
-            {
-              id: 'games',
-              label: 'Games',
-              path: '/games',
-              default: true,
-              exists: true,
-              read: true,
-            },
-          ],
-        },
+    url === '/api/admin/scan/manual-identify/session-preview'
+      ? { games: [] }
+      : url === '/api/get_libraries'
+        ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+        : {
+            roots: [
+              {
+                id: 'games',
+                label: 'Games',
+                path: '/games',
+                default: true,
+                exists: true,
+                read: true,
+              },
+            ],
+          },
   )
   vi.mocked(postJson).mockRejectedValue(
     new Error('The selected folder does not exist or cannot be read'),
@@ -261,7 +305,7 @@ test('restores the selected library from scan-management deep links', async () =
   await waitFor(() => expect(library).toHaveValue('lib-2'))
 })
 
-test('manual deep link focuses identification and hides automatic scan actions', async () => {
+test('manual deep link keeps automatic scan actions visible and focuses identification', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'
       ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
@@ -343,6 +387,6 @@ test('confirms linking a listed folder to an existing game before posting', asyn
       library_uuid: 'lib-1',
     }),
   )
-  expect(await screen.findByRole('status')).toHaveTextContent('Linked folder to Metroid Prime.')
+  expect(await screen.findByText('Linked folder to Metroid Prime.')).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Identify' })).not.toBeInTheDocument()
 })

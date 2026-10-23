@@ -80,7 +80,6 @@ const CASES = [
   ['/scan_management?active_tab=auto', 'Scan management'],
   ['/scan_management?active_tab=manual', 'Scan management'],
   ['/scan_manual_folder', 'Scan management'],
-  ['/scan_management?active_tab=jobs', 'Scan jobs'],
   ['/scan_management?active_tab=unmatched', 'Unmatched folders'],
   ['/scan_management?active_tab=scan_filters', 'Game scanning filters'],
   ['/scan_management?active_tab=file_extensions', 'File Extensions'],
@@ -102,6 +101,7 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan jobs', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.queryByText('Dupe glance')).toBeNull()
@@ -112,9 +112,28 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan jobs', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
     expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
+  })
+
+  test('scan jobs deep link opens the combined scan workspace at its jobs section', async () => {
+    mountAt('/scan_management?active_tab=jobs')
+    expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Scan jobs', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
+      'href',
+      '/admin/scan-jobs',
+    )
+  })
+
+  test('/admin/scan-jobs keeps the full-history jobs page available', async () => {
+    mountAt('/admin/scan-jobs')
+    expect(await screen.findByRole('heading', { name: 'Scan jobs', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Automatic scan' })).not.toBeInTheDocument()
   })
 
   test('/admin/library/add opens the create form directly', () => {

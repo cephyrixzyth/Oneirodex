@@ -4,12 +4,13 @@ import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useScanControls, type Schedule } from './useScanControls'
+import { ScansPage } from './ScansPage'
 import './ScanControlsPage.css'
 
 export function ScanControlsPage() {
-  const { hash } = useLocation()
+  const { hash, search } = useLocation()
+  const activeTab = new URLSearchParams(search).get('active_tab')
   const {
-    manualMode,
     libraries,
     roots,
     libraryUuid,
@@ -86,22 +87,41 @@ export function ScanControlsPage() {
     browseParts,
   } = useScanControls()
   useEffect(() => {
-    if (hash !== '#manual-identify') return
-    const target = document.getElementById('manual-identify')
+    const sectionId =
+      hash.slice(1) ||
+      (activeTab === 'manual'
+        ? 'manual-identify'
+        : activeTab === 'jobs'
+          ? 'scan-jobs'
+          : '')
+    if (!['automatic-scan', 'manual-identify', 'scan-jobs'].includes(sectionId)) return
+    const target = document.getElementById(sectionId)
     if (!target) return
 
-    target.scrollIntoView({
-      block: 'start',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    const frame = window.requestAnimationFrame(() => {
+      target.scrollIntoView?.({
+        block: 'start',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      })
+      target.focus({ preventScroll: true })
     })
-    target.focus({ preventScroll: true })
-  }, [hash])
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeTab, hash])
 
   return (
     <Page
-      className={`od-scan-controls-page${manualMode ? ' is-manual' : ''}`}
+      className="od-scan-controls-page"
       title="Scan management"
-      lede="Configure automatic scans and identify games manually from one page. Choose a library and scan location, then use the action you need."
+      documentTitle={
+        activeTab === 'manual'
+          ? 'Manual scan'
+          : activeTab === 'jobs'
+            ? 'Scan Jobs'
+            : activeTab === 'auto'
+              ? 'Scans'
+              : undefined
+      }
+      lede="Start or schedule an automatic scan, identify games manually, and review scan jobs on this page."
     >
       <PageStatus
         loading={loading}
@@ -113,7 +133,7 @@ export function ScanControlsPage() {
           Retry loading scan controls
         </Button>
       ) : null}
-      <form className="od-admin-panel od-scan-controls" onSubmit={submit}>
+      <form id="automatic-scan" className="od-admin-panel od-scan-controls" onSubmit={submit}>
         <h2>Automatic scan</h2>
         <p className="od-admin-lede">
           Start a scan now or set a repeat schedule for this library and location.
@@ -352,6 +372,7 @@ export function ScanControlsPage() {
                   const params = new URLSearchParams({
                     full_disk_path: row.full_path,
                     library_uuid: libraryUuid,
+                    name: row.name,
                   })
                   return (
                     <tr key={row.full_path}>
@@ -472,6 +493,7 @@ export function ScanControlsPage() {
           <PageStatus announcement="status">{linkStatus}</PageStatus>
         ) : null}
       </section>
+      <ScansPage embedded />
       {browseOpen ? (
         <Modal
           open

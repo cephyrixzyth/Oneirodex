@@ -89,6 +89,49 @@ describe('ScansPage queued jobs', () => {
     expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
   })
 
+  test('embedded jobs panel is capped at the legacy 25 rows and links to full history', async () => {
+    const jobs = Array.from({ length: 27 }, (_, index) => ({
+      id: `job-${index + 1}`,
+      library_name: `Library ${index + 1}`,
+      status: 'Completed',
+      scan_folder: `/storage/${index + 1}`,
+    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => ({
+        ok: String(url).includes('/api/scan_jobs_status'),
+        status: String(url).includes('/api/scan_jobs_status') ? 200 : 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(jobs),
+        json: async () => jobs,
+      })),
+    )
+
+    render(
+      <MemoryRouter>
+        <ScansPage embedded />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Library 1')).toBeInTheDocument()
+    expect(screen.getByText('Showing 25 of 27 matching scan jobs')).toBeInTheDocument()
+    expect(screen.queryByText('Library 26')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
+      'href',
+      '/admin/scan-jobs',
+    )
+  })
+
+  test('uses the legacy Scan Jobs browser title', async () => {
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(document.title).toBe('Scan Jobs · Oneirodex Admin'))
+  })
+
   test('cancels a queued scan and refreshes the job list', async () => {
     const user = userEvent.setup()
     let jobs = [

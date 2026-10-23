@@ -55,13 +55,17 @@ export function SectionTopNav() {
           : ''
   if (['auto', 'manual', 'jobs'].includes(scanView)) {
     const scanPages = [
-      { id: 'auto', href: '/scan_management?active_tab=auto', label: 'Scanning' },
+      {
+        id: 'auto',
+        href: '/scan_management?active_tab=auto#automatic-scan',
+        label: 'Scanning',
+      },
       {
         id: 'manual',
         href: '/scan_management?active_tab=manual#manual-identify',
         label: 'Manual identify',
       },
-      { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
+      { id: 'jobs', href: '/scan_management?active_tab=jobs#scan-jobs', label: 'Scan jobs' },
     ]
     return (
       <AdminPageActions label="Scan pages">

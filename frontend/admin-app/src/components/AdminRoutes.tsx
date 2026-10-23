@@ -119,7 +119,7 @@ function ScanManagementRoute() {
   const location = useLocation()
   const { search } = location
   const tab = new URLSearchParams(search).get('active_tab') || 'auto'
-  if (tab === 'jobs') return <ScansPage />
+  if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />
   if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />
   if (tab === 'unmatched') return <ScanUnmatchedPage />
   if (tab === 'scan_filters') return <ScanFiltersPage />
@@ -171,7 +171,7 @@ export function AdminRoutes() {
       {/* "Libraries & scans" — the merged nav item (UX-C2). Every legacy path
           the old resolver folded onto 'libraries' renders LibrariesPage. */}
       <Route path="/libraries" element={<NativeLibrariesPage />} />
-      <Route path="/admin/library/add" element={<NativeLibrariesPage />} />
+      <Route path="/admin/library/add" element={<NativeLibraryAddPage />} />
       <Route path="/admin/library/edit/:libraryUuid" element={<LibraryEditorPage />} />
       <Route path="/libraries/*" element={<LibrariesPage />} />
       <Route path="/admin/library/*" element={<LibrariesPage />} />

@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { PageStatus, Button, confirmAction, errorFromResponse } from '@oneirodex/ui'
 import { csrfHeaders, getJson } from '../api/adminApi'
 import { DataTable } from '../components/DataTable'
@@ -19,7 +20,7 @@ import { useVisibilityPoll } from '../hooks/useVisibilityPoll'
 import { errorText } from '../utils/errorText'
 import './ScansPage.css'
 
-export function ScansPage() {
+export function ScansPage({ embedded = false }: { embedded?: boolean }) {
   const [status, setStatus] = useState<ScanJobsPayload>(null)
   const [error, setError] = useState<unknown>(null)
   const [actionError, setActionError] = useState('')
@@ -79,7 +80,8 @@ export function ScansPage() {
   const jobs = normalizeScanJobsList(status)
   // A bare `running` flag with no jobs behind it is a phantom scan (GT-B13).
   const running = isScanRunning(status)
-  const runningJob = jobs.find((job) => String(job.status || '').toLowerCase() === 'running') || null
+  const runningJob =
+    jobs.find((job) => String(job.status || '').toLowerCase() === 'running') || null
   const stoppingJob =
     jobs.find((job) => String(job.status || '').toLowerCase() === 'stopping') || null
   const queuedJobs = jobs.filter((job) => isScanQueuedStatus(job?.status))
@@ -106,6 +108,7 @@ export function ScansPage() {
           .includes(needle),
     )
   })
+  const visibleJobs = embedded ? filteredJobs.slice(0, 25) : filteredJobs
   const statusPayload = (status && !Array.isArray(status) ? status : {}) as Record<string, unknown>
   const message =
     statusPayload.message || statusPayload.status_message || statusPayload.phase || null
@@ -300,11 +303,8 @@ export function ScansPage() {
     URL.revokeObjectURL(href)
   }
 
-  return (
-    <Page
-      title="Scan jobs"
-      lede="Review live scan progress, retry completed scans, and inspect unmatched folders."
-    >
+  const content = (
+    <>
       <PageStatus error={error} errorMessage="Unable to load scan status." />
       <PageStatus error={actionError} />
       <div className="od-admin-panel">
@@ -415,9 +415,11 @@ export function ScansPage() {
                 />
               </label>
               <span className="od-table-count" aria-live="polite">
-                {filteredJobs.length === jobs.length
-                  ? `${jobs.length} scan job${jobs.length === 1 ? '' : 's'}`
-                  : `${filteredJobs.length} of ${jobs.length} scan jobs`}
+                {embedded && filteredJobs.length > visibleJobs.length
+                  ? `Showing ${visibleJobs.length} of ${filteredJobs.length} matching scan jobs`
+                  : filteredJobs.length === jobs.length
+                    ? `${jobs.length} scan job${jobs.length === 1 ? '' : 's'}`
+                    : `${filteredJobs.length} of ${jobs.length} scan jobs`}
               </span>
             </div>
             {/* Scan jobs sort and filter like every other table now (W27-C2).
@@ -426,7 +428,7 @@ export function ScansPage() {
                 Status renders a queue position alongside the word — sorting on
                 the rendered markup would order by the wrong thing entirely. */}
             <DataTable
-              rows={filteredJobs}
+              rows={visibleJobs}
               getRowKey={(job) => job.id}
               caption="Scan jobs"
               scrollLabel="Scan jobs table"
@@ -629,6 +631,33 @@ export function ScansPage() {
         onChoose={onScanConflictChoose}
         onClose={onScanConflictClose}
       />
+    </>
+  )
+  if (embedded) {
+    return (
+      <section
+        id="scan-jobs"
+        className="od-scan-jobs-workspace"
+        tabIndex={-1}
+        aria-labelledby="od-scan-jobs-heading"
+      >
+        <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
+          <h2 id="od-scan-jobs-heading">Scan jobs</h2>
+          <Link className="od-btn od-btn--secondary" to="/admin/scan-jobs">
+            View full scan history
+          </Link>
+        </div>
+        {content}
+      </section>
+    )
+  }
+  return (
+    <Page
+      title="Scan jobs"
+      documentTitle="Scan Jobs"
+      lede="Review live scan progress, retry completed scans, and inspect unmatched folders."
+    >
+      {content}
     </Page>
   )
 }
