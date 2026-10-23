@@ -1170,7 +1170,7 @@ async def _delete_single(request, app, data, user, library_uuid, *, database_sco
     return JSONResponse(api_ok_payload({'status': 'started', 'job_id': job_id}))
 
 
-async def _json_object_or_form(request, config):
+async def _json_object_or_form(request, config, *, preserve_non_object_json=False):
     is_json = _request_is_json(request)
     limit = min(int(config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024), 32 * 1024 * 1024)
     if not is_json:
@@ -1190,7 +1190,9 @@ async def _json_object_or_form(request, config):
             value = json.loads(raw or b'{}')
         except (TypeError, ValueError, UnicodeDecodeError):
             value = {}
-        return (value if isinstance(value, dict) else {}), False
+        if isinstance(value, dict) or preserve_non_object_json:
+            return value, False
+        return {}, False
     content_type = request.headers.get('content-type', '').lower()
     if not content_type.startswith(('multipart/form-data', 'application/x-www-form-urlencoded')):
         return {'__form__': {}}, False

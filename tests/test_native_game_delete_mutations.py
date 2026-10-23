@@ -172,6 +172,27 @@ def test_native_full_game_delete_checks_path_before_fake_disk_and_db_effects(nat
     assert not any(call[0] == 'remove_path' for call in data.calls)
 
 
+@pytest.mark.parametrize(
+    ('body', 'expected_detail'),
+    [
+        ({}, {'game_uuid': 'Field required'}),
+        ([], {'__root__': 'Input should be a valid dictionary or instance of DeleteFullGameBody'}),
+    ],
+)
+def test_native_full_game_delete_preserves_legacy_non_object_validation_detail(
+    native_client, body, expected_detail,
+):
+    runtime, data, csrf, cookie = native_client
+
+    response = _request_json(
+        runtime, '/delete_full_game', body, csrf=csrf, cookie=cookie,
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == expected_detail
+    assert data.calls == []
+
+
 def test_native_image_delete_preserves_validation_scan_guard_and_cover_fallback(native_client):
     runtime, data, csrf, cookie = native_client
     data.running = True

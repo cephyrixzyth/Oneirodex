@@ -214,7 +214,7 @@ async def _handle(
             from .library_admin_mutations import _json_object_or_form
 
             full_disk_payload, full_disk_too_large = await _json_object_or_form(
-                request, app.config,
+                request, app.config, preserve_non_object_json=True,
             )
         if auth.token is None:
             csrf_token = None
@@ -340,11 +340,15 @@ def _delete_full_game(app, data, payload, *, too_large=False):
 
     if too_large:
         return _error('Request body is too large.', 'bad_request', 413)
-    form = payload.get('__form__', {}) if isinstance(payload, dict) else {}
-    source = payload if isinstance(payload, dict) else {}
-    body = dict(form) if form else dict(source)
-    body.pop('__form__', None)
-    body.pop(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
+    if isinstance(payload, dict):
+        form = payload.get('__form__', {})
+        body = dict(form) if form else dict(payload)
+        body.pop('__form__', None)
+        body.pop(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
+    else:
+        # Keep JSON scalars and arrays intact so Pydantic produces the same
+        # root-level validation detail as the legacy schema validator.
+        body = payload
     try:
         parsed = DeleteFullGameBody.model_validate(body)
     except ValidationError as exc:
