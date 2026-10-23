@@ -196,11 +196,14 @@ async def _handle(request, *, flask_app, data, find_user, find_token,
                 response = JSONResponse(payload, status_code=status)
             else:
                 kind = str(body.get('kind') or 'name').strip().lower()
-                pattern = str(body.get('pattern') or '').strip()
+                raw_pattern = body.get('pattern')
+                pattern = raw_pattern.strip() if isinstance(raw_pattern, str) else ''
                 case_sensitive = body.get('case_sensitive', False)
                 message = None
                 if kind not in {'name', 'dir', 'regex'}:
                     message = 'Choose a valid filter type.'
+                elif not isinstance(raw_pattern, str):
+                    message = 'Pattern must be text.'
                 elif not pattern or len(pattern) > 200:
                     message = 'Pattern must be between 1 and 200 characters.'
                 elif kind == 'name' and pattern.lower().startswith(('dir:', 're:')):

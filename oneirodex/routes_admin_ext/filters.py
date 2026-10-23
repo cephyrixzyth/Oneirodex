@@ -46,7 +46,10 @@ def scan_filters_api(body: ScanFilterBody | None = None):
 
     payload = body.model_dump()
     kind = str(payload.get('kind') or 'name').strip().lower()
-    pattern = str(payload.get('pattern') or '').strip()
+    raw_pattern = payload.get('pattern')
+    if not isinstance(raw_pattern, str):
+        return api_error('Pattern must be text.', code='bad_request')
+    pattern = raw_pattern.strip()
     if kind not in {'name', 'dir', 'regex'}:
         return api_error('Choose a valid filter type.', code='bad_request')
     if not pattern or len(pattern) > 200:

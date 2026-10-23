@@ -75,6 +75,18 @@ def test_scan_filter_read_create_and_regex_validation():
     assert len(data.rows) == 2
 
 
+def test_scan_filter_create_rejects_non_string_patterns_without_writes():
+    data = FakeFilters()
+    client = make_client(data)
+    for pattern in (['Nintendo'], {'name': 'Nintendo'}, 7, True):
+        response = client.post(
+            '/api/admin/scan-filters', json={'kind': 'name', 'pattern': pattern},
+        )
+        assert response.status_code == 400
+        assert response.json()['ok'] is False
+    assert len(data.rows) == 1
+
+
 def test_scan_filter_delete_reports_missing_rows():
     client = make_client()
     removed = client.delete('/api/admin/scan-filters/1')

@@ -280,7 +280,7 @@ Admin → **Libraries & scans → Scan filters** (`/admin/edit_filters`) or the 
 | **Skip folder** | Prefix `dir:` (e.g. `dir:_MyTools`, `dir:OpenVR*`) | Folder listing skips matching basenames (case-insensitive **fnmatch**). Built-in emu/FE/tool + scaffolding + mod/repack defaults already apply; Admin rows add extras |
 | **Skip folder (regex)** | Prefix `re:` (e.g. `re:\[Demo\s+Build\]`) | Folder listing skips basenames matching the regex (case-insensitive). Built-in generic `[… Repack]` bracket-tag regex already applies |
 
-The React manager validates custom regex syntax before saving. Existing saved patterns remain listed and are not rewritten during migration.
+The React manager validates custom regex syntax before saving. API patterns must be JSON strings; other JSON value types are rejected without creating a filter. Existing saved patterns remain listed and are not rewritten during migration.
 
 **UI:** How-it-works copy, examples, Kind column, and **Quick add** buttons that fill the form (Name · GOG / Open Source / Public Domain; Skip · `_MyTools` / `OpenVR*` / `Tools*` / `_Extras`). The filter-type selector supports name tags, skip-folder globs, and skip-folder regular expressions. Prefer **prefix** globs (`dolphin*`, `GOD v*`) over substring (`*dolphin*`, `GOD*`) so real titles are not skipped.
 
