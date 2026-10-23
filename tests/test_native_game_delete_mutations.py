@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
+import shutil
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -176,6 +180,42 @@ def test_native_unmatched_folder_delete_rejects_non_json_media_type(native_clien
     assert response.status_code == 415
     assert response.json()['status'] == 'error'
     assert not any(call[0] in ('remove_path', 'remove_entry') for call in data.calls)
+
+
+@pytest.mark.parametrize(
+    ('failure', 'expected_status'),
+    [(RuntimeError, 500), (PermissionError, 403)],
+)
+def test_native_unmatched_folder_delete_restores_path_when_database_delete_fails(
+    native_client, tmp_path, failure, expected_status,
+):
+    runtime, data, csrf, cookie = native_client
+    folder = tmp_path / 'unmatched'
+    folder.mkdir()
+    marker = folder / 'keep.txt'
+    marker.write_text('restore after commit failure', encoding='utf-8')
+
+    data.path_exists = lambda path: Path(path).exists()
+    data.folder_entry = lambda path: SimpleNamespace(folder_path=path)
+    data.rollback = lambda: data.calls.append(('rollback',))
+    data.stage_path = lambda path: _stage_test_path(path)
+    data.restore_staged_path = lambda staged, path: os.replace(staged, path)
+    data.discard_staged_path = lambda staged: shutil.rmtree(staged)
+
+    def fail_database_delete(_entry):
+        raise failure('synthetic database commit failure')
+
+    data.remove_folder_entry = fail_database_delete
+
+    response = _request_json(
+        runtime, '/delete_folder', {'folder_path': str(folder)},
+        csrf=csrf, cookie=cookie,
+    )
+
+    assert response.status_code == expected_status
+    assert folder.is_dir()
+    assert marker.read_text(encoding='utf-8') == 'restore after commit failure'
+    assert not list(tmp_path.glob('*.delete-*'))
 
 
 def test_native_full_game_delete_checks_path_before_fake_disk_and_db_effects(native_client):
@@ -468,3 +508,9 @@ def _request_json(runtime, path, body, *, csrf=None, cookie=None):
                 headers['Cookie'] = f'session={cookie}'
             return await client.post(path, headers=headers, json=body)
     return asyncio.run(send())
+
+
+def _stage_test_path(path):
+    staged = f'{path}.delete-{uuid4().hex}'
+    os.replace(path, staged)
+    return staged

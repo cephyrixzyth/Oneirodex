@@ -81,6 +81,28 @@ class GameDeleteMutationData:
         else:
             shutil.rmtree(path)
 
+    def stage_path(self, path):
+        """Move a path aside so a failed database delete can restore it."""
+        staged = f'{path}.delete-{uuid4().hex}'
+        os.replace(path, staged)
+        return staged
+
+    def restore_staged_path(self, staged, path):
+        os.replace(staged, path)
+
+    def discard_staged_path(self, staged):
+        try:
+            if os.path.isdir(staged) and not os.path.islink(staged):
+                shutil.rmtree(staged)
+            else:
+                os.unlink(staged)
+        except OSError:
+            # The DB row has already been removed. Preserve the successful
+            # result and leave the orphaned staged path for operator cleanup.
+            logging.getLogger(__name__).warning(
+                'Folder delete committed but staged path cleanup failed'
+            )
+
     def path_exists(self, path):
         return os.path.exists(path)
 
@@ -341,11 +363,31 @@ async def _delete_folder(request, app, data):
             'The specified path does not exist. Entry removed if it was in the database.',
             'not_found', 404, body_status='error',
         )
+    staged_path = None
+
+    def rollback_and_restore():
+        rollback = getattr(data, 'rollback', None)
+        if callable(rollback):
+            rollback()
+        if staged_path is not None:
+            try:
+                data.restore_staged_path(staged_path, full_path)
+            except OSError:
+                logging.getLogger(__name__).exception(
+                    'Could not restore folder after a failed database delete'
+                )
+
     try:
-        data.remove_path(full_path)
-        if data.path_exists(full_path):
-            return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
+        stage_path = getattr(data, 'stage_path', None)
+        if callable(stage_path):
+            staged_path = stage_path(full_path)
+        else:
+            data.remove_path(full_path)
+            if data.path_exists(full_path):
+                return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
         data.remove_folder_entry(entry)
+        if staged_path is not None:
+            data.discard_staged_path(staged_path)
         from oneirodex.utils.api_contract import api_ok_payload
 
         return JSONResponse(api_ok_payload({
@@ -353,14 +395,13 @@ async def _delete_folder(request, app, data):
             'message': 'Item deleted successfully. Database entry removed.',
         }))
     except PermissionError:
+        rollback_and_restore()
         return _error(
             'Failed to delete the item due to insufficient permissions. Database entry retained.',
             'forbidden', 403, body_status='error',
         )
     except Exception:
-        rollback = getattr(data, 'rollback', None)
-        if callable(rollback):
-            rollback()
+        rollback_and_restore()
         return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
 
 
