@@ -193,7 +193,7 @@ export function ReferenceSetsPage() {
       if (fileInput.current) fileInput.current.value = ''
       setReport(null)
       setMessage(
-        `Uploaded ${row.name}: ${row.entry_count} entries for ${row.library_platform}/${row.region}.`,
+        `Uploaded ${row.name}: ${row.entry_count} entries for ${row.library_platform}/${row.region}`,
       )
     })
   }

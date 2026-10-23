@@ -45,7 +45,9 @@ test('upload sends multipart with shared CSRF and installs row', async () => {
   render(<ReferenceSetsPage />)
   const input = await selectFile()
   fireEvent.submit(input.closest('form')!)
-  expect(await screen.findByText(/Uploaded Synthetic Review/)).toBeInTheDocument()
+  expect(
+    await screen.findByText('Uploaded Synthetic Review: 1 entries for NES/USA'),
+  ).toBeInTheDocument()
   const init = fetcher.mock.calls[0][1]
   expect(init.headers).toEqual({ 'X-CSRFToken': 'review-csrf' })
   expect(init.body.get('library_platform')).toBe('NES')
@@ -89,7 +91,9 @@ test('replacement and deletion require separate confirmations, cancellation pres
   )
   expect(fetcher).not.toHaveBeenCalled()
   fireEvent.submit(input.closest('form')!)
-  expect(await screen.findByText(/Uploaded Synthetic Review/)).toBeInTheDocument()
+  expect(
+    await screen.findByText('Uploaded Synthetic Review: 1 entries for NES/USA'),
+  ).toBeInTheDocument()
   expect(fetcher.mock.calls[0][1].body.get('replace')).toBe('true')
   const remove = screen.getByRole('button', { name: 'Delete Synthetic Review (NES/USA)' })
   fireEvent.click(remove)
