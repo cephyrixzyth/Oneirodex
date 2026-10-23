@@ -306,6 +306,17 @@ def _error(message, code, status, *, body_status=None):
 
 
 async def _delete_folder(request, app, data):
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if not is_json:
+        return _error(
+            'The request Content-Type must be application/json.',
+            'bad_request', 415, body_status='error',
+        )
     try:
         body = await request.json()
     except Exception:

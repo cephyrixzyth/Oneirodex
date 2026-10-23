@@ -155,6 +155,29 @@ def test_native_unmatched_folder_delete_keeps_path_guard_and_fake_side_effects(n
     assert not any(call[0] == 'remove_path' for call in data.calls)
 
 
+def test_native_unmatched_folder_delete_rejects_non_json_media_type(native_client):
+    runtime, data, csrf, cookie = native_client
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_folder',
+                content=b'{"folder_path":"/safe/games/Unmatched"}',
+                headers={
+                    'Content-Type': 'text/plain',
+                    'X-CSRFToken': csrf,
+                    'Cookie': f'session={cookie}',
+                },
+            )
+
+    response = asyncio.run(send())
+    assert response.status_code == 415
+    assert response.json()['status'] == 'error'
+    assert not any(call[0] in ('remove_path', 'remove_entry') for call in data.calls)
+
+
 def test_native_full_game_delete_checks_path_before_fake_disk_and_db_effects(native_client):
     runtime, data, csrf, cookie = native_client
     response = _request_json(
