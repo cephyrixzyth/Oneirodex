@@ -516,7 +516,7 @@ def create_game_reads_router(
                 not role_at_least(getattr(auth.user, 'role', None), 'librarian')
                 or (auth.token is not None and not auth.has_scope('admin'))
             ):
-                response = _api_error('Librarian required', 'forbidden')
+                response = _api_error('Librarian or admin required', 'forbidden')
             if response is None:
                 payload = await _json_object(request)
                 game_uuid = payload.get('game_uuid')
