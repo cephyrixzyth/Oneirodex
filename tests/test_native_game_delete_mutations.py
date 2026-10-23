@@ -197,6 +197,26 @@ def test_native_full_game_delete_preserves_legacy_non_object_validation_detail(
     assert data.calls == []
 
 
+def test_native_full_game_delete_accepts_classic_form_submission(native_client):
+    runtime, data, csrf, cookie = native_client
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_full_game',
+                data={'csrf_token': csrf, 'game_uuid': 'game-1'},
+                headers={'Cookie': f'session={cookie}'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 200
+    assert response.json()['message'] == 'Game file has been deleted successfully.'
+    assert any(call[0] == 'game-1' for call in data.calls)
+
+
 def test_native_image_delete_preserves_validation_scan_guard_and_cover_fallback(native_client):
     runtime, data, csrf, cookie = native_client
     data.running = True
