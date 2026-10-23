@@ -129,6 +129,26 @@ def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract(monkey
     assert calls[0]['raw'] == b'contents'
 
 
+def test_reference_sets_upload_reports_legacy_xml_parse_detail(monkeypatch):
+    from oneirodex import db
+    from xml.etree.ElementTree import ParseError
+
+    monkeypatch.setattr(db.session, 'rollback', lambda: None)
+    client = _client(data=SimpleNamespace(
+        read=lambda: {},
+        upload=lambda **_kwargs: (_ for _ in ()).throw(ParseError('no element found: line 1, column 19')),
+    ))
+    response = client.post(
+        '/api/reference-sets',
+        data={'library_platform': 'NES', 'region': 'USA', 'source': 'mame'},
+        files={'file': ('bad.xml', b'<datafile><machine>')},
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['message'] == 'Failed to parse DAT: no element found: line 1, column 19'
+
+
 def test_legacy_reference_sets_invalid_form_redirect_keeps_html_content_type():
     client = _client()
     missing_csrf = client.post('/admin/reference_sets', data={'field': 'value'})

@@ -421,11 +421,11 @@ def create_reference_sets_router(
                             db.session.rollback()
                             payload, status = api_error_payload(str(exc), code='bad_request')
                             response = JSONResponse(payload, status_code=status)
-                        except ET.ParseError:
+                        except ET.ParseError as exc:
                             from oneirodex.runtime_native.db_session import native_db as db
                             db.session.rollback()
                             payload, status = api_error_payload(
-                                'Could not parse the DAT. Check its contents and selected platform.',
+                                f'Failed to parse DAT: {exc}',
                                 code='bad_request',
                             )
                             response = JSONResponse(payload, status_code=status)
@@ -638,11 +638,11 @@ def create_reference_sets_router(
                                         code='bad_request',
                                     )
                                     response = JSONResponse(payload, status_code=status)
-                                except ET.ParseError:
+                                except ET.ParseError as exc:
                                     from oneirodex.runtime_native.db_session import native_db as db
                                     db.session.rollback()
                                     payload, status = api_error_payload(
-                                        'Could not parse the DAT. Check its contents and selected platform.',
+                                        f'Failed to parse DAT: {exc}',
                                         code='bad_request',
                                     )
                                     response = JSONResponse(payload, status_code=status)
