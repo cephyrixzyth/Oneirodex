@@ -103,6 +103,7 @@ def test_native_game_delete_preserves_auth_csrf_and_scan_guard(native_client):
     runtime, data, csrf, cookie = native_client
     no_csrf = _request(runtime, '/delete_game/game-1', cookie=cookie)
     assert no_csrf.status_code == 400
+    assert no_csrf.headers['content-type'].startswith('application/json')
     assert data.calls == []
 
     data.running = True
@@ -215,6 +216,32 @@ def test_native_full_game_delete_accepts_classic_form_submission(native_client):
     assert response.status_code == 200
     assert response.json()['message'] == 'Game file has been deleted successfully.'
     assert any(call[0] == 'game-1' for call in data.calls)
+
+
+def test_native_full_game_delete_renders_classic_form_csrf_errors_as_html(native_client):
+    runtime, data, csrf, cookie = native_client
+
+    async def send(token):
+        form = {'game_uuid': 'game-1'}
+        if token is not None:
+            form['csrf_token'] = token
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/delete_full_game', data=form,
+                headers={'Cookie': f'session={cookie}'},
+            )
+
+    missing = asyncio.run(send(None))
+    invalid = asyncio.run(send('invalid-csrf-token'))
+
+    assert missing.status_code == invalid.status_code == 400
+    assert missing.headers['content-type'].startswith('text/html')
+    assert invalid.headers['content-type'].startswith('text/html')
+    assert '<p>The CSRF token is missing.</p>' in missing.text
+    assert '<p>The CSRF token is invalid.</p>' in invalid.text
+    assert data.calls == []
 
 
 def test_native_full_game_delete_treats_malformed_json_as_missing_body(native_client):

@@ -226,6 +226,14 @@ async def _handle(
                 request, auth.session_data, app.config, token=csrf_token,
             )
         if csrf is not None:
+            if (
+                full_disk
+                and isinstance(full_disk_payload, dict)
+                and '__form__' in full_disk_payload
+            ):
+                from .csrf_compat import csrf_html_error_response
+
+                csrf = csrf_html_error_response(csrf)
             response = csrf
         elif auth.user is None:
             response = _login_redirect(app, request, login_manager, auth)
