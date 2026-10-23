@@ -86,6 +86,14 @@ test.each([
       'href',
       '/scan_management?active_tab=manual#manual-identify',
     )
+    expect(screen.getByRole('link', { name: 'Scanning' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=auto#automatic-scan',
+    )
+    expect(screen.getByRole('link', { name: 'Scan jobs' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=jobs#scan-jobs',
+    )
   },
 )
 
