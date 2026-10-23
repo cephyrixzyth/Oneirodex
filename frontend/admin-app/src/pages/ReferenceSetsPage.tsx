@@ -329,7 +329,7 @@ export function ReferenceSetsPage() {
                   })
                   setReport(null)
                   setRehashStatus(
-                    `Hashed ${result.hashed} / ${result.considered} (skipped ${result.skipped}).`,
+                    `Hashed ${result.hashed} / ${result.considered} (skipped ${result.skipped})`,
                   )
                 }, setRehashStatus)
               }}

@@ -132,7 +132,7 @@ test('rehash/catalog actions retain platform payloads and count feedback without
   await screen.findByLabelText('DAT file')
   expect(postJson).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Rehash platform' }))
-  expect(await screen.findByText('Hashed 2 / 3 (skipped 1).')).toBeInTheDocument()
+  expect(await screen.findByText('Hashed 2 / 3 (skipped 1)')).toBeInTheDocument()
   expect(postJson).toHaveBeenNthCalledWith(1, '/api/reference-sets/rehash', {
     library_platform: 'NES',
   })
@@ -155,7 +155,7 @@ test('rehash keeps progress and errors beside its action', async () => {
   expect(screen.getByRole('status')).toHaveTextContent('Hashing…')
   expect(rehash).toBeDisabled()
   finish({ hashed: 2, considered: 3, skipped: 1 })
-  expect(await screen.findByRole('status')).toHaveTextContent('Hashed 2 / 3 (skipped 1).')
+  expect(await screen.findByRole('status')).toHaveTextContent('Hashed 2 / 3 (skipped 1)')
 
   vi.mocked(postJson).mockRejectedValueOnce(new Error('Disk read denied'))
   fireEvent.click(rehash)
