@@ -31,7 +31,7 @@ Admin → Integrations → **ROM reference sets (DAT)** (`/admin/reference_sets`
 | Library platform | Same enum as Systems (`NES`, `SNES`, …) |
 | Region | `USA` `EUR` `JPN` `BRA` `KOR` `AUS` `GBR` `FRA` `DEU` `ESP` `CHN` `WORLD` `OTHER`. `PAL` still stores as `EUR`. France/Germany/Spain/UK are for a regional DAT you upload — they are not IGDB `release_dates.region` values. |
 | Source | `nointro` / `redump` / `tosec` / `mame` / `other` |
-| File | XML `datafile` (No-Intro, Redump, TOSEC, MAME `-listxml`, MAME softlist `softwarelist`) or ClrMamePro text `.dat` |
+| File | XML `datafile` (No-Intro, Redump, TOSEC, MAME `-listxml`, MAME softlist `softwarelist`) or ClrMamePro text `.dat`; maximum 32 MiB. Larger files show `DAT too large (max 32 MiB)` and are not stored. |
 
 **TOSEC and MAME (INSP-34):** a TOSEC set for a home computer (`AMIGA`, `C64`, `ZX_SPECTRUM`, `CPC`, …) uploads like any other — its `(1991)(Publisher)(EU)[cr Group]` groups are stripped by the same title peel the scanner uses, so two dumps of one game collapse onto one title; pick region **WORLD** unless the set is region-split. A MAME `-listxml` or softlist for **ARCADE** (no `MAME` platform — the arcade shelf *is* the platform) is titled by each machine's `<description>` (*Pac-Man (Midway)*), not its short set name (`pacman`); the first `<rom>` under the machine or its `<part>/<dataarea>` carries the hashes. A CRC shared by several machines (clone sets reusing a ROM) is *ambiguous* for identify and never auto-creates a game.
 

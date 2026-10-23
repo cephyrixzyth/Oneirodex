@@ -145,7 +145,7 @@ export function ReferenceSetsPage() {
     event.preventDefault()
     if (!file) return
     if (file.size > maxBytes) {
-      setError('DAT must be at most 32 MiB.')
+      setError('DAT too large (max 32 MiB)')
       return
     }
     void action(async () => {

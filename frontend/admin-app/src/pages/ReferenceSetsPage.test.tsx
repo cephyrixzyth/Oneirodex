@@ -54,6 +54,21 @@ test('upload sends multipart with shared CSRF and installs row', async () => {
   expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeDisabled()
 })
 
+test('over-limit DAT uses the legacy message and is rejected before upload', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  const fetcher = vi.fn()
+  vi.stubGlobal('fetch', fetcher)
+  render(<ReferenceSetsPage />)
+  const input = await screen.findByLabelText('DAT file')
+  const oversized = new File(['x'], 'too-large.dat', { type: 'application/xml' })
+  Object.defineProperty(oversized, 'size', { value: state.max_dat_bytes + 1 })
+  fireEvent.change(input, { target: { files: [oversized] } })
+  fireEvent.submit(input.closest('form')!)
+  expect(await screen.findByRole('alert')).toHaveTextContent('DAT too large (max 32 MiB)')
+  expect(fetcher).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
+})
+
 test('replacement and deletion require separate confirmations, cancellation preserves drafts', async () => {
   vi.mocked(getJson).mockResolvedValue({ ...state, sets: [row] })
   vi.mocked(confirmAction)
