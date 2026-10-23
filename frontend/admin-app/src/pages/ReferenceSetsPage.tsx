@@ -75,6 +75,7 @@ export function ReferenceSetsPage() {
   const [file, setFile] = useState<File | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [rehashPlatform, setRehashPlatform] = useState('')
+  const [rehashStatus, setRehashStatus] = useState('')
   const [repairPlatform, setRepairPlatform] = useState('')
   const [repairRegion, setRepairRegion] = useState('')
   const [catalogPlatform, setCatalogPlatform] = useState('')
@@ -126,7 +127,7 @@ export function ReferenceSetsPage() {
       cancelled = true
     }
   }, [reload])
-  async function action(work: () => Promise<void>) {
+  async function action(work: () => Promise<void>, onError?: (message: string) => void) {
     if (loading || loadFailed || lock.current) return
     lock.current = true
     setBusy(true)
@@ -135,7 +136,9 @@ export function ReferenceSetsPage() {
     try {
       await work()
     } catch (err) {
-      setError(errorText(err) || 'Could not complete the action.')
+      const message = errorText(err) || 'Could not complete the action.'
+      if (onError) onError(message)
+      else setError(message)
     } finally {
       lock.current = false
       setBusy(false)
@@ -318,20 +321,26 @@ export function ReferenceSetsPage() {
             {platformSelect('Rehash platform selection', rehashPlatform, setRehashPlatform)}
             <Button
               disabled={disabled || !rehashPlatform}
-              onClick={() =>
+              onClick={() => {
+                setRehashStatus('Hashing…')
                 void action(async () => {
                   const result = await postJson('/api/reference-sets/rehash', {
                     library_platform: rehashPlatform,
                   })
                   setReport(null)
-                  setMessage(
+                  setRehashStatus(
                     `Hashed ${result.hashed} / ${result.considered} (skipped ${result.skipped}).`,
                   )
-                })
-              }
+                }, setRehashStatus)
+              }}
             >
               Rehash platform
             </Button>
+            {rehashStatus ? (
+              <PageStatus announcement="status" className="od-admin-hint">
+                {rehashStatus}
+              </PageStatus>
+            ) : null}
           </section>
           <section className="od-admin-panel">
             <h2>DAT repair preview</h2>

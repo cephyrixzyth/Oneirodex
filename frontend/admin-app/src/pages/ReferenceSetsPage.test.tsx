@@ -143,6 +143,26 @@ test('rehash/catalog actions retain platform payloads and count feedback without
   })
 })
 
+test('rehash keeps progress and errors beside its action', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  let finish!: (value: any) => void
+  vi.mocked(postJson).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+  render(<ReferenceSetsPage />)
+  await screen.findByLabelText('DAT file')
+
+  const rehash = screen.getByRole('button', { name: 'Rehash platform' })
+  fireEvent.click(rehash)
+  expect(screen.getByRole('status')).toHaveTextContent('Hashing…')
+  expect(rehash).toBeDisabled()
+  finish({ hashed: 2, considered: 3, skipped: 1 })
+  expect(await screen.findByRole('status')).toHaveTextContent('Hashed 2 / 3 (skipped 1).')
+
+  vi.mocked(postJson).mockRejectedValueOnce(new Error('Disk read denied'))
+  fireEvent.click(rehash)
+  expect(await screen.findByRole('status')).toHaveTextContent('Disk read denied')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
 test('repair dry run renders all four buckets and totals/truncation; pending work locks controls', async () => {
   vi.mocked(getJson).mockResolvedValue(state)
   let finish!: (value: any) => void
