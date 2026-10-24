@@ -109,6 +109,7 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
     )
   })
   const visibleJobs = embedded ? filteredJobs.slice(0, 25) : filteredJobs
+  const glanceJobs = jobs.slice(0, 5)
   const statusPayload = (status && !Array.isArray(status) ? status : {}) as Record<string, unknown>
   const message =
     statusPayload.message || statusPayload.status_message || statusPayload.phase || null
@@ -302,6 +303,23 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
     link.remove()
     URL.revokeObjectURL(href)
   }
+
+  const conflictDialogs = (
+    <>
+      <ScanConflictModal
+        open={conflictOpen}
+        busy={refreshing}
+        onChoose={onConflictChoose}
+        onClose={onConflictClose}
+      />
+      <ScanConflictModal
+        open={scanConflictOpen}
+        busy={Boolean(scanBusyKey)}
+        onChoose={onScanConflictChoose}
+        onClose={onScanConflictClose}
+      />
+    </>
+  )
 
   const content = (
     <>
@@ -619,18 +637,7 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
           </>
         )}
       </div>
-      <ScanConflictModal
-        open={conflictOpen}
-        busy={refreshing}
-        onChoose={onConflictChoose}
-        onClose={onConflictClose}
-      />
-      <ScanConflictModal
-        open={scanConflictOpen}
-        busy={Boolean(scanBusyKey)}
-        onChoose={onScanConflictChoose}
-        onClose={onScanConflictClose}
-      />
+      {conflictDialogs}
     </>
   )
   if (embedded) {
@@ -647,7 +654,70 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
             View full scan history
           </Link>
         </div>
-        {content}
+        <div className="od-admin-panel od-scan-glance">
+          <PageStatus error={error} errorMessage="Unable to load scan status." />
+          <PageStatus error={actionError} />
+          <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
+            <Button
+              type="button"
+              className="od-btn--accent"
+              onClick={() => void startRefreshAll()}
+              disabled={refreshing}
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
+            </Button>
+            {scanMotifActive ? (
+              <PageStatus
+                announcement="status"
+                inline
+                className="od-admin-scan-live"
+                dataState={running ? 'running' : 'queued'}
+              >
+                <span className="od-spinner od-spinner--sm" aria-hidden="true" />
+                {runningJob
+                  ? 'Scanning…'
+                  : stoppingJob
+                    ? 'Stopping…'
+                    : `Queued… (${queuedJobs.length})`}
+              </PageStatus>
+            ) : null}
+          </div>
+          {!status ? (
+            <PageStatus loading loadingMessage="Loading scan status…" />
+          ) : (
+            <>
+              <p className="od-scan-summary">{scanSummary}</p>
+              {message ? <p className="od-admin-lede">{message as ReactNode}</p> : null}
+              <ul className="od-scan-glance__list" aria-label="Recent scan jobs">
+                {glanceJobs.map((job) => {
+                  const path = String(job.scan_folder || '')
+                  const libraryName = String(job.library_name || job.library || 'Unknown library')
+                  const statusLabel = String(job.status || 'Unknown')
+                  const detail = String(job.error_message || job.current_processing || '')
+                  return (
+                    <li className="od-scan-glance__item" key={String(job.id)}>
+                      <div className="od-scan-glance__heading">
+                        <strong>{libraryName}</strong>
+                        <span className="od-scan-glance__status">{statusLabel}</span>
+                      </div>
+                      <code className="od-scan-glance__path" title={path}>
+                        {path || 'No scan path reported'}
+                      </code>
+                      {detail ? <p className="od-scan-glance__detail">{detail}</p> : null}
+                    </li>
+                  )
+                })}
+              </ul>
+              {jobs.length > glanceJobs.length ? (
+                <p className="od-scan-glance__more">
+                  Showing {glanceJobs.length} recent jobs of {jobs.length}.{' '}
+                  <Link to="/admin/scan-jobs">Open full scan history for filters and actions.</Link>
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+        {conflictDialogs}
       </section>
     )
   }

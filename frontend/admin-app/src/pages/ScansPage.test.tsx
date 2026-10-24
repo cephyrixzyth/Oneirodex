@@ -89,7 +89,7 @@ describe('ScansPage queued jobs', () => {
     expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
   })
 
-  test('embedded jobs panel is capped at the legacy 25 rows and links to full history', async () => {
+  test('embedded jobs panel is a compact recent-activity glance and links to full history', async () => {
     const jobs = Array.from({ length: 27 }, (_, index) => ({
       id: `job-${index + 1}`,
       library_name: `Library ${index + 1}`,
@@ -114,12 +114,22 @@ describe('ScansPage queued jobs', () => {
     )
 
     expect(await screen.findByText('Library 1')).toBeInTheDocument()
-    expect(screen.getByText('Showing 25 of 27 matching scan jobs')).toBeInTheDocument()
-    expect(screen.queryByText('Library 26')).not.toBeInTheDocument()
+    expect(screen.getByText('Showing 5 recent jobs of 27.')).toBeInTheDocument()
+    expect(screen.getByText('Library 5')).toBeInTheDocument()
+    expect(screen.queryByText('Library 6')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Scan jobs table' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('group', { name: 'Filter scan jobs by status' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear completed' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
       'href',
       '/admin/scan-jobs',
     )
+    expect(
+      screen.getByRole('link', { name: 'Open full scan history for filters and actions.' }),
+    ).toHaveAttribute('href', '/admin/scan-jobs')
   })
 
   test('uses the legacy Scan Jobs browser title', async () => {
