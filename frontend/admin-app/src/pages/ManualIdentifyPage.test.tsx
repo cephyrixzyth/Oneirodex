@@ -316,6 +316,50 @@ test('shows an out-of-root path rejection as an accessible save alert', async ()
   expect(alert.compareDocumentPosition(screen.getByLabelText('Library')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })
 
+test('keeps missing provider-key guidance inline as a polite status', async () => {
+  const note = 'MOBYGAMES_API_KEY not configured — empty results. Set env or GlobalSettings.mobygames_api_key.'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.startsWith('/api/search_metadata?'))
+      return response({
+        source: 'mobygames',
+        results: [],
+        needs_key: true,
+        key_configured: false,
+        note,
+      }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?name=Provider+probe']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Search MobyGames' }))
+
+  const status = await screen.findByRole('status')
+  expect(status).toHaveTextContent(note)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(status.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],

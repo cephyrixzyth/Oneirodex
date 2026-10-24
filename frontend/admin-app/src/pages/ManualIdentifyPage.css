@@ -115,6 +115,15 @@
   margin-top: var(--od-space-3);
 }
 
+.od-manual-identify__provider-note {
+  margin-top: var(--od-space-2);
+  padding: var(--od-space-2);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: color-mix(in srgb, var(--od-text) 3%, var(--od-surface));
+  color: var(--od-text);
+}
+
 .od-manual-identify__provider-links {
   margin-block: var(--od-space-3);
 }

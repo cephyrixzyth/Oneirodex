@@ -32,6 +32,7 @@ export function ManualIdentifyPage() {
   const [options, setOptions] = useState<Options | null>(null)
   const [loadError, setLoadError] = useState('')
   const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [providerNotice, setProviderNotice] = useState('')
   const [searchBusy, setSearchBusy] = useState(false)
   const [searchSource, setSearchSource] = useState('IGDB')
   const [form, setForm] = useState<Record<string, any>>({
@@ -137,6 +138,7 @@ export function ManualIdentifyPage() {
     setSearchBusy(true)
     setSearchSource('IGDB')
     setSaveError('')
+    setProviderNotice('')
     try {
       const params = new URLSearchParams({ name: term })
       const data = await getJson(`/api/search_igdb_by_name?${params}`)
@@ -156,12 +158,13 @@ export function ManualIdentifyPage() {
     setSearchBusy(true)
     setSearchSource(source.toUpperCase())
     setSaveError('')
+    setProviderNotice('')
     try {
       const params = new URLSearchParams({ name: term, source })
       const data = await getJson(`/api/search_metadata?${params}`)
       setCandidates(Array.isArray(data.results) ? data.results : [])
       if (!Array.isArray(data.results) || !data.results.length)
-        setSaveError(data.note || `No ${source.toUpperCase()} matches found.`)
+        setProviderNotice(data.note || `No ${source.toUpperCase()} matches found.`)
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : `${source.toUpperCase()} search failed.`,
@@ -532,6 +535,11 @@ export function ManualIdentifyPage() {
             </Button>
           ))}
         </div>
+        {providerNotice ? (
+          <div className="od-manual-identify__provider-note" role="status">
+            {providerNotice}
+          </div>
+        ) : null}
         {candidates.length ? (
           <ul className="od-manual-identify__results" aria-label={`${searchSource} matches`}>
             {candidates.map((row) => (
