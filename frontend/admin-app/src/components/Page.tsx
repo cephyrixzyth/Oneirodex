@@ -19,12 +19,14 @@ export function Page({
   title,
   documentTitle,
   lede,
+  actions,
   className,
   children,
 }: {
   title: ReactNode
   documentTitle?: string
   lede?: ReactNode
+  actions?: ReactNode
   className?: string
   children?: ReactNode
 }) {
@@ -41,8 +43,20 @@ export function Page({
 
   return (
     <div className={className ? `od-admin-page ${className}` : 'od-admin-page'}>
-      <h1 ref={headingRef}>{title}</h1>
-      {lede ? <p className="od-admin-lede">{lede}</p> : null}
+      {actions ? (
+        <div className="od-admin-page__heading">
+          <div>
+            <h1 ref={headingRef}>{title}</h1>
+            {lede ? <p className="od-admin-lede">{lede}</p> : null}
+          </div>
+          <div className="od-admin-page__actions">{actions}</div>
+        </div>
+      ) : (
+        <>
+          <h1 ref={headingRef}>{title}</h1>
+          {lede ? <p className="od-admin-lede">{lede}</p> : null}
+        </>
+      )}
       {children}
     </div>
   )

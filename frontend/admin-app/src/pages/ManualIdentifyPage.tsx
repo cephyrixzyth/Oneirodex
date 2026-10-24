@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson, putJson } from '../api/adminApi'
@@ -14,7 +14,6 @@ export function ManualIdentifyPage() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search])
   const [options, setOptions] = useState<Options | null>(null)
   const [loadError, setLoadError] = useState('')
-  const [searchText, setSearchText] = useState(query.get('name') || '')
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [searchBusy, setSearchBusy] = useState(false)
   const [searchSource, setSearchSource] = useState('IGDB')
@@ -58,6 +57,7 @@ export function ManualIdentifyPage() {
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkError, setLinkError] = useState('')
   const [linkSearched, setLinkSearched] = useState(false)
+  const [activeTab, setActiveTab] = useState('about')
 
   useEffect(() => {
     let live = true
@@ -90,7 +90,6 @@ export function ManualIdentifyPage() {
       .then((payload) => {
         if (!live) return
         setForm((current) => ({ ...current, ...payload.game }))
-        setSearchText(payload.game?.name || '')
         setLinkQuery(payload.game?.name || '')
         setScanRunning(Boolean(payload.scan_running))
       })
@@ -108,9 +107,8 @@ export function ManualIdentifyPage() {
   const setField = (name: string, value: unknown) =>
     setForm((current) => ({ ...current, [name]: value }))
 
-  async function search(event: FormEvent) {
-    event.preventDefault()
-    const term = searchText.trim()
+  async function search() {
+    const term = String(form.name || '').trim()
     if (!term || searchBusy) return
     setSearchBusy(true)
     setSearchSource('IGDB')
@@ -129,7 +127,7 @@ export function ManualIdentifyPage() {
   }
 
   async function searchProvider(source: string) {
-    const term = String(form.name || searchText).trim()
+    const term = String(form.name || '').trim()
     if (!term || searchBusy) return
     setSearchBusy(true)
     setSearchSource(source.toUpperCase())
@@ -267,6 +265,24 @@ export function ManualIdentifyPage() {
     Number(form.igdb_id) > 0 &&
     String(form.full_disk_path).trim().length > 0 &&
     String(form.name).trim().length > 0
+  const tabs = [
+    ['about', 'About'],
+    ['release', 'Release'],
+    ['links', 'Links & media'],
+    ['taxonomy', 'Taxonomy'],
+  ] as const
+  function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const index = tabs.findIndex(([id]) => id === activeTab)
+    let next = -1
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
+    if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length
+    if (event.key === 'Home') next = 0
+    if (event.key === 'End') next = tabs.length - 1
+    if (next < 0) return
+    event.preventDefault()
+    setActiveTab(tabs[next][0])
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+  }
   async function loadIgdbId() {
     const id = Number(form.igdb_id)
     if (!Number.isInteger(id) || id < 1 || searchBusy) return
@@ -352,14 +368,30 @@ export function ManualIdentifyPage() {
       lede={
         editing
           ? 'Update metadata for an existing library title.'
-          : 'Search metadata, confirm the game details, then add it to the selected library.'
+          : fromUnmatched
+            ? 'Match a scanned folder to catalog metadata or an existing library game.'
+            : 'Search providers, set path metadata, and save into the library.'
+      }
+      actions={
+        <Button
+          variant="primary"
+          type="submit"
+          form="od-manual-identify-form"
+          disabled={saving || !options || Boolean(loadError) || scanRunning || !identifyFieldsValid}
+        >
+          {saving ? 'Saving…' : editing ? 'Save changes' : 'Save'}
+        </Button>
       }
       className="od-manual-identify"
     >
       <div className="od-admin-actions-row">
         <a
           className="od-cbtn"
-          href={fromUnmatched ? '/scan_management?active_tab=unmatched' : '/scan_management?active_tab=manual'}
+          href={
+            fromUnmatched
+              ? '/scan_management?active_tab=unmatched'
+              : '/scan_management?active_tab=manual'
+          }
         >
           Back to scan review
         </a>
@@ -374,18 +406,75 @@ export function ManualIdentifyPage() {
           A scan is running. Editing is paused until it finishes.
         </PageStatus>
       ) : null}
-      <section className="od-admin-panel" aria-labelledby="od-identify-search-title">
-        <h2 id="od-identify-search-title">Search metadata</h2>
-        <form className="od-manual-identify__search" onSubmit={search}>
+      <section className="od-admin-panel od-manual-identify__essential" aria-label="Game identity">
+        <div className="od-manual-identify__library">
           <label className="od-admin-field">
-            Game name
+            Library
+            <select
+              className="od-admin-input"
+              value={form.library_uuid}
+              onChange={(event) => setField('library_uuid', event.target.value)}
+              required
+              disabled={!options || saving}
+            >
+              {options?.libraries.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name} · {row.platform_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="od-manual-identify__library-summary">
+            Platform:{' '}
+            {options?.libraries.find((row) => row.uuid === form.library_uuid)?.platform_name || '—'}
+          </p>
+        </div>
+        <div className="od-manual-identify__id">
+          <label className="od-admin-field">
+            IGDB ID
             <input
               className="od-admin-input"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              type="number"
+              min="1"
+              value={form.igdb_id}
+              onChange={(event) => setField('igdb_id', event.target.value)}
+              required
+              aria-describedby="od-manual-identify-igdb-help"
             />
           </label>
-          <Button type="submit" disabled={searchBusy || !searchText.trim()}>
+          <div className="od-admin-actions-row">
+            <Button
+              type="button"
+              onClick={() => void loadIgdbId()}
+              aria-label="Search IGDB by ID"
+              disabled={searchBusy}
+            >
+              Search IGDB
+            </Button>
+            <span id="od-manual-identify-igdb-help" className="od-admin-lede od-admin-lede--flush">
+              Enter the IGDB ID of the game.
+            </span>
+            <Button type="button" onClick={() => void addNonCatalogGame()}>
+              Add non-catalog game
+            </Button>
+          </div>
+        </div>
+        <form
+          className="od-manual-identify__search"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void search()
+          }}
+        >
+          <label className="od-admin-field">
+            Name
+            <input
+              className="od-admin-input"
+              value={form.name}
+              onChange={(event) => setField('name', event.target.value)}
+            />
+          </label>
+          <Button type="submit" disabled={searchBusy || !String(form.name || '').trim()}>
             {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
           </Button>
         </form>
@@ -395,7 +484,7 @@ export function ManualIdentifyPage() {
               key={source}
               type="button"
               onClick={() => void searchProvider(source)}
-              disabled={searchBusy || !searchText.trim()}
+              disabled={searchBusy || !String(form.name || '').trim()}
             >
               Search{' '}
               {source === 'thegamesdb'
@@ -423,63 +512,7 @@ export function ManualIdentifyPage() {
             ))}
           </ul>
         ) : null}
-      </section>
-      <form className="od-admin-panel od-manual-identify__form" onSubmit={submit}>
-        <h2>Game details</h2>
-        <label className="od-admin-field">
-          Library
-          <select
-            className="od-admin-input"
-            value={form.library_uuid}
-            onChange={(event) => setField('library_uuid', event.target.value)}
-            required
-            disabled={!options || saving}
-          >
-            {options?.libraries.map((row) => (
-              <option key={row.uuid} value={row.uuid}>
-                {row.name} · {row.platform_name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="od-admin-field">
-          IGDB ID
-          <input
-            className="od-admin-input"
-            type="number"
-            min="1"
-            value={form.igdb_id}
-            onChange={(event) => setField('igdb_id', event.target.value)}
-            required
-            aria-describedby="od-manual-identify-igdb-help"
-          />
-        </label>
-        <div className="od-admin-actions-row">
-          <Button
-            type="button"
-            onClick={() => void loadIgdbId()}
-            aria-label="Search IGDB by ID"
-            disabled={searchBusy}
-          >
-            Search IGDB
-          </Button>
-          <span id="od-manual-identify-igdb-help" className="od-admin-lede od-admin-lede--flush">
-            Enter the IGDB ID of the game.
-          </span>
-          <Button type="button" onClick={() => void addNonCatalogGame()}>
-            Add non-catalog game
-          </Button>
-        </div>
-        <label className="od-admin-field">
-          Name
-          <input
-            className="od-admin-input"
-            value={form.name}
-            onChange={(event) => setField('name', event.target.value)}
-            required
-          />
-        </label>
-        <label className="od-admin-field">
+        <label className="od-admin-field od-manual-identify__path">
           Full disk path
           <input
             className="od-admin-input"
@@ -488,174 +521,239 @@ export function ManualIdentifyPage() {
             required
           />
         </label>
-        <label className="od-admin-field">
-          Summary
-          <textarea
-            className="od-admin-input"
-            rows={4}
-            value={form.summary}
-            onChange={(event) => setField('summary', event.target.value)}
-          />
-        </label>
-        <label className="od-admin-field">
-          Storyline
-          <textarea
-            className="od-admin-input"
-            rows={4}
-            value={form.storyline}
-            onChange={(event) => setField('storyline', event.target.value)}
-          />
-        </label>
-        <div className="od-manual-identify__grid">
-          <label className="od-admin-field">
-            Website
-            <input
-              className="od-admin-input"
-              type="url"
-              value={form.url}
-              onChange={(event) => setField('url', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            First release date
-            <input
-              className="od-admin-input"
-              type="date"
-              value={form.first_release_date}
-              onChange={(event) => setField('first_release_date', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            Aggregated rating
-            <input
-              className="od-admin-input"
-              type="number"
-              min="0"
-              max="100"
-              step="any"
-              value={form.aggregated_rating}
-              onChange={(event) => setField('aggregated_rating', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            Category
-            <select
-              className="od-admin-input"
-              value={form.category}
-              onChange={(event) => setField('category', event.target.value)}
+      </section>
+      <form
+        className="od-admin-panel od-manual-identify__form"
+        id="od-manual-identify-form"
+        onSubmit={submit}
+      >
+        <div
+          className="od-manual-identify__tabs"
+          role="tablist"
+          aria-label="Game metadata sections"
+          onKeyDown={onTabKeyDown}
+        >
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`od-identify-tab-${id}`}
+              aria-controls={`od-identify-panel-${id}`}
+              aria-selected={activeTab === id}
+              tabIndex={activeTab === id ? 0 : -1}
+              className={`od-manual-identify__tab${activeTab === id ? ' is-active' : ''}`}
+              onClick={() => setActiveTab(id)}
             >
-              <option value="">Select category</option>
-              {options?.categories.map((row) => (
-                <option key={row.value} value={row.value}>
-                  {row.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="od-admin-field">
-            Status
-            <select
-              className="od-admin-input"
-              value={form.status}
-              onChange={(event) => setField('status', event.target.value)}
-            >
-              <option value="">Select status</option>
-              {options?.statuses.map((row) => (
-                <option key={row.value} value={row.value}>
-                  {row.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="od-admin-field">
-            Developer
-            <input
-              className="od-admin-input"
-              value={form.developer}
-              onChange={(event) => setField('developer', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            Publisher
-            <input
-              className="od-admin-input"
-              value={form.publisher}
-              onChange={(event) => setField('publisher', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            Video URLs
-            <input
-              className="od-admin-input"
-              value={form.video_urls}
-              onChange={(event) => setField('video_urls', event.target.value)}
-            />
-          </label>
-          <label className="od-admin-field">
-            Item kind
-            <select
-              className="od-admin-input"
-              value={form.item_kind}
-              onChange={(event) => setField('item_kind', event.target.value)}
-            >
-              <option value="">Automatic</option>
-              {['game', 'experience', 'emulator', 'tool'].map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
-          </label>
+              {label}
+            </button>
+          ))}
         </div>
-        <details className="od-manual-identify__provider-links">
-          <summary>Provider links</summary>
+        <section
+          id="od-identify-panel-about"
+          role="tabpanel"
+          aria-labelledby="od-identify-tab-about"
+          hidden={activeTab !== 'about'}
+        >
+          <label className="od-admin-field">
+            Summary
+            <textarea
+              className="od-admin-input"
+              rows={4}
+              value={form.summary}
+              onChange={(event) => setField('summary', event.target.value)}
+            />
+          </label>
+          <label className="od-admin-field">
+            Storyline
+            <textarea
+              className="od-admin-input"
+              rows={4}
+              value={form.storyline}
+              onChange={(event) => setField('storyline', event.target.value)}
+            />
+          </label>
           <div className="od-manual-identify__grid">
-            {[
-              ['steam', 'Steam'],
-              ['gog', 'GOG'],
-              ['epicgames', 'Epic Games'],
-              ['itch', 'itch.io'],
-              ['rawg', 'RAWG'],
-              ['mobygames', 'MobyGames'],
-              ['thegamesdb', 'TheGamesDB'],
-              ['official', 'Official site'],
-              ['wikipedia', 'Wikipedia'],
-            ].map(([key, label]) => (
-              <label className="od-admin-field" key={key}>
-                {label}
-                <input
-                  className="od-admin-input"
-                  type="url"
-                  value={form.provider_urls[key] || ''}
-                  onChange={(event) =>
-                    setField('provider_urls', { ...form.provider_urls, [key]: event.target.value })
-                  }
-                  placeholder="https://…"
-                />
-              </label>
-            ))}
+            <label className="od-admin-field">
+              Developer
+              <input
+                className="od-admin-input"
+                value={form.developer}
+                onChange={(event) => setField('developer', event.target.value)}
+              />
+            </label>
+            <label className="od-admin-field">
+              Publisher
+              <input
+                className="od-admin-input"
+                value={form.publisher}
+                onChange={(event) => setField('publisher', event.target.value)}
+              />
+            </label>
           </div>
-        </details>
-        {TAXONOMIES.map(([key, label, field]) => (
-          <fieldset className="od-manual-identify__taxonomy" key={key}>
-            <legend>{label}</legend>
-            {options?.taxonomies[key]?.map((row) => (
-              <label key={row.id}>
-                <input
-                  type="checkbox"
-                  checked={form[field].includes(row.id)}
-                  onChange={(event) =>
-                    setField(
-                      field,
-                      event.target.checked
-                        ? [...form[field], row.id]
-                        : form[field].filter((id: number) => id !== row.id),
-                    )
-                  }
-                />{' '}
-                {row.name}
-              </label>
-            ))}
-          </fieldset>
-        ))}
+        </section>
+        <section
+          id="od-identify-panel-release"
+          role="tabpanel"
+          aria-labelledby="od-identify-tab-release"
+          hidden={activeTab !== 'release'}
+        >
+          <div className="od-manual-identify__grid">
+            <label className="od-admin-field">
+              First release date
+              <input
+                className="od-admin-input"
+                type="date"
+                value={form.first_release_date}
+                onChange={(event) => setField('first_release_date', event.target.value)}
+              />
+            </label>
+            <label className="od-admin-field">
+              Aggregated rating
+              <input
+                className="od-admin-input"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                value={form.aggregated_rating}
+                onChange={(event) => setField('aggregated_rating', event.target.value)}
+              />
+            </label>
+            <label className="od-admin-field">
+              Category
+              <select
+                className="od-admin-input"
+                value={form.category}
+                onChange={(event) => setField('category', event.target.value)}
+              >
+                <option value="">Select category</option>
+                {options?.categories.map((row) => (
+                  <option key={row.value} value={row.value}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="od-admin-field">
+              Status
+              <select
+                className="od-admin-input"
+                value={form.status}
+                onChange={(event) => setField('status', event.target.value)}
+              >
+                <option value="">Select status</option>
+                {options?.statuses.map((row) => (
+                  <option key={row.value} value={row.value}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="od-admin-field">
+              Item kind
+              <select
+                className="od-admin-input"
+                value={form.item_kind}
+                onChange={(event) => setField('item_kind', event.target.value)}
+              >
+                <option value="">Automatic</option>
+                {['game', 'experience', 'emulator', 'tool'].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+        <section
+          id="od-identify-panel-links"
+          role="tabpanel"
+          aria-labelledby="od-identify-tab-links"
+          hidden={activeTab !== 'links'}
+        >
+          <div className="od-manual-identify__grid">
+            <label className="od-admin-field">
+              Website
+              <input
+                className="od-admin-input"
+                type="url"
+                value={form.url}
+                onChange={(event) => setField('url', event.target.value)}
+              />
+            </label>
+            <label className="od-admin-field">
+              Video URLs
+              <input
+                className="od-admin-input"
+                value={form.video_urls}
+                onChange={(event) => setField('video_urls', event.target.value)}
+              />
+            </label>
+          </div>
+          <details className="od-manual-identify__provider-links">
+            <summary>Provider links</summary>
+            <div className="od-manual-identify__grid">
+              {[
+                ['steam', 'Steam'],
+                ['gog', 'GOG'],
+                ['epicgames', 'Epic Games'],
+                ['itch', 'itch.io'],
+                ['rawg', 'RAWG'],
+                ['mobygames', 'MobyGames'],
+                ['thegamesdb', 'TheGamesDB'],
+                ['official', 'Official site'],
+                ['wikipedia', 'Wikipedia'],
+              ].map(([key, label]) => (
+                <label className="od-admin-field" key={key}>
+                  {label}
+                  <input
+                    className="od-admin-input"
+                    type="url"
+                    value={form.provider_urls[key] || ''}
+                    onChange={(event) =>
+                      setField('provider_urls', {
+                        ...form.provider_urls,
+                        [key]: event.target.value,
+                      })
+                    }
+                    placeholder="https://…"
+                  />
+                </label>
+              ))}
+            </div>
+          </details>
+        </section>
+        <section
+          id="od-identify-panel-taxonomy"
+          role="tabpanel"
+          aria-labelledby="od-identify-tab-taxonomy"
+          hidden={activeTab !== 'taxonomy'}
+        >
+          {TAXONOMIES.map(([key, label, field]) => (
+            <fieldset className="od-manual-identify__taxonomy" key={key}>
+              <legend>{label}</legend>
+              {options?.taxonomies[key]?.map((row) => (
+                <label key={row.id}>
+                  <input
+                    type="checkbox"
+                    checked={form[field].includes(row.id)}
+                    onChange={(event) =>
+                      setField(
+                        field,
+                        event.target.checked
+                          ? [...form[field], row.id]
+                          : form[field].filter((id: number) => id !== row.id),
+                      )
+                    }
+                  />{' '}
+                  {row.name}
+                </label>
+              ))}
+            </fieldset>
+          ))}
+        </section>
         {saveError ? (
           <PageStatus announcement="alert" className="od-manual-identify__error">
             {saveError}
@@ -670,17 +768,6 @@ export function ManualIdentifyPage() {
             ))}
           </ul>
         ) : null}
-        <div className="od-admin-actions-row">
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={
-              saving || !options || Boolean(loadError) || scanRunning || !identifyFieldsValid
-            }
-          >
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Save and identify game'}
-          </Button>
-        </div>
       </form>
       <section className="od-admin-panel" aria-labelledby="od-link-existing-title">
         <h2 id="od-link-existing-title">Or link to an existing library game</h2>
