@@ -70,6 +70,37 @@ class GameDeleteMutationData:
             db.session.delete(entry)
             db.session.commit()
 
+    def restore_folder_entry(self, entry) -> bool:
+        """Recreate a deleted unmatched-folder row after staged cleanup fails."""
+        if entry is None:
+            return True
+
+        from sqlalchemy import select
+
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import UnmatchedFolder
+
+        try:
+            existing = db.session.execute(
+                select(UnmatchedFolder).filter_by(folder_path=entry.folder_path),
+            ).scalars().first()
+            if existing is not None:
+                return True
+
+            values = {
+                column.key: getattr(entry, column.key)
+                for column in UnmatchedFolder.__table__.columns
+            }
+            db.session.add(UnmatchedFolder(**values))
+            db.session.commit()
+            return True
+        except Exception:
+            db.session.rollback()
+            logging.getLogger(__name__).exception(
+                'Could not restore unmatched-folder row after staged cleanup failed'
+            )
+            return False
+
     def rollback(self):
         from oneirodex.runtime_native.db_session import native_db as db
 
@@ -123,11 +154,13 @@ class GameDeleteMutationData:
             else:
                 os.unlink(staged)
         except OSError:
-            # The DB row has already been removed. Preserve the successful
-            # result and leave the orphaned staged path for operator cleanup.
+            # The route restores the staged path and its DB row before it
+            # reports a failed deletion to the caller.
             logging.getLogger(__name__).warning(
                 'Folder delete committed but staged path cleanup failed'
             )
+            return False
+        return True
 
     def path_exists(self, path):
         return os.path.exists(path)
@@ -416,7 +449,30 @@ async def _delete_folder(request, app, data):
                 return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
         data.remove_folder_entry(entry)
         if staged_path is not None:
-            data.discard_staged_path(staged_path)
+            discarded = data.discard_staged_path(staged_path)
+            if discarded is False:
+                try:
+                    data.restore_staged_path(staged_path, full_path)
+                    staged_path = None
+                    restore_folder_entry = getattr(data, 'restore_folder_entry', None)
+                    if entry is not None and (
+                        not callable(restore_folder_entry)
+                        or restore_folder_entry(entry) is False
+                    ):
+                        raise RuntimeError('Could not restore unmatched-folder row')
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        'Could not restore folder after staged cleanup failed'
+                    )
+                    return _error(
+                        'Could not complete the deletion. Administrator recovery may be required.',
+                        'internal', 500, body_status='error',
+                    )
+                if entry is None:
+                    message = 'Could not delete the item. The original folder was restored.'
+                else:
+                    message = 'Could not delete the item. The folder and database entry were restored.'
+                return _error(message, 'internal', 500, body_status='error')
         from oneirodex.utils.api_contract import api_ok_payload
 
         return JSONResponse(api_ok_payload({

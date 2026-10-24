@@ -56,6 +56,10 @@ class FakeGameDeleteData:
     def remove_folder_entry(self, entry):
         self.calls.append(('remove_entry', entry.folder_path))
 
+    def restore_folder_entry(self, entry):
+        self.calls.append(('restore_entry', entry.folder_path))
+        return True
+
     def path_exists(self, _path):
         return self.exists
 
@@ -249,6 +253,37 @@ def test_native_unmatched_folder_delete_restores_path_when_database_delete_fails
     assert folder.is_dir()
     assert marker.read_text(encoding='utf-8') == 'restore after commit failure'
     assert not list(tmp_path.glob('*.delete-*'))
+
+
+def test_native_unmatched_folder_delete_restores_folder_and_row_when_staged_cleanup_fails(
+    native_client, tmp_path,
+):
+    runtime, data, csrf, cookie = native_client
+    folder = tmp_path / 'unmatched'
+    nested = folder / 'nested'
+    nested.mkdir(parents=True)
+    marker = nested / 'keep.txt'
+    marker.write_text('restore after staged cleanup failure', encoding='utf-8')
+
+    entry = SimpleNamespace(id='synthetic-row', folder_path=str(folder))
+    data.path_exists = lambda path: Path(path).exists()
+    data.folder_entry = lambda _path: entry
+    data.stage_path = _stage_test_path
+    data.restore_staged_path = lambda staged, path: os.replace(staged, path)
+    data.discard_staged_path = lambda _staged: False
+
+    response = _request_json(
+        runtime, '/delete_folder', {'folder_path': str(folder)},
+        csrf=csrf, cookie=cookie,
+    )
+
+    assert response.status_code == 500
+    assert response.json()['message'] == (
+        'Could not delete the item. The folder and database entry were restored.'
+    )
+    assert marker.read_text(encoding='utf-8') == 'restore after staged cleanup failure'
+    assert not list(tmp_path.glob('*.delete-*'))
+    assert ('restore_entry', str(folder)) in data.calls
 
 
 def test_native_full_game_delete_checks_path_before_fake_disk_and_db_effects(native_client):
