@@ -432,6 +432,43 @@ test('explains that a game name is required before searching IGDB', async () => 
   expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(false)
 })
 
+test('keeps an empty IGDB result as inline guidance instead of an error alert', async () => {
+  const note = 'No IGDB matches found. You can still enter the metadata manually.'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.startsWith('/api/search_igdb_by_name?'))
+      return response({ results: [] }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?name=No+Match+Probe']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Search IGDB', exact: true }))
+
+  expect(await screen.findByRole('status')).toHaveTextContent(note)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(true)
+})
+
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],

@@ -151,7 +151,7 @@ export function ManualIdentifyPage() {
       const data = await getJson(`/api/search_igdb_by_name?${params}`)
       setCandidates(Array.isArray(data.results) ? data.results : [])
       if (!Array.isArray(data.results) || !data.results.length)
-        setSaveError('No IGDB matches found. You can still enter the metadata manually.')
+        setProviderNotice('No IGDB matches found. You can still enter the metadata manually.')
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'IGDB search failed.')
     } finally {
