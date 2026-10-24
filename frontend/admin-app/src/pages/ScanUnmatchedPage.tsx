@@ -403,9 +403,7 @@ export function ScanUnmatchedPage() {
       }
       setSelectedIds(new Set())
       selectedRows.current.clear()
-      setActionStatus(
-        `Cleared ${cleared} ${entryLabel(cleared)}. Storage files were not changed.`,
-      )
+      setActionStatus(`Cleared ${cleared} ${entryLabel(cleared)}. Storage files were not changed.`)
       setReloadKey((value) => value + 1)
     } catch (reason) {
       setError(reason)
@@ -601,19 +599,8 @@ export function ScanUnmatchedPage() {
         <Button className="od-cbtn" disabled={loading} onClick={() => void clearRows('Unmatched')}>
           Clear Unmatched
         </Button>
-        <Button
-          className="od-cbtn"
-          disabled={loading}
-          onClick={() => void clearRows('all')}
-        >
+        <Button className="od-cbtn" disabled={loading} onClick={() => void clearRows('all')}>
           Clear All
-        </Button>
-        <Button
-          className="od-cbtn"
-          disabled={loading}
-          onClick={() => setReloadKey((value) => value + 1)}
-        >
-          Refresh
         </Button>
         <Button
           className="od-cbtn"
@@ -647,18 +634,35 @@ export function ScanUnmatchedPage() {
         >
           Backfill kind hints
         </Button>
-        <a
-          className="od-cbtn"
-            href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'csv', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
-          >
-            Export CSV
-        </a>
-        <a
-          className="od-cbtn"
-            href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'json', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
-          >
-            Export JSON
-        </a>
+        <details className="od-scan-unmatched__export">
+          <summary className="od-cbtn" title="Download the current filter">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" focusable="false">
+              <path
+                d="M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>{' '}
+            Export
+          </summary>
+          <div>
+            <a
+              className="od-cbtn"
+              href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'csv', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
+            >
+              Export CSV
+            </a>
+            <a
+              className="od-cbtn"
+              href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'json', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
+            >
+              Export JSON
+            </a>
+          </div>
+        </details>
       </AdminPageActions>
       {linkSuccess ? (
         <PageStatus announcement="status" className="od-scan-unmatched__success">
@@ -673,188 +677,205 @@ export function ScanUnmatchedPage() {
         errorMessage="Unable to load unmatched folders."
       />
       <section className="od-scan-unmatched" aria-label="Unmatched folder filters and results">
-        <div className="od-scan-unmatched__filter-group" role="group" aria-label="Status filter">
-          {STATUS_FILTERS.map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              aria-pressed={status === value}
-              className={`od-scan-unmatched__filter${status === value ? ' is-active' : ''}`}
-              onClick={() => changeFilter(setStatus, value)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-        <label className="od-scan-unmatched__search">
-          Search
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setSelectedIds(new Set())
-              selectedRows.current.clear()
-              setQuery(event.target.value)
-              setOffset(0)
-            }}
-            placeholder="Path, folder, library, platform, or matched title"
-          />
-        </label>
-        <div className="od-scan-unmatched__selects">
-          <label>
-            Library
-            <select
-              value={libraryUuid}
-              onChange={(event) => changeFilter(setLibraryUuid, event.target.value)}
-            >
-              <option value="">All libraries</option>
-              {libraries.map((row) => (
-                <option key={row.uuid} value={row.uuid}>
-                  {row.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            System
-            <select
-              value={platform}
-              onChange={(event) => changeFilter(setPlatform, event.target.value)}
-            >
-              <option value="">All systems</option>
-              {systems.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Region
-            <select
-              value={region}
-              onChange={(event) => changeFilter(setRegion, event.target.value)}
-            >
-              <option value="">All regions</option>
-              {['USA', 'EUR', 'JPN', 'WORLD', 'OTHER'].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Rows per page
-            <select
-              value={pageSize}
+        <div className="od-scan-unmatched__filters">
+          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Status filter">
+            {STATUS_FILTERS.map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                aria-pressed={status === value}
+                className={`od-scan-unmatched__filter od-scan-unmatched__filter--status${status === value ? ' is-active' : ''}`}
+                onClick={() => changeFilter(setStatus, value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <label className="od-scan-unmatched__search">
+            <span className="visually-hidden">Search unmatched folders</span>
+            <input
+              type="search"
+              value={query}
               onChange={(event) => {
-                setPageSize(Number(event.target.value) || 150)
+                setSelectedIds(new Set())
+                selectedRows.current.clear()
+                setQuery(event.target.value)
                 setOffset(0)
               }}
-            >
-              {[50, 150, 300, 500].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
+              placeholder="Search path, name, library, platform, or dupe title…"
+            />
           </label>
-        </div>
-        <div className="od-scan-unmatched__chips">
-          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Layout filter">
-            <strong>Layout</strong>
-            {[
-              ['all', 'All'],
-              ['file-leaf', 'ROM files library'],
-              ['folder-leaf', 'Folder library'],
-            ].map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                aria-pressed={layout === value}
-                className={`od-scan-unmatched__filter${layout === value ? ' is-active' : ''}`}
-                onClick={() => changeFilter(setLayout, value)}
+          <div className="od-scan-unmatched__selects">
+            <label>
+              Library
+              <select
+                className="od-scan-unmatched__control"
+                value={libraryUuid}
+                onChange={(event) => changeFilter(setLibraryUuid, event.target.value)}
               >
-                {label}
-              </Button>
-            ))}
-          </div>
-          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Triage filter">
-            <strong>Triage</strong>
-            {[
-              ['all', 'All'],
-              ['platform-mismatch', 'Platform mismatch'],
-              ['garbage', 'Garbage'],
-            ].map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                aria-pressed={triage === value}
-                className={`od-scan-unmatched__filter${triage === value ? ' is-active' : ''}`}
-                onClick={() => changeFilter(setTriage, value)}
+                <option value="">All libraries</option>
+                {libraries.map((row) => (
+                  <option key={row.uuid} value={row.uuid}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              System
+              <select
+                className="od-scan-unmatched__control"
+                value={platform}
+                onChange={(event) => changeFilter(setPlatform, event.target.value)}
               >
-                {label}
-              </Button>
-            ))}
-          </div>
-          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Why filter">
-            <strong>Why</strong>
-            {WHY_FILTERS.map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                aria-pressed={why === value}
-                className={`od-scan-unmatched__filter${why === value ? ' is-active' : ''}`}
-                onClick={() => changeFilter(setWhy, value)}
+                <option value="">All systems</option>
+                {systems.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Region
+              <select
+                className="od-scan-unmatched__control"
+                value={region}
+                onChange={(event) => changeFilter(setRegion, event.target.value)}
               >
-                {label}
-              </Button>
-            ))}
-          </div>
-          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Kind filter">
-            <strong>Kind</strong>
-            {[
-              ['all', 'All'],
-              ['experience', 'Soft title'],
-              ['emulator', 'Emulator'],
-              ['tool', 'Utility'],
-              ['none', 'No hint'],
-            ].map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                aria-pressed={kind === value}
-                className={`od-scan-unmatched__filter${kind === value ? ' is-active' : ''}`}
-                onClick={() => changeFilter(setKind, value)}
+                <option value="">All regions</option>
+                {['USA', 'EUR', 'JPN', 'WORLD', 'OTHER'].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Page size
+              <select
+                className="od-scan-unmatched__control"
+                aria-label="Rows per page"
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value) || 150)
+                  setOffset(0)
+                }}
               >
-                {label}
-              </Button>
-            ))}
+                {[50, 150, 300, 500].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-        </div>
-        <div className="od-scan-unmatched__pager">
-          <span>
-            Showing {start}–{end} of {displayTotal}
-          </span>
-          <div>
-            <Button
-              type="button"
-              disabled={loading || offset <= 0}
-              onClick={() => setOffset((value) => Math.max(0, value - pageSize))}
+          <div className="od-scan-unmatched__chips">
+            <div
+              className="od-scan-unmatched__filter-group"
+              role="group"
+              aria-label="Layout filter"
             >
-              Previous
-            </Button>
+              <strong>Layout</strong>
+              {[
+                ['all', 'All'],
+                ['file-leaf', 'ROM files library'],
+                ['folder-leaf', 'Folder library'],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  aria-pressed={layout === value}
+                  className={`od-scan-unmatched__filter od-scan-unmatched__filter--chip${layout === value ? ' is-active' : ''}`}
+                  onClick={() => changeFilter(setLayout, value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div
+              className="od-scan-unmatched__filter-group"
+              role="group"
+              aria-label="Triage filter"
+            >
+              <strong>Triage</strong>
+              {[
+                ['all', 'All'],
+                ['platform-mismatch', 'Platform mismatch'],
+                ['garbage', 'Garbage'],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  aria-pressed={triage === value}
+                  className={`od-scan-unmatched__filter od-scan-unmatched__filter--chip${triage === value ? ' is-active' : ''}`}
+                  onClick={() => changeFilter(setTriage, value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="od-scan-unmatched__filter-group" role="group" aria-label="Why filter">
+              <strong>Why</strong>
+              {WHY_FILTERS.map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  aria-pressed={why === value}
+                  className={`od-scan-unmatched__filter od-scan-unmatched__filter--chip${why === value ? ' is-active' : ''}`}
+                  onClick={() => changeFilter(setWhy, value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="od-scan-unmatched__filter-group" role="group" aria-label="Kind filter">
+              <strong>Kind</strong>
+              {[
+                ['all', 'All'],
+                ['experience', 'Soft title'],
+                ['emulator', 'Emulator'],
+                ['tool', 'Utility'],
+                ['none', 'No hint'],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  aria-pressed={kind === value}
+                  className={`od-scan-unmatched__filter od-scan-unmatched__filter--chip${kind === value ? ' is-active' : ''}`}
+                  onClick={() => changeFilter(setKind, value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="od-scan-unmatched__pager">
             <span>
-              Page {displayTotal ? Math.floor(offset / pageSize) + 1 : 0} of{' '}
-              {Math.max(1, Math.ceil(displayTotal / pageSize))}
+              Showing {start}–{end} of {displayTotal}
             </span>
-            <Button
-              type="button"
-              disabled={loading || offset + pageSize >= displayTotal}
-              onClick={() => setOffset((value) => value + pageSize)}
-            >
-              Next
-            </Button>
+            {displayTotal > pageSize ? (
+              <div>
+                <Button
+                  type="button"
+                  disabled={loading || offset <= 0}
+                  onClick={() => setOffset((value) => Math.max(0, value - pageSize))}
+                >
+                  Previous
+                </Button>
+                <span>
+                  Page {displayTotal ? Math.floor(offset / pageSize) + 1 : 0} of{' '}
+                  {Math.max(1, Math.ceil(displayTotal / pageSize))}
+                </span>
+                <Button
+                  type="button"
+                  disabled={loading || offset + pageSize >= displayTotal}
+                  onClick={() => setOffset((value) => value + pageSize)}
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
         {selectedIds.size ? (
@@ -962,11 +983,12 @@ export function ScanUnmatchedPage() {
                   >
                     <Button
                       type="button"
-                      className="od-scan-unmatched__sort"
+                      aria-pressed={sort.key === key}
+                      className={`od-scan-unmatched__sort${sort.key === key ? ' is-active' : ''}`}
                       onClick={() => toggleSort(key)}
                     >
                       {label}
-                      {sort.key === key ? (sort.dir === 1 ? ' ↑' : ' ↓') : ''}
+                      {sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ' ↕'}
                     </Button>
                   </th>
                 ))}
@@ -975,7 +997,7 @@ export function ScanUnmatchedPage() {
             </thead>
             <tbody>
               {visibleRows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} data-status={row.status || 'Unknown'}>
                   <td>
                     <input
                       type="checkbox"
@@ -1021,9 +1043,15 @@ export function ScanUnmatchedPage() {
                         disabled={busyId === row.id}
                         onClick={() => void saveSearchName(row)}
                       >
-                        Save name
+                        Save
                       </Button>
                     </div>
+                    <small className="od-scan-unmatched__on-disk">
+                      On disk:{' '}
+                      <span title={row.folder_path || undefined}>
+                        {row.folder_path?.split(/[\\/]/).filter(Boolean).at(-1) || 'Unknown path'}
+                      </span>
+                    </small>
                     <div className="od-scan-unmatched__badges">
                       <span>
                         {detectLeafType(row.folder_path) === 'file-leaf' ? 'ROM files' : 'Folder'}
@@ -1037,9 +1065,6 @@ export function ScanUnmatchedPage() {
                       ) : null}
                       {isGarbageScaffolding(row) ? <span>Garbage</span> : null}
                     </div>
-                    <small className="od-scan-unmatched__on-disk">
-                      On disk: <span>{row.folder_path || 'Unknown path'}</span>
-                    </small>
                     {row.matched_game?.name ? (
                       <small>Matched title: {row.matched_game.name}</small>
                     ) : null}
@@ -1071,7 +1096,11 @@ export function ScanUnmatchedPage() {
                     ) : null}
                   </td>
                   <td className="od-scan-unmatched__status">
-                    <span>{row.status || 'Unknown'}</span>
+                    <span
+                      className={`od-scan-unmatched__status-label od-scan-unmatched__status-label--${String(row.status || 'unknown').toLowerCase()}`}
+                    >
+                      {row.status || 'Unknown'}
+                    </span>
                     {row.why_unmatched ||
                     row.unmatched_reason ||
                     row.match_reason ||
@@ -1099,141 +1128,155 @@ export function ScanUnmatchedPage() {
                         role="toolbar"
                         aria-label={`Actions for ${row.folder_path || row.id}`}
                       >
-                      <Button
-                        type="button"
-                        onClick={() => setPathModal(String(row.folder_path || ''))}
-                      >
-                        Open path
-                      </Button>
-                      <a
-                        className="od-btn"
-                        href={`/add_game_manual?${new URLSearchParams({ full_disk_path: String(row.folder_path || ''), library_uuid: String(row.library_uuid || ''), name: String(row.search_name || row.suggested_search_name || row.folder_name || String(row.folder_path || '').split(/[\\/]/).pop() || ''), from_unmatched: 'true' })}`}
-                      >
-                        Fix search
-                      </a>
-                      {row.status === 'Unmatched' ||
-                      row.status === 'Pending' ||
-                      row.status === 'Duplicate' ? (
-                        <>
+                        <Button
+                          type="button"
+                          onClick={() => setPathModal(String(row.folder_path || ''))}
+                        >
+                          Open path
+                        </Button>
+                        <a
+                          className="od-btn"
+                          href={`/add_game_manual?${new URLSearchParams({
+                            full_disk_path: String(row.folder_path || ''),
+                            library_uuid: String(row.library_uuid || ''),
+                            name: String(
+                              row.search_name ||
+                                row.suggested_search_name ||
+                                row.folder_name ||
+                                String(row.folder_path || '')
+                                  .split(/[\\/]/)
+                                  .pop() ||
+                                '',
+                            ),
+                            from_unmatched: 'true',
+                          })}`}
+                        >
+                          Fix search
+                        </a>
+                        {row.status === 'Unmatched' ||
+                        row.status === 'Pending' ||
+                        row.status === 'Duplicate' ? (
+                          <>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void markKind(row, 'experience', 'Soft title')}
+                            >
+                              Mark Soft
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void markKind(row, 'emulator', 'Emulator')}
+                            >
+                              Mark Emu
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void markKind(row, 'tool', 'Utility')}
+                            >
+                              Mark Util
+                            </Button>
+                          </>
+                        ) : null}
+                        {row.status === 'Unmatched' ? (
+                          row.is_bare_update_package ? (
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void placeUpdate(row)}
+                            >
+                              Place update
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void retryMatch(row)}
+                            >
+                              Retry match
+                            </Button>
+                          )
+                        ) : null}
+                        {badMatchReasons.length ? (
+                          <label className="od-scan-unmatched__badmatch">
+                            Bad match
+                            <select
+                              aria-label={`Flag bad match for ${row.folder_path || row.id}`}
+                              disabled={busyId === row.id}
+                              value={row.bad_match_reason || ''}
+                              onChange={(event) => void saveBadMatch(row, event.target.value)}
+                            >
+                              <option value="">Not flagged</option>
+                              {badMatchReasons.map((reason) => (
+                                <option key={reason.id} value={reason.id}>
+                                  {reason.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {row.status !== 'Duplicate' ? (
                           <Button
                             type="button"
                             disabled={busyId === row.id}
-                            onClick={() => void markKind(row, 'experience', 'Soft title')}
+                            onClick={() => void toggleIgnore(row)}
                           >
-                            Mark Soft
+                            {row.status === 'Ignore' ? 'Unignore' : 'Ignore'}
                           </Button>
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void markKind(row, 'emulator', 'Emulator')}
-                          >
-                            Mark Emu
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void markKind(row, 'tool', 'Utility')}
-                          >
-                            Mark Util
-                          </Button>
-                        </>
-                      ) : null}
-                      {row.status === 'Unmatched' ? (
-                        row.is_bare_update_package ? (
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void placeUpdate(row)}
-                          >
-                            Place update
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void retryMatch(row)}
-                          >
-                            Retry match
-                          </Button>
-                        )
-                      ) : null}
-                      {badMatchReasons.length ? (
-                        <label className="od-scan-unmatched__badmatch">
-                          Bad match
-                          <select
-                            aria-label={`Flag bad match for ${row.folder_path || row.id}`}
-                            disabled={busyId === row.id}
-                            value={row.bad_match_reason || ''}
-                            onChange={(event) => void saveBadMatch(row, event.target.value)}
-                          >
-                            <option value="">Not flagged</option>
-                            {badMatchReasons.map((reason) => (
-                              <option key={reason.id} value={reason.id}>
-                                {reason.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
-                      {row.status !== 'Duplicate' ? (
+                        ) : null}
+                        {row.status === 'Duplicate' ? (
+                          <>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void runRowAction(row, 'merge')}
+                            >
+                              Merge
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void runRowAction(row, 'keep')}
+                            >
+                              Keep
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => void runRowAction(row, 'ignore')}
+                            >
+                              Ignore
+                            </Button>
+                          </>
+                        ) : null}
                         <Button
                           type="button"
                           disabled={busyId === row.id}
-                          onClick={() => void toggleIgnore(row)}
-                        >
-                          {row.status === 'Ignore' ? 'Unignore' : 'Ignore'}
-                        </Button>
-                      ) : null}
-                      {row.status === 'Duplicate' ? (
-                        <>
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void runRowAction(row, 'merge')}
-                          >
-                            Merge
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void runRowAction(row, 'keep')}
-                          >
-                            Keep
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={busyId === row.id}
-                            onClick={() => void runRowAction(row, 'ignore')}
-                          >
-                            Ignore
-                          </Button>
-                        </>
-                      ) : null}
-                      <Button
-                        type="button"
-                        disabled={busyId === row.id}
-                        onClick={() => {
-                          if (!window.confirm('Remove this entry from the unmatched list?')) return
-                          void postJson('/api/unmatched_folders/batch/clear', {
-                            ids: [String(row.id)],
-                          })
-                            .then(() => {
-                              setActionStatus('Entry removed successfully.')
-                              setReloadKey((value) => value + 1)
+                          onClick={() => {
+                            if (!window.confirm('Remove this entry from the unmatched list?'))
+                              return
+                            void postJson('/api/unmatched_folders/batch/clear', {
+                              ids: [String(row.id)],
                             })
-                            .catch(setError)
-                        }}
-                      >
-                        Clear
-                      </Button>
-                      <Button
-                        type="button"
-                        className="od-btn od-btn--danger"
-                        disabled={busyId === row.id}
-                        onClick={() => void deleteFolderFromDisk(row)}
-                      >
-                        Delete from disk
-                      </Button>
+                              .then(() => {
+                                setActionStatus('Entry removed successfully.')
+                                setReloadKey((value) => value + 1)
+                              })
+                              .catch(setError)
+                          }}
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          type="button"
+                          className="od-btn od-btn--danger"
+                          disabled={busyId === row.id}
+                          onClick={() => void deleteFolderFromDisk(row)}
+                        >
+                          Delete from disk
+                        </Button>
                       </div>
                     </details>
                   </td>

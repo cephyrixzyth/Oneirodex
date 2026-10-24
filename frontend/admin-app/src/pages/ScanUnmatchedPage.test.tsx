@@ -51,10 +51,21 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('/storage/review/page-0')).toBeInTheDocument()
+  expect(await screen.findByText('page-0')).toBeInTheDocument()
   expect(screen.getByText("Linked existing game 'Review Game' to this folder.")).toBeInTheDocument()
   expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Clear Unmatched' })).toBeInTheDocument()
+  expect(screen.getByRole('searchbox', { name: 'Search unmatched folders' })).toBeInTheDocument()
+  expect(screen.getByRole('searchbox', { name: 'Search unmatched folders' })).toHaveAttribute(
+    'placeholder',
+    'Search path, name, library, platform, or dupe title…',
+  )
+  expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument()
+  expect(screen.getByText('Page size')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('Export'))
+  expect(screen.getByRole('link', { name: 'Export CSV' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Export JSON' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
     'href',
     '/add_game_manual?full_disk_path=%2Fstorage%2Freview%2Fpage-0&library_uuid=library-1&name=page-0&from_unmatched=true',
@@ -80,12 +91,17 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
   const firstRow = screen.getByRole('row', { name: /page-0/ })
   expect(within(firstRow).getByText('On disk:')).toBeInTheDocument()
   expect(within(firstRow).getByText('Why unmatched?')).toBeInTheDocument()
+  expect(firstRow).toHaveAttribute('data-status', 'Unmatched')
+  expect(within(firstRow).getByText('Unmatched')).toHaveClass(
+    'od-scan-unmatched__status-label--unmatched',
+  )
+  expect(within(firstRow).getByTitle('/storage/review/page-0')).toHaveTextContent('page-0')
 
   fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))
   expect(await screen.findByText('No folders for this filter.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Folder library' }))
-  expect(await screen.findByText('/storage/review/page-0')).toBeInTheDocument()
+  expect(await screen.findByText('page-0')).toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select folder /storage/review/page-0' }))
   expect(screen.getByRole('group', { name: 'Selected folder actions' })).toBeInTheDocument()
@@ -112,7 +128,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
       expect.anything(),
     ),
   )
-  expect(await screen.findByText('/storage/review/page-50')).toBeInTheDocument()
+  expect(await screen.findByText('page-50')).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledTimes(1)
 })
 
@@ -141,13 +157,15 @@ test('Clear All confirms and uses singular feedback for one removed entry', asyn
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('/storage/review/clear-all')).toBeInTheDocument()
+  expect(await screen.findByText('clear-all')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Clear All' }))
 
   expect(window.confirm).toHaveBeenCalledWith(
     'Clear all unmatched-folder entries? This removes the database entries only; it does not delete files from storage.',
   )
-  expect(await screen.findByText('Cleared 1 entry. Storage files were not changed.')).toBeInTheDocument()
+  expect(
+    await screen.findByText('Cleared 1 entry. Storage files were not changed.'),
+  ).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith('/api/unmatched_folders/batch/clear', {
     ids: ['folder-clear-all'],
   })
@@ -175,10 +193,8 @@ test('disk deletion requires confirmation before the destructive request', async
     </MemoryRouter>,
   )
 
-  await screen.findByText('/storage/review/delete-me')
-  fireEvent.click(
-    within(screen.getByRole('row', { name: /delete-me/ })).getByText('Actions'),
-  )
+  await screen.findByText('delete-me')
+  fireEvent.click(within(screen.getByRole('row', { name: /delete-me/ })).getByText('Actions'))
   fireEvent.click(screen.getByRole('button', { name: 'Delete from disk' }))
   expect(window.confirm).toHaveBeenCalledWith(
     'Are you sure you want to delete the folder /storage/review/delete-me FROM DISK?',
@@ -207,18 +223,18 @@ test('computed filters paginate across every matching row and report the filtere
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('/storage/review/Game-0.nes')).toBeInTheDocument()
+  expect(await screen.findByText('Game-0.nes')).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))
 
   expect(await screen.findByText('Showing 1–50 of 51')).toBeInTheDocument()
-  expect(screen.getByText('/storage/review/Game-0.nes')).toBeInTheDocument()
-  expect(screen.queryByText('/storage/review/Game-50.nes')).not.toBeInTheDocument()
+  expect(screen.getByText('Game-0.nes')).toBeInTheDocument()
+  expect(screen.queryByText('Game-50.nes')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
   expect(await screen.findByText('Showing 51–51 of 51')).toBeInTheDocument()
-  expect(screen.getByText('/storage/review/Game-50.nes')).toBeInTheDocument()
-  expect(screen.queryByText('/storage/review/Game-0.nes')).not.toBeInTheDocument()
+  expect(screen.getByText('Game-50.nes')).toBeInTheDocument()
+  expect(screen.queryByText('Game-0.nes')).not.toBeInTheDocument()
   expect(getJson).toHaveBeenCalledWith(
     expect.stringContaining('paginate=0'),
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -252,7 +268,7 @@ test('keeps selected rows across server pages and applies batch actions to every
     await screen.findByRole('checkbox', { name: 'Select folder /storage/review/page-00' }),
   )
   fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
-  await screen.findByText('/storage/review/page-00')
+  await screen.findByText('page-00')
   fireEvent.click(screen.getByRole('button', { name: 'Next' }))
   fireEvent.click(
     await screen.findByRole('checkbox', { name: 'Select folder /storage/review/page-50' }),
@@ -307,7 +323,7 @@ test('saves the legacy soft search name without renaming the folder path', async
   )
   const nameInput = await screen.findByRole('textbox', { name: 'Search name' })
   fireEvent.change(nameInput, { target: { value: 'Corrected Search Name' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
   await waitFor(() =>
     expect(postJson).toHaveBeenCalledWith('/api/unmatched_folders/folder-name/name', {
@@ -316,7 +332,7 @@ test('saves the legacy soft search name without renaming the folder path', async
     }),
   )
   expect(await screen.findByText(/folder on disk was not renamed/i)).toBeInTheDocument()
-  expect(screen.getByText('/storage/review/Original Name')).toBeInTheDocument()
+  expect(screen.getByText('Original Name')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
     'href',
     '/add_game_manual?full_disk_path=%2Fstorage%2Freview%2FOriginal+Name&library_uuid=&name=Old+Search+Name&from_unmatched=true',
