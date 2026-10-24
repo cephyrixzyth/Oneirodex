@@ -14,6 +14,15 @@ from .request_auth import request_auth_context
 
 
 class LegacyScanFormData:
+    def library_exists(self, library_uuid):
+        from oneirodex.models import Library
+        from oneirodex.runtime_native.db_session import native_db as db
+        from sqlalchemy import select
+
+        return db.session.execute(
+            select(Library.uuid).filter_by(uuid=library_uuid)
+        ).first() is not None
+
     def resolve_path(self, app, folder_path, library_root):
         from oneirodex.utils.library_roots import resolve_scan_path
 
@@ -32,7 +41,7 @@ class LegacyScanFormData:
     def readable_directory(self, path):
         import os
 
-        return os.path.exists(path) and os.access(path, os.R_OK)
+        return os.path.isdir(path) and os.access(path, os.R_OK)
 
     def scan_patterns(self):
         from oneirodex.utils.functions import load_scanning_filter_patterns
@@ -58,6 +67,59 @@ def create_legacy_scan_form_router(
 ) -> APIRouter:
     router = APIRouter()
     data = data_access or LegacyScanFormData()
+
+    @router.get('/api/admin/scan/manual-identify/session-preview')
+    async def manual_identify_session_preview(request: Request):
+        """Expose the candidate list left by the legacy folder-scan form.
+
+        The old form stored this projection in the signed session and rendered
+        it on the next scan-management request. The React page needs the same
+        projection after the compatibility redirect.
+        """
+        from oneirodex.utils.api_contract import api_ok_payload, api_error_payload
+        from oneirodex.utils.role_catalog import normalize_role
+        from starlette.responses import JSONResponse
+
+        scope = database_scope(flask_app) if database_scope else nullcontext()
+        with scope:
+            auth = request_auth_context(
+                request, flask_app.config, find_user=find_user,
+                find_token=find_token, commit_token_touch=commit_token_touch,
+                load_user_id=load_user_id, login_manager=login_manager,
+            )
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            elif normalize_role(getattr(auth.user, 'role', None) or '') != 'admin':
+                response = _login_redirect(
+                    flask_app, request, login_manager, auth,
+                    message='You must be an admin to access this page.',
+                    category='danger', include_next=False,
+                )
+            elif auth.token is not None and not auth.has_scope('admin'):
+                payload, status = api_error_payload(
+                    'This token does not have the admin scope', code='forbidden',
+                )
+                response = JSONResponse(payload, status_code=status)
+            else:
+                game_paths = auth.session_data.get('game_paths')
+                rows = []
+                if isinstance(game_paths, dict):
+                    rows = [
+                        {'name': name, 'full_path': path}
+                        for name, path in game_paths.items()
+                        if isinstance(name, str) and name.strip()
+                        and isinstance(path, str) and path.strip()
+                    ][:5000]
+                response = JSONResponse(api_ok_payload({
+                    'games': rows,
+                    'library_uuid': auth.session_data.get('selected_library_uuid'),
+                }), headers={'Cache-Control': 'no-store'})
+            if auth.should_set_session_cookie:
+                _set_session_cookie(response, flask_app, auth)
+            from oneirodex.utils.security_headers import security_header_values
+            for key, value in security_header_values(flask_app.config).items():
+                response.headers.setdefault(key, value)
+            return response
 
     @router.post('/scan_manual_folder')
     async def scan_manual_folder(request: Request):
@@ -116,6 +178,12 @@ def create_legacy_scan_form_router(
                         pass
                     elif not str(first_form_value(form, 'library_uuid') or '').strip():
                         _flash(auth, 'error', 'Please select a library.')
+                    elif not data.library_exists(
+                        str(first_form_value(form, 'library_uuid') or '').strip(),
+                    ):
+                        # The Flask SelectField rejected values outside the
+                        # database-backed choices before running path scans.
+                        _flash(auth, 'error', 'Not a valid choice.')
                     else:
                         resolved, root_error = data.resolve_path(
                             flask_app, folder_path, library_root,
@@ -134,6 +202,9 @@ def create_legacy_scan_form_router(
                                     insensitive, sensitive = data.scan_patterns()
                                     games = data.list_games(resolved, insensitive, sensitive)
                                     auth.session_data['active_tab'] = 'manualScan'
+                                    library_uuid = str(first_form_value(form, 'library_uuid') or '').strip()
+                                    if library_uuid:
+                                        auth.session_data['selected_library_uuid'] = library_uuid
                                     auth.session_data['game_paths'] = {
                                         row['name']: row['full_path'] for row in games
                                     }
@@ -141,7 +212,7 @@ def create_legacy_scan_form_router(
                                     _flash(auth, 'error', 'Folder does not exist or cannot be accessed.')
                     response = flask_redirect_response(
                         '/scan_manual_folder' if cancelled else
-                        '/admin/scan_management?active_tab=manualScan', status_code=302,
+                        '/scan_management?active_tab=manual', status_code=302,
                     )
 
                 if auth is not None and auth.should_set_session_cookie:

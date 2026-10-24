@@ -51,6 +51,18 @@ class FakeScanFormData:
         return [{'name': 'Example Game', 'full_path': '/safe/ROMs/Example Game'}]
 
 
+def test_readable_directory_rejects_regular_files(tmp_path):
+    folder = tmp_path / 'folder'
+    folder.mkdir()
+    file_path = tmp_path / 'not-a-folder'
+    file_path.write_text('', encoding='utf-8')
+    data = LegacyScanFormData()
+
+    assert data.readable_directory(folder)
+    assert not data.readable_directory(file_path)
+    assert not data.readable_directory(tmp_path / 'missing')
+
+
 def test_legacy_scan_manual_form_checks_hidden_csrf_and_persists_scan_projection():
     flask_app = Flask(__name__)
     flask_app.config.update(
