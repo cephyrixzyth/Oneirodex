@@ -69,6 +69,13 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   expect(await screen.findByLabelText('Game name')).toHaveValue('Sample')
   expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
+  expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeEnabled()
+  expect(screen.getByText('Enter the IGDB ID of the game.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Search IGDB by ID' }))
+  expect(fetchMock).not.toHaveBeenCalledWith(
+    expect.stringContaining('/api/search_igdb_by_id'),
+    expect.anything(),
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Search IGDB' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Use this match' }))
   expect(screen.getByLabelText('Name')).toHaveValue('Sample')

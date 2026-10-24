@@ -446,16 +446,21 @@ export function ManualIdentifyPage() {
             value={form.igdb_id}
             onChange={(event) => setField('igdb_id', event.target.value)}
             required
+            aria-describedby="od-manual-identify-igdb-help"
           />
         </label>
         <div className="od-admin-actions-row">
           <Button
             type="button"
             onClick={() => void loadIgdbId()}
-            disabled={searchBusy || !form.igdb_id}
+            aria-label="Search IGDB by ID"
+            disabled={searchBusy}
           >
-            Load IGDB entry
+            Search IGDB
           </Button>
+          <span id="od-manual-identify-igdb-help" className="od-admin-lede od-admin-lede--flush">
+            Enter the IGDB ID of the game.
+          </span>
           <Button type="button" onClick={() => void addNonCatalogGame()}>
             Add non-catalog game
           </Button>
