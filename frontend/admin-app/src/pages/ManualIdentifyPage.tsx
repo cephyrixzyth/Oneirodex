@@ -70,6 +70,8 @@ export function ManualIdentifyPage() {
         setForm((current) => ({
           ...current,
           library_uuid: current.library_uuid || data.libraries[0]?.uuid || '',
+          category: current.category || data.categories?.[0]?.value || '',
+          status: current.status || data.statuses?.[0]?.value || '',
         }))
       })
       .catch((error) => {
@@ -233,7 +235,14 @@ export function ManualIdentifyPage() {
           ? '/api/admin/manual-identify?from_unmatched=true'
           : '/api/admin/manual-identify'
       const payload = editing ? await putJson(submitUrl, body) : await postJson(submitUrl, body)
-      navigate(payload.redirect_url || '/libraries')
+      const destination = payload.redirect_url || '/library'
+      if (destination === '/library') {
+        // /library belongs to the member SPA. Leave the admin router so the
+        // server can hand the request to the correct application shell.
+        window.location.assign(destination)
+      } else {
+        navigate(destination)
+      }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Unable to save this game.')
       const detail = (error as { data?: { detail?: unknown } })?.data?.detail

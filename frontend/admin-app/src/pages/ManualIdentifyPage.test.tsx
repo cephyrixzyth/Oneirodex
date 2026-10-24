@@ -10,8 +10,11 @@ vi.mock('@oneirodex/ui', async (importOriginal) => {
 })
 
 const originalFetch = globalThis.fetch
+const locationAssign = vi.fn()
 afterEach(() => {
   globalThis.fetch = originalFetch
+  vi.unstubAllGlobals()
+  locationAssign.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -32,6 +35,7 @@ function LinkSuccessRoute() {
 }
 
 test('loads options, applies an IGDB match, and posts a JSON identify payload', async () => {
+  vi.stubGlobal('location', { ...window.location, assign: locationAssign })
   const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/api/admin/manual-identify/options'))
@@ -51,18 +55,20 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
       return response({
         results: [{ id: 123, name: 'Sample', summary: 'Summary', genres: [{ name: 'Adventure' }] }],
       }) as any
-    return response({ redirect_url: '/libraries' }) as any
+    return response({ redirect_url: '/library' }) as any
   })
   globalThis.fetch = fetchMock as unknown as typeof fetch
   render(
     <MemoryRouter
-      initialEntries={['/add_game_manual?full_disk_path=%2Fgames%2FSample&library_uuid=lib-1']}
+      initialEntries={['/add_game_manual?full_disk_path=%2Fgames%2FSample&library_uuid=lib-1&name=Sample']}
     >
       <ManualIdentifyPage />
     </MemoryRouter>,
   )
 
-  fireEvent.change(await screen.findByLabelText('Game name'), { target: { value: 'Sample' } })
+  expect(await screen.findByLabelText('Game name')).toHaveValue('Sample')
+  expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
+  expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
   fireEvent.click(screen.getByRole('button', { name: 'Search IGDB' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Use this match' }))
   expect(screen.getByLabelText('Name')).toHaveValue('Sample')
@@ -85,6 +91,7 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
     full_disk_path: '/games/Sample',
     genre_ids: [7],
   })
+  await waitFor(() => expect(locationAssign).toHaveBeenCalledWith('/library'))
 })
 
 test('prefills identify fields from the existing direct-entry query contract', async () => {
@@ -167,7 +174,7 @@ test.each([true, false])(
     >
       <Routes>
         <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
-        <Route path="/libraries" element={<div>Library page</div>} />
+        <Route path="/library" element={<div>Library page</div>} />
         <Route path="/scan_management" element={<LinkSuccessRoute />} />
       </Routes>
     </MemoryRouter>,
