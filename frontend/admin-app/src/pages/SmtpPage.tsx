@@ -3,7 +3,6 @@ import { Button, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
-import { showToast } from '../utils/toast'
 
 interface SmtpForm {
   smtp_enabled: boolean
@@ -77,6 +76,7 @@ export function SmtpPage() {
   }, [reload])
   function field<K extends keyof SmtpForm>(key: K, value: SmtpForm[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
+    setError('')
     setMessage('')
   }
   async function save(event: FormEvent) {
@@ -92,11 +92,9 @@ export function SmtpPage() {
       setForm({ ...form, smtp_password: '' })
       setPasswordSaved(passwordSaved || Boolean(form.smtp_password))
       setMessage('SMTP settings saved successfully')
-      showToast('SMTP settings saved successfully', 'success')
     } catch (err) {
       const text = `Error saving SMTP settings: ${errorText(err) || 'Unknown error'}`
       setError(text)
-      showToast(text, 'error')
     } finally {
       setBusy(false)
     }
@@ -110,23 +108,24 @@ export function SmtpPage() {
       const data = await postJson('/admin/smtp_test')
       if (!data.success) {
         const text = data.message || 'SMTP connection failed.'
-        setError(text)
-        showToast(`SMTP connection failed: ${text}`, 'error')
+        setError(`SMTP connection failed: ${text}`)
         return
       }
       setMessage('SMTP connection successful. No email was sent.')
-      showToast('SMTP connection successful', 'success')
     } catch (err) {
       const text = `Error testing SMTP connection: ${errorText(err) || 'Unknown error'}`
       setError(text)
-      showToast(text, 'error')
     } finally {
       setBusy(false)
     }
   }
   const disabled = loading || failed || busy
   return (
-    <Page title="SMTP" lede="Configure outgoing email for account messages and invitations.">
+    <Page
+      title="SMTP Settings"
+      documentTitle="SMTP"
+      lede="Configure outgoing email for account messages and invitations."
+    >
       <PageStatus error={error || null} />
       {message ? (
         <PageStatus announcement="status" className="od-admin-hint">
@@ -154,6 +153,7 @@ export function SmtpPage() {
               SMTP server
               <input
                 className="od-admin-input"
+                required
                 value={form.smtp_server}
                 onChange={(e) => field('smtp_server', e.target.value)}
               />

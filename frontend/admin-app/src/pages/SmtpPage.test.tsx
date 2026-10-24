@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { SmtpPage } from './SmtpPage'
 import { getJson, postJson } from '../api/adminApi'
@@ -20,7 +20,10 @@ test('loads safe settings, saves blank password, and tests the saved connection 
     .mockResolvedValueOnce({ success: true, result: 'connected' })
     .mockResolvedValueOnce({ success: true, status: 'success', message: 'saved' })
   render(<SmtpPage />)
+  expect(await screen.findByRole('heading', { name: 'SMTP Settings' })).toBeVisible()
+  await waitFor(() => expect(document.title).toBe('SMTP · Oneirodex Admin'))
   const port = await screen.findByLabelText('Port')
+  expect(screen.getByLabelText('SMTP server')).toBeRequired()
   expect(screen.getByLabelText('Password')).toHaveValue('')
   fireEvent.change(port, { target: { value: '2525' } })
   expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
@@ -34,6 +37,17 @@ test('loads safe settings, saves blank password, and tests the saved connection 
   expect(postJson).toHaveBeenCalledWith(
     '/admin/smtp_settings',
     expect.objectContaining({ smtp_password: '', smtp_port: '2525' }),
+  )
+})
+
+test('connection test failure shows one persistent page error', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  vi.mocked(postJson).mockResolvedValue({ success: false, message: 'SMTP connection failed' })
+  render(<SmtpPage />)
+  await screen.findByLabelText('SMTP server')
+  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'SMTP connection failed: SMTP connection failed',
   )
 })
 
@@ -62,6 +76,17 @@ test('save failure retains draft including replacement password', async () => {
   )
   expect(password).toHaveValue('draft-test-password')
   expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
+})
+
+test('editing a field clears stale action feedback', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  vi.mocked(postJson).mockRejectedValue(new Error('Could not save SMTP settings'))
+  render(<SmtpPage />)
+  const server = await screen.findByLabelText('SMTP server')
+  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save SMTP settings')
+  fireEvent.change(server, { target: { value: 'smtp.updated.example' } })
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
 })
 
 test('disabled SMTP still tests the saved configuration, and help remains available', async () => {
