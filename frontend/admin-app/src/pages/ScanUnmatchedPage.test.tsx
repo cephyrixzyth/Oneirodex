@@ -59,6 +59,14 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
   )
   expect(screen.getByRole('group', { name: 'Layout filter' })).toBeInTheDocument()
   expect(screen.getByRole('group', { name: 'Triage filter' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Why filter' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Kind filter' })).toBeInTheDocument()
+  expect(
+    within(screen.getByRole('group', { name: 'Why filter' })).getByRole('button', { name: 'All' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  expect(
+    within(screen.getByRole('group', { name: 'Kind filter' })).getByRole('button', { name: 'All' }),
+  ).toHaveAttribute('aria-pressed', 'true')
   expect(screen.getByRole('columnheader', { name: /Folder/ })).toHaveAttribute(
     'aria-sort',
     'ascending',

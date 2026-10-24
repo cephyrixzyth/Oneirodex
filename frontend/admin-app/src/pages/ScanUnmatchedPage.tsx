@@ -799,26 +799,40 @@ export function ScanUnmatchedPage() {
               </Button>
             ))}
           </div>
-          <label>
-            Why
-            <select value={why} onChange={(event) => changeFilter(setWhy, event.target.value)}>
-              {WHY_FILTERS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Kind
-            <select value={kind} onChange={(event) => changeFilter(setKind, event.target.value)}>
-              <option value="all">All kinds</option>
-              <option value="experience">Soft title</option>
-              <option value="emulator">Emulator</option>
-              <option value="tool">Utility</option>
-              <option value="none">No hint</option>
-            </select>
-          </label>
+          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Why filter">
+            <strong>Why</strong>
+            {WHY_FILTERS.map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                aria-pressed={why === value}
+                className={`od-scan-unmatched__filter${why === value ? ' is-active' : ''}`}
+                onClick={() => changeFilter(setWhy, value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div className="od-scan-unmatched__filter-group" role="group" aria-label="Kind filter">
+            <strong>Kind</strong>
+            {[
+              ['all', 'All'],
+              ['experience', 'Soft title'],
+              ['emulator', 'Emulator'],
+              ['tool', 'Utility'],
+              ['none', 'No hint'],
+            ].map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                aria-pressed={kind === value}
+                className={`od-scan-unmatched__filter${kind === value ? ' is-active' : ''}`}
+                onClick={() => changeFilter(setKind, value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
         <div className="od-scan-unmatched__pager">
           <span>
