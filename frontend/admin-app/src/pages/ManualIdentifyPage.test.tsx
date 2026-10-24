@@ -469,6 +469,48 @@ test('keeps an empty IGDB result as inline guidance instead of an error alert', 
   expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(true)
 })
 
+test('keeps provider failures beside the provider search controls', async () => {
+  const note = 'MobyGames provider temporarily unavailable'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.startsWith('/api/search_metadata?'))
+      return {
+        ...response({ error: note }),
+        ok: false,
+        status: 503,
+      } as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?name=Provider+failure+probe']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Search MobyGames' }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(note)
+  expect(alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?'))).toBe(true)
+})
+
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],

@@ -33,6 +33,7 @@ export function ManualIdentifyPage() {
   const [loadError, setLoadError] = useState('')
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [providerNotice, setProviderNotice] = useState('')
+  const [providerError, setProviderError] = useState('')
   const [searchBusy, setSearchBusy] = useState(false)
   const [searchSource, setSearchSource] = useState('IGDB')
   const [form, setForm] = useState<Record<string, any>>({
@@ -140,12 +141,14 @@ export function ManualIdentifyPage() {
       setSaveError('')
       setCandidates([])
       setProviderNotice('Enter a game name first')
+      setProviderError('')
       return
     }
     setSearchBusy(true)
     setSearchSource('IGDB')
     setSaveError('')
     setProviderNotice('')
+    setProviderError('')
     try {
       const params = new URLSearchParams({ name: term })
       const data = await getJson(`/api/search_igdb_by_name?${params}`)
@@ -167,12 +170,14 @@ export function ManualIdentifyPage() {
       setSaveError('')
       setCandidates([])
       setProviderNotice('Enter a game name first')
+      setProviderError('')
       return
     }
     setSearchBusy(true)
     setSearchSource(source.toUpperCase())
     setSaveError('')
     setProviderNotice('')
+    setProviderError('')
     try {
       const params = new URLSearchParams({ name: term, source })
       const data = await getJson(`/api/search_metadata?${params}`)
@@ -180,7 +185,7 @@ export function ManualIdentifyPage() {
       if (!Array.isArray(data.results) || !data.results.length)
         setProviderNotice(data.note || `No ${source.toUpperCase()} matches found.`)
     } catch (error) {
-      setSaveError(
+      setProviderError(
         error instanceof Error ? error.message : `${source.toUpperCase()} search failed.`,
       )
     } finally {
@@ -553,6 +558,11 @@ export function ManualIdentifyPage() {
           <div className="od-manual-identify__provider-note" role="status">
             {providerNotice}
           </div>
+        ) : null}
+        {providerError ? (
+          <PageStatus announcement="alert" className="od-manual-identify__error">
+            {providerError}
+          </PageStatus>
         ) : null}
         {candidates.length ? (
           <ul className="od-manual-identify__results" aria-label={`${searchSource} matches`}>
