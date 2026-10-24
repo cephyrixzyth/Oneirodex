@@ -8,7 +8,7 @@
 
 pytest==9.1.1
 # Starlette 1.7 uses HTTPX2 for its TestClient implementation.
-httpx2==2.13.1
+httpx2==2.16.0
 # CI test harnesses still exercise the Flask/WSGI compatibility layer and
 # import HTTPX directly; these are test-only, not runtime dependencies.
 a2wsgi==1.10.10
