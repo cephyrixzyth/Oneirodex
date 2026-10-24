@@ -59,7 +59,6 @@ const CASES = [
   ['/admin/quality_profiles', 'Quality Profiles'],
   ['/admin/announcements', 'Announcements'],
   ['/admin/integrations', 'Integrations'],
-  ['/admin/scan-jobs', 'Scan jobs'],
   ['/admin/scan-controls', 'Scan management'],
   ['/add_game_manual', 'Identify game'],
   ['/game_edit/123e4567-e89b-12d3-a456-426614174000', 'Edit game entry'],
@@ -116,6 +115,14 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
     expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
+  })
+
+  test('legacy manual scan URL opens manual identify in the combined scan page', () => {
+    mountAt('/scan_manual_folder')
+    expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan jobs', level: 2 })).toBeInTheDocument()
   })
 
   test('scan jobs deep link opens the combined scan workspace at its jobs section', async () => {
