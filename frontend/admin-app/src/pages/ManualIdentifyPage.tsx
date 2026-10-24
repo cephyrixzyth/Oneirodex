@@ -6,6 +6,23 @@ import { Page } from '../components/Page'
 import { Candidate, Options, TAXONOMIES } from './manualIdentifyTypes'
 import './ManualIdentifyPage.css'
 
+function suggestedNameFromPath(path: string, extensions: string[] = []) {
+  const leaf = path.trim().split(/[\\/]/).filter(Boolean).at(-1) || ''
+  const knownExtensions = new Set(
+    extensions.map((extension) => {
+      const normalized = extension.trim().toLowerCase()
+      return normalized.startsWith('.') ? normalized : `.${normalized}`
+    }),
+  )
+  let title = leaf
+  for (let depth = 0; depth < 4; depth += 1) {
+    const dot = title.lastIndexOf('.')
+    if (dot <= 0 || !knownExtensions.has(title.slice(dot).toLowerCase())) break
+    title = title.slice(0, dot)
+  }
+  return title
+}
+
 export function ManualIdentifyPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -71,6 +88,9 @@ export function ManualIdentifyPage() {
         setOptions(data as Options)
         setForm((current) => ({
           ...current,
+          name: current.name || (!editing
+            ? suggestedNameFromPath(current.full_disk_path, data.file_extensions)
+            : ''),
           library_uuid: current.library_uuid || data.libraries[0]?.uuid || '',
           category: current.category || data.categories?.[0]?.value || '',
           status: current.status || data.statuses?.[0]?.value || '',
@@ -91,7 +111,9 @@ export function ManualIdentifyPage() {
     getJson(`/api/admin/manual-identify/${encodeURIComponent(gameUuid)}`)
       .then((payload) => {
         if (!live) return
-        setForm((current) => ({ ...current, ...payload.game }))
+        const editableGame = { ...payload.game }
+        delete editableGame.uuid
+        setForm((current) => ({ ...current, ...editableGame }))
         setLinkQuery(payload.game?.name || '')
         setScanRunning(Boolean(payload.scan_running))
       })
@@ -409,6 +431,11 @@ export function ManualIdentifyPage() {
       {scanRunning ? (
         <PageStatus announcement="status" className="od-manual-identify__error">
           A scan is running. Editing is paused until it finishes.
+        </PageStatus>
+      ) : null}
+      {saveError ? (
+        <PageStatus announcement="alert" className="od-manual-identify__error">
+          {saveError}
         </PageStatus>
       ) : null}
       <section className="od-admin-panel od-manual-identify__essential" aria-label="Game identity">
@@ -764,11 +791,6 @@ export function ManualIdentifyPage() {
             </fieldset>
           ))}
         </section>
-        {saveError ? (
-          <PageStatus announcement="alert" className="od-manual-identify__error">
-            {saveError}
-          </PageStatus>
-        ) : null}
         {Object.keys(fieldErrors).length ? (
           <ul className="od-manual-identify__error-list" aria-label="Field validation errors">
             {Object.entries(fieldErrors).map(([field, message]) => (

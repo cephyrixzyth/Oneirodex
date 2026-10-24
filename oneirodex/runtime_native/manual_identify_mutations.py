@@ -8,6 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class ManualIdentifyMutationData:
@@ -25,7 +26,7 @@ class ManualIdentifyMutationData:
             Category, Developer, Game, GameMode, Genre, Library, Platform,
             PlayerPerspective, Publisher, Status, Theme,
         )
-        from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+        from oneirodex.utils.security import get_allowed_base_directories, is_readable_game_path, is_safe_path
 
         game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
         if not game:
@@ -42,14 +43,14 @@ class ManualIdentifyMutationData:
         safe, _path_error = is_safe_path(body.full_disk_path, allowed_bases, logger=app.logger)
         if not safe:
             return _failure('The selected game path is outside configured storage roots.', 'forbidden')
-        if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
-            return _failure('The selected game folder does not exist or cannot be read.', 'bad_request')
+        if not is_readable_game_path(body.full_disk_path):
+            return _failure('The selected game file or folder does not exist or cannot be read.', 'bad_request')
         if body.igdb_id != game.igdb_id:
             duplicate = db.session.execute(
                 select(Game).where(Game.igdb_id == body.igdb_id, Game.id != game.id).with_for_update()
             ).scalars().first()
             if duplicate:
-                return _failure('That IGDB ID is already used by another game.', 'conflict')
+                return _failure(_duplicate_igdb_id_message(body.igdb_id), 'conflict')
 
         relations = (
             ('genre_ids', 'genres', Genre),
@@ -125,9 +126,12 @@ class ManualIdentifyMutationData:
             return _failure('The game could not be updated. Check the game details and try again.', 'internal')
 
         _event(f'Game {game.name} updated by admin {actor.name}', actor)
-        if igdb_changed:
-            _queue_image_refresh(app, game_uuid)
-        return {'game_uuid': game_uuid, 'redirect_url': '/libraries'}
+        image_refresh_started = bool(_queue_image_refresh(app, game_uuid)) if igdb_changed else False
+        return {
+            'game_uuid': game_uuid,
+            'redirect_url': '/library',
+            'image_refresh_started': image_refresh_started,
+        }
 
     def create(self, app, body, actor, *, from_unmatched: bool):
         import os
@@ -142,7 +146,8 @@ class ManualIdentifyMutationData:
             Platform, PlayerPerspective, Publisher, Status, Theme, UnmatchedFolder,
         )
         from oneirodex.utils.security import (
-            get_allowed_base_directories, is_safe_path, sanitize_path_for_logging,
+            get_allowed_base_directories, is_readable_game_path, is_safe_path,
+            sanitize_path_for_logging,
         )
         from oneirodex.utils.event_logging import log_system_event
 
@@ -159,8 +164,8 @@ class ManualIdentifyMutationData:
                 event_type='security', event_level='warning', audit_user=getattr(actor, 'id', None),
             )
             return _failure('The selected game path is outside configured storage roots.', 'forbidden')
-        if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
-            return _failure('The selected game folder does not exist or cannot be read.', 'bad_request')
+        if not is_readable_game_path(body.full_disk_path):
+            return _failure('The selected game file or folder does not exist or cannot be read.', 'bad_request')
 
         is_custom_game = body.igdb_id >= 2_000_000_420
         if not is_custom_game:
@@ -265,7 +270,7 @@ class ManualIdentifyMutationData:
             event_type='game', event_level='information', audit_user=getattr(actor, 'id', None),
         )
         return {'game_uuid': game_uuid,
-                'redirect_url': '/admin/unmatched' if from_unmatched else '/libraries'}
+                'redirect_url': '/admin/unmatched' if from_unmatched else '/library'}
 
 
 def create_manual_identify_mutation_router(
@@ -333,7 +338,7 @@ async def _write(request, app, data, action, find_user, find_token, commit_token
                 if action == 'create':
                     result = data.create(
                         app, body, auth.user,
-                        from_unmatched=request.query_params.get('from_unmatched') == 'true',
+                        from_unmatched=first_query_value(request.query_params, 'from_unmatched') == 'true',
                     )
                 else:
                     result = data.update(app, game_uuid, body, auth.user)
@@ -343,8 +348,18 @@ async def _write(request, app, data, action, find_user, find_token, commit_token
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
+                    if auth.token is None:
+                        from .account_avatar_upload import _flash
+
+                        if action == 'create':
+                            _flash(auth.session_data, 'success', 'Game added successfully.')
+                        elif result.get('image_refresh_started'):
+                            _flash(auth.session_data, 'image-refresh', 'Game updated, downloading images')
+                            auth.session_data['image_refresh_game_uuid'] = result['game_uuid']
+                        else:
+                            _flash(auth.session_data, 'success', 'Game updated successfully.')
                     response = JSONResponse(api_ok_payload(result), status_code=201 if action == 'create' else 200)
-        if auth.should_set_session_cookie:
+        if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
             from .oidc_status import _set_session_cookie
             _set_session_cookie(response, app, auth)
         response.headers.setdefault('Cache-Control', 'no-store')
@@ -360,6 +375,10 @@ def mount_manual_identify_mutation_routes(app: FastAPI, flask_app, **kwargs):
 
 def _failure(message, code):
     return {'error': message, 'code': code}
+
+
+def _duplicate_igdb_id_message(igdb_id):
+    return f'The IGDB ID {igdb_id} is already used by another game.'
 
 
 def _event(message, actor):

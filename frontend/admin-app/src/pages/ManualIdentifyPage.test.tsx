@@ -40,7 +40,7 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
     const url = String(input)
     if (url.endsWith('/api/admin/manual-identify/options'))
       return response({
-        libraries: [{ uuid: 'lib-1', name: 'PC', platform_name: 'PC' }],
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
         taxonomies: {
           genres: [{ id: 7, name: 'Adventure' }],
           game_modes: [],
@@ -70,6 +70,8 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
 
   expect(await screen.findByLabelText('Name')).toHaveValue('Sample')
   expect(screen.getByLabelText('Full disk path')).toHaveValue('/games/Sample')
+  expect(screen.getByText('Platform: PC Windows')).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Parity Batch Library · PC Windows' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('tab', { name: 'Release' }))
   expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
@@ -134,6 +136,214 @@ test('prefills identify fields from the existing direct-entry query contract', a
   )
   expect(await screen.findByLabelText('Name')).toHaveValue('Sample')
   expect(screen.getByLabelText('IGDB ID')).toHaveValue(123)
+})
+
+test('omits read-only game UUID when saving an existing edit form', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [{ value: 'MAIN_GAME', label: 'Main Game' }],
+        statuses: [{ value: 'RELEASED', label: 'Released' }],
+        file_extensions: ['.rom'],
+      }) as any
+    if (url.endsWith('/api/admin/manual-identify/game-1') && init?.method === 'PUT')
+      return response({ redirect_url: '/admin/dashboard' }) as any
+    if (url.endsWith('/api/admin/manual-identify/game-1'))
+      return response({
+        game: {
+          uuid: 'game-1',
+          igdb_id: 123,
+          name: 'Existing game',
+          library_uuid: 'lib-1',
+          full_disk_path: '/games/existing.rom',
+          provider_urls: {},
+          genre_ids: [],
+          game_mode_ids: [],
+          theme_ids: [],
+          platform_ids: [],
+          player_perspective_ids: [],
+        },
+        scan_running: false,
+      }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/game_edit/game-1']}>
+      <Routes>
+        <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
+        <Route path="/admin/dashboard" element={<div>Saved edit</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByLabelText('Name')).toHaveValue('Existing game')
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/manual-identify/game-1',
+      expect.objectContaining({ method: 'PUT' }),
+    ),
+  )
+  const updateCall = fetchMock.mock.calls.find(
+    ([url, init]) => String(url) === '/api/admin/manual-identify/game-1' && init?.method === 'PUT',
+  )
+  const updatePayload = JSON.parse((updateCall?.[1] as RequestInit).body as string)
+  expect(updatePayload).toMatchObject({
+    igdb_id: 123,
+    name: 'Existing game',
+    library_uuid: 'lib-1',
+    full_disk_path: '/games/existing.rom',
+  })
+  expect(updatePayload).not.toHaveProperty('uuid')
+  expect(await screen.findByText('Saved edit')).toBeInTheDocument()
+})
+
+test('shows duplicate IGDB ID errors before the long edit form', async () => {
+  const conflictMessage = 'The IGDB ID 2000000420 is already used by another game.'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.endsWith('/api/admin/manual-identify/game-1') && init?.method === 'PUT')
+      return {
+        ok: false,
+        status: 409,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ error: conflictMessage, message: conflictMessage }),
+        text: async () => JSON.stringify({ error: conflictMessage, message: conflictMessage }),
+      } as any
+    if (url.endsWith('/api/admin/manual-identify/game-1'))
+      return response({
+        game: {
+          uuid: 'game-1',
+          igdb_id: 2000777140,
+          name: 'Conflict fixture',
+          library_uuid: 'lib-1',
+          full_disk_path: '/storage/ParityRoot/notes.txt',
+          provider_urls: {},
+          genre_ids: [],
+          game_mode_ids: [],
+          theme_ids: [],
+          platform_ids: [],
+          player_perspective_ids: [],
+        },
+        scan_running: false,
+      }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/game_edit/game-1']}>
+      <Routes>
+        <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByLabelText('Name')).toHaveValue('Conflict fixture')
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(conflictMessage)
+  expect(alert.compareDocumentPosition(screen.getByLabelText('Library')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test('shows an out-of-root path rejection as an accessible save alert', async () => {
+  const message = 'The selected game path is outside configured storage roots.'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.endsWith('/api/admin/manual-identify'))
+      return {
+        ok: false,
+        status: 403,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ error: message, message }),
+        text: async () => JSON.stringify({ error: message, message }),
+      } as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?igdb_id=2000777751&library_uuid=lib-1&name=Path+probe&full_disk_path=%2Foutside%2FOneirodexParity%2Fnot-a-real-file.rom']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByLabelText('Name')).toHaveValue('Path probe')
+  const saveButton = screen.getByRole('button', { name: 'Save' })
+  await waitFor(() => expect(saveButton).toBeEnabled())
+  fireEvent.click(saveButton)
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(message)
+  expect(alert.compareDocumentPosition(screen.getByLabelText('Library')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+test.each([
+  ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
+  ['C:\\Games\\Beta.nes', 'Beta'],
+  ['/games/Final.Fantasy.IX', 'Final.Fantasy.IX'],
+])('derives a title from a path when no explicit name is supplied: %s', async (path, title) => {
+  globalThis.fetch = vi.fn(async () =>
+    response({
+      libraries: [{ uuid: 'lib-1', name: 'PC', platform_name: 'PC' }],
+      taxonomies: {
+        genres: [],
+        game_modes: [],
+        themes: [],
+        platforms: [],
+        player_perspectives: [],
+      },
+      categories: [],
+      statuses: [],
+      file_extensions: ['.rom', '.nes'],
+    }),
+  ) as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={[`/add_game_manual?full_disk_path=${encodeURIComponent(path)}`]}>
+      <ManualIdentifyPage />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByLabelText('Name')).toHaveValue(title)
+  expect(screen.getByLabelText('Full disk path')).toHaveValue(path)
 })
 
 test('switches non-catalog entry to a generated, locked ID and focuses the empty name', async () => {

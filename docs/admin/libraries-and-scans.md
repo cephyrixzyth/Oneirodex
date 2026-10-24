@@ -22,6 +22,10 @@ The Libraries page is an admin SPA **DataTable** (sort + per-column filters, the
 
 The legacy `POST /scan_manual_folder` compatibility form now returns to the Manual identify section on the shared Scan page (`/scan_management?active_tab=manual#manual-identify`) after validation, so a missing library or inaccessible folder does not send the operator back to the top of the page. When that form has populated candidate paths in the signed admin session, the React page restores the candidate rows and selected library through an admin-only, no-store session-preview read; it does not start another scan.
 
+When Manual identify opens with `full_disk_path` but no `name`, the Name field starts with the path's final segment. Supported ROM/archive suffixes are removed; a supplied `name` query value takes precedence, and dotted directory names that do not end in a supported suffix stay intact.
+
+The library selector and platform summary use the readable platform label (for example, `PC Windows`) rather than the internal platform key (`PCWIN`).
+
 ## Where can a library point?
 
 By default: anywhere under the games folder (`DATA_FOLDER_GAMES`) or the OS base
@@ -219,7 +223,8 @@ The unmatched table stretches with the Scan management page (`od-adminpage--xl`,
 - **TheGamesDB (W20-5c + W21 Stage E):** optional `THEGAMESDB_API_KEY` (or `GlobalSettings.thegamesdb_api_key`) — empty results when unset (honest, no 500). Manual identify / covers + **Stage E propose-only** platform-filtered exact-title hints on console leaves after Stage D miss (no Game create). Sibling guards reject Color/Advance/Wii U/Jaguar CD/Amiga CD32/Pocket Color/PS2+/Xbox 360+ hits on the short library leaf. Leftover dump suffixes (`.sg` `.sgx` `.min` `.cpr` `.adf` `.mgw` `.ssd` `.uef` `.bbc` …) are in `PLATFORM_ROM_EXTENSIONS` and default allowed file types. A new platform suffix in that map is seeded on boot.
 - **Identify is fast-path:** when a scan job creates a game, folder-size walk, Steam enrichment, cover/screenshot download, and HLTB run on a background thread after the row commits (`queue_post_identify_enrichment`). The library can show the title before size/covers finish.
 - **Manual Identify taxonomy:** on save, the server re-fetches IGDB (non-custom ids) and **creates missing** Genre/Theme/GameMode/Platform/Perspective rows before attach — same upsert as scan identify, so checkbox-only names that were not yet in the DB are not dropped. Steam enrich also applies **genres** (+ mapped game modes), not only summary/VR.
-- Manual identify / add still sizes the folder inline (capped ~60s) and enriches inline (or uses the existing image-refresh thread).
+- Manual Identify and link-existing actions accept a readable game folder or regular game file within an allowed storage root. Editing a game recalculates its size inline (folder walks are capped at about 60 seconds; file targets use their byte size) and enriches inline or through the existing image-refresh thread.
+- Successful Manual Identify creates and edits show the same success notice as v1.1.8 after returning to the library. When an edit changes the IGDB ID and the image-refresh worker starts, the browser shows the same compact progress toast and spinner. This browser feedback uses the signed-in session; API-token writes do not add browser notices.
 - Covers may also fill via missing-image tools; freshness tools mark OUT/~ titles.
 - **Library health (light):** Ops `library.health` / `GET /admin/api/library/health` — deterministic cover · empty/`path_status` missing · no-IGDB/custom-range · OUT/~ · unmatched score (0–100, grades good|fair|poor; withheld when no games). Scan refreshes `Game.path_status`; Ops poll stays SQL-only — [ops-summary.md](ops-summary.md#libraryhealth-lightweight-ops-pulse).
 - Members see new platforms on **Systems** (`/systems`) once platforms appear in `/api/library_platforms`.
@@ -366,6 +371,8 @@ For library hero / site-wide fallback variety, use **Art studio → Backup & sto
 - Failures are recorded on the `Image` row (`last_error`, `last_attempt_at`) by every download path (batch, single, turbo, and the eager cover/screenshot fetch during scan/identify) so a permissions or network problem on `IMAGE_SAVE_PATH` shows up in the UI instead of silently leaving images stuck "pending".
 - A cover that HTTP-200s but is a 1×1, a tiny stub, or a near-solid wash is replaced with titled studio art on download (scan, queue, turbo, retry). Screenshots and other kinds are not inspected — a dark loading screen is real content.
 - Identify/match accepts bare IGDB image ids **or** expanded `{id, url}` objects for cover and screenshots (`store_image` normalizes int-or-dict — expanded cover dicts used to be dropped, leaving screenshots-only / branded **No cover art**). Cover is queued whenever IGDB provides one; until the local file lands, browse/details resolve the remote `download_url` instead of the branded placeholder.
+
+While a scan is running, the current edit form announces that editing is paused and disables Save until the scan finishes. When an edit uses an IGDB ID already assigned to another game, the save is rejected without changing either record, and a visible error near the top identifies the conflicting ID. A duplicate catalog ID during create is also rejected without changing the existing game; the current form gives a specific catalog-conflict message.
 
 ## Deploy note
 
