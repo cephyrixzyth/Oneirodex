@@ -156,7 +156,7 @@ export function ManualIdentifyPage() {
       if (!Array.isArray(data.results) || !data.results.length)
         setProviderNotice('No IGDB matches found. You can still enter the metadata manually.')
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'IGDB search failed.')
+      setProviderError(error instanceof Error ? error.message : 'IGDB search failed.')
     } finally {
       setSearchBusy(false)
     }
@@ -351,10 +351,8 @@ export function ManualIdentifyPage() {
       setField('name', '')
       setField('item_kind', 'game')
       requestAnimationFrame(() => nameInputRef.current?.focus())
-    } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : 'Could not allocate a custom catalog ID.',
-      )
+    } catch {
+      setSaveError('Could not allocate a custom catalog ID. Try again.')
     }
   }
   async function searchExistingGames(event: FormEvent) {

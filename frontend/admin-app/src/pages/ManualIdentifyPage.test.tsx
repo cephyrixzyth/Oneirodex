@@ -511,6 +511,42 @@ test('keeps provider failures beside the provider search controls', async () => 
   expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?'))).toBe(true)
 })
 
+test('announces IGDB transport failures beside the search controls', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.startsWith('/api/search_igdb_by_name?')) throw new TypeError('Failed to fetch')
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?name=IGDB+transport+probe']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Search IGDB', exact: true }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Failed to fetch')
+  expect(alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(true)
+})
+
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],
@@ -592,6 +628,74 @@ test('switches non-catalog entry to a generated, locked ID and focuses the empty
     expect.stringContaining('/api/search_igdb_by_id'),
     expect.anything(),
   )
+})
+
+test('reports custom ID allocation failure without using the legacy fallback ID', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.endsWith('/api/get_next_custom_igdb_id'))
+      return {
+        ok: false,
+        status: 500,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          ok: false,
+          error: 'Could not work out the next custom IGDB id',
+          error_code: 'internal',
+          message: 'Could not work out the next custom IGDB id',
+          success: false,
+        }),
+        text: async () =>
+          JSON.stringify({
+            ok: false,
+            error: 'Could not work out the next custom IGDB id',
+            error_code: 'internal',
+            message: 'Could not work out the next custom IGDB id',
+            success: false,
+          }),
+      } as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/add_game_manual?name=Keep+this+title&full_disk_path=%2Fgames%2Fcustom&library_uuid=lib-1',
+      ]}
+    >
+      <ManualIdentifyPage />
+    </MemoryRouter>,
+  )
+
+  const name = await screen.findByLabelText('Name')
+  const id = screen.getByLabelText('IGDB ID')
+  fireEvent.click(screen.getByRole('button', { name: 'Add non-catalog game' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not allocate a custom catalog ID. Try again.',
+  )
+  expect(name).toHaveValue('Keep this title')
+  expect(id).toHaveValue(null)
+  expect(id).not.toHaveAttribute('readonly')
+  expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input) === '/api/admin/manual-identify'),
+  ).toBe(false)
 })
 
 test.each([true, false])(
