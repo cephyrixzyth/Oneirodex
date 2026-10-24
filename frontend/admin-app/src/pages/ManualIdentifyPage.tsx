@@ -262,6 +262,11 @@ export function ManualIdentifyPage() {
   }
 
   const fromUnmatched = query.get('from_unmatched') === 'true'
+  const identifyFieldsValid =
+    /^\d+$/.test(String(form.igdb_id).trim()) &&
+    Number(form.igdb_id) > 0 &&
+    String(form.full_disk_path).trim().length > 0 &&
+    String(form.name).trim().length > 0
   async function loadIgdbId() {
     const id = Number(form.igdb_id)
     if (!Number.isInteger(id) || id < 1 || searchBusy) return
@@ -669,7 +674,9 @@ export function ManualIdentifyPage() {
           <Button
             variant="primary"
             type="submit"
-            disabled={saving || !options || Boolean(loadError) || scanRunning}
+            disabled={
+              saving || !options || Boolean(loadError) || scanRunning || !identifyFieldsValid
+            }
           >
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Save and identify game'}
           </Button>
