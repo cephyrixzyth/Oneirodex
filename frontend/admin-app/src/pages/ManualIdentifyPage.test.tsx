@@ -67,6 +67,7 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   )
 
   expect(await screen.findByLabelText('Game name')).toHaveValue('Sample')
+  expect(screen.getByLabelText('Full disk path')).toHaveValue('/games/Sample')
   expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
   expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeEnabled()

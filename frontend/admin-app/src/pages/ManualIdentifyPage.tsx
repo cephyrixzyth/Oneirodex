@@ -475,7 +475,7 @@ export function ManualIdentifyPage() {
           />
         </label>
         <label className="od-admin-field">
-          Game folder path
+          Full disk path
           <input
             className="od-admin-input"
             value={form.full_disk_path}
