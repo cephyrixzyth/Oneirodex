@@ -134,7 +134,14 @@ export function ManualIdentifyPage() {
 
   async function search() {
     const term = String(form.name || '').trim()
-    if (!term || searchBusy || customIdMode) return
+    if (searchBusy || customIdMode) return
+    if (!term) {
+      setSearchSource('IGDB')
+      setSaveError('')
+      setCandidates([])
+      setProviderNotice('Enter a game name first')
+      return
+    }
     setSearchBusy(true)
     setSearchSource('IGDB')
     setSaveError('')
@@ -520,7 +527,7 @@ export function ManualIdentifyPage() {
           </label>
           <Button
             type="submit"
-            disabled={customIdMode || searchBusy || !String(form.name || '').trim()}
+            disabled={customIdMode || searchBusy}
           >
             {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
           </Button>
