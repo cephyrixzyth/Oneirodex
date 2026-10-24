@@ -138,7 +138,10 @@ def test_admin_shell_consumes_and_escapes_queued_flash_messages(pilot):
     assert 'Invite quota updated.' not in next_page.text
 
 
-@pytest.mark.parametrize('path', ['/admin/help', '/admin/smtp_settings', '/admin/igdb_settings'])
+@pytest.mark.parametrize('path', [
+    '/admin/help', '/admin/smtp_settings', '/admin/igdb_settings',
+    '/scan_manual_folder',
+])
 def test_admin_page_paths_render_the_shell_when_compatibility_posts_share_the_path(pilot, path):
     flask_app, app = pilot
     response = fetch(app, path, signed_cookie(flask_app, 'admin'))
