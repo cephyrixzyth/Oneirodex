@@ -81,6 +81,32 @@ class GameDeleteMutationData:
         else:
             shutil.rmtree(path)
 
+    def ensure_path_removable(self, path):
+        """Fail before staging when the current user cannot remove the path."""
+        required_directories = {os.path.dirname(path) or os.curdir}
+        if os.path.isdir(path) and not os.path.islink(path):
+            pending = [path]
+            while pending:
+                directory = pending.pop()
+                try:
+                    entries = list(os.scandir(directory))
+                except PermissionError:
+                    raise
+                if entries:
+                    # Removing children requires write and search permission
+                    # on their containing directory, as shutil.rmtree does.
+                    required_directories.add(directory)
+                pending.extend(
+                    entry.path for entry in entries
+                    if entry.is_dir(follow_symlinks=False)
+                )
+
+        for directory in required_directories:
+            if not os.access(directory, os.W_OK | os.X_OK):
+                raise PermissionError(
+                    f'Insufficient permissions to remove path within {directory}'
+                )
+
     def stage_path(self, path):
         """Move a path aside so a failed database delete can restore it."""
         staged = f'{path}.delete-{uuid4().hex}'
@@ -378,6 +404,9 @@ async def _delete_folder(request, app, data):
                 )
 
     try:
+        ensure_path_removable = getattr(data, 'ensure_path_removable', None)
+        if callable(ensure_path_removable):
+            ensure_path_removable(full_path)
         stage_path = getattr(data, 'stage_path', None)
         if callable(stage_path):
             staged_path = stage_path(full_path)

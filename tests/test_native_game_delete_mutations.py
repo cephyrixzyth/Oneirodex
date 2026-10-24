@@ -15,7 +15,10 @@ from fastapi import FastAPI
 from flask import Flask
 from werkzeug.exceptions import NotFound
 
-from oneirodex.runtime_native.game_delete_mutations import create_game_delete_mutation_router
+from oneirodex.runtime_native.game_delete_mutations import (
+    GameDeleteMutationData,
+    create_game_delete_mutation_router,
+)
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
@@ -180,6 +183,36 @@ def test_native_unmatched_folder_delete_rejects_non_json_media_type(native_clien
     assert response.status_code == 415
     assert response.json()['status'] == 'error'
     assert not any(call[0] in ('remove_path', 'remove_entry') for call in data.calls)
+
+
+def test_native_unmatched_folder_delete_checks_permissions_before_staging(native_client):
+    runtime, data, csrf, cookie = native_client
+    data.ensure_path_removable = lambda _path: (_ for _ in ()).throw(
+        PermissionError('synthetic read-only folder')
+    )
+    data.stage_path = lambda _path: pytest.fail('must not stage a protected folder')
+
+    response = _request_json(
+        runtime, '/delete_folder', {'folder_path': '/safe/games/Unmatched'},
+        csrf=csrf, cookie=cookie,
+    )
+
+    assert response.status_code == 403
+    assert response.json()['message'] == (
+        'Failed to delete the item due to insufficient permissions. Database entry retained.'
+    )
+    assert not any(call[0] == 'remove_entry' for call in data.calls)
+
+
+def test_game_delete_permission_preflight_checks_directories(monkeypatch, tmp_path):
+    folder = tmp_path / 'read-only'
+    folder.mkdir()
+    (folder / 'marker.txt').write_text('keep', encoding='utf-8')
+    access = lambda path, _mode: Path(path) != folder
+    monkeypatch.setattr('oneirodex.runtime_native.game_delete_mutations.os.access', access)
+
+    with pytest.raises(PermissionError):
+        GameDeleteMutationData().ensure_path_removable(str(folder))
 
 
 @pytest.mark.parametrize(
