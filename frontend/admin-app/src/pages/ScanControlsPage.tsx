@@ -357,7 +357,12 @@ export function ScanControlsPage() {
           </PageStatus>
         ) : null}
         {manualRows.length ? (
-          <div className="od-admin-table-wrap">
+          <div
+            className="od-admin-table-wrap od-scan-controls__manual-results"
+            role="region"
+            tabIndex={0}
+            aria-label="Manual identification candidates; scroll horizontally to see all columns"
+          >
             <table className="od-data-table">
               <caption>Games available for manual identification</caption>
               <thead>

@@ -362,6 +362,11 @@ test('confirms linking a listed folder to an existing game before posting', asyn
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   await screen.findByRole('link', { name: 'Identify' })
+  expect(
+    screen.getByRole('region', {
+      name: 'Manual identification candidates; scroll horizontally to see all columns',
+    }),
+  ).toHaveAttribute('tabindex', '0')
   fireEvent.click(screen.getByRole('button', { name: 'Link existing game' }))
   fireEvent.click(screen.getByRole('button', { name: 'Search existing games' }))
   const hit = await screen.findByRole('button', { name: 'Metroid Prime · /games/Metroid Prime' })

@@ -41,6 +41,16 @@
   scroll-margin-block-start: calc(2.5rem + var(--od-space-2));
 }
 
+.od-scan-controls__manual-results {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.od-scan-controls__manual-results .od-data-table {
+  min-width: 40rem;
+}
+
 .od-scan-controls__links,
 .od-scan-controls__path,
 .od-scan-controls__interval,
