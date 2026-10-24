@@ -993,6 +993,12 @@ export function ScanUnmatchedPage() {
                             [String(row.id)]: event.target.value,
                           }))
                         }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            void saveSearchName(row)
+                          }
+                        }}
                         title="Search name for Fix search; does not rename the folder on disk"
                       />
                       <Button
@@ -1073,7 +1079,7 @@ export function ScanUnmatchedPage() {
                       </Button>
                       <a
                         className="od-btn"
-                        href={`/add_game_manual?${new URLSearchParams({ full_disk_path: String(row.folder_path || ''), library_uuid: String(row.library_uuid || ''), from_unmatched: 'true' })}`}
+                        href={`/add_game_manual?${new URLSearchParams({ full_disk_path: String(row.folder_path || ''), library_uuid: String(row.library_uuid || ''), name: String(row.search_name || row.suggested_search_name || row.folder_name || String(row.folder_path || '').split(/[\\/]/).pop() || ''), from_unmatched: 'true' })}`}
                       >
                         Fix search
                       </a>

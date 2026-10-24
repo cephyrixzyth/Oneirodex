@@ -258,4 +258,50 @@ test('saves the legacy soft search name without renaming the folder path', async
   )
   expect(await screen.findByText(/folder on disk was not renamed/i)).toBeInTheDocument()
   expect(screen.getByText('/storage/review/Original Name')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
+    'href',
+    '/add_game_manual?full_disk_path=%2Fstorage%2Freview%2FOriginal+Name&library_uuid=&name=Old+Search+Name&from_unmatched=true',
+  )
+})
+
+test('saves the soft search name when Enter is pressed in its field', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    if (String(url) === '/api/get_libraries') return []
+    return {
+      items: [
+        {
+          id: 'folder-enter',
+          folder_path: '/storage/review/Enter Name',
+          folder_name: 'Enter Name',
+          search_name: 'Original Search Name',
+          status: 'Unmatched',
+        },
+      ],
+      total: 1,
+      count: 1,
+    }
+  })
+  vi.mocked(postJson).mockResolvedValue({
+    id: 'folder-enter',
+    folder_path: '/storage/review/Enter Name',
+    search_name: 'Keyboard Search Name',
+    disk_rename: false,
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+      <ScanUnmatchedPage />
+    </MemoryRouter>,
+  )
+  const nameInput = await screen.findByRole('textbox', { name: 'Search name' })
+  fireEvent.change(nameInput, { target: { value: 'Keyboard Search Name' } })
+  fireEvent.keyDown(nameInput, { key: 'Enter', code: 'Enter' })
+
+  await waitFor(() =>
+    expect(postJson).toHaveBeenCalledWith('/api/unmatched_folders/folder-enter/name', {
+      search_name: 'Keyboard Search Name',
+      display_name: 'Keyboard Search Name',
+    }),
+  )
+  expect(await screen.findByText(/folder on disk was not renamed/i)).toBeInTheDocument()
 })
