@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { csrfHeaders, getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
+import { AdminPageActions } from '../components/AdminPageActions'
 import { OpenPathModal } from '../components/OpenPathModal'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -594,74 +595,71 @@ export function ScanUnmatchedPage() {
     <Page
       title="Unmatched folders"
       lede="Review unmatched folders and duplicate candidates from scan management."
+      className="od-scan-unmatched-page"
     >
-      <div className="od-scan-unmatched__toolbar">
-        <div className="od-scan-unmatched__links">
-          <a href="/admin/scan-jobs">Return to scan jobs</a>
-          <a
+      <AdminPageActions label="Unmatched folder actions">
+        <Button className="od-cbtn" disabled={loading} onClick={() => void clearRows('Unmatched')}>
+          Clear Unmatched
+        </Button>
+        <Button
+          className="od-cbtn"
+          disabled={loading}
+          onClick={() => void clearRows('all')}
+        >
+          Clear All
+        </Button>
+        <Button
+          className="od-cbtn"
+          disabled={loading}
+          onClick={() => setReloadKey((value) => value + 1)}
+        >
+          Refresh
+        </Button>
+        <Button
+          className="od-cbtn"
+          disabled={loading}
+          onClick={async () => {
+            try {
+              const result = await postJson('/api/unmatched_folders/reclassify_duplicates', {})
+              setActionStatus(`Fixed ${Number(result.changed_count) || 0} false duplicates.`)
+              setReloadKey((value) => value + 1)
+            } catch (reason) {
+              setError(reason)
+            }
+          }}
+        >
+          Fix false duplicates
+        </Button>
+        <Button
+          className="od-cbtn"
+          disabled={loading}
+          onClick={async () => {
+            try {
+              const result = await postJson('/api/unmatched_folders/backfill_suggested_kind', {})
+              setActionStatus(
+                `Kind hints updated ${Number(result.updated) || 0} of ${Number(result.scanned) || 0} scanned.`,
+              )
+              setReloadKey((value) => value + 1)
+            } catch (reason) {
+              setError(reason)
+            }
+          }}
+        >
+          Backfill kind hints
+        </Button>
+        <a
+          className="od-cbtn"
             href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'csv', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
           >
             Export CSV
-          </a>
-          <a
+        </a>
+        <a
+          className="od-cbtn"
             href={`/api/unmatched_folders/export?${new URLSearchParams({ status, format: 'json', ...(libraryUuid ? { library_uuid: libraryUuid } : {}), ...(platform ? { platform } : {}), ...(region ? { rom_region: region } : {}), ...(searchQuery ? { q: searchQuery } : {}), ...(why !== 'all' ? { why } : {}), ...(kind !== 'all' && kind !== 'none' ? { suggested_kind: kind } : {}) })}`}
           >
             Export JSON
-          </a>
-        </div>
-        <div className="od-scan-unmatched__actions">
-          <Button type="button" disabled={loading} onClick={() => void clearRows('Unmatched')}>
-            Clear Unmatched
-          </Button>
-          <Button
-            type="button"
-            disabled={loading}
-            className="od-btn od-btn--danger"
-            onClick={() => void clearRows('all')}
-          >
-            Clear All
-          </Button>
-          <Button
-            type="button"
-            disabled={loading}
-            onClick={() => setReloadKey((value) => value + 1)}
-          >
-            Refresh
-          </Button>
-          <Button
-            type="button"
-            disabled={loading}
-            onClick={async () => {
-              try {
-                const result = await postJson('/api/unmatched_folders/reclassify_duplicates', {})
-                setActionStatus(`Fixed ${Number(result.changed_count) || 0} false duplicates.`)
-                setReloadKey((value) => value + 1)
-              } catch (reason) {
-                setError(reason)
-              }
-            }}
-          >
-            Fix false duplicates
-          </Button>
-          <Button
-            type="button"
-            disabled={loading}
-            onClick={async () => {
-              try {
-                const result = await postJson('/api/unmatched_folders/backfill_suggested_kind', {})
-                setActionStatus(
-                  `Kind hints updated ${Number(result.updated) || 0} of ${Number(result.scanned) || 0} scanned.`,
-                )
-                setReloadKey((value) => value + 1)
-              } catch (reason) {
-                setError(reason)
-              }
-            }}
-          >
-            Backfill kind hints
-          </Button>
-        </div>
-      </div>
+        </a>
+      </AdminPageActions>
       {linkSuccess ? (
         <PageStatus announcement="status" className="od-scan-unmatched__success">
           {linkSuccess}

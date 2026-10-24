@@ -54,6 +54,11 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
   expect(await screen.findByText('/storage/review/page-0')).toBeInTheDocument()
   expect(screen.getByText("Linked existing game 'Review Game' to this folder.")).toBeInTheDocument()
   expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Clear Unmatched' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
+    'href',
+    '/add_game_manual?full_disk_path=%2Fstorage%2Freview%2Fpage-0&library_uuid=library-1&name=page-0&from_unmatched=true',
+  )
   expect(getJson).toHaveBeenCalledWith(
     expect.stringContaining('paginate=1&limit=150&offset=0'),
     expect.objectContaining({ signal: expect.any(AbortSignal) }),

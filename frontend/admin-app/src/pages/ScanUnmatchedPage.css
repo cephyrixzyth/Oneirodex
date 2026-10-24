@@ -1,6 +1,3 @@
-.od-scan-unmatched__toolbar,
-.od-scan-unmatched__links,
-.od-scan-unmatched__actions,
 .od-scan-unmatched__filter-group,
 .od-scan-unmatched__selects,
 .od-scan-unmatched__chips,
@@ -14,13 +11,17 @@
   gap: var(--od-space-2, 0.5rem);
 }
 
-.od-scan-unmatched__toolbar {
-  justify-content: space-between;
-  margin-bottom: var(--od-space-3, 0.75rem);
-}
-
-.od-scan-unmatched__links {
-  margin-inline-end: auto;
+.od-scan-unmatched-page > h1,
+.od-scan-unmatched-page > .od-admin-lede {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .od-scan-unmatched__success {
@@ -305,8 +306,16 @@
     align-items: stretch;
   }
 
-  .od-scan-unmatched__links,
-  .od-scan-unmatched__actions {
+  #od-admin-topbar-slot > .od-cbtn-group[aria-label='Unmatched folder actions'] {
     width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 900px) {
+  #od-admin-topbar-slot > .od-cbtn-group[aria-label='Unmatched folder actions'] {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
