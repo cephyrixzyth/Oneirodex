@@ -154,7 +154,14 @@ export function ManualIdentifyPage() {
 
   async function searchProvider(source: string) {
     const term = String(form.name || '').trim()
-    if (!term || searchBusy) return
+    if (searchBusy) return
+    if (!term) {
+      setSearchSource(source.toUpperCase())
+      setSaveError('')
+      setCandidates([])
+      setProviderNotice('Enter a game name first')
+      return
+    }
     setSearchBusy(true)
     setSearchSource(source.toUpperCase())
     setSaveError('')
@@ -524,7 +531,7 @@ export function ManualIdentifyPage() {
               key={source}
               type="button"
               onClick={() => void searchProvider(source)}
-              disabled={searchBusy || !String(form.name || '').trim()}
+              disabled={searchBusy}
             >
               Search{' '}
               {source === 'thegamesdb'

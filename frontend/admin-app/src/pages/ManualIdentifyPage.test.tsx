@@ -360,6 +360,42 @@ test('keeps missing provider-key guidance inline as a polite status', async () =
   expect(status.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })
 
+test('explains that a game name is required before searching other providers', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const searchButton = await screen.findByRole('button', { name: 'Search MobyGames' })
+  expect(searchButton).toBeEnabled()
+  fireEvent.click(searchButton)
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Enter a game name first')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?'))).toBe(false)
+})
+
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],
