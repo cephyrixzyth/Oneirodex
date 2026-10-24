@@ -560,7 +560,10 @@ def _setup_form_payload(path, form):
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
             'mobygames_api_key', 'thegamesdb_api_key',
         ):
-            body['configure_' + key] = first_form_value(form, 'configure_' + key) == 'on'
+            configured = first_form_value(form, 'configure_' + key) == 'on'
+            body['configure_' + key] = configured
+            if not configured:
+                body[key] = ''
     else:
         body.update(
             skip=first_form_value(form, 'skip_library') == 'on',

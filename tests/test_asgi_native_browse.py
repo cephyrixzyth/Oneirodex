@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import httpx
 import pytest
@@ -3031,6 +3032,7 @@ def test_native_game_input_family_patch_preserves_librarian_csrf_acl_and_schema(
         headers={'X-CSRFToken': blocked_csrf},
     )
     assert blocked.status_code == 403
+    assert blocked.json()['message'] == 'Librarian or admin required'
     assert blocked_runtime._fake_game_reads.calls == []
 
 
@@ -3938,6 +3940,45 @@ def test_native_filter_taxonomies_keep_authenticated_catalogue_shape(monkeypatch
     response = asyncio.run(send())
     assert response.status_code == 200
     assert response.json() == [{'id': 1, 'name': catalogue.title()}]
+
+
+@pytest.mark.parametrize(
+    ('exception', 'expected_message', 'expected_event'),
+    [
+        (
+            __import__('sqlalchemy').exc.SQLAlchemyError('Database connection failed'),
+            'Database error retrieving genres',
+            'Database error fetching genres: Database connection failed',
+        ),
+        (
+            RuntimeError('Unexpected failure'),
+            'Error retrieving genres',
+            'Unexpected error fetching genres: Unexpected failure',
+        ),
+    ],
+)
+def test_native_taxonomy_errors_preserve_legacy_error_classification(
+    monkeypatch, exception, expected_message, expected_event,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    events = []
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event',
+        lambda message, **kwargs: events.append((message, kwargs)) or True,
+    )
+
+    def fail_taxonomy(_name):
+        raise exception
+
+    monkeypatch.setattr(runtime._fake_filter_reads, 'taxonomy', fail_taxonomy)
+    response = _run(runtime, '/api/genres', cookie=_signed_session())
+
+    assert response.status_code == 500
+    assert response.json()['message'] == expected_message
+    assert events == [(
+        expected_event,
+        {'event_type': 'filters_api', 'event_level': 'error'},
+    )]
 
 
 def test_native_member_profiles_keep_social_scope_and_acl_response_shapes(monkeypatch):
@@ -5756,12 +5797,13 @@ def test_native_browser_player_settings_matches_flask_silent_json(monkeypatch):
     cookie, csrf_token = _signed_session_with_csrf()
     headers = {'Content-Type': 'application/json', 'X-CSRFToken': csrf_token}
 
-    async def send_raw(content, content_type='application/json'):
+    async def send_raw(method, content, content_type='application/json'):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=admin_runtime), base_url='http://testserver'
         ) as client:
             client.cookies.set('session', cookie)
-            return await client.put(
+            return await client.request(
+                method,
                 '/api/browser-player-settings', content=content,
                 headers={**headers, 'Content-Type': content_type},
                 follow_redirects=False,
@@ -6763,6 +6805,11 @@ def test_native_member_chat_spaces_read_uses_native_adapter(monkeypatch):
 def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     calls = []
+    visibility_calls = []
+
+    def channel_visible(_self, user, channel_id):
+        visibility_calls.append((user.id, channel_id))
+        return channel_id == 44
 
     def messages(_self, user, channel_id, *, limit, before_id, since_id):
         calls.append((user.id, channel_id, limit, before_id, since_id))
@@ -6770,6 +6817,7 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
             return None
         return {'messages': [{'id': 12, 'text': 'hello'}], 'channel': {'id': 44}}
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'channel_visible', channel_visible)
     monkeypatch.setattr(chat_reads.ChatReadData, 'messages', messages)
     asyncio.run(runtime._ensure_flask())
     flask_app.app_context = lambda: (_ for _ in ()).throw(
@@ -6786,6 +6834,9 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
     invalid_limit = _run(
         runtime, '/api/chat/channels/44/messages?limit=many', cookie=_signed_session(),
     )
+    missing_with_invalid_limit = _run(
+        runtime, '/api/chat/channels/45/messages?limit=many', cookie=_signed_session(),
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -6795,7 +6846,10 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
     assert missing.json()['error'] == 'Not found'
     assert invalid_limit.status_code == 400
     assert invalid_limit.json()['error'] == 'limit must be an integer'
-    assert calls == [(7, 44, 100, 19, None), (7, 45, 50, None, None)]
+    assert missing_with_invalid_limit.status_code == 404
+    assert missing_with_invalid_limit.json()['error'] == 'Not found'
+    assert calls == [(7, 44, 100, 19, None)]
+    assert visibility_calls == [(7, 44), (7, 45), (7, 44), (7, 45)]
 
 
 def test_native_member_chat_search_read_keeps_query_and_limit_contract(monkeypatch):
@@ -7631,7 +7685,7 @@ def test_lazy_asgi_dispatches_legacy_unmatched_status_form_natively(monkeypatch)
     )
 
     assert response.status_code == 303
-    assert response.headers['location'] == '/scan_management'
+    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
     assert calls == ['folder-9']
 
 
@@ -7786,7 +7840,7 @@ def test_lazy_asgi_dispatches_library_refresh_all_natively(monkeypatch):
         enqueue_refresh=lambda queue: calls.append(('enqueue', queue)) or {
             'status': 'queued', 'jobs': [{'job_id': 'refresh-job', 'position': 1}],
         },
-        promote_refresh=lambda _app: SimpleNamespace(id='refresh-job'),
+        promote_refresh=lambda _app, *, database_scope=None: SimpleNamespace(id='refresh-job'),
     )
     monkeypatch.setattr(native_library_admin_mutations, 'LibraryAdminMutationData', lambda: data)
     cookie, csrf = _signed_session_with_csrf()
@@ -7827,11 +7881,15 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
     response = _run(
-        runtime, '/api/scan_jobs_status?status=queued&library_uuid=lib-1&name=Shelf',
+        runtime,
+        '/api/scan_jobs_status?status=queued&status=Failed&library_uuid=lib-1'
+        '&library_uuid=lib-2&q=Shelf&q=Other&name=Fallback',
         cookie=_signed_session(),
     )
     head = _run(
-        runtime, '/api/scan_jobs_status?status=queued&library_uuid=lib-1&name=Shelf',
+        runtime,
+        '/api/scan_jobs_status?status=queued&status=Failed&library_uuid=lib-1'
+        '&library_uuid=lib-2&q=Shelf&q=Other&name=Fallback',
         cookie=_signed_session(), method='HEAD',
     )
 
@@ -7860,10 +7918,17 @@ def test_lazy_asgi_dispatches_admin_path_info_without_opening_path(monkeypatch):
     monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
-    response = _run(runtime, '/api/path/open?full_disk_path=%2Fstorage%2Flibrary',
+    response = _run(
+        runtime,
+        '/api/path/open?path=%2Fstorage%2Flibrary&path=%2Fstorage%2Fother'
+        '&full_disk_path=%2Fstorage%2Ffallback',
                     cookie=_signed_session())
-    head = _run(runtime, '/api/path/open?full_disk_path=%2Fstorage%2Flibrary',
-                cookie=_signed_session(), method='HEAD')
+    head = _run(
+        runtime,
+        '/api/path/open?path=%2Fstorage%2Flibrary&path=%2Fstorage%2Fother'
+        '&full_disk_path=%2Fstorage%2Ffallback',
+        cookie=_signed_session(), method='HEAD',
+    )
 
     assert response.status_code == 200
     assert response.json()['open_via'] == 'desktop'
@@ -8796,6 +8861,26 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
     )
 
 
+def test_lazy_asgi_setup_form_admin_gate_matches_flask_redirect_shape(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 2,
+        transition=lambda *args, **kwargs: pytest.fail('unauthorized setup transition ran'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/setup/smtp', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'smtp_server': 'mail.invalid', 'smtp_port': '2525'},
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=/setup/smtp'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in response.text
+
+
 def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(monkeypatch):
     calls = []
     data = SimpleNamespace(
@@ -8932,7 +9017,8 @@ def test_lazy_asgi_login_form_renders_visible_validation_with_legacy_status(monk
     assert response.status_code == 200
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert 'Please enter your username and password.' in response.text
-    assert 'role="alert"' in response.text
+    assert 'data-auth-notices=' in response.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in response.text
 
 
 def test_lazy_asgi_login_form_missing_csrf_matches_flask_bad_request(monkeypatch):
@@ -9045,12 +9131,15 @@ def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
 
 
 def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     calls = []
 
     class FakeRegistrationData:
         def register(self, payload, invite, request, config):
             calls.append((payload, invite))
-            return {'registered': True, 'confirmation_sent': True}, None
+            return {'registered': True, '_account_created': True, '_confirmation_sent': True}, None
 
     monkeypatch.setattr(native_auth_registration, 'AuthRegistrationData', FakeRegistrationData)
     _flask_app, runtime = _runtime(monkeypatch)
@@ -9078,6 +9167,9 @@ def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
 
 
 def test_lazy_asgi_registration_form_renders_visible_validation_with_legacy_status(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     calls = []
     monkeypatch.setattr(
         native_auth_registration, 'AuthRegistrationData',
@@ -9100,11 +9192,53 @@ def test_lazy_asgi_registration_form_renders_visible_validation_with_legacy_stat
     assert response.status_code == 200
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert 'Invalid registration details.' in response.text
-    assert 'role="alert"' in response.text
+    assert 'data-auth-notices=' in response.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in response.text
     assert calls == []
 
 
+def test_lazy_asgi_registration_form_does_not_claim_account_created_for_generic_ack(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    data = SimpleNamespace(register=lambda *_args: ({
+        'requested': True,
+        'message': 'If the details can be used to create an account, check your email for next steps.',
+        'next_url': '/login',
+        '_account_created': False,
+        '_confirmation_sent': False,
+    }, None))
+    monkeypatch.setattr(native_auth_registration, 'AuthRegistrationData', lambda: data)
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/register?token=invite-123', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'existing.player',
+            'email': 'new@example.com', 'password': 'secure-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/register?token=invite-123'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert any(
+        'If the details can be used to create an account' in message
+        for _category, message in saved_session['_flashes']
+    )
+    assert not any('Your account was created' in message for _category, message in saved_session['_flashes'])
+
+
 def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     calls = []
 
     class FakeResetData:
@@ -9154,11 +9288,13 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     assert invalid_email.status_code == 200
     assert invalid_email.headers['content-type'] == 'text/html; charset=utf-8'
     assert 'Invalid email address.' in invalid_email.text
-    assert 'role="alert"' in invalid_email.text
+    assert 'data-auth-notices=' in invalid_email.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in invalid_email.text
     assert mismatch.status_code == 200
     assert mismatch.headers['content-type'] == 'text/html; charset=utf-8'
     assert 'Invalid password details.' in mismatch.text
-    assert 'role="alert"' in mismatch.text
+    assert 'data-auth-notices=' in mismatch.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in mismatch.text
     assert reset.status_code == 302 and reset.headers['location'] == '/login'
     assert ('request', 'player@example.com', '127.0.0.1') in calls
     assert ('valid', 'token-123') in calls
@@ -9268,6 +9404,7 @@ def test_lazy_asgi_public_demo_keeps_disabled_and_missing_user_responses(monkeyp
     disabled_head = _run(disabled_runtime, '/demo', method='HEAD')
     assert disabled_head.status_code == 404 and disabled_head.content == b''
     assert disabled_head.headers['content-type'] == disabled.headers['content-type']
+    assert disabled_head.headers['content-length'] == str(len(disabled.content))
 
     monkeypatch.setenv('ONEIRODEX_PUBLIC_DEMO', 'yes')
     _flask_app, missing_runtime = _runtime(monkeypatch)
@@ -9325,6 +9462,7 @@ def test_lazy_asgi_dispatches_registration_with_validation_invite_logout_and_csr
     assert invalid.status_code == 422
     assert registered.status_code == invited_signed_in.status_code == 202
     assert registered.json()['requested'] is True
+    assert not any(key.startswith('_') for key in registered.json())
     assert conflict.status_code == 409
     assert any(
         value.startswith('remember_token=') and 'max-age=0' in value.lower()
@@ -9478,7 +9616,7 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
             'system': {}, 'database': {}, 'active_users': 0, 'logs': {'count': 0, 'latest': None},
             'config': {}, 'theme_assets': {},
         },
-        summary=lambda app: calls.append(('summary', app.name)) or {'health': 'ok'},
+        summary=lambda app, database_scope=None: calls.append(('summary', app.name)) or {'health': 'ok'},
         devices=lambda limit, app: calls.append(('devices', limit, app.name)) or {'devices': []},
         library_health=lambda app: calls.append(('library_health', app.name)) or {'score': 100},
         image_refresh_progress=lambda game_uuid: {'status': 'error', 'game_uuid': game_uuid},
@@ -9547,8 +9685,9 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
     assert deletion_stream.headers['content-type'].startswith('text/event-stream')
     assert '"status": "completed"' in deletion_stream.text
     assert cancel_scan.status_code == 302
-    assert cancel_scan.headers['location'] == '/admin/scan_management?active_tab=jobs'
+    assert cancel_scan.headers['location'] == '/scan_management?active_tab=jobs'
     assert restart_scan.status_code == 302
+    assert restart_scan.headers['location'] == '/scan_management?active_tab=jobs'
     assert scan_calls == [('cancel', 'job-1'), ('restart', 'job-2', 'force')]
     assert calls == [
         ('logs', 200), ('system', flask_app.name), ('summary', flask_app.name),
@@ -9602,7 +9741,7 @@ def test_lazy_asgi_dispatches_theme_font_catalogue_natively(monkeypatch):
         'fonts': [{'id': 'fixture'}], 'platform_hints': {}, 'fonts_dir': '/fonts', 'note': 'fixture',
     })
     monkeypatch.setattr(native_theme_fonts_read, 'ThemeFontsData', lambda *_args: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/theme/fonts', cookie=_signed_session())
 
@@ -9755,7 +9894,6 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
         headers={'X-CSRFToken': csrf, 'Content-Type': 'application/vnd.api+json'},
         content='{"game_uuid":"game-1","source_url":"https://patch.test/vendor-guide"}',
     )
-
     empty_attach = _run(
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf}, json_body={},
@@ -9770,17 +9908,6 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf}, json_body={'game_uuid': 'game-1'},
     )
-
-    assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
-    assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
-    assert vendor_json_attach.status_code == 201
-    assert vendor_json_attach.json()['source_url'] == 'https://patch.test/vendor-guide'
-    assert empty_attach.status_code == 400
-    assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
-    assert empty_attach.json()['error_code'] == 'bad_request'
-    assert missing_game_uuid.status_code == missing_source_url.status_code == 400
-    assert missing_game_uuid.json()['error_code'] == 'bad_request'
-    assert missing_source_url.json()['error_code'] == 'bad_request'
     blank_source = _run(
         runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf}, json_body={
@@ -9813,6 +9940,17 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
         headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
         content='{',
     )
+
+    assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
+    assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
+    assert vendor_json_attach.status_code == 201
+    assert vendor_json_attach.json()['source_url'] == 'https://patch.test/vendor-guide'
+    assert empty_attach.status_code == 400
+    assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
+    assert empty_attach.json()['error_code'] == 'bad_request'
+    assert missing_game_uuid.status_code == missing_source_url.status_code == 400
+    assert missing_game_uuid.json()['error_code'] == 'bad_request'
+    assert missing_source_url.json()['error_code'] == 'bad_request'
     assert blank_source.status_code == 422
     assert blank_source.json()['error_code'] == 'unprocessable'
     assert 'source_url' in blank_source.json()['detail']
@@ -9837,7 +9975,7 @@ def test_lazy_asgi_dispatches_member_download_queue_natively(monkeypatch):
         delete=lambda request_id: request_id == 5,
     )
     monkeypatch.setattr(native_download_request_reads, 'DownloadRequestReadData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/my_downloads', cookie=_signed_session())
 
@@ -10566,7 +10704,7 @@ def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
     assert calls == [('game-1', '/safe/Game', 'administrator', 7)]
 
 
@@ -10689,6 +10827,10 @@ def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
 
     calls = []
     fake = SimpleNamespace(
+        library_exists=lambda library_uuid: (
+            calls.append(('library_exists', library_uuid)) or
+            library_uuid == 'library-1'
+        ),
         resolve_path=lambda _app, folder_path, library_root: ('/safe/ROMs', None),
         allowed_bases=lambda _app: ['/safe'],
         safe_path=lambda path, _bases: (calls.append(('safe', path)) or True, None),
@@ -10710,8 +10852,9 @@ def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/admin/scan_management?active_tab=manualScan'
+    assert response.headers['location'] == '/scan_management?active_tab=manual'
     assert calls == [
+        ('library_exists', 'library-1'),
         ('safe', '/safe/ROMs'),
         ('list', '/safe/ROMs', ['ignored'], ['CaseSensitive']),
     ]
@@ -10828,7 +10971,15 @@ def test_lazy_asgi_dispatches_native_oidc_start_and_callback(monkeypatch):
 
 def test_lazy_asgi_uses_native_404_without_wsgi_fallback(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
-    response = _run(runtime, '/route-that-does-not-exist')
-    assert response.status_code == 404
-    assert response.json()['error_code'] == 'not_found'
-    assert response.json()['message'] == 'Not found'
+    page_response = _run(runtime, '/route-that-does-not-exist')
+    assert page_response.status_code == 404
+    assert page_response.headers['content-type'].startswith('text/html')
+    assert '<title>404 Not Found</title>' in page_response.text
+
+    api_response = _run(runtime, '/api/route-that-does-not-exist')
+    assert api_response.status_code == 404
+    assert api_response.json()['error_code'] == 'not_found'
+    assert api_response.json()['message'] == (
+        'The requested URL was not found on the server. If you entered the URL '
+        'manually please check your spelling and try again.'
+    )

@@ -42,7 +42,7 @@ def test_setup_integrations_form_carries_provider_configure_checkboxes():
 
     assert error is None
     assert return_to == '/setup/integrations'
-    assert payload['steam_web_api_key'] == 'typed-but-unchecked'
+    assert payload['steam_web_api_key'] == ''
     assert payload['configure_steam_web_api_key'] is False
     assert payload['steamgriddb_api_key'] == 'typed-and-selected'
     assert payload['configure_steamgriddb_api_key'] is True
