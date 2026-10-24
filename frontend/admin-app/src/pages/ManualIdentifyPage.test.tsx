@@ -136,6 +136,59 @@ test('prefills identify fields from the existing direct-entry query contract', a
   expect(screen.getByLabelText('IGDB ID')).toHaveValue(123)
 })
 
+test('switches non-catalog entry to a generated, locked ID and focuses the empty name', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'PC', platform_name: 'PC' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [{ value: 'MAIN_GAME', label: 'Main Game' }],
+        statuses: [{ value: 'RELEASED', label: 'Released' }],
+      }) as any
+    if (url === '/api/get_next_custom_igdb_id') return response({ next_id: 2000000420 }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/add_game_manual?name=Old+catalog+title&full_disk_path=%2Fgames%2Fcustom&library_uuid=lib-1',
+      ]}
+    >
+      <ManualIdentifyPage />
+    </MemoryRouter>,
+  )
+
+  const name = await screen.findByLabelText('Name')
+  const id = screen.getByLabelText('IGDB ID')
+  expect(name).toHaveValue('Old catalog title')
+  fireEvent.click(screen.getByRole('button', { name: 'Add non-catalog game' }))
+
+  await waitFor(() => {
+    expect(id).toHaveValue(2000000420)
+    expect(id).toHaveAttribute('readonly')
+    expect(name).toHaveValue('')
+    expect(name).toHaveFocus()
+  })
+  expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  fireEvent.change(name, { target: { value: 'Custom game' } })
+  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+  expect(fetchMock).not.toHaveBeenCalledWith(
+    expect.stringContaining('/api/search_igdb_by_id'),
+    expect.anything(),
+  )
+})
+
 test.each([true, false])(
   'searches and confirms linking an existing game from edit page (from unmatched: %s)',
   async (fromUnmatched) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson, putJson } from '../api/adminApi'
@@ -58,6 +58,8 @@ export function ManualIdentifyPage() {
   const [linkError, setLinkError] = useState('')
   const [linkSearched, setLinkSearched] = useState(false)
   const [activeTab, setActiveTab] = useState('about')
+  const [customIdMode, setCustomIdMode] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let live = true
@@ -109,7 +111,7 @@ export function ManualIdentifyPage() {
 
   async function search() {
     const term = String(form.name || '').trim()
-    if (!term || searchBusy) return
+    if (!term || searchBusy || customIdMode) return
     setSearchBusy(true)
     setSearchSource('IGDB')
     setSaveError('')
@@ -285,7 +287,7 @@ export function ManualIdentifyPage() {
   }
   async function loadIgdbId() {
     const id = Number(form.igdb_id)
-    if (!Number.isInteger(id) || id < 1 || searchBusy) return
+    if (!Number.isInteger(id) || id < 1 || searchBusy || customIdMode) return
     setSearchBusy(true)
     setSearchSource('IGDB')
     try {
@@ -301,7 +303,10 @@ export function ManualIdentifyPage() {
     try {
       const data = await getJson('/api/get_next_custom_igdb_id')
       setField('igdb_id', data.next_id)
+      setCustomIdMode(true)
+      setField('name', '')
       setField('item_kind', 'game')
+      requestAnimationFrame(() => nameInputRef.current?.focus())
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : 'Could not allocate a custom catalog ID.',
@@ -439,6 +444,7 @@ export function ManualIdentifyPage() {
               value={form.igdb_id}
               onChange={(event) => setField('igdb_id', event.target.value)}
               required
+              readOnly={customIdMode}
               aria-describedby="od-manual-identify-igdb-help"
             />
           </label>
@@ -447,7 +453,7 @@ export function ManualIdentifyPage() {
               type="button"
               onClick={() => void loadIgdbId()}
               aria-label="Search IGDB by ID"
-              disabled={searchBusy}
+              disabled={searchBusy || customIdMode}
             >
               Search IGDB
             </Button>
@@ -471,10 +477,14 @@ export function ManualIdentifyPage() {
             <input
               className="od-admin-input"
               value={form.name}
+              ref={nameInputRef}
               onChange={(event) => setField('name', event.target.value)}
             />
           </label>
-          <Button type="submit" disabled={searchBusy || !String(form.name || '').trim()}>
+          <Button
+            type="submit"
+            disabled={customIdMode || searchBusy || !String(form.name || '').trim()}
+          >
             {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
           </Button>
         </form>
