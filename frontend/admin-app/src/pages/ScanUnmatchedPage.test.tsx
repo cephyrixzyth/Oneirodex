@@ -72,6 +72,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
 
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select folder /storage/review/page-0' }))
   expect(screen.getByRole('group', { name: 'Selected folder actions' })).toBeInTheDocument()
+  vi.mocked(postJson).mockResolvedValue({ cleared: 1 })
   vi.spyOn(window, 'confirm').mockReturnValue(true)
   fireEvent.click(screen.getByRole('button', { name: 'Clear selected' }))
   await waitFor(() =>
@@ -79,6 +80,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
       ids: ['folder-0'],
     }),
   )
+  expect(await screen.findByText('Cleared 1 selected entry.')).toBeInTheDocument()
 
   fireEvent.click(
     within(screen.getByRole('group', { name: 'Layout filter' })).getByRole('button', {
@@ -95,6 +97,43 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
   )
   expect(await screen.findByText('/storage/review/page-50')).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledTimes(1)
+})
+
+test('Clear All confirms and uses singular feedback for one removed entry', async () => {
+  const row = {
+    id: 'folder-clear-all',
+    folder_path: '/storage/review/clear-all',
+    status: 'Unmatched',
+  }
+  let clearListReads = 0
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    const value = String(url)
+    if (value === '/api/get_libraries') return []
+    if (value.includes('limit=100')) {
+      clearListReads += 1
+      return clearListReads === 1 ? { items: [row], total: 1, count: 1 } : { items: [] }
+    }
+    return { items: [row], total: 1, count: 1 }
+  })
+  vi.mocked(postJson).mockResolvedValue({ cleared: 1 })
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+  render(
+    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+      <ScanUnmatchedPage />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('/storage/review/clear-all')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Clear All' }))
+
+  expect(window.confirm).toHaveBeenCalledWith(
+    'Clear all unmatched-folder entries? This removes the database entries only; it does not delete files from storage.',
+  )
+  expect(await screen.findByText('Cleared 1 entry. Storage files were not changed.')).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith('/api/unmatched_folders/batch/clear', {
+    ids: ['folder-clear-all'],
+  })
 })
 
 test('disk deletion requires confirmation before the destructive request', async () => {

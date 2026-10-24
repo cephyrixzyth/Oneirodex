@@ -56,6 +56,8 @@ const WHY_FILTERS = [
   ['region_mismatch', 'Region mismatch'],
 ] as const
 
+const entryLabel = (count: number) => (count === 1 ? 'entry' : 'entries')
+
 export function ScanUnmatchedPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -303,7 +305,7 @@ export function ScanUnmatchedPage() {
           const result = await postJson('/api/unmatched_folders/batch/clear', { ids: batch })
           cleared += Number(result?.cleared) || 0
         }
-        setActionStatus(`Cleared ${cleared} selected entries.`)
+        setActionStatus(`Cleared ${cleared} selected ${entryLabel(cleared)}.`)
       } else if (action === 'ignore_selected') {
         const eligible = selectedRowData.filter((row) => row.status !== 'Ignore')
         let ignored = 0
@@ -400,7 +402,9 @@ export function ScanUnmatchedPage() {
       }
       setSelectedIds(new Set())
       selectedRows.current.clear()
-      setActionStatus(`Cleared ${cleared} entries. Storage files were not changed.`)
+      setActionStatus(
+        `Cleared ${cleared} ${entryLabel(cleared)}. Storage files were not changed.`,
+      )
       setReloadKey((value) => value + 1)
     } catch (reason) {
       setError(reason)
