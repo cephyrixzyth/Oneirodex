@@ -53,7 +53,7 @@ const CASES = [
   ['/admin/manage_invites', 'Invites'],
   ['/admin/settings', 'Settings'],
   ['/admin/storage', 'Storage / hardlinks'],
-  ['/admin/smtp_settings', 'SMTP'],
+  ['/admin/smtp_settings', 'SMTP Settings'],
   ['/admin/scan_match', 'Scan / match policy'],
   ['/admin/remote_play', 'Remote play'],
   ['/admin/quality_profiles', 'Quality Profiles'],
@@ -187,6 +187,36 @@ describe('AdminRoutes path -> page', () => {
     expect(await screen.findByText('link completed')).toBeInTheDocument()
     expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Unmatched folder filters and results')).toBeInTheDocument()
+  })
+
+  test('legacy unmatched URL redirects into the single scan-management page', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => [],
+      text: async () => '',
+    })) as unknown as typeof globalThis.fetch
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/admin/unmatched',
+            state: { linkSuccess: 'linked through the legacy URL' },
+          },
+        ]}
+      >
+        <AdminRoutes />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('heading', { name: 'Unmatched folders' })).toBeInTheDocument()
+    expect(screen.getByTestId('current-location')).toHaveTextContent(
+      '/scan_management?active_tab=unmatched',
+    )
+    expect(screen.queryByText('Dupe glance')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Unmatched folder filters and results')).toBeInTheDocument()
+    expect(await screen.findByText('linked through the legacy URL')).toBeInTheDocument()
   })
 
   test('Admin Help internal navigation stays in the SPA', () => {

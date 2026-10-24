@@ -29,7 +29,6 @@ import { OidcSettingsPage } from '../pages/OidcSettingsPage'
 import { DownloadsPage } from '../pages/DownloadsPage'
 import { StatisticsPage } from '../pages/StatisticsPage'
 import { ScansPage } from '../pages/ScansPage'
-import { UnmatchedPage } from '../pages/UnmatchedPage'
 import { ScanUnmatchedPage } from '../pages/ScanUnmatchedPage'
 import { ManualIdentifyPage } from '../pages/ManualIdentifyPage'
 import { EditGameImagesPage } from '../pages/EditGameImagesPage'
@@ -128,6 +127,17 @@ function ScanManagementRoute() {
   return <ScanControlsPage />
 }
 
+function UnmatchedCompatibilityRoute() {
+  const location = useLocation()
+  return (
+    <Navigate
+      replace
+      to="/scan_management?active_tab=unmatched"
+      state={location.state}
+    />
+  )
+}
+
 export function AdminRoutes() {
   return (
     <Routes>
@@ -200,7 +210,7 @@ export function AdminRoutes() {
       <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
       <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />
       <Route path="/edit_game_images/:gameUuid" element={<EditGameImagesPage />} />
-      <Route path="/admin/unmatched" element={<UnmatchedPage />} />
+      <Route path="/admin/unmatched" element={<UnmatchedCompatibilityRoute />} />
       {/* Discovery shelves, newsletter, announcements, attract mode. */}
       <Route path="/admin/discovery_sections" element={<DiscoverySectionsPage />} />
       <Route

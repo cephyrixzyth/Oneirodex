@@ -359,7 +359,7 @@ export function ManualIdentifyPage() {
       <div className="od-admin-actions-row">
         <a
           className="od-cbtn"
-          href={fromUnmatched ? '/admin/unmatched' : '/scan_management?active_tab=manual'}
+          href={fromUnmatched ? '/scan_management?active_tab=unmatched' : '/scan_management?active_tab=manual'}
         >
           Back to scan review
         </a>
