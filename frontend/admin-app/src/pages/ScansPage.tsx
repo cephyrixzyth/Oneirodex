@@ -657,6 +657,11 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
         <div className="od-admin-panel od-scan-glance">
           <PageStatus error={error} errorMessage="Unable to load scan status." />
           <PageStatus error={actionError} />
+          {actionMessage ? (
+            <PageStatus announcement="status" inline>
+              {actionMessage}
+            </PageStatus>
+          ) : null}
           <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
             <Button
               type="button"
@@ -693,6 +698,9 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
                   const path = String(job.scan_folder || '')
                   const libraryName = String(job.library_name || job.library || 'Unknown library')
                   const statusLabel = String(job.status || 'Unknown')
+                  const jobStatus = statusLabel.toLowerCase()
+                  const queued = isScanQueuedStatus(job.status)
+                  const canStop = jobStatus === 'running' || queued
                   const detail = String(job.error_message || job.current_processing || '')
                   return (
                     <li className="od-scan-glance__item" key={String(job.id)}>
@@ -704,6 +712,24 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
                         {path || 'No scan path reported'}
                       </code>
                       {detail ? <p className="od-scan-glance__detail">{detail}</p> : null}
+                      {canStop ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="od-btn--secondary"
+                          disabled={Boolean(busyJobKey) || actionBusy}
+                          title={queued ? 'Cancel queued scan before it starts' : 'Stop this scan'}
+                          onClick={() => void cancelScanJob(job)}
+                        >
+                          {busyJobKey === job.id
+                            ? queued
+                              ? 'Cancelling…'
+                              : 'Stopping…'
+                            : queued
+                              ? 'Cancel queue'
+                              : 'Stop'}
+                        </Button>
+                      ) : null}
                     </li>
                   )
                 })}

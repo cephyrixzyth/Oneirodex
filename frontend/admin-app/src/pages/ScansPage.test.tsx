@@ -132,6 +132,54 @@ describe('ScansPage queued jobs', () => {
     ).toHaveAttribute('href', '/admin/scan-jobs')
   })
 
+  test('embedded glance keeps Stop and Cancel queue available for active jobs', async () => {
+    const user = userEvent.setup()
+    const jobs = [
+      {
+        id: 'running-glance',
+        library_name: 'PCWIN',
+        status: 'Running',
+        scan_folder: '/storage/pc',
+        total_folders: 10,
+        folders_success: 1,
+      },
+      {
+        id: 'queued-glance',
+        library_name: 'PS2',
+        status: 'Queued',
+        queue_position: 1,
+        scan_folder: '/storage/ps2',
+      },
+    ]
+    const fetchMock = vi.fn(async (url) => {
+      const isStatus = String(url).includes('/api/scan_jobs_status')
+      return {
+        ok: isStatus || String(url).includes('/cancel_scan_job/'),
+        status: isStatus ? 200 : 302,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(jobs),
+        json: async () => jobs,
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <MemoryRouter>
+        <ScansPage embedded />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel queue' }))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/cancel_scan_job/queued-glance',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+    expect(screen.getByText('Queued scan job queued-glance cancelled.')).toBeInTheDocument()
+  })
+
   test('uses the legacy Scan Jobs browser title', async () => {
     render(
       <MemoryRouter>
