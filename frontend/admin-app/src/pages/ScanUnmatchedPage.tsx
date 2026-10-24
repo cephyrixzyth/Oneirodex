@@ -987,7 +987,6 @@ export function ScanUnmatchedPage() {
                     />
                   </td>
                   <td className="od-scan-unmatched__path">
-                    <span>{row.folder_path || 'Unknown path'}</span>
                     <label
                       className="od-scan-unmatched__name-label"
                       htmlFor={`unmatched-name-${row.id}`}
@@ -1040,19 +1039,9 @@ export function ScanUnmatchedPage() {
                       ) : null}
                       {isGarbageScaffolding(row) ? <span>Garbage</span> : null}
                     </div>
-                    {row.why_unmatched ||
-                    row.unmatched_reason ||
-                    row.match_reason ||
-                    row.match_score != null ? (
-                      <small className="od-scan-unmatched__why">
-                        <strong>Why unmatched?</strong>{' '}
-                        {row.why_unmatched ||
-                          row.unmatched_reason ||
-                          row.match_reason ||
-                          'No match reason'}
-                        {row.match_score != null ? ` · Match confidence ${row.match_score}` : ''}
-                      </small>
-                    ) : null}
+                    <small className="od-scan-unmatched__on-disk">
+                      On disk: <span>{row.folder_path || 'Unknown path'}</span>
+                    </small>
                     {row.matched_game?.name ? (
                       <small>Matched title: {row.matched_game.name}</small>
                     ) : null}
@@ -1083,12 +1072,35 @@ export function ScanUnmatchedPage() {
                       </details>
                     ) : null}
                   </td>
-                  <td>{row.status || 'Unknown'}</td>
+                  <td className="od-scan-unmatched__status">
+                    <span>{row.status || 'Unknown'}</span>
+                    {row.why_unmatched ||
+                    row.unmatched_reason ||
+                    row.match_reason ||
+                    row.match_score != null ? (
+                      <small className="od-scan-unmatched__why">
+                        <strong>Why unmatched?</strong>{' '}
+                        {row.why_unmatched ||
+                          row.unmatched_reason ||
+                          row.match_reason ||
+                          'No match reason'}
+                        {row.match_score != null ? ` · Match confidence ${row.match_score}` : ''}
+                      </small>
+                    ) : null}
+                  </td>
                   <td>{row.library_name || '—'}</td>
                   <td>{row.platform_name || '—'}</td>
                   <td>{row.rom_region || '—'}</td>
                   <td>
-                    <div className="od-scan-unmatched__row-actions">
+                    <details className="od-scan-unmatched__row-menu">
+                      <summary className="od-btn od-scan-unmatched__row-menu-summary">
+                        Actions
+                      </summary>
+                      <div
+                        className="od-scan-unmatched__row-actions"
+                        role="toolbar"
+                        aria-label={`Actions for ${row.folder_path || row.id}`}
+                      >
                       <Button
                         type="button"
                         onClick={() => setPathModal(String(row.folder_path || ''))}
@@ -1224,7 +1236,8 @@ export function ScanUnmatchedPage() {
                       >
                         Delete from disk
                       </Button>
-                    </div>
+                      </div>
+                    </details>
                   </td>
                 </tr>
               ))}

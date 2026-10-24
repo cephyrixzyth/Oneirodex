@@ -16,6 +16,7 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     id: `folder-${index}`,
     folder_path: `/storage/review/page-${index}`,
     status: 'Unmatched',
+    ...(index === 0 ? { why_unmatched: 'Could not auto-match to IGDB' } : {}),
     library_uuid: 'library-1',
     library_name: 'Review Library',
     platform_name: 'PCWIN',
@@ -71,6 +72,9 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     'aria-sort',
     'ascending',
   )
+  const firstRow = screen.getByRole('row', { name: /page-0/ })
+  expect(within(firstRow).getByText('On disk:')).toBeInTheDocument()
+  expect(within(firstRow).getByText('Why unmatched?')).toBeInTheDocument()
 
   fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))
@@ -167,6 +171,9 @@ test('disk deletion requires confirmation before the destructive request', async
   )
 
   await screen.findByText('/storage/review/delete-me')
+  fireEvent.click(
+    within(screen.getByRole('row', { name: /delete-me/ })).getByText('Actions'),
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Delete from disk' }))
   expect(window.confirm).toHaveBeenCalledWith(
     'Are you sure you want to delete the folder /storage/review/delete-me FROM DISK?',
