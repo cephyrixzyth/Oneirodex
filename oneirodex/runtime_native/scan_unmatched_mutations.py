@@ -473,6 +473,11 @@ def create_scan_unmatched_mutations_router(
             privilege='librarian', schema='PlaceUnmatchedUpdateBody',
         )
 
+    @router.options('/api/unmatched_folders/{folder_id:str}/place_update')
+    async def place_update_options(folder_id: str):
+        # Preserve Flask's generated unauthenticated OPTIONS header order.
+        return HTMLResponse('', status_code=200, headers={'Allow': 'POST, OPTIONS'})
+
     @router.post('/delete_all_unmatched_folders')
     async def clear_all_legacy(request: Request):
         return await _run(

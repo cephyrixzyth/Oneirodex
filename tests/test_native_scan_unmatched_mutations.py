@@ -336,6 +336,18 @@ def test_soft_name_options_matches_flask_auto_options_without_auth(runtime):
     assert data.calls == []
 
 
+def test_place_update_options_matches_flask_auto_options_without_auth(runtime):
+    app, _flask_app, data, _users, _cookies = runtime
+
+    response = _request(app, '/api/unmatched_folders/8/place_update', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['allow'] == 'POST, OPTIONS'
+    assert response.content == b''
+    assert data.calls == []
+
+
 def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runtime):
     from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
