@@ -134,13 +134,19 @@ def create_quality_profiles_router(
                     except Exception:
                         body = None
                 payload_body = body if isinstance(body, dict) else {}
-                if path.endswith('/active') and request.method in ('PUT', 'POST'):
+                if (
+                    body and not isinstance(body, dict)
+                    and not path.endswith(('/active', '/score'))
+                ):
+                    payload, status = api_error_payload('Invalid request.', code='unprocessable')
+                    response = JSONResponse(payload, status_code=status)
+                elif path.endswith('/active') and request.method in ('PUT', 'POST'):
                     from pydantic import ValidationError
                     from oneirodex.schemas.quality_stats import SetActiveQualityProfileBody
                     from oneirodex.utils.validation import format_validation_errors
 
                     try:
-                        model = SetActiveQualityProfileBody.model_validate(payload_body)
+                        model = SetActiveQualityProfileBody.model_validate(body or {})
                         result = data.set_active((model.id or model.active_id or model.profile_id or '').strip())
                     except ValidationError as exc:
                         payload, status = api_error_payload(
@@ -159,7 +165,7 @@ def create_quality_profiles_router(
                     from oneirodex.utils.validation import format_validation_errors
 
                     try:
-                        model = ScoreReleaseBody.model_validate(payload_body)
+                        model = ScoreReleaseBody.model_validate(body or {})
                     except ValidationError as exc:
                         payload, status = api_error_payload(
                             'Invalid request.', code='unprocessable',
@@ -169,7 +175,7 @@ def create_quality_profiles_router(
                     else:
                         try:
                             size_bytes = int(model.size_bytes) if model.size_bytes is not None else None
-                        except (TypeError, ValueError):
+                        except (TypeError, ValueError, OverflowError):
                             size_bytes = None
                         profile = (model.profile_id or model.id or '').strip() or None
                         response = JSONResponse(data.score(
