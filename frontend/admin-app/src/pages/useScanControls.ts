@@ -125,9 +125,9 @@ export function useScanControls() {
           (row: unknown): row is { name: string; full_path: string } =>
             Boolean(
               row &&
-                typeof row === 'object' &&
-                typeof (row as { name?: unknown }).name === 'string' &&
-                typeof (row as { full_path?: unknown }).full_path === 'string',
+              typeof row === 'object' &&
+              typeof (row as { name?: unknown }).name === 'string' &&
+              typeof (row as { full_path?: unknown }).full_path === 'string',
             ),
         )
         if (!rows.length) return
@@ -232,7 +232,12 @@ export function useScanControls() {
         setManualListed(true)
       }
     } catch (error) {
-      setManualError(errorText(error) || 'Unable to list games in this folder.')
+      const message = errorText(error)
+      setManualError(
+        message === 'The selected folder does not exist or cannot be read'
+          ? 'Folder does not exist or cannot be accessed.'
+          : message || 'Unable to list games in this folder.',
+      )
     } finally {
       setManualBusy(false)
     }

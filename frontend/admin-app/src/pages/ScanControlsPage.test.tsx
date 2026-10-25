@@ -224,10 +224,13 @@ test('restores candidates from the legacy manual-folder session after its redire
   expect(scan).not.toHaveBeenCalled()
 })
 
-test('shows a rejected manual folder as an accessible error without starting a scan', async () => {
+test('shows legacy error wording and clears stale manual candidates without starting a scan', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/admin/scan/manual-identify/session-preview'
-      ? { games: [] }
+      ? {
+          games: [{ name: 'Previous Folder Game', full_path: '/games/Previous Folder Game' }],
+          library_uuid: 'lib-1',
+        }
       : url === '/api/get_libraries'
         ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
         : {
@@ -251,8 +254,9 @@ test('shows a rejected manual folder as an accessible error without starting a s
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'The selected folder does not exist or cannot be read',
+    'Folder does not exist or cannot be accessed.',
   )
+  expect(screen.queryByText('Previous Folder Game')).not.toBeInTheDocument()
   expect(scan).not.toHaveBeenCalled()
 })
 
