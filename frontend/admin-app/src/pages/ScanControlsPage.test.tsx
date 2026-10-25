@@ -5,20 +5,13 @@ import { getJson, postJson } from '../api/adminApi'
 import { confirmAction } from '@oneirodex/ui'
 import { MemoryRouter } from 'react-router-dom'
 
-const { scan, scanError, clearScanError } = vi.hoisted(() => ({
+const { scan, scanError, clearScanError, useLibraryScanMock } = vi.hoisted(() => ({
   scan: vi.fn(),
   scanError: { current: '' },
   clearScanError: vi.fn(() => {
     scanError.current = ''
   }),
-}))
-vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
-vi.mock('@oneirodex/ui', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@oneirodex/ui')>()
-  return { ...actual, confirmAction: vi.fn() }
-})
-vi.mock('../hooks/useLibraryScan', () => ({
-  useLibraryScan: () => ({
+  useLibraryScanMock: vi.fn(() => ({
     conflictOpen: false,
     scanning: false,
     scanError: scanError.current,
@@ -26,7 +19,15 @@ vi.mock('../hooks/useLibraryScan', () => ({
     startScan: scan,
     onConflictChoose: vi.fn(),
     onConflictClose: vi.fn(),
-  }),
+  })),
+}))
+vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
+vi.mock('@oneirodex/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneirodex/ui')>()
+  return { ...actual, confirmAction: vi.fn() }
+})
+vi.mock('../hooks/useLibraryScan', () => ({
+  useLibraryScan: useLibraryScanMock,
 }))
 afterEach(() => {
   vi.resetAllMocks()
@@ -130,6 +131,7 @@ test('keeps scan start errors visible in the automatic scan form', async () => {
     scanError.current = ''
   })
   renderPage()
+  expect(useLibraryScanMock).toHaveBeenCalledWith({ persistentErrors: true })
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Invalid cron expression: cron must have 5 fields: minute hour dom month dow',
   )

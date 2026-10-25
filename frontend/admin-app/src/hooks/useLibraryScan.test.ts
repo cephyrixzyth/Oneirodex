@@ -9,6 +9,7 @@ vi.mock('../utils/toast', () => ({ showToast: vi.fn() }))
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.clearAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -41,4 +42,17 @@ test('keeps rejected scan errors in persistent state when requested', async () =
 
   act(() => result.current.clearScanError())
   expect(result.current.scanError).toBe('')
+})
+
+test('keeps scan status transport failures visible when persistent errors are enabled', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network unavailable')))
+  const { result } = renderHook(() => useLibraryScan({ persistentErrors: true }))
+
+  await act(async () => {
+    await result.current.startScan({ libraryUuid: 'lib-1' })
+  })
+
+  expect(result.current.scanError).toBe('Network unavailable')
+  expect(postJsonResult).not.toHaveBeenCalled()
+  expect(showToast).not.toHaveBeenCalled()
 })
