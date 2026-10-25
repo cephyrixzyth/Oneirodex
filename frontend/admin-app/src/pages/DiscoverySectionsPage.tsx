@@ -59,8 +59,14 @@ export function DiscoverySectionsPage() {
 
   return (
     <Page
+      className="od-discovery-sections"
       title="Discovery sections"
-      lede="Reorder shelves, choose visibility, and curate manual or filtered game selections."
+      lede="Drag to reorder, toggle visibility, or add a custom shelf (manual game list or library / platform / genre filter). Built-in shelves can be reordered and hidden but not deleted."
+      actions={
+        <Button variant="primary" disabled={disabled} onClick={() => openEditor()}>
+          Add shelf
+        </Button>
+      }
     >
       <PageStatus
         loading={loading}
@@ -77,13 +83,6 @@ export function DiscoverySectionsPage() {
           {message}
         </PageStatus>
       ) : null}
-      <Button variant="primary" disabled={disabled} onClick={() => openEditor()}>
-        Add shelf
-      </Button>
-      <p className="od-admin-hint">
-        Built-in shelves can be reordered, hidden, scheduled and pinned; their selection cannot be
-        edited or deleted.
-      </p>
       <ol className="od-admin-list od-discovery-shelves" aria-label="Discovery shelf order">
         {sections.map((row, index) => (
           <li

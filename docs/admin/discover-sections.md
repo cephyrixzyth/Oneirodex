@@ -10,7 +10,7 @@ Admin → **Discovery Sections Management** (`/admin/discovery_sections`) contro
 
 This page uses the packaged admin React shell, shared forms, and named Edit/Delete controls through FastAPI. Move up/down buttons support keyboard ordering. Manual shelves support local game search, ordered selection and deduplicated UUID entry (maximum 60 games); filtered shelves retain library, platform and genre selection. Built-in shelves cannot be deleted or have their selection edited. Discovery-section reads and mutations also dispatch through FastAPI while preserving the existing admin session and CSRF contract. The application still has legacy Flask services and extensions during the runtime migration.
 
-Shelf cards use a compact responsive grid and collapse to one column on narrow screens. Pointer drag handles restore the v1.1.8 reorder interaction; named Move up/Move down controls remain available for keyboard users. The handles identify the shelf and announce the keyboard alternatives.
+The Add shelf action sits beside the page heading, with a lede explaining the available shelf actions. Shelf cards use a compact responsive grid and collapse to one column on narrow screens. Pointer drag handles restore the v1.1.8 reorder interaction; named Move up/Move down controls remain available for keyboard users. The handles identify the shelf and announce the keyboard alternatives.
 
 Schedule controls save layout and UTC start/end dates together; an invalid window preserves the saved schedule. Pin rank has a separate Save action. Visibility and ordering refresh from persisted state. Delete requires confirmation; failed saves retain the draft and failed loading offers Retry. Flask retains the route and guarded API boundary.
 
