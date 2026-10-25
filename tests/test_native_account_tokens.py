@@ -235,6 +235,22 @@ def test_create_requires_csrf_before_body_validation():
     assert data.created == []
 
 
+def test_create_non_object_json_preserves_model_type_validation():
+    user = FakeUser()
+    client, data, _ = make_client(user=user)
+
+    for payload in ([], ['x'], 'x'):
+        response = client.post(
+            '/api/tokens', headers=browser_credentials(user), json=payload,
+        )
+
+        assert response.status_code == 422
+        assert response.json()['detail'] == {
+            '__root__': 'Input should be a valid dictionary or instance of CreateApiTokenBody'
+        }
+    assert data.created == []
+
+
 def test_create_enforces_role_and_bearer_scope_narrowing():
     user = FakeUser()
     admin_scope_data = make_client(user=user)[0]

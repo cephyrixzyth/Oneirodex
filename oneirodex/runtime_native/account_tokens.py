@@ -218,7 +218,7 @@ async def _validated_body(request: Request) -> tuple[Any | None, Response | None
         payload = json.loads(await request.body() or b'{}')
     except (TypeError, ValueError):
         payload = {}
-    if not isinstance(payload, dict):
+    if payload is None:
         payload = {}
     try:
         return CreateApiTokenBody.model_validate(payload), None
