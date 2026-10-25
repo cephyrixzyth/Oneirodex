@@ -24,6 +24,16 @@ test('loads safe settings, saves blank password, and tests the saved connection 
   await waitFor(() => expect(document.title).toBe('SMTP · Oneirodex Admin'))
   const port = await screen.findByLabelText('Port')
   expect(screen.getByLabelText('SMTP server')).toBeRequired()
+  expect(screen.getByLabelText('Enable SMTP')).toHaveAttribute('id', 'smtp_enabled')
+  expect(screen.getByLabelText('SMTP server')).toHaveAttribute('id', 'smtp_server')
+  expect(port).toHaveAttribute('id', 'smtp_port')
+  expect(screen.getByLabelText('Username')).toHaveAttribute('id', 'smtp_username')
+  expect(screen.getByLabelText('Password')).toHaveAttribute('id', 'smtp_password')
+  expect(screen.getByLabelText('Use TLS')).toHaveAttribute('id', 'smtp_use_tls')
+  expect(screen.getByLabelText('Default sender email')).toHaveAttribute(
+    'id',
+    'smtp_default_sender',
+  )
   expect(screen.getByLabelText('Password')).toHaveValue('')
   fireEvent.change(port, { target: { value: '2525' } })
   expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()

@@ -143,6 +143,7 @@ export function SmtpPage() {
             <legend>Connection settings</legend>
             <label className="od-admin-field">
               <input
+                id="smtp_enabled"
                 type="checkbox"
                 checked={form.smtp_enabled}
                 onChange={(e) => field('smtp_enabled', e.target.checked)}
@@ -153,6 +154,7 @@ export function SmtpPage() {
               SMTP server
               <input
                 className="od-admin-input"
+                id="smtp_server"
                 required
                 value={form.smtp_server}
                 onChange={(e) => field('smtp_server', e.target.value)}
@@ -162,6 +164,7 @@ export function SmtpPage() {
               Port
               <input
                 className="od-admin-input"
+                id="smtp_port"
                 type="number"
                 step={1}
                 value={form.smtp_port}
@@ -172,6 +175,7 @@ export function SmtpPage() {
               Username
               <input
                 className="od-admin-input"
+                id="smtp_username"
                 autoComplete="off"
                 value={form.smtp_username}
                 onChange={(e) => field('smtp_username', e.target.value)}
@@ -181,6 +185,7 @@ export function SmtpPage() {
               Password
               <input
                 className="od-admin-input"
+                id="smtp_password"
                 type="password"
                 autoComplete="new-password"
                 aria-describedby="smtp-password-help"
@@ -195,6 +200,7 @@ export function SmtpPage() {
             </p>
             <label className="od-admin-field">
               <input
+                id="smtp_use_tls"
                 type="checkbox"
                 checked={form.smtp_use_tls}
                 onChange={(e) => field('smtp_use_tls', e.target.checked)}
@@ -205,6 +211,7 @@ export function SmtpPage() {
               Default sender email
               <input
                 className="od-admin-input"
+                id="smtp_default_sender"
                 type="email"
                 value={form.smtp_default_sender}
                 onChange={(e) => field('smtp_default_sender', e.target.value)}
