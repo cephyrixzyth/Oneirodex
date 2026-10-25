@@ -252,6 +252,27 @@ def test_librarian_catalog_and_mod_crud_validation(runtime):
     assert deleted.json()['id'] == 'mod-1'
 
 
+@pytest.mark.parametrize(
+    ('path', 'action'),
+    [
+        ('/api/games/game-1/mods/catalog', ('delete_mod', 'game-1', 'catalog')),
+        ('/api/games/game-1/mods/profiles', ('delete_mod', 'game-1', 'profiles')),
+        ('/api/games/game-1/mods/pack', ('delete_mod', 'game-1', 'pack')),
+        ('/api/games/game-1/mods/profiles/import', ('delete_profile', 'game-1', 'import')),
+    ],
+)
+def test_static_mod_paths_keep_legacy_dynamic_delete_dispatch(runtime, path, action):
+    """Static GET/POST/PATCH siblings must not swallow dynamic DELETE routes."""
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+
+    response = _request(
+        app, path, cookie=cookies['librarian'], method='DELETE',
+    )
+
+    assert response.status_code == 404
+    assert data.calls[-1] == action
+
+
 def test_mod_create_accepts_vendor_json_like_legacy_validator(runtime):
     app, flask_app, data, _users, _tokens, cookies = runtime
     from oneirodex.schemas.game_mods import ModRowBody

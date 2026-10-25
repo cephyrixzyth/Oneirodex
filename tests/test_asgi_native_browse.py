@@ -1350,8 +1350,9 @@ class FakeCollectionReadData:
         return {'game_uuid': game_uuid}, None, 201
 
     def remove_item(self, user, collection_uuid, game_uuid, *, admin_access):
-        assert (user.id, collection_uuid, game_uuid, admin_access) == (
-            7, 'collection-1', 'game-1', False,
+        assert (user.id, collection_uuid, game_uuid, admin_access) in (
+            (7, 'collection-1', 'game-1', False),
+            (7, 'collection-1', 'order', False),
         )
         return {'game_uuid': game_uuid}, None
 
@@ -7200,6 +7201,9 @@ def test_lazy_asgi_dispatches_wishlist_mutations_with_csrf(
         ('DELETE', '/api/collections/collection-1', None, 200, 'ok'),
         ('POST', '/api/collections/collection-1/items', {'game_uuid': 'game-1'}, 201, 'game_uuid'),
         ('DELETE', '/api/collections/collection-1/items/game-1', None, 200, 'ok'),
+        # Legacy Flask also resolves this method through the dynamic item
+        # route; the static `/items/order` route only owns PUT.
+        ('DELETE', '/api/collections/collection-1/items/order', None, 200, 'ok'),
         ('PUT', '/api/collections/collection-1/items/order', {'game_uuids': ['game-1']}, 200, 'uuid'),
     ],
 )
