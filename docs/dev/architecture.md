@@ -488,7 +488,11 @@ configuration and extension compatibility.
 The ASGI activity/event streams now check event visibility and child-role
 eligibility in request-local ORM scope without pushing Flask app context. Their
 signed-session ID resolver uses the framework-independent Flask-cookie codec
-and active-user/password-fingerprint checks.
+and active-user/password-fingerprint checks. Admin test events carry non-serialized
+publisher ownership metadata. The publisher and other admins retain access, while
+unrelated members and children do not receive account names through live delivery
+or replay. Generic scan, ops, and hello events remain available to signed-in
+stream subscribers.
 
 ASGI ZIP and ROM downloads read ownership, game ACL, and download records in
 request-local ORM scope. Download identity uses the signed-session codec or
