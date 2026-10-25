@@ -24,8 +24,9 @@ Each page has one home. The Support inbox is under Users; ES-DE / Pegasus export
 is part of Plugins & exports.
 
 The **System** rail section holds Ops glance, Statistics, Downloads admin, Danger
-zone, and Admin help. Admin help is its own operator guide with links to the
-admin sections and troubleshooting; the member guide remains at `/help`.
+zone, and Admin help. Admin help is its own operator guide with quick links to
+Dashboard, Libraries & scans, Users, Themes, Integrations and Ops; the member
+guide remains available at `/help`.
 Statistics is read-only and summarizes library totals,
 download activity, invitations, and favourites. Downloads admin lists queued zip
 requests; deleting a request requires confirmation and removes the request record.
