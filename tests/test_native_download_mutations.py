@@ -22,6 +22,7 @@ class FakeDownloads:
         self.missing_game = False
         self.access_allowed = True
         self.other_record = SimpleNamespace(file_path='/storage/fixture/update.zip', times_downloaded=0)
+        self.download_events = []
 
     def game(self, game_uuid):
         if self.missing_game:
@@ -66,6 +67,9 @@ class FakeDownloads:
 
     def log_legacy_event(self, *_args, **_kwargs):
         pass
+
+    def log_download_started(self, game, user):
+        self.download_events.append((f'User initiated download for game: {game.name}', user.id))
 
     def zip_path(self, _game, path, **_kwargs):
         return path
@@ -129,6 +133,23 @@ def test_download_request_creation_checks_scope_path_and_returns_stream_url():
     assert response.json()['download_id'] == 81
     assert response.json()['stream_url'] == '/download_zip/81'
     assert data.created == ('12345678-1234-1234-1234-123456789abc', 7, '/storage/fixture', '/storage/fixture')
+    assert data.download_events == [('User initiated download for game: Fixture', 7)]
+
+
+def test_download_started_event_is_attributed_to_authenticated_user(monkeypatch):
+    from oneirodex.runtime_native.download_mutations import DownloadMutationData
+    import oneirodex.utils.event_logging as event_logging
+
+    events = []
+    monkeypatch.setattr(event_logging, 'log_system_event', lambda *args, **kwargs: events.append((args, kwargs)))
+    game = SimpleNamespace(name='Fixture')
+    user = SimpleNamespace(id=42)
+
+    DownloadMutationData().log_download_started(game, user)
+
+    assert events == [(( 'User initiated download for game: Fixture',), {
+        'event_type': 'game', 'event_level': 'information', 'audit_user': 42,
+    })]
 
 
 def test_orphan_version_cleanup_requires_librarian_and_reports_api_envelope():

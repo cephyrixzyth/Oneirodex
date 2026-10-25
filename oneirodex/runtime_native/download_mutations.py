@@ -118,9 +118,15 @@ class DownloadMutationData:
                          event_type='game', event_level='information')
         return row
 
-    def log_legacy_event(self, message, *, event_type, event_level):
+    def log_legacy_event(self, message, *, event_type, event_level, audit_user=None):
         from oneirodex.utils.event_logging import log_system_event
-        log_system_event(message, event_type=event_type, event_level=event_level)
+        log_system_event(message, event_type=event_type, event_level=event_level,
+                         audit_user=audit_user)
+
+    def log_download_started(self, game, user):
+        from oneirodex.utils.event_logging import log_system_event
+        log_system_event(f'User initiated download for game: {game.name}',
+                         event_type='game', event_level='information', audit_user=user.id)
 
     def can_access(self, user, game):
         from oneirodex.utils.library_acl import user_can_access_game
@@ -215,7 +221,7 @@ class DownloadMutationData:
         except Exception:
             pass
         log_system_event(f'API download request created for game: {game.name}',
-                         event_type='game', event_level='information')
+                         event_type='game', event_level='information', audit_user=user.id)
         return row
 
 
@@ -351,6 +357,7 @@ async def _run_download(request, *, flask_app, data, find_user, find_token,
                     payload, status = api_error_payload('Access denied', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
                 else:
+                    data.log_download_started(game, auth.user)
                     body = await _read_json(request)
                     kind = (body.get('kind') or first_query_value(request.query_params, 'kind') or 'base') if body else (first_query_value(request.query_params, 'kind') or 'base')
                     kind = kind.strip().lower() if isinstance(kind, str) else 'base'
@@ -577,7 +584,7 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
             else:
                 data.log_legacy_event(
                     f'User initiated download for game: {game.name}',
-                    event_type='game', event_level='information',
+                    event_type='game', event_level='information', audit_user=auth.user.id,
                 )
                 bases = data.allowed_bases(flask_app)
                 if not bases:
