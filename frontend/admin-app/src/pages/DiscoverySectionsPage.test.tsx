@@ -78,6 +78,8 @@ test('pointer drag reorders shelves and persists the complete order', async () =
   render(<DiscoverySectionsPage />)
 
   const source = await screen.findByRole('button', { name: 'Drag Libraries to reorder' })
+  expect(source.querySelector('svg')).toHaveAttribute('data-icon', 'grip')
+  expect(source).not.toHaveTextContent('Drag')
   const target = screen
     .getByRole('list', { name: 'Discovery shelf order' })
     .querySelectorAll('li')[1]

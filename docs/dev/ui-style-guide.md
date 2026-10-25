@@ -249,17 +249,17 @@ Catalog and alias requirements:
 
 Most rail drawings remain in React icon maps, with shared geometry defined by
 the framework-neutral catalog in `frontend/shared/icons/manifest.json`. It
-defines `ownership`, `discover`, `integrations`, `report`, `menu`, `more`, `user`,
-`download`, `downloads`, `play`, and `settings`, including category,
+defines `ownership`, `discover`, `integrations`, `report`, `menu`, `grip`, `more`,
+`user`, `download`, `downloads`, `play`, and `settings`, including category,
 aliases (`plug`, `report-issue`, `cogs`, and `gear`), accessibility use, SVG shapes and theme
 inheritance. `scripts/generate_icon_adapters.py` validates
 the SVG whitelist and generates the React adapter. Run it after manifest edits;
 `--check` detects stale output. Do not hand-edit `generatedIconPaths.tsx`.
 The catalog now
-shows all 61 canonical React glyph keys and, for the eight era overrides, the shared,
+shows all 62 canonical React glyph keys and, for the eight era overrides, the shared,
 pixel, rounded, and angular drawings together. Its room-to-hand mapping is
 visible beside the specimens. This makes renderer coverage inspectable; it does
-not establish theme-pack parity beyond those eleven migrated keys. The former
+not establish theme-pack parity beyond those twelve migrated keys. The former
 `compass` drawing remains only as a React-era fallback. The catalog also shows all
 six theme-pack manifests and their 17 declared keys. It renders the 85 shipped
 non-outline SVG assets and the shared outline drawings; all 17 Outline keys now have shared drawings. These

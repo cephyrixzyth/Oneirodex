@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
+import { RailIcon } from '../components/railIcons'
 import { utcInput, useDiscoverySections } from './useDiscoverySections'
 import { postJson, putJson } from '../api/adminApi'
 import './DiscoverySectionsPage.css'
@@ -96,27 +97,29 @@ export function DiscoverySectionsPage() {
             }}
             onDrop={(event) => finishDrop(index, event)}
           >
-            <Button
-              size="sm"
-              className="od-discovery-shelf__drag-handle"
-              draggable={!disabled}
-              disabled={disabled}
-              aria-label={`Drag ${row.name} to reorder`}
-              title="Drag to reorder; Move up and Move down also work with a keyboard."
-              onDragStart={(event) => {
-                setDragIndex(index)
-                setDropIndex(index)
-                event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData('text/plain', String(index))
-              }}
-              onDragEnd={() => {
-                setDragIndex(null)
-                setDropIndex(null)
-              }}
-            >
-              Drag
-            </Button>
-            <h2 className="od-discovery-shelf-heading">{row.name}</h2>
+            <div className="od-discovery-shelf__top">
+              <Button
+                size="sm"
+                className="od-discovery-shelf__drag-handle"
+                draggable={!disabled}
+                disabled={disabled}
+                aria-label={`Drag ${row.name} to reorder`}
+                title="Drag to reorder; Move up and Move down also work with a keyboard."
+                onDragStart={(event) => {
+                  setDragIndex(index)
+                  setDropIndex(index)
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', String(index))
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null)
+                  setDropIndex(null)
+                }}
+              >
+                <RailIcon name="grip" size={18} />
+              </Button>
+              <h2 className="od-discovery-shelf-heading">{row.name}</h2>
+            </div>
             <p className="od-admin-hint">
               {row.section_type === 'custom'
                 ? `${row.description} · ${row.count} items`

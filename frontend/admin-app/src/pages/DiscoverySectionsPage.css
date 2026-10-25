@@ -61,7 +61,10 @@
 }
 
 .od-discovery-shelf__drag-handle {
-  align-self: flex-start;
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  padding: var(--od-space-2);
   cursor: grab;
   touch-action: none;
 }
@@ -76,7 +79,17 @@
 }
 
 .od-discovery-shelves .od-discovery-shelf-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.od-discovery-shelf__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--od-space-2);
+  margin-bottom: var(--od-space-2);
 }
 
 .od-discovery-shelves .od-admin-field {
