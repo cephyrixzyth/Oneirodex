@@ -355,7 +355,7 @@ export function GameActionBar({
         <a
           className={`od-action-bar__btn${lifecycleState !== 'update_available' ? ' is-disabled' : ''}`}
           href={updatesUrl}
-          title={updateTitle}
+          title={!canDownload ? 'Updates are unavailable for child accounts' : updateTitle}
           aria-disabled={!canDownload || lifecycleState !== 'update_available'}
           data-action="update"
           onClick={onUpdateClick}
