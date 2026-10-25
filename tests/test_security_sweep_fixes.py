@@ -175,6 +175,7 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
 
     player, friend, stranger = (_user(db_session, prefix=p) for p in ('player', 'friend', 'stranger'))
     admin = _user(db_session, role='admin', prefix='evadmin')
+    child = _user(db_session, role='child', prefix='evchild')
     db_session.add(UserFriendship(user_id=player.id, friend_user_id=friend.id, status='accepted'))
     db_session.commit()
     event = SimpleNamespace(type='activity', payload={'user_id': player.id, 'action': 'started'})
@@ -187,6 +188,14 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
     assert not event_visible_to(event, friend.id), 'the player turned sharing off'
     assert event_visible_to(SimpleNamespace(type='scan', payload={'progress': 3}), stranger.id)
     assert not event_visible_to(event, None)
+    test_event = SimpleNamespace(
+        type='test', payload={'message': 'ping', 'user': admin.name},
+        visibility_user_id=admin.id,
+    )
+    assert event_visible_to(test_event, admin.id)
+    assert not event_visible_to(test_event, player.id)
+    assert not event_visible_to(test_event, child.id)
+    assert event_visible_to(SimpleNamespace(type='scan', payload={'progress': 4}), child.id)
     download = SimpleNamespace(type='download', payload={'user_id': player.id, 'request_id': 7, 'status': 'available'})
     assert event_visible_to(download, player.id) and event_visible_to(download, admin.id)
     assert not event_visible_to(download, friend.id), "a member's downloads are theirs"

@@ -16,6 +16,7 @@ class AppEvent:
     type: str
     payload: dict[str, Any] = field(default_factory=dict)
     ts: float = field(default_factory=time.time)
+    visibility_user_id: int | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {'type': self.type, 'payload': self.payload, 'ts': self.ts}
@@ -31,8 +32,18 @@ class EventBus:
         self._history: list[AppEvent] = []
         self._history_size = history_size
 
-    def publish(self, event_type: str, **payload: Any) -> AppEvent:
-        event = AppEvent(type=event_type, payload=payload)
+    def publish(
+        self,
+        event_type: str,
+        *,
+        visibility_user_id: int | None = None,
+        **payload: Any,
+    ) -> AppEvent:
+        event = AppEvent(
+            type=event_type,
+            payload=payload,
+            visibility_user_id=visibility_user_id,
+        )
         with self._lock:
             self._history.append(event)
             if len(self._history) > self._history_size:

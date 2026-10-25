@@ -22,6 +22,40 @@ def test_encode_sse_bytes():
     assert b'"ok": true' in raw
 
 
+def test_event_visibility_owner_is_internal_and_not_serialized():
+    event = AppEvent(
+        type='test', payload={'message': 'ping', 'user': 'ParityAdmin'},
+        visibility_user_id=7,
+    )
+    assert event.visibility_user_id == 7
+    assert event.to_dict()['payload'] == {'message': 'ping', 'user': 'ParityAdmin'}
+
+
+def test_admin_test_event_publisher_keeps_owner_metadata_out_of_response(monkeypatch):
+    from oneirodex.runtime_native.notifications import NotificationData
+
+    emitted = {}
+
+    def publish(event_type, *, visibility_user_id=None, **payload):
+        emitted.update(type=event_type, visibility_user_id=visibility_user_id, payload=payload)
+        return AppEvent(
+            type=event_type, payload=payload, visibility_user_id=visibility_user_id,
+        )
+
+    monkeypatch.setattr('oneirodex.utils.event_bus.event_bus.publish', publish)
+    response = NotificationData().publish_test_event(
+        SimpleNamespace(id=7, name='ParityAdmin'),
+    )
+
+    assert emitted == {
+        'type': 'test', 'visibility_user_id': 7,
+        'payload': {'message': 'ping', 'user': 'ParityAdmin'},
+    }
+    assert response['type'] == 'test'
+    assert response['payload'] == {'message': 'ping', 'user': 'ParityAdmin'}
+    assert 'visibility_user_id' not in response
+
+
 def test_asgi_intercepts_both_sse_paths():
     src = inspect.getsource(LazyASGIApp.__call__)
     assert '/api/activity/stream' in src or '_SSE_ROUTES' in inspect.getsource(LazyASGIApp)
@@ -38,6 +72,25 @@ def test_sse_routes_config():
     assert events['restrict_child'] is False
     assert 'activity' in activity['event_types']
     assert events['event_types'] is None
+
+
+def test_visibility_scoped_event_uses_viewer_filter_before_generic_fast_path(monkeypatch):
+    from contextlib import nullcontext
+    from oneirodex.utils import event_visibility
+
+    app = LazyASGIApp()
+    app._flask_app = object()
+    app._native_database_scope = lambda _flask_app: nullcontext()
+    event = AppEvent(
+        type='test', payload={'user': 'ParityAdmin'}, visibility_user_id=7,
+    )
+    monkeypatch.setattr(
+        event_visibility, 'event_visible_to',
+        lambda candidate, viewer_id: candidate is event and viewer_id == 7,
+    )
+
+    assert app._event_visible(event, 7)
+    assert not app._event_visible(event, 8)
 
 
 def test_sse_authorization_uses_native_db_scope_without_flask_context(monkeypatch):

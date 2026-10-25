@@ -4677,7 +4677,11 @@ class LazyASGIApp:
     def _event_visible(self, event, user_id) -> bool:
         """Per-viewer filter for the live streams (utils/event_visibility.py)."""
         payload = getattr(event, 'payload', None) or {}
-        if payload.get('user_id') is None and not payload.get('game_uuid'):
+        if (
+            getattr(event, 'visibility_user_id', None) is None
+            and payload.get('user_id') is None
+            and not payload.get('game_uuid')
+        ):
             return True  # about no member and no game: no lookup needed
         try:
             from oneirodex.utils.event_visibility import event_visible_to

@@ -73,7 +73,9 @@ class NotificationData:
     def publish_test_event(self, user):
         from oneirodex.utils.event_bus import event_bus
 
-        event = event_bus.publish('test', message='ping', user=user.name)
+        event = event_bus.publish(
+            'test', message='ping', user=user.name, visibility_user_id=user.id,
+        )
         return event.to_dict()
 
 
