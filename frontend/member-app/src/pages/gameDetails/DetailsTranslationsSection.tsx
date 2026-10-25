@@ -26,6 +26,7 @@ export function DetailsTranslationsSection({
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogStatus, setCatalogStatus] = useState<string | null>(null)
   const navigate = useNavigate()
+  const childActionDescriptionId = `translations-child-restriction-${game.uuid}`
 
   async function downloadPatch(patch: TranslationPatch) {
     const versionKey = `patch:${patch.uuid}`
@@ -58,7 +59,7 @@ export function DetailsTranslationsSection({
         <code>docs/user/translation-patches.md</code>.
       </p>
       {!canDownload ? (
-        <p className="od-details-page__muted" role="note">
+        <p className="visually-hidden" id={childActionDescriptionId} role="note">
           Downloads and companion patch actions are unavailable for child accounts.
         </p>
       ) : null}
@@ -88,6 +89,7 @@ export function DetailsTranslationsSection({
                       type="button"
                       disabled={!canDownload || Boolean(busyVersionKey)}
                       title={!canDownload ? 'Patch downloads are unavailable for child accounts' : undefined}
+                      aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                       onClick={() => {
                         if (!canDownload) return
                         void downloadPatch(patch)
@@ -110,6 +112,7 @@ export function DetailsTranslationsSection({
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
                         title={!canDownload ? 'Companion patch actions are unavailable for child accounts' : undefined}
+                        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return
                           setBusyVersionKey(versionKey)

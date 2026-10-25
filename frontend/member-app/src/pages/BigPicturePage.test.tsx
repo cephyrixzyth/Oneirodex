@@ -89,7 +89,8 @@ test('child Big Picture preserves download/install controls in a disabled state'
   )
 
   expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent('Alpha Game')
-  expect(screen.getByText(/downloads and companion install unavailable/i)).toBeInTheDocument()
+  expect(screen.getByText(/downloads and companion install actions are unavailable/i))
+    .toHaveClass('visually-hidden')
   expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Install' })).toBeDisabled()
   expect(downloadsApi.initiateGameDownload).not.toHaveBeenCalled()

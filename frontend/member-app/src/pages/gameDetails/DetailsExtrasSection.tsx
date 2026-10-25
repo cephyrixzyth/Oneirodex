@@ -22,11 +22,12 @@ export function DetailsExtrasSection({
   VersionActions,
   'busyVersionKey' | 'setBusyVersionKey' | 'setVersionActionStatus' | 'handleVersionDownload'
 >) {
+  const childActionDescriptionId = `extras-child-restriction-${game.uuid}`
   return (
     <section className="od-details-page__section" id="extras">
       <h2>Extras &amp; DLC</h2>
       {!canDownload ? (
-        <p className="od-details-page__muted" role="note">
+        <p className="visually-hidden" id={childActionDescriptionId} role="note">
           Downloads and companion install actions are unavailable for child accounts.
         </p>
       ) : null}
@@ -76,6 +77,7 @@ export function DetailsExtrasSection({
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
                         title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+                        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return
                           void handleVersionDownload({
@@ -95,6 +97,7 @@ export function DetailsExtrasSection({
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
                         title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
+                        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return
                           setBusyVersionKey(versionKey)

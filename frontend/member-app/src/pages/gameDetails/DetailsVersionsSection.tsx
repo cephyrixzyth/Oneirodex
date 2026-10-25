@@ -29,6 +29,7 @@ export function DetailsVersionsSection({
   hasMissingVersions: boolean
   canDownload?: boolean
 } & VersionActions) {
+  const childActionDescriptionId = `versions-child-restriction-${game.uuid}`
   return (
     <section className="od-details-page__section" id="updates">
       <div className="od-details-page__section-head">
@@ -55,7 +56,7 @@ export function DetailsVersionsSection({
         </p>
       ) : null}
       {!canDownload ? (
-        <p className="od-details-page__muted" role="note">
+        <p className="visually-hidden" id={childActionDescriptionId} role="note">
           Downloads and companion install actions are unavailable for child accounts.
         </p>
       ) : !seatCanUseCompanion() ? (
@@ -107,6 +108,7 @@ export function DetailsVersionsSection({
                       type="button"
                       disabled={!canDownload || Boolean(busyVersionKey)}
                       title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+                      aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                       onClick={() => {
                         if (!canDownload) return
                         void handleVersionDownload({
@@ -124,6 +126,7 @@ export function DetailsVersionsSection({
                       type="button"
                       disabled={!canDownload || Boolean(busyVersionKey)}
                       title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
+                      aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                       onClick={() => {
                         if (!canDownload) return
                         setBusyVersionKey(versionKey)

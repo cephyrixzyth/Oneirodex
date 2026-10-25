@@ -362,6 +362,15 @@ export function BigPicturePage() {
             ) : null}
             {selected ? (
               <div className="od-bp__hero-actions">
+                {isChildAccount ? (
+                  <span
+                    className="visually-hidden"
+                    id={`big-picture-child-restriction-${selected.uuid}`}
+                    role="status"
+                  >
+                    Downloads and companion install actions are unavailable for child accounts.
+                  </span>
+                ) : null}
                 <Link className="od-bp__btn od-bp__btn--primary" to={gameDetailsUrl(selected.uuid)}>
                   Open
                 </Link>
@@ -371,6 +380,9 @@ export function BigPicturePage() {
                     className="od-bp__btn"
                     disabled={isChildAccount}
                     title={isChildAccount ? 'Downloads are unavailable for child accounts' : undefined}
+                    aria-describedby={
+                      isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
+                    }
                     onClick={() => void requestDownload(selected.uuid)}
                   >
                     Download
@@ -384,6 +396,9 @@ export function BigPicturePage() {
                     className="od-bp__btn"
                     disabled={isChildAccount}
                     title={isChildAccount ? 'Companion actions are unavailable for child accounts' : undefined}
+                    aria-describedby={
+                      isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
+                    }
                     onClick={() => {
                       if (isChildAccount) return
                       void queueClientCommand(selected.uuid, 'install').then(() => {

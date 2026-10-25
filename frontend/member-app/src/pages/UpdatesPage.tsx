@@ -391,6 +391,9 @@ export function UpdatesPage() {
                           type="button"
                           disabled={!canDownload || busyKey === applyKey}
                           title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+                          aria-describedby={
+                            !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
+                          }
                           onClick={() => {
                             if (!canDownload) return
                             if (!pack || !pack.kind || !pack.uuid) return
@@ -422,6 +425,9 @@ export function UpdatesPage() {
                           type="button"
                           disabled={!canDownload || busyKey === applyKey}
                           title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
+                          aria-describedby={
+                            !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
+                          }
                           onClick={() => {
                             if (!canDownload) return
                             void applyPack(game, pack)
@@ -431,7 +437,7 @@ export function UpdatesPage() {
                         </Button>
                       ) : null}
                       {pack?.download_url && !canDownload ? (
-                        <span className="od-updates__status" role="note">
+                        <span className="visually-hidden" id={`updates-child-restriction-${game.uuid}`} role="note">
                           Downloads unavailable for child accounts
                         </span>
                       ) : null}
