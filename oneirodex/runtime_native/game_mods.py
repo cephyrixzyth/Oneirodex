@@ -389,7 +389,7 @@ async def _profiles(request, app, data, auth, *, game_uuid, body, **_):
     if denied:
         return denied
     try:
-        if request.method == 'GET':
+        if request.method in ('GET', 'HEAD'):
             return _ok({'game_uuid': game_uuid, **data.list_profiles(app, game_uuid)})
         profile = data.create_profile(app, game_uuid, body.name, body.mod_ids)
         return _ok({'profile': profile, **data.list_profiles(app, game_uuid)}, status=201)

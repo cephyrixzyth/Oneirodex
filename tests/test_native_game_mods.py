@@ -342,6 +342,21 @@ def test_bulk_pack_profiles_import_export_activate_and_delete(runtime):
     assert ('activate_profile', 'game-1', 'default') in data.calls
 
 
+def test_head_profiles_matches_get_without_creating_profile(runtime):
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+
+    response = _request(
+        app, '/api/games/game-1/mods/profiles', cookie=cookies['member'],
+        method='HEAD',
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.content == b''
+    assert ('load', 'game-1') not in data.calls
+    assert not any(call[0] == 'create_profile' for call in data.calls)
+
+
 def test_feature_gates_and_csrf_precedes_auth(runtime):
     app, flask_app, data, _users, _tokens, _cookies = runtime
     data.is_enabled = False
