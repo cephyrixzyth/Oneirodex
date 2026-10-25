@@ -23,6 +23,17 @@ function suggestedNameFromPath(path: string, extensions: string[] = []) {
   return title
 }
 
+function providerName(source: string) {
+  const names: Record<string, string> = {
+    steam: 'Steam',
+    gog: 'GOG',
+    rawg: 'RAWG',
+    mobygames: 'MobyGames',
+    thegamesdb: 'TheGamesDB',
+  }
+  return names[source.toLowerCase()] || source
+}
+
 export function ManualIdentifyPage() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -166,7 +177,7 @@ export function ManualIdentifyPage() {
     const term = String(form.name || '').trim()
     if (searchBusy) return
     if (!term) {
-      setSearchSource(source.toUpperCase())
+      setSearchSource(providerName(source))
       setSaveError('')
       setCandidates([])
       setProviderNotice('Enter a game name first')
@@ -174,7 +185,7 @@ export function ManualIdentifyPage() {
       return
     }
     setSearchBusy(true)
-    setSearchSource(source.toUpperCase())
+    setSearchSource(providerName(source))
     setSaveError('')
     setProviderNotice('')
     setProviderError('')
@@ -183,10 +194,10 @@ export function ManualIdentifyPage() {
       const data = await getJson(`/api/search_metadata?${params}`)
       setCandidates(Array.isArray(data.results) ? data.results : [])
       if (!Array.isArray(data.results) || !data.results.length)
-        setProviderNotice(data.note || `No ${source.toUpperCase()} matches found.`)
+        setProviderNotice(data.note || `No ${providerName(source)} matches found.`)
     } catch (error) {
       setProviderError(
-        error instanceof Error ? error.message : `${source.toUpperCase()} search failed.`,
+        error instanceof Error ? error.message : `${providerName(source)} search failed.`,
       )
     } finally {
       setSearchBusy(false)
@@ -306,6 +317,7 @@ export function ManualIdentifyPage() {
   }
 
   const fromUnmatched = query.get('from_unmatched') === 'true'
+  const hasScanContext = fromUnmatched || query.has('full_disk_path')
   const identifyFieldsValid =
     /^\d+$/.test(String(form.igdb_id).trim()) &&
     Number(form.igdb_id) > 0 &&
@@ -431,18 +443,20 @@ export function ManualIdentifyPage() {
       }
       className="od-manual-identify"
     >
-      <div className="od-admin-actions-row">
-        <a
-          className="od-cbtn"
-          href={
-            fromUnmatched
-              ? '/scan_management?active_tab=unmatched'
-              : '/scan_management?active_tab=manual'
-          }
-        >
-          Back to scan review
-        </a>
-      </div>
+      {hasScanContext ? (
+        <div className="od-admin-actions-row">
+          <a
+            className="od-cbtn"
+            href={
+              fromUnmatched
+                ? '/scan_management?active_tab=unmatched'
+                : '/scan_management?active_tab=manual'
+            }
+          >
+            Back to scan review
+          </a>
+        </div>
+      ) : null}
       {loadError ? (
         <PageStatus announcement="alert" className="od-manual-identify__error">
           {loadError} <Button onClick={() => window.location.reload()}>Retry</Button>
@@ -458,7 +472,10 @@ export function ManualIdentifyPage() {
           {saveError}
         </PageStatus>
       ) : null}
-      <section className="od-admin-panel od-manual-identify__essential" aria-label="Game identity">
+      <section
+        className="od-admin-panel od-manual-identify__library-panel"
+        aria-label="Library selection"
+      >
         <div className="od-manual-identify__library">
           <label className="od-admin-field">
             Library
@@ -481,6 +498,8 @@ export function ManualIdentifyPage() {
             {options?.libraries.find((row) => row.uuid === form.library_uuid)?.platform_name || '—'}
           </p>
         </div>
+      </section>
+      <section className="od-admin-panel od-manual-identify__essential" aria-label="Game identity">
         <div className="od-manual-identify__id">
           <label className="od-admin-field">
             IGDB ID
@@ -507,10 +526,12 @@ export function ManualIdentifyPage() {
             <span id="od-manual-identify-igdb-help" className="od-admin-lede od-admin-lede--flush">
               Enter the IGDB ID of the game.
             </span>
-            <Button type="button" onClick={() => void addNonCatalogGame()}>
-              Add non-catalog game
-            </Button>
           </div>
+        </div>
+        <div className="od-manual-identify__custom-id-action">
+          <Button type="button" onClick={() => void addNonCatalogGame()}>
+            Add non-catalog game
+          </Button>
         </div>
         <form
           className="od-manual-identify__search"
@@ -528,30 +549,26 @@ export function ManualIdentifyPage() {
               onChange={(event) => setField('name', event.target.value)}
             />
           </label>
-          <Button
-            type="submit"
-            disabled={customIdMode || searchBusy}
+          <div
+            className="od-manual-identify__providers"
+            role="group"
+            aria-label="Metadata provider searches"
           >
-            {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
-          </Button>
-        </form>
-        <div className="od-manual-identify__providers" aria-label="Other metadata providers">
-          {['steam', 'gog', 'rawg', 'mobygames', 'thegamesdb'].map((source) => (
-            <Button
-              key={source}
-              type="button"
-              onClick={() => void searchProvider(source)}
-              disabled={searchBusy}
-            >
-              Search{' '}
-              {source === 'thegamesdb'
-                ? 'TheGamesDB'
-                : source === 'mobygames'
-                  ? 'MobyGames'
-                  : source.toUpperCase()}
+            <Button type="submit" disabled={customIdMode || searchBusy}>
+              {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
             </Button>
-          ))}
-        </div>
+            {['steam', 'gog', 'rawg', 'mobygames', 'thegamesdb'].map((source) => (
+              <Button
+                key={source}
+                type="button"
+                onClick={() => void searchProvider(source)}
+                disabled={searchBusy}
+              >
+                Search {providerName(source)}
+              </Button>
+            ))}
+          </div>
+        </form>
         {providerNotice ? (
           <div className="od-manual-identify__provider-note" role="status">
             {providerNotice}

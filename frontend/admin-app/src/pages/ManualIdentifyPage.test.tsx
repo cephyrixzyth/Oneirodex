@@ -72,6 +72,20 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   expect(screen.getByLabelText('Full disk path')).toHaveValue('/games/Sample')
   expect(screen.getByText('Platform: PC Windows')).toBeInTheDocument()
   expect(screen.getByRole('option', { name: 'Parity Batch Library · PC Windows' })).toBeInTheDocument()
+  const libraryPanel = screen.getByRole('region', { name: 'Library selection' })
+  const identityPanel = screen.getByRole('region', { name: 'Game identity' })
+  expect(
+    libraryPanel.compareDocumentPosition(identityPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  const customEntry = screen.getByRole('button', { name: 'Add non-catalog game' })
+  expect(customEntry.closest('.od-manual-identify__id')).toBeNull()
+  expect(
+    customEntry.compareDocumentPosition(screen.getByLabelText('Name')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  const providerSearches = screen.getByRole('group', { name: 'Metadata provider searches' })
+  expect(providerSearches).toHaveClass('od-manual-identify__providers')
+  expect(providerSearches).toContainElement(screen.getByRole('button', { name: 'Search Steam' }))
   fireEvent.click(screen.getByRole('tab', { name: 'Release' }))
   expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
@@ -136,6 +150,31 @@ test('prefills identify fields from the existing direct-entry query contract', a
   )
   expect(await screen.findByLabelText('Name')).toHaveValue('Sample')
   expect(screen.getByLabelText('IGDB ID')).toHaveValue(123)
+})
+
+test('hides scan-return navigation for direct manual identify entry', async () => {
+  globalThis.fetch = vi.fn(async () =>
+    response({
+      libraries: [{ uuid: 'lib-1', name: 'PC', platform_name: 'PC' }],
+      taxonomies: {
+        genres: [],
+        game_modes: [],
+        themes: [],
+        platforms: [],
+        player_perspectives: [],
+      },
+      categories: [],
+      statuses: [],
+    }),
+  ) as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?library_uuid=lib-1']}>
+      <ManualIdentifyPage />
+    </MemoryRouter>,
+  )
+
+  await screen.findByLabelText('Name')
+  expect(screen.queryByRole('link', { name: 'Back to scan review' })).toBeNull()
 })
 
 test('omits read-only game UUID when saving an existing edit form', async () => {
