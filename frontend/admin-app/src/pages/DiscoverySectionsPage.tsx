@@ -125,8 +125,7 @@ export function DiscoverySectionsPage() {
                 ? `${row.description} · ${row.count} items`
                 : row.count
                   ? `${row.count} items`
-                  : 'Empty'}{' '}
-              · {row.is_live ? 'Live' : 'Not live'} · {row.layout}
+                  : 'Empty'}
             </p>
             <label className="od-admin-field">
               <input

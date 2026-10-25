@@ -43,7 +43,7 @@
 
 .od-discovery-shelves {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   align-items: stretch;
   gap: var(--od-space-3);
   margin: var(--od-space-3) 0 0;
@@ -61,12 +61,19 @@
 }
 
 .od-discovery-shelf__drag-handle {
-  flex: 0 0 1.75rem;
-  width: 1.75rem;
-  min-height: 1.75rem;
-  padding: var(--od-space-1);
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
   cursor: grab;
   touch-action: none;
+}
+
+.od-discovery-shelf__drag-handle:focus-visible {
+  outline: 2px solid var(--od-focus-ring);
+  outline-offset: 2px;
 }
 
 .od-discovery-shelf__drag-handle:active {

@@ -70,7 +70,7 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
   fireEvent.click(checkbox)
   await waitFor(() => expect(checkbox).toBeChecked())
   await waitFor(() => expect(checkbox).toBeEnabled())
-  expect(within(checkbox.closest('li')!).getByText(/Live · shelf/)).toBeInTheDocument()
+  expect(within(checkbox.closest('li')!).getByText('3 items')).toBeInTheDocument()
   const customRow = await openShelfActions('Review shelf')
   fireEvent.click(within(customRow).getByRole('button', { name: 'Move Review shelf up' }))
   expect(await screen.findByText('Shelf order saved.')).toBeInTheDocument()
