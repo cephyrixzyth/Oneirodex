@@ -42,6 +42,13 @@ const state = {
   max_games: 60,
 }
 
+async function openShelfActions(name: string) {
+  const checkbox = await screen.findByRole('checkbox', { name: `Visible ${name}` })
+  const row = checkbox.closest('li')!
+  fireEvent.click(within(row).getByText('More actions'))
+  return row
+}
+
 test('keyboard order/visibility preserve builtin restrictions and Live refresh', async () => {
   vi.mocked(getJson)
     .mockResolvedValueOnce(state)
@@ -53,8 +60,10 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
   vi.mocked(postJson).mockResolvedValue({ ok: true })
   render(<DiscoverySectionsPage />)
   const checkbox = await screen.findByRole('checkbox', { name: 'Visible Libraries' })
-  expect(screen.queryByRole('button', { name: 'Delete Libraries' })).toBeNull()
-  expect(screen.getByRole('button', { name: 'Move Libraries up' })).toBeDisabled()
+  const builtinRow = checkbox.closest('li')!
+  expect(within(builtinRow).queryByRole('button', { name: 'Delete Libraries' })).toBeNull()
+  fireEvent.click(within(builtinRow).getByText('More actions'))
+  expect(within(builtinRow).getByRole('button', { name: 'Move Libraries up' })).toBeDisabled()
   fireEvent.click(checkbox)
   await waitFor(() => expect(checkbox).not.toBeChecked())
   await waitFor(() => expect(checkbox).toBeEnabled())
@@ -62,7 +71,8 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
   await waitFor(() => expect(checkbox).toBeChecked())
   await waitFor(() => expect(checkbox).toBeEnabled())
   expect(within(checkbox.closest('li')!).getByText(/Live · shelf/)).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Move Review shelf up' }))
+  const customRow = await openShelfActions('Review shelf')
+  fireEvent.click(within(customRow).getByRole('button', { name: 'Move Review shelf up' }))
   expect(await screen.findByText('Shelf order saved.')).toBeInTheDocument()
   expect(postJson).toHaveBeenLastCalledWith('/admin/api/discovery_sections/order', {
     sections: [
@@ -110,7 +120,7 @@ test('manual search adds local results and UUID/order controls stay synchronized
     .mockResolvedValueOnce(state)
   vi.mocked(postJson).mockResolvedValue({ section: custom })
   render(<DiscoverySectionsPage />)
-  await screen.findByRole('button', { name: 'Edit Review shelf' })
+  await openShelfActions('Review shelf')
   fireEvent.click(screen.getByRole('button', { name: 'Add shelf' }))
   const dialog = screen.getByRole('dialog', { name: 'Add discovery shelf' })
   fireEvent.change(within(dialog).getByLabelText('Shelf name'), {
@@ -143,7 +153,8 @@ test.each([
   vi.mocked(getJson).mockResolvedValue(state)
   vi.mocked(putJson).mockResolvedValue({ section: custom })
   render(<DiscoverySectionsPage />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit Review shelf' }))
+  const row = await openShelfActions('Review shelf')
+  fireEvent.click(within(row).getByRole('button', { name: 'Edit Review shelf' }))
   const dialog = screen.getByRole('dialog', { name: 'Edit discovery shelf' })
   fireEvent.change(within(dialog).getByLabelText('Game UUIDs'), {
     target: { value: Array.from({ length: 61 }, (_, index) => `game-${index}`).join('\n') },
@@ -168,7 +179,8 @@ test('schedule UTC and pin controls keep separate save/clear operations', async 
   vi.mocked(getJson).mockResolvedValue(state)
   vi.mocked(putJson).mockResolvedValue({ section: custom })
   render(<DiscoverySectionsPage />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Schedule and pin Review shelf' }))
+  const row = await openShelfActions('Review shelf')
+  fireEvent.click(within(row).getByRole('button', { name: 'Schedule and pin Review shelf' }))
   const dialog = screen.getByRole('dialog', { name: 'Schedule and pin Review shelf' })
   fireEvent.change(within(dialog).getByRole('combobox', { name: 'Shelf layout' }), {
     target: { value: 'hero' },
@@ -206,14 +218,15 @@ test('load Retry, failed edit draft retention and confirmed custom deletion', as
   render(<DiscoverySectionsPage />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Sections unavailable')
   fireEvent.click(screen.getByRole('button', { name: 'Retry loading discovery sections' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit Review shelf' }))
+  const row = await openShelfActions('Review shelf')
+  fireEvent.click(within(row).getByRole('button', { name: 'Edit Review shelf' }))
   const name = screen.getByLabelText('Shelf name')
   fireEvent.change(name, { target: { value: 'Retained draft' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save shelf' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Save unavailable')
   expect(name).toHaveValue('Retained draft')
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-  const remove = screen.getByRole('button', { name: 'Delete Review shelf' })
+  const remove = within(row).getByRole('button', { name: 'Delete Review shelf' })
   fireEvent.click(remove)
   await waitFor(() => expect(remove).toBeEnabled())
   expect(deleteJson).not.toHaveBeenCalled()
@@ -232,7 +245,8 @@ test('confirmation keeps the delete opener enabled for cancel and Escape focus r
       }),
   )
   render(<DiscoverySectionsPage />)
-  const opener = await screen.findByRole('button', { name: 'Delete Review shelf' })
+  const row = await openShelfActions('Review shelf')
+  const opener = within(row).getByRole('button', { name: 'Delete Review shelf' })
   for (const dismiss of ['cancel', 'Escape']) {
     opener.focus()
     fireEvent.click(opener)

@@ -144,58 +144,61 @@ export function DiscoverySectionsPage() {
               />{' '}
               Visible {row.name}
             </label>
-            <div className="od-admin-actions-row">
-              <Button
-                disabled={disabled || index === 0}
-                aria-label={`Move ${row.name} up`}
-                onClick={() => move(index, -1)}
-              >
-                Move up
-              </Button>
-              <Button
-                disabled={disabled || index === sections.length - 1}
-                aria-label={`Move ${row.name} down`}
-                onClick={() => move(index, 1)}
-              >
-                Move down
-              </Button>
-              <Button
-                disabled={disabled}
-                aria-label={`Schedule and pin ${row.name}`}
-                onClick={() => {
-                  setError('')
-                  setMessage('')
-                  setSchedule(row)
-                  setScheduleDraft({
-                    layout: row.layout,
-                    starts: utcInput(row.starts_at),
-                    ends: utcInput(row.ends_at),
-                    pin: row.pin_rank == null ? '' : String(row.pin_rank),
-                  })
-                }}
-              >
-                Schedule and pin
-              </Button>
-              {row.section_type === 'custom' ? (
-                <>
-                  <Button
-                    disabled={disabled}
-                    aria-label={`Edit ${row.name}`}
-                    onClick={() => openEditor(row)}
-                  >
-                    Edit shelf
-                  </Button>
-                  <Button
-                    variant="danger"
-                    disabled={disabled}
-                    aria-label={`Delete ${row.name}`}
-                    onClick={() => remove(row)}
-                  >
-                    Delete shelf
-                  </Button>
-                </>
-              ) : null}
-            </div>
+            <details className="od-discovery-shelf__actions">
+              <summary>More actions</summary>
+              <div className="od-admin-actions-row">
+                <Button
+                  disabled={disabled || index === 0}
+                  aria-label={`Move ${row.name} up`}
+                  onClick={() => move(index, -1)}
+                >
+                  Move up
+                </Button>
+                <Button
+                  disabled={disabled || index === sections.length - 1}
+                  aria-label={`Move ${row.name} down`}
+                  onClick={() => move(index, 1)}
+                >
+                  Move down
+                </Button>
+                <Button
+                  disabled={disabled}
+                  aria-label={`Schedule and pin ${row.name}`}
+                  onClick={() => {
+                    setError('')
+                    setMessage('')
+                    setSchedule(row)
+                    setScheduleDraft({
+                      layout: row.layout,
+                      starts: utcInput(row.starts_at),
+                      ends: utcInput(row.ends_at),
+                      pin: row.pin_rank == null ? '' : String(row.pin_rank),
+                    })
+                  }}
+                >
+                  Schedule and pin
+                </Button>
+                {row.section_type === 'custom' ? (
+                  <>
+                    <Button
+                      disabled={disabled}
+                      aria-label={`Edit ${row.name}`}
+                      onClick={() => openEditor(row)}
+                    >
+                      Edit shelf
+                    </Button>
+                    <Button
+                      variant="danger"
+                      disabled={disabled}
+                      aria-label={`Delete ${row.name}`}
+                      onClick={() => remove(row)}
+                    >
+                      Delete shelf
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            </details>
           </li>
         ))}
       </ol>
