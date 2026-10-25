@@ -21,6 +21,13 @@
   font-size: var(--od-font-md);
 }
 
+.od-manual-identify .od-admin-page__actions .od-btn--lg,
+.od-manual-identify__id .od-btn--lg,
+.od-manual-identify__custom-id-action .od-btn--lg,
+.od-manual-identify__providers .od-btn--lg {
+  min-height: calc(var(--od-control-h) + var(--od-space-4));
+}
+
 .od-manual-identify__essential {
   display: grid;
   gap: var(--od-space-3);
@@ -48,6 +55,12 @@
   display: flex;
   justify-content: flex-start;
   grid-column: 1 / -1;
+}
+
+.od-manual-identify__custom-id-action .od-btn {
+  border-color: var(--od-accent);
+  color: var(--od-text);
+  font-weight: 600;
 }
 
 .od-manual-identify__id .od-admin-actions-row {

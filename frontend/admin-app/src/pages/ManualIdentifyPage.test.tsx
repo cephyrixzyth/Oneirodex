@@ -78,6 +78,8 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
     libraryPanel.compareDocumentPosition(identityPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy()
   const customEntry = screen.getByRole('button', { name: 'Add non-catalog game' })
+  expect(customEntry).toHaveClass('od-btn--lg')
+  expect(customEntry).not.toHaveClass('od-btn--primary')
   expect(customEntry.closest('.od-manual-identify__id')).toBeNull()
   expect(
     customEntry.compareDocumentPosition(screen.getByLabelText('Name')) &
@@ -86,6 +88,21 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   const providerSearches = screen.getByRole('group', { name: 'Metadata provider searches' })
   expect(providerSearches).toHaveClass('od-manual-identify__providers')
   expect(providerSearches).toContainElement(screen.getByRole('button', { name: 'Search Steam' }))
+  expect(screen.getByRole('button', { name: 'Search IGDB' })).toHaveClass(
+    'od-btn--primary',
+    'od-btn--lg',
+  )
+  expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toHaveClass(
+    'od-btn--primary',
+    'od-btn--lg',
+  )
+  expect(screen.getByRole('button', { name: 'Save', exact: true })).toHaveClass('od-btn--lg')
+  for (const provider of ['Steam', 'GOG', 'RAWG', 'MobyGames', 'TheGamesDB']) {
+    expect(screen.getByRole('button', { name: `Search ${provider}` })).toHaveClass(
+      'od-btn--primary',
+      'od-btn--lg',
+    )
+  }
   fireEvent.click(screen.getByRole('tab', { name: 'Release' }))
   expect(screen.getByLabelText('Category')).toHaveValue('MAIN_GAME')
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')

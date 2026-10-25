@@ -434,6 +434,7 @@ export function ManualIdentifyPage() {
       actions={
         <Button
           variant="primary"
+          size="lg"
           type="submit"
           form="od-manual-identify-form"
           disabled={saving || !options || Boolean(loadError) || scanRunning || !identifyFieldsValid}
@@ -516,6 +517,8 @@ export function ManualIdentifyPage() {
           </label>
           <div className="od-admin-actions-row">
             <Button
+              variant="primary"
+              size="lg"
               type="button"
               onClick={() => void loadIgdbId()}
               aria-label="Search IGDB by ID"
@@ -529,7 +532,7 @@ export function ManualIdentifyPage() {
           </div>
         </div>
         <div className="od-manual-identify__custom-id-action">
-          <Button type="button" onClick={() => void addNonCatalogGame()}>
+          <Button size="lg" type="button" onClick={() => void addNonCatalogGame()}>
             Add non-catalog game
           </Button>
         </div>
@@ -554,12 +557,14 @@ export function ManualIdentifyPage() {
             role="group"
             aria-label="Metadata provider searches"
           >
-            <Button type="submit" disabled={customIdMode || searchBusy}>
+            <Button variant="primary" size="lg" type="submit" disabled={customIdMode || searchBusy}>
               {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
             </Button>
             {['steam', 'gog', 'rawg', 'mobygames', 'thegamesdb'].map((source) => (
               <Button
                 key={source}
+                variant="primary"
+                size="lg"
                 type="button"
                 onClick={() => void searchProvider(source)}
                 disabled={searchBusy}
