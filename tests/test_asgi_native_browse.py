@@ -2510,18 +2510,19 @@ def test_native_library_detail_and_watch_reads_keep_acl_and_not_found_order(monk
 
 def test_native_admin_library_detail_requires_admin_and_keeps_envelope(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
+    library_uuid = '00000000-0000-0000-0000-000000000001'
     response = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=_signed_session(),
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=_signed_session(),
     )
 
     assert response.status_code == 200
-    assert response.json()['uuid'] == 'lib-1'
+    assert response.json()['uuid'] == library_uuid
     assert response.json()['success'] is True
-    assert runtime._fake_library_reads.calls == [('library', 'lib-1')]
+    assert runtime._fake_library_reads.calls == [('library', library_uuid)]
 
     flask_app._fake_user.role = 'user'
     denied = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=_signed_session(),
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=_signed_session(),
     )
     assert denied.status_code == 403
     assert denied.json()['error'] == 'Admin required'
@@ -7778,9 +7779,10 @@ def test_legacy_game_image_delete_preserves_non_object_json_validation(monkeypat
 
 def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
     calls = []
-    library = SimpleNamespace(uuid='lib-1', name='Original')
+    library_uuid = '00000000-0000-0000-0000-000000000001'
+    library = SimpleNamespace(uuid=library_uuid, name='Original')
     data = SimpleNamespace(
-        library=lambda uuid: library if uuid == 'lib-1' else None,
+        library=lambda uuid: library if uuid == library_uuid else None,
         update=lambda row, **values: calls.append((row.uuid, values)) or {
             'uuid': row.uuid, 'name': values['name'], 'platform': values['platform'].name,
             'scan_depth': values['scan_depth'],
@@ -7791,7 +7793,7 @@ def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
     response = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=cookie, method='PUT',
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=cookie, method='PUT',
         headers={'X-CSRFToken': csrf}, json_body={
             'name': 'Renamed', 'platform': 'PCWIN', 'scan_depth': 2,
             'watch_enabled': 'off',
@@ -7800,7 +7802,7 @@ def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['name'] == 'Renamed'
-    assert calls[0][0] == 'lib-1'
+    assert calls[0][0] == library_uuid
     assert calls[0][1]['watch_enabled'] is False
 
 

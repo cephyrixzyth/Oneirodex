@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from typing import Any, Callable
+from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
@@ -370,8 +371,8 @@ def create_library_reads_router(
     def get_library(library_uuid: str, request: Request):
         return library_response(request, library_uuid)
 
-    @router.api_route('/api/admin/libraries/{library_uuid}', methods=['GET', 'HEAD'])
-    def admin_library_detail(library_uuid: str, request: Request):
+    @router.api_route('/api/admin/libraries/{library_uuid:uuid}', methods=['GET', 'HEAD'])
+    def admin_library_detail(library_uuid: UUID, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth = request_auth_context(
@@ -389,7 +390,7 @@ def create_library_reads_router(
                 ):
                     response = _api_error('Admin required', 'forbidden')
             if response is None:
-                library = data.library(library_uuid)
+                library = data.library(str(library_uuid))
                 if library is None:
                     response = _api_error('Library not found.', 'not_found')
                 else:

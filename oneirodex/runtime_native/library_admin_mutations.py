@@ -13,7 +13,7 @@ import base64
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Any, Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
@@ -352,10 +352,10 @@ def create_library_admin_mutations_router(
             login_manager=login_manager, database_scope=database_scope,
         )
 
-    @router.put('/api/admin/libraries/{library_uuid}')
-    async def update_library(library_uuid: str, request: Request):
+    @router.put('/api/admin/libraries/{library_uuid:uuid}')
+    async def update_library(library_uuid: UUID, request: Request):
         return await _handle(
-            request, flask_app, data, action='update', library_uuid=library_uuid,
+            request, flask_app, data, action='update', library_uuid=str(library_uuid),
             find_user=find_user, find_token=find_token,
             commit_token_touch=commit_token_touch, load_user_id=load_user_id,
             login_manager=login_manager, database_scope=database_scope,

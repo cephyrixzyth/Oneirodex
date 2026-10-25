@@ -20,11 +20,14 @@ from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token,
 )
 
+LIBRARY_UUID = '00000000-0000-0000-0000-000000000001'
+
 
 class FakeLibraryAdminMutations:
     def __init__(self):
         self.items = {
             'lib-1': SimpleNamespace(uuid='lib-1', name='Library One', last_scan_folder='/safe/root/one'),
+            LIBRARY_UUID: SimpleNamespace(uuid=LIBRARY_UUID, name='Library One', last_scan_folder='/safe/root/one'),
         }
         self.calls = []
 
@@ -224,7 +227,7 @@ def test_unauthenticated_library_api_returns_json_401_after_valid_csrf(native_cl
     csrf = generate_csrf_token(session, 'library-admin-secret')
     session_cookie = dump_session_cookie(session, 'library-admin-secret')
     response = _request(
-        runtime, 'PUT', '/api/admin/libraries/lib-1', cookie=False,
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}', cookie=False,
         headers={'Cookie': f'session={session_cookie}', 'X-CSRFToken': csrf},
         data={
             'csrf_token': csrf, 'name': 'Must not update', 'platform': 'PCWIN',
@@ -377,6 +380,16 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['download_missing_images'] is True
     assert scan[3]['force_updates_extras'] is True
     assert scan[3]['fetch_hltb'] is True
+
+
+def test_library_update_uuid_route_does_not_capture_static_scan_actions(native_client):
+    runtime, data = native_client
+
+    for path in ('/api/admin/libraries/scan', '/api/admin/libraries/refresh_all'):
+        response = _request(runtime, 'PUT', path, json={})
+        assert response.status_code == 405
+        assert 'POST' in response.headers.get('allow', '')
+    assert data.calls == []
 
 
 def test_single_scan_json_media_types_match_legacy_parser(native_client):
@@ -574,12 +587,12 @@ def test_single_library_update_preserves_json_and_bounded_image_form(native_clie
     runtime, data = native_client
     image = BytesIO()
     Image.new('RGB', (2, 2), color='green').save(image, format='PNG')
-    updated = _request(runtime, 'PUT', '/api/admin/libraries/lib-1', json={
+    updated = _request(runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}', json={
         'name': 'Renamed library', 'platform': 'PCWIN', 'scan_depth': 2,
         'watch_enabled': 'off',
     })
     multipart = _request(
-        runtime, 'PUT', '/api/admin/libraries/lib-1',
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}',
         files={'image': ('library.png', image.getvalue())},
         data={'name': 'Image library', 'platform': 'PCWIN', 'scan_depth': '1'},
     )
@@ -588,7 +601,7 @@ def test_single_library_update_preserves_json_and_bounded_image_form(native_clie
     assert updated.json()['name'] == 'Renamed library'
     assert multipart.status_code == 200
     update_call = next(call for call in data.calls if call[0] == 'update')
-    assert update_call[1] == 'lib-1'
+    assert update_call[1] == LIBRARY_UUID
     assert update_call[2]['watch_enabled'] is False
     image_call = [call for call in data.calls if call[0] == 'update'][1]
     assert image_call[2]['image'][0] == 'library.png'
