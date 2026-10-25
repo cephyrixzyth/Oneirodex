@@ -147,7 +147,9 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                 response = _error(403, 'forbidden', 'This token does not have the admin scope')
             else:
                 try:
-                    response = await _manual_identify_list(request, flask_app, data, auth)
+                    response = await _manual_identify_list(
+                        request, flask_app, data, auth, database_scope=database_scope,
+                    )
                 except Exception:
                     response = _error(500, 'internal', 'An error occurred while processing your request')
         if auth.should_set_session_cookie:
@@ -157,7 +159,7 @@ async def _run(request, *, flask_app, data, find_user, find_token,
         return response
 
 
-async def _manual_identify_list(request, app, data, auth):
+async def _manual_identify_list(request, app, data, auth, *, database_scope=None):
     try:
         payload = await request.json()
     except Exception:
@@ -188,14 +190,20 @@ async def _manual_identify_list(request, app, data, auth):
                 'action': 'conflict', 'message': 'Another scan is already running.',
                 'read_only': True,
             }, headers={'Cache-Control': 'no-store'})
-        result = data.start_or_queue_scan(
+        queue_options = dict(
             folder_path=folder_path, library_uuid=library.uuid, scan_mode=mode,
             remove_missing=False, download_missing_images=False,
             force_updates_extras_scan=body.force_updates_extras_scan,
             fetch_hltb=body.fetch_hltb, force_hltb_refetch=body.force_hltb_refetch,
             schedule=None, queue_policy=body.queue_policy, allow_force=True,
-            app=app, database_scope=database_scope,
+            app=app,
         )
+        # The active request is already inside this scope, but the scan worker
+        # runs on its own thread and needs the callback to open a fresh scope.
+        # Keep it optional for lightweight route adapters and unit tests.
+        if database_scope is not None:
+            queue_options['database_scope'] = database_scope
+        result = data.start_or_queue_scan(**queue_options)
         if result.get('status') not in ('started', 'queued'):
             return _error(409, 'conflict', result.get('message') or 'Manual scan could not be queued')
         return _ok({
