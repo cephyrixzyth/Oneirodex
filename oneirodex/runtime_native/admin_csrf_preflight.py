@@ -14,6 +14,16 @@ _URLENCODED_BODY_LIMIT = 1024 * 1024
 _MULTIPART_BODY_DEFAULT_LIMIT = 128 * 1024 * 1024
 
 
+def is_admin_mutation_scope(scope: Mapping) -> bool:
+    """Return whether this request can need the admin CSRF preflight."""
+    method = str(scope.get('method') or '').upper()
+    path = str(scope.get('path') or '')
+    return (
+        method in _UNSAFE_METHODS
+        and (path == '/admin' or path.startswith('/admin/'))
+    )
+
+
 def native_route_matches(native_app, scope: Mapping) -> bool:
     """Return whether FastAPI recognizes this exact path and method.
 

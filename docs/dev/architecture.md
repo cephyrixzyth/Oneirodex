@@ -67,7 +67,9 @@ membership check, feature/configuration gates, child video restrictions, and
 the existing signed-user identity; route tests use a fake mint adapter.
 
 Native write handlers apply CSRF to browser-session requests and retain the
-existing API-token authentication path.
+existing API-token authentication path. The ASGI preflight checks FastAPI route
+tables only for unsafe `/admin` requests, avoiding route matching on normal
+page and member API reads while preserving CSRF-before-auth behavior.
 
 The first-run setup shell pages, ordered `POST /api/setup/step` transition,
 and classic HTML form POSTs (`/setup/submit` plus the five step URLs) now

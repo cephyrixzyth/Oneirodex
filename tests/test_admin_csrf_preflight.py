@@ -9,6 +9,7 @@ from oneirodex.runtime_native.admin_csrf_preflight import (
     empty_admin_mutation_csrf_error,
     inspect_multipart_csrf_body,
     inspect_urlencoded_csrf_body,
+    is_admin_mutation_scope,
     native_route_matches,
 )
 
@@ -22,6 +23,13 @@ def test_empty_admin_mutation_without_csrf_is_preflighted():
     assert empty_admin_mutation_csrf_error(
         _scope(headers=[(b'content-length', b'0')]), {},
     ) == 'The CSRF token is missing.'
+
+
+def test_admin_mutation_scope_gate_skips_safe_and_non_admin_requests():
+    assert not is_admin_mutation_scope(_scope(path='/admin/settings', method='GET'))
+    assert not is_admin_mutation_scope(_scope(path='/api/notifications/read', method='POST'))
+    assert is_admin_mutation_scope(_scope(path='/admin/settings', method='POST'))
+    assert is_admin_mutation_scope(_scope(path='/admin/api/library/1', method='DELETE'))
 
 
 def test_admin_csrf_preflight_skips_populated_or_tokened_requests():
