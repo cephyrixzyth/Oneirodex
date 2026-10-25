@@ -215,6 +215,43 @@ test('shows a rejected manual folder as an accessible error without starting a s
   expect(scan).not.toHaveBeenCalled()
 })
 
+test('explains manual-identify metadata permission failures and links to Server Settings', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/admin/scan/manual-identify/session-preview'
+      ? { games: [] }
+      : url === '/api/get_libraries'
+        ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+        : {
+            roots: [
+              {
+                id: 'games',
+                label: 'Games',
+                path: '/games',
+                default: true,
+                exists: true,
+                read: true,
+              },
+            ],
+          },
+  )
+  vi.mocked(postJson).mockRejectedValue(
+    new Error('Review local metadata write permissions before identifying this folder.'),
+  )
+  renderPage('/scan_management?active_tab=manual')
+  await screen.findByRole('option', { name: 'Nintendo' })
+  fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Review local metadata write permissions before identifying this folder.',
+  )
+  expect(screen.getByText(/Grant Oneirodex write access or turn off/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Open Server Settings' })).toHaveAttribute(
+    'href',
+    '/admin/new_server_settings',
+  )
+  expect(scan).not.toHaveBeenCalled()
+})
+
 test('shows the busy-scan queue result from the manual list action', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'

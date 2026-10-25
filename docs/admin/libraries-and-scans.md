@@ -22,7 +22,7 @@ The Libraries page is an admin SPA **DataTable** (sort + per-column filters, the
 
 The legacy `POST /scan_manual_folder` compatibility form now returns to the Manual identify section on the shared Scan page (`/scan_management?active_tab=manual#manual-identify`) after validation, so a missing library or inaccessible folder does not send the operator back to the top of the page. When that form has populated candidate paths in the signed admin session, the React page restores the candidate rows and selected library through an admin-only, no-store session-preview read; it does not start another scan.
 
-When Manual identify opens with `full_disk_path` but no `name`, the Name field starts with the path's final segment. Supported ROM/archive suffixes are removed; a supplied `name` query value takes precedence, and dotted directory names that do not end in a supported suffix stay intact.
+If listing candidates fails because local metadata write permission is missing, the Manual identify page explains the permission requirement and links to Server Settings where the metadata-write option can be disabled. When Manual identify opens with `full_disk_path` but no `name`, the Name field starts with the path's final segment. Supported ROM/archive suffixes are removed; a supplied `name` query value takes precedence, and dotted directory names that do not end in a supported suffix stay intact.
 
 The library selector and platform summary use the readable platform label (for example, `PC Windows`) rather than the internal platform key (`PCWIN`).
 

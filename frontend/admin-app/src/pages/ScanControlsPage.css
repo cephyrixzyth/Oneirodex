@@ -1,22 +1,7 @@
 .od-scan-controls-page {
   display: flex;
   flex-direction: column;
-}
-
-.od-scan-controls-page .od-scan-controls {
-  order: 1;
-}
-
-.od-scan-controls-page .od-scan-controls__manual {
-  order: 2;
-}
-
-.od-scan-controls-page.is-manual .od-scan-controls {
-  order: 2;
-}
-
-.od-scan-controls-page.is-manual .od-scan-controls__manual {
-  order: 1;
+  gap: var(--od-space-4);
 }
 
 .od-scan-controls {

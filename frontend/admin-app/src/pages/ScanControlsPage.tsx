@@ -349,7 +349,19 @@ export function ScanControlsPage() {
         >
           {manualBusy ? 'Listing games…' : 'List games to identify'}
         </Button>
-        {manualError ? <PageStatus error={manualError} /> : null}
+        {manualError ? (
+          <>
+            <PageStatus error={manualError} />
+            {manualError.toLowerCase().includes('write permissions') ? (
+              <p className="od-admin-hint">
+                Manual identification needs write access to the selected game folders when local
+                metadata files are enabled. Grant Oneirodex write access or turn off “Write
+                metadata file on manual ID” in Server Settings.{' '}
+                <a href="/admin/new_server_settings">Open Server Settings</a>
+              </p>
+            ) : null}
+          </>
+        ) : null}
         {manualStatus ? <PageStatus announcement="status">{manualStatus}</PageStatus> : null}
         {manualListed && manualRows.length === 0 ? (
           <PageStatus announcement="status" className="od-admin-lede">
