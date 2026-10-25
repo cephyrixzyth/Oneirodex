@@ -189,21 +189,40 @@ def _legacy_auto_options_methods(request, routing_app) -> list[str]:
 
 
 def _native_allowed_methods(request, *, route_app=None) -> list[str]:
-    """Collect all FastAPI methods for the path, then apply Flask defaults."""
+    """Collect methods from the most specific FastAPI path, then add defaults."""
     from starlette.routing import Match
 
     apps = route_app or getattr(request, 'app', None)
     if not isinstance(apps, (list, tuple)):
         apps = (apps,)
-    methods = set()
+    method_candidates = []
     path_scope = dict(request.scope)
     path_scope['method'] = 'GET'
+
+    def specificity(route_path):
+        segments = [part for part in str(route_path or '').strip('/').split('/') if part]
+        literals = sum(not part.startswith('{') for part in segments)
+        parameters = len(segments) - literals
+        literal_length = sum(len(part) for part in segments if not part.startswith('{'))
+        return literals, -parameters, len(segments), literal_length
+
     def collect(routes, scope) -> None:
         for route in routes:
             match, child_scope = route.matches(scope)
             if match is Match.NONE:
                 continue
-            methods.update(getattr(route, 'methods', ()) or ())
+            # The member shell is mounted as a catch-all route, but its
+            # handler only serves a small allowlist of page paths. Do not let
+            # that fallback advertise GET/HEAD for unrelated API or unknown
+            # URLs when computing Flask's method list.
+            if getattr(route, 'path', None) == '/{member_path:path}':
+                from oneirodex.runtime_native.member_shell import member_shell_route
+
+                if not member_shell_route(str(scope.get('path', ''))):
+                    continue
+            route_methods = getattr(route, 'methods', ()) or ()
+            if route_methods:
+                method_candidates.append((specificity(getattr(route, 'path', '')), route_methods))
             child_router = (
                 getattr(route, 'original_router', None)
                 or getattr(getattr(route, 'app', None), 'router', None)
@@ -214,6 +233,12 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
     for app in apps:
         router = getattr(app, 'router', None)
         collect(getattr(router, 'routes', ()), path_scope)
+    methods = set()
+    if method_candidates:
+        most_specific = max(score for score, _methods in method_candidates)
+        for score, route_methods in method_candidates:
+            if score == most_specific:
+                methods.update(route_methods)
     if 'GET' in methods:
         methods.add('HEAD')
     if methods:

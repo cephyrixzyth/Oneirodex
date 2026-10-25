@@ -4189,9 +4189,11 @@ class LazyASGIApp:
         route_apps = [app for app in route_apps if app is not None]
 
         # Some routes deliberately implement OPTIONS. Preserve their handler
-        # instead of replacing it with Flask's generated empty response.
+        # instead of replacing it with Flask's generated empty response. A
+        # mounted Starlette app can match every method at its prefix, so walk
+        # into mounts and require an actual route that declares OPTIONS.
         for app in route_apps:
-            if self._matches_native_app_route(app, scope):
+            if self._matches_native_options_route(app, scope):
                 await app(scope, receive, send)
                 return True
 
@@ -4415,6 +4417,37 @@ class LazyASGIApp:
             if match is Match.FULL:
                 return True
         return False
+
+    @staticmethod
+    def _matches_native_options_route(app, scope) -> bool:
+        """Return whether a concrete native route explicitly handles OPTIONS."""
+        if app is None:
+            return False
+
+        from starlette.routing import Match
+
+        def matches(routes, route_scope) -> bool:
+            for route in routes:
+                match, child_scope = route.matches(route_scope)
+                if match is Match.NONE:
+                    continue
+                methods = {str(method).upper() for method in (getattr(route, 'methods', ()) or ())}
+                if match is Match.FULL and 'OPTIONS' in methods:
+                    return True
+                child_router = (
+                    getattr(route, 'original_router', None)
+                    or getattr(getattr(route, 'app', None), 'router', None)
+                )
+                if child_router is not None and matches(
+                    getattr(child_router, 'routes', ()), {**route_scope, **child_scope},
+                ):
+                    return True
+            return False
+
+        return matches(
+            getattr(getattr(app, 'router', None), 'routes', ()),
+            {**scope, 'method': 'OPTIONS'},
+        )
 
     async def _send_setup_redirect_if_required(
         self, scope, send, *, skip_active_step=False,

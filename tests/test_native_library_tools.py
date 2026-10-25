@@ -214,6 +214,106 @@ def test_auto_options_combines_methods_from_split_native_routers():
     }
 
 
+def test_auto_options_ignores_member_shell_catchall_for_non_page_paths():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    delete_app = FastAPI()
+    member_shell_app = FastAPI()
+
+    @delete_app.delete('/api/resource/{resource_id}')
+    async def delete_resource(resource_id: str):
+        return {}
+
+    @member_shell_app.get('/{member_path:path}')
+    async def member_shell(member_path: str):
+        return {}
+
+    def options(path):
+        request = Request({
+            'type': 'http', 'method': 'OPTIONS', 'path': path,
+            'raw_path': path.encode(), 'query_string': b'', 'headers': [],
+            'scheme': 'http', 'server': ('testserver', 80),
+            'client': ('testclient', 50000),
+        })
+        return flask_auto_options_response(
+            {}, request, route_app=[delete_app, member_shell_app],
+        )
+
+    delete_response = options('/api/resource/1')
+    member_response = options('/discover')
+
+    assert delete_response is not None
+    assert set(delete_response.headers['allow'].split(', ')) == {'DELETE', 'OPTIONS'}
+    assert member_response is not None
+    assert set(member_response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+
+
+def test_auto_options_prefers_static_path_over_dynamic_sibling():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    static_app = FastAPI()
+    dynamic_app = FastAPI()
+
+    @static_app.get('/api/ownership/connections')
+    async def list_connections():
+        return {}
+
+    @dynamic_app.post('/api/ownership/{store:str}')
+    async def connect_store(store: str):
+        return {}
+
+    @dynamic_app.delete('/api/ownership/{store:str}')
+    async def disconnect_store(store: str):
+        return {}
+
+    request = Request({
+        'type': 'http', 'method': 'OPTIONS', 'path': '/api/ownership/connections',
+        'raw_path': b'/api/ownership/connections', 'query_string': b'', 'headers': [],
+        'scheme': 'http', 'server': ('testserver', 80),
+        'client': ('testclient', 50000),
+    })
+    response = flask_auto_options_response({}, request, route_app=[static_app, dynamic_app])
+
+    assert response is not None
+    assert set(response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+
+
+def test_explicit_options_match_does_not_treat_mount_as_handler():
+    from fastapi import FastAPI
+    from asgi import LazyASGIApp
+
+    child = FastAPI()
+
+    @child.delete('/delete-only')
+    async def delete_only():
+        return {}
+
+    @child.options('/custom-options')
+    async def custom_options():
+        return {}
+
+    parent = FastAPI()
+    parent.mount('/api', child)
+
+    def scope(path):
+        return {
+            'type': 'http', 'method': 'OPTIONS', 'path': path,
+            'raw_path': path.encode(), 'root_path': '',
+            'query_string': b'', 'headers': [],
+        }
+
+    assert not LazyASGIApp._matches_native_options_route(
+        parent, scope('/api/delete-only'),
+    )
+    assert LazyASGIApp._matches_native_options_route(
+        parent, scope('/api/custom-options'),
+    )
+
+
 def test_propose_leaf_options_matches_legacy_method_order(runtime):
     app, _data, _cookies = runtime
     path = '/api/library_tools/propose_leaf_libraries'

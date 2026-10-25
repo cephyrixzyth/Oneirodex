@@ -839,7 +839,10 @@ def create_chat_reads_router(
     async def chat_attachment_upload_options(channel_id: int):
         # Flask automatically exposes OPTIONS for the legacy POST endpoint.
         # Chat probes this route to decide whether to show attachment controls.
-        return Response(status_code=200, headers={'Allow': 'OPTIONS, POST'})
+        return Response(
+            status_code=200, headers={'Allow': 'OPTIONS, POST'},
+            media_type='text/html',
+        )
 
     @router.post('/api/chat/channels/{channel_id:int}/attachments')
     async def chat_attachment_upload(request: Request, channel_id: int):

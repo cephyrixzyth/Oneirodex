@@ -6694,6 +6694,8 @@ def test_native_chat_attachment_options_probe_matches_legacy_contract(monkeypatc
 
     assert response.status_code == 200
     assert response.headers['allow'] == 'OPTIONS, POST'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.content == b''
 
 
 def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
