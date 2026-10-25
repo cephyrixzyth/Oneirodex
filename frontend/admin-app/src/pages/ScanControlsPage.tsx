@@ -73,6 +73,8 @@ export function ScanControlsPage() {
     closeBrowseRef,
     conflictOpen,
     scanning,
+    scanError,
+    clearScanError,
     onConflictChoose,
     onConflictClose,
     browse,
@@ -138,6 +140,7 @@ export function ScanControlsPage() {
         <p className="od-admin-lede">
           Start a scan now or set a repeat schedule for this library and location.
         </p>
+        {scanError ? <PageStatus error={scanError} /> : null}
         <label className="od-admin-field">
           Library
           <select
@@ -269,7 +272,10 @@ export function ScanControlsPage() {
             <select
               className="od-admin-input"
               value={schedule}
-              onChange={(event) => setSchedule(event.target.value as Schedule)}
+              onChange={(event) => {
+                clearScanError()
+                setSchedule(event.target.value as Schedule)
+              }}
               disabled={scanning}
             >
               <option value="">Once (no repeat)</option>
@@ -314,7 +320,10 @@ export function ScanControlsPage() {
               <input
                 className="od-admin-input"
                 value={cron}
-                onChange={(event) => setCron(event.target.value)}
+                onChange={(event) => {
+                  clearScanError()
+                  setCron(event.target.value)
+                }}
                 maxLength={64}
                 placeholder="0 */6 * * *"
                 required

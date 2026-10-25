@@ -61,7 +61,15 @@ export function useScanControls() {
   const [browseError, setBrowseError] = useState('')
   const browseTitleId = useId()
   const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
-  const { conflictOpen, scanning, startScan, onConflictChoose, onConflictClose } = useLibraryScan()
+  const {
+    conflictOpen,
+    scanning,
+    scanError,
+    clearScanError,
+    startScan,
+    onConflictChoose,
+    onConflictClose,
+  } = useLibraryScan({ persistentErrors: true })
 
   useEffect(() => {
     let cancelled = false
@@ -379,6 +387,8 @@ export function useScanControls() {
     closeBrowseRef,
     conflictOpen,
     scanning,
+    scanError,
+    clearScanError,
     startScan,
     onConflictChoose,
     onConflictClose,

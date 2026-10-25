@@ -5,7 +5,13 @@ import { getJson, postJson } from '../api/adminApi'
 import { confirmAction } from '@oneirodex/ui'
 import { MemoryRouter } from 'react-router-dom'
 
-const { scan } = vi.hoisted(() => ({ scan: vi.fn() }))
+const { scan, scanError, clearScanError } = vi.hoisted(() => ({
+  scan: vi.fn(),
+  scanError: { current: '' },
+  clearScanError: vi.fn(() => {
+    scanError.current = ''
+  }),
+}))
 vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
 vi.mock('@oneirodex/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@oneirodex/ui')>()
@@ -15,6 +21,8 @@ vi.mock('../hooks/useLibraryScan', () => ({
   useLibraryScan: () => ({
     conflictOpen: false,
     scanning: false,
+    scanError: scanError.current,
+    clearScanError,
     startScan: scan,
     onConflictChoose: vi.fn(),
     onConflictClose: vi.fn(),
@@ -104,6 +112,31 @@ test('keeps automatic scan and manual identification together on the scan manage
     'href',
     '/admin/scan-jobs',
   )
+})
+
+test('keeps scan start errors visible in the automatic scan form', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : {
+          roots: [
+            { id: 'games', label: 'Games', path: '/games', default: true, exists: true, read: true },
+          ],
+        },
+  )
+  scanError.current =
+    'Invalid cron expression: cron must have 5 fields: minute hour dom month dow'
+  vi.mocked(clearScanError).mockImplementation(() => {
+    scanError.current = ''
+  })
+  renderPage()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Invalid cron expression: cron must have 5 fields: minute hour dom month dow',
+  )
+  expect(screen.getByRole('button', { name: 'Start scan' })).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('Repeat schedule'), { target: { value: 'cron' } })
+  expect(clearScanError).toHaveBeenCalled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 test.each([

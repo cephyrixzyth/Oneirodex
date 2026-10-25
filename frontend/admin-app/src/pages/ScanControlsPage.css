@@ -13,6 +13,7 @@
 
 .od-scan-controls > h2,
 .od-scan-controls > p,
+.od-scan-controls > .od-page-status,
 .od-scan-controls__path,
 .od-scan-controls__schedule {
   grid-column: 1 / -1;
@@ -109,6 +110,7 @@
 
   .od-scan-controls > h2,
   .od-scan-controls > p,
+  .od-scan-controls > .od-page-status,
   .od-scan-controls__path,
   .od-scan-controls__schedule {
     grid-column: auto;
