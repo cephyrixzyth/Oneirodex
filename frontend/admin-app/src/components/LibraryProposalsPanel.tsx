@@ -61,6 +61,7 @@ export function LibraryProposalsPanel() {
       const params = new URLSearchParams({
         full_disk_path: row.path,
         igdb_id: String(candidate.igdb_id),
+        name: String(row.game_name || row.proposal?.guessed_name || name),
         ...(row.library_uuid ? { library_uuid: row.library_uuid } : {}),
       })
       setApproved((previous) => [

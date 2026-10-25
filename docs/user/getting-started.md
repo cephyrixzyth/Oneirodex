@@ -52,6 +52,8 @@ account.
 chosen avatar** rather than a generic person glyph, and opens the account menu (not a full-page
 takeover). Choosing **Profile**, **Change avatar**, **Change password**, **Invites** or **API tokens** opens the **account modal** over the page you were on, styled like the game preview popup, with a strip along the top to move between the five panels without closing. Nothing navigates away, so your scroll position and filters survive. The old `/settings_*` and `/user/invites` pages still work if you open them directly — they are the fallback for Big Picture and for a browser with JavaScript off.
 
+Avatar uploads accept JPG, JPEG, PNG, GIF and WebP images up to 5 MB.
+
 **Friends** in the rail opens the stay-open Friends dock in place — it does **not** navigate to `/social-companion` as the main SPA shell.
 
 **Loading looks the same everywhere.** Every page, panel and modal that is fetching something shows

@@ -76,3 +76,36 @@ it('loads unified choices and saves changed preferences through the JSON API', a
   expect(options.method).toBe('PUT')
   expect(JSON.parse(options.body)).toMatchObject({ items_per_page: '100', icon_pack: 'solid' })
 })
+
+it('shows and saves an uploaded operator font from the server-provided choices', async () => {
+  const uploadedFont = { value: 'paritycollision', label: 'ParityCollision (operator)' }
+  const withUploadedFont = {
+    ...preferenceResponse,
+    choices: { ...preferenceResponse.choices, fonts: [...preferenceResponse.choices.fonts, uploadedFont] },
+  }
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(withUploadedFont), { status: 200 }))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          preferences: { ...preferenceResponse.preferences, font: uploadedFont.value },
+        }),
+        { status: 200 },
+      ),
+    )
+  vi.stubGlobal('fetch', fetchMock)
+  render(<PreferencesModal open onClose={() => undefined} />)
+
+  const font = await screen.findByLabelText('Font')
+  expect(screen.getByRole('option', { name: uploadedFont.label })).toBeInTheDocument()
+  fireEvent.change(font, { target: { value: uploadedFont.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  expect(screen.getByRole('status')).toHaveTextContent('Preferences saved.')
+  const [, options] = fetchMock.mock.calls[1]
+  expect(options.method).toBe('PUT')
+  expect(JSON.parse(options.body)).toMatchObject({ font: uploadedFont.value })
+})

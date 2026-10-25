@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
 import { getJson, putJson } from '../api/adminApi'
 import { AdminPageActions } from '../components/AdminPageActions'
+import { useAdminDocumentTitle } from '../components/Page'
 import { CreateUserForm } from '../components/CreateUserForm'
 import { DataTable } from '../components/DataTable'
 import { Button, PageStatus } from '@oneirodex/ui'
@@ -92,6 +93,7 @@ function UserEditor({
 }
 
 export function UsersPage() {
+  useAdminDocumentTitle('Users')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<unknown>(null)
   // Distinct from "empty" on purpose — the old copy said "Loading or no users",

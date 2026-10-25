@@ -8,6 +8,8 @@
 
 **Server logs:** live on **Ops → Full log** (`/admin/ops?open=full-log`). Bookmarks to `/admin/server_logs` / `/admin/system_logs` redirect there. The irreversible **Clear logs** action requires the admin API's session CSRF check and records a post-clear audit event.
 
+The device-list API accepts an optional `limit` query parameter (default 200, capped at 1,000). For compatibility with earlier releases, `limit=0` uses the default page size; negative values clamp to one, and invalid values use the default.
+
 **Initial load:** The health banner says “Checking health…” until the first summary arrives. If that request fails, it says “Health status unavailable” alongside the shared Retry state; an absent summary is never presented as “All systems healthy.”
 
 Ops detail tables display configured path existence/read/write state and a concise latest-log summary. Unknown structured values use a safe “Details available” label instead of stringifying arbitrary objects.

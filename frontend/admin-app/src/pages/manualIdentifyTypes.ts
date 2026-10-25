@@ -4,6 +4,7 @@ export type Options = {
   taxonomies: Record<string, Choice[]>
   categories: Array<{ value: string; label: string }>
   statuses: Array<{ value: string; label: string }>
+  file_extensions: string[]
 }
 export type Candidate = Record<string, any> & { id: number; name: string }
 

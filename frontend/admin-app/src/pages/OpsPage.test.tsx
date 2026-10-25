@@ -219,6 +219,7 @@ test('Ops status stays neutral until its first summary loads', async () => {
 
   render(<OpsPage />)
 
+  expect(document.title).toBe('Ops · Oneirodex Admin')
   const status = screen.getByLabelText('System status')
   expect(status).toHaveTextContent('Checking health…')
   expect(status).toHaveAttribute('aria-busy', 'true')

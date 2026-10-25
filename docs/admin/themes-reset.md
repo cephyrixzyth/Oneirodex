@@ -10,7 +10,7 @@ Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded conte
 
 ## Admin theme management UI
 
-`/admin/themes` provides the installed-theme inventory, ZIP upload, custom-theme deletion, loading-motif selection and confirmed default reset in the shared React admin shell. Upload keeps the existing ZIP limits and archive safety checks; loading motifs use the shared catalogue and settings API. Theme choice for an individual account remains in Preferences. Upload, delete, and reset form posts now dispatch through FastAPI with the existing signed-session and CSRF checks, redirects, and flash behavior. Reset also accepts the React JSON request. The authoring guide is served from React at `/admin/themes/readme`.
+`/admin/themes` provides the installed-theme inventory, ZIP upload, custom-theme deletion, loading-motif selection and confirmed default reset in the shared React admin shell. Rotation picks a motif per session; lock applies the selected motif for everyone. In rotating mode, the page previews the generic motifs; hover or keyboard focus animates one specimen at a time, and a caption gives the size of the full rotation catalogue. Lock mode previews the selected motif. Loading motifs use the shared catalogue and settings API. Theme choice for an individual account remains in Preferences. React upload and delete actions use FastAPI JSON endpoints with the existing signed-session and CSRF checks; reset accepts the React JSON request. Legacy form compatibility routes retain their redirect and flash behavior. The shared upload service does not require Flask to be installed in the FastAPI image. The authoring guide is served from React at `/admin/themes/readme`.
 
 ## Default look
 

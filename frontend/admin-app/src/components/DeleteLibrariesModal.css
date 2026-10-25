@@ -69,6 +69,11 @@
   margin: 0;
 }
 
+.od-delete-libraries__current-game {
+  color: var(--od-text);
+  font-weight: 600;
+}
+
 .od-delete-libraries__progress progress {
   width: 100%;
   accent-color: var(--od-accent);

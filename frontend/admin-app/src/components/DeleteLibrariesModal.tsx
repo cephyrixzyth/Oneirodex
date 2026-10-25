@@ -11,6 +11,7 @@ type Progress = {
   current?: number
   total?: number
   message?: string
+  current_game?: string
   games_failed?: number
 }
 
@@ -219,6 +220,9 @@ export function DeleteLibrariesModal({
       {jobId ? (
         <PageStatus announcement="status" className={'od-delete-libraries__progress'}>
           <p>{progress?.message || 'Deleting libraries…'}</p>
+          {progress?.current_game ? (
+            <p className="od-delete-libraries__current-game">{progress.current_game}</p>
+          ) : null}
           {Number(progress?.total) > 0 ? (
             <progress value={Number(progress?.current) || 0} max={Number(progress?.total)} />
           ) : null}

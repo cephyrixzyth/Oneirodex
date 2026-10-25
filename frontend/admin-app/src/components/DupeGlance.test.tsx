@@ -184,7 +184,10 @@ test('DupeGlance Mark as Emulator calls mark_kind and catalogs without IGDB', as
   await screen.findByRole('heading', { name: 'Dupe glance' })
   await user.selectOptions(screen.getByLabelText(/status/i), 'Unmatched')
   expect(await screen.findByText('/games/3DSenVR')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'Fix search' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
+    'href',
+    '/add_game_manual?full_disk_path=%2Fgames%2F3DSenVR&library_uuid=&name=3DSenVR&platform_name=PCWIN&platform_id=&from_unmatched=true',
+  )
 
   await user.click(screen.getByRole('button', { name: 'Mark as Emulator' }))
 

@@ -42,6 +42,7 @@ function mockLoad() {
 describe('ThemesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete window.GtLoadingMotifs
     mockLoad()
   })
 
@@ -72,6 +73,49 @@ describe('ThemesPage', () => {
         loading_icon_id: 'arcade',
       }),
     )
+  })
+
+  it('previews the rotating catalogue and reports the full rotation size', async () => {
+    const motifIds = ['dpad', 'disc', 'stick', 'handheld', 'cart', 'crt']
+    const buildNode = vi.fn((id: string, sizeClass = '') => {
+      const node = document.createElement('span')
+      node.className = `od-loading-motif ${sizeClass}`.trim()
+      node.dataset.motif = id
+      node.setAttribute('aria-hidden', 'true')
+      return node
+    })
+    window.GtLoadingMotifs = { CATALOGUE: motifIds, buildNode }
+    vi.mocked(getJson).mockImplementation(async (url) =>
+      url.endsWith('/loading-icons')
+        ? {
+            ...icons,
+            catalogue: [
+              ...icons.catalogue,
+              ...motifIds.slice(2).map((id) => ({ id, name: id, family: 'Classic' })),
+              { id: 'nes', name: 'NES', family: 'Nintendo' },
+            ],
+          }
+        : themes,
+    )
+
+    render(<ThemesPage />)
+
+    const preview = await screen.findByRole('group', { name: 'Rotating motif previews' })
+    expect(
+      screen.getByText(/random motif per session; lock pins one for everyone/i),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(preview.querySelectorAll('[data-motif]')).toHaveLength(6))
+    expect(preview).toHaveTextContent('Rotating across 7 motifs')
+    expect(preview.querySelector('[data-motif="dpad"]')).toHaveAttribute('tabindex', '0')
+    expect(preview.querySelector('[data-motif="dpad"]')).toHaveAttribute('aria-label', 'D-pad')
+    expect(buildNode).toHaveBeenCalledWith(
+      'dpad',
+      'od-loading-motif--sm od-loading-motif--preview',
+    )
+
+    fireEvent.click(screen.getByLabelText('Use one motif'))
+    await waitFor(() => expect(preview.querySelectorAll('[data-motif]')).toHaveLength(1))
+    expect(preview.querySelector('[data-motif="dpad"]')).toHaveClass('od-loading-motif--lg')
   })
 
   it('uploads a selected ZIP through multipart without setting content type in the page', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, PageStatus, confirmAction, openPreferencesModal } from '@oneirodex/ui'
 import { deleteJson, getJson, postForm, postJson, putJson } from '../api/adminApi'
 import { Page } from '../components/Page'
@@ -25,6 +25,17 @@ type LoadingConfig = {
   catalogue: Motif[]
 }
 
+type LoadingMotifRenderer = {
+  CATALOGUE?: string[]
+  buildNode: (id: string, sizeClass?: string) => HTMLElement
+}
+
+declare global {
+  interface Window {
+    GtLoadingMotifs?: LoadingMotifRenderer
+  }
+}
+
 export function ThemesPage() {
   const [inventory, setInventory] = useState<ThemeInventory | null>(null)
   const [loadingConfig, setLoadingConfig] = useState<LoadingConfig | null>(null)
@@ -36,6 +47,7 @@ export function ThemesPage() {
   const [mode, setMode] = useState<'rotate' | 'lock'>('rotate')
   const [iconId, setIconId] = useState('')
   const [saved, setSaved] = useState(false)
+  const motifPreviewRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setPageLoading(true)
@@ -157,6 +169,44 @@ export function ThemesPage() {
   )
   const selectedMotif = loadingConfig?.catalogue.find((motif) => motif.id === iconId)
 
+  useEffect(() => {
+    const preview = motifPreviewRef.current
+    const renderer = window.GtLoadingMotifs
+    if (!preview || !renderer) return
+
+    preview.replaceChildren()
+    if (mode === 'lock' && iconId) {
+      const node = renderer.buildNode(iconId, 'od-loading-motif--lg')
+      node.setAttribute('aria-label', selectedMotif?.name || iconId)
+      node.setAttribute('role', 'img')
+      preview.append(node)
+      return
+    }
+    if (mode !== 'rotate' || !renderer.CATALOGUE?.length) return
+
+    for (const motifId of renderer.CATALOGUE) {
+      const motif = loadingConfig?.catalogue.find((row) => row.id === motifId)
+      const node = renderer.buildNode(
+        motifId,
+        'od-loading-motif--sm od-loading-motif--preview',
+      )
+      node.setAttribute('tabindex', '0')
+      node.setAttribute('title', motif?.name || motifId)
+      node.setAttribute('aria-label', motif?.name || motifId)
+      node.setAttribute('role', 'img')
+      node.removeAttribute('aria-hidden')
+      preview.append(node)
+    }
+
+    const catalogueSize = loadingConfig?.catalogue.length || 0
+    if (catalogueSize > renderer.CATALOGUE.length) {
+      const note = document.createElement('p')
+      note.className = 'od-themes-motif-note'
+      note.textContent = `Rotating across ${catalogueSize} motifs — one per system, plus these six generic ones.`
+      preview.append(note)
+    }
+  }, [iconId, loadingConfig, mode, selectedMotif?.name])
+
   return (
     <Page
       title="Themes"
@@ -193,7 +243,10 @@ export function ThemesPage() {
           >
             <div>
               <h2 id="loading-motif-title">Loading motif</h2>
-              <p>Choose a rotating catalogue or lock loading indicators to one motif.</p>
+              <p>
+                Animated motifs appear on Auto Scan and other loading surfaces. Rotate picks a
+                random motif per session; lock pins one for everyone.
+              </p>
             </div>
             <fieldset className="od-themes-mode">
               <legend>Loading behavior</legend>
@@ -248,6 +301,12 @@ export function ThemesPage() {
                 {selectedMotif ? <p>{selectedMotif.description}</p> : null}
               </div>
             ) : null}
+            <div
+              ref={motifPreviewRef}
+              className="od-themes-motif-preview"
+              role="group"
+              aria-label={mode === 'lock' ? 'Selected loading motif preview' : 'Rotating motif previews'}
+            />
             <div className="od-admin-actions-row">
               <Button disabled={busy || (mode === 'lock' && !iconId)} onClick={saveLoadingIcon}>
                 Save loading motif

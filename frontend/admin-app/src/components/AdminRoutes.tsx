@@ -8,7 +8,7 @@ import { IntegrationsPage } from '../pages/IntegrationsPage'
 import { WhitelistPage } from '../pages/WhitelistPage'
 import { InvitesPage } from '../pages/InvitesPage'
 import { LibrariesPage } from '../pages/LibrariesPage'
-import { NativeLibrariesPage } from '../pages/NativeLibrariesPage'
+import { NativeLibrariesPage, NativeLibraryAddPage } from '../pages/NativeLibrariesPage'
 import { OpsPage } from '../pages/OpsPage'
 import { OwnershipDiagnosticsPage } from '../pages/OwnershipDiagnosticsPage'
 import { PluginsPage } from '../pages/PluginsPage'
@@ -28,11 +28,11 @@ import { NewsletterPage } from '../pages/NewsletterPage'
 import { OidcSettingsPage } from '../pages/OidcSettingsPage'
 import { DownloadsPage } from '../pages/DownloadsPage'
 import { StatisticsPage } from '../pages/StatisticsPage'
-import { ScansPage } from '../pages/ScansPage'
 import { ScanUnmatchedPage } from '../pages/ScanUnmatchedPage'
 import { ManualIdentifyPage } from '../pages/ManualIdentifyPage'
 import { EditGameImagesPage } from '../pages/EditGameImagesPage'
 import { ScanFiltersPage } from '../pages/ScanFiltersPage'
+import { ScansPage } from '../pages/ScansPage'
 import { ScanControlsPage } from '../pages/ScanControlsPage'
 import { DiscoverySectionsPage } from '../pages/DiscoverySectionsPage'
 import { SupportInboxPage } from '../pages/SupportInboxPage'
@@ -78,7 +78,7 @@ import { SETTINGS_CARDS, railDestinations } from './navConfig'
  *   /admin/announcements .... AnnouncementsPage
  *   /admin/integrations .... IntegrationsPage
  *   /libraries[/…], /admin/library[/…], /scan_management[/…], /admin/filters[/…]
- *                          ... LibrariesPage
+ *                          ... LibrariesPage (except the direct add form)
  *   /admin/detail_layout ......... DetailLayoutPage  (H-D.5 port 1)
  *   /admin/emulator_profiles ..... EmulatorsPage     (H-D.5 port 2)
  *   /admin/ai .................... AiAssistPage
@@ -178,8 +178,8 @@ export function AdminRoutes() {
       <Route path="/admin/ownership" element={<OwnershipDiagnosticsPage />} />
       <Route path="/admin/edit_filters" element={<ScanFiltersPage />} />
 
-      {/* "Libraries & scans" — the merged nav item (UX-C2). Every legacy path
-          the old resolver folded onto 'libraries' renders LibrariesPage. */}
+      {/* "Libraries & scans" — keep the direct add entry focused while the
+          remaining management paths share the consolidated library views. */}
       <Route path="/libraries" element={<NativeLibrariesPage />} />
       <Route path="/admin/library/add" element={<NativeLibraryAddPage />} />
       <Route path="/admin/library/edit/:libraryUuid" element={<LibraryEditorPage />} />
@@ -205,7 +205,10 @@ export function AdminRoutes() {
       <Route path="/admin/integrations/oidc" element={<OidcSettingsPage />} />
       <Route path="/admin/manage-downloads" element={<DownloadsPage />} />
       <Route path="/admin/statistics" element={<StatisticsPage />} />
-      <Route path="/admin/scan-jobs" element={<ScansPage />} />
+      <Route
+        path="/admin/scan-jobs"
+        element={<ScansPage />}
+      />
       <Route path="/admin/scan-controls" element={<ScanControlsPage />} />
       <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
       <Route path="/game_edit/:gameUuid" element={<ManualIdentifyPage />} />

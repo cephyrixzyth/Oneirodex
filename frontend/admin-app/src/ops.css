@@ -1243,3 +1243,25 @@ body.od-shell-host .od-admin-main:has(.od-dash),
   vertical-align: -0.2em;
   margin-right: 0.15rem;
 }
+
+/* The rail stylesheet also lives in the mounted theme library and can be older
+   than the admin app bundle after an in-place upgrade. Keep the drawer close
+   action hidden on desktop even when that shared stylesheet is stale. */
+.od-admin-shell .od-rail__close {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .od-admin-shell .od-rail__close {
+    display: inline-flex;
+  }
+
+  /* A mounted theme library can lag behind this bundle during an in-place
+     upgrade. The body owns the admin rail state, so make the mobile open state
+     win even when the shared theme's selector is stale. */
+  body.od-shell-host[data-rail='open'] .od-rail {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+}

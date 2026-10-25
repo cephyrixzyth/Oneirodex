@@ -85,6 +85,6 @@ test('requires confirmation before clearing a proposal and links approved matche
   const handoff = await screen.findByRole('link', { name: 'Continue identify' })
   expect(handoff).toHaveAttribute(
     'href',
-    '/add_game_manual?full_disk_path=%2Fstorage%2Fgames%2FExample+%26+More&igdb_id=123&library_uuid=lib-1',
+    '/add_game_manual?full_disk_path=%2Fstorage%2Fgames%2FExample+%26+More&igdb_id=123&name=Example+Game&library_uuid=lib-1',
   )
 })

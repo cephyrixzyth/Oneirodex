@@ -400,7 +400,7 @@ export const DupeGlance = memo(function DupeGlance({
                     </Button>
                     <a
                       className="od-btn"
-                      href={`/add_game_manual?full_disk_path=${encodeURIComponent(String(row.folder_path || ''))}&library_uuid=${encodeURIComponent(String(row.library_uuid || ''))}&platform_name=${encodeURIComponent(String(row.platform_name || ''))}&platform_id=${encodeURIComponent(String(row.platform_id || ''))}&from_unmatched=true`}
+                      href={`/add_game_manual?full_disk_path=${encodeURIComponent(String(row.folder_path || ''))}&library_uuid=${encodeURIComponent(String(row.library_uuid || ''))}&name=${encodeURIComponent(String(resolveSearchName(row) || folderBasename(row.folder_path) || ''))}&platform_name=${encodeURIComponent(String(row.platform_name || ''))}&platform_id=${encodeURIComponent(String(row.platform_id || ''))}&from_unmatched=true`}
                       title="Fix search — opens manual add / IGDB search (uses Search name when set)"
                     >
                       Fix search

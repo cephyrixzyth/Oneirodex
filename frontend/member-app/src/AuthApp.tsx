@@ -19,6 +19,7 @@ interface RuntimeBootstrap {
 }
 
 type Page = 'login' | 'register' | 'reset-request' | 'reset-confirm' | 'confirm-email' | 'setup'
+type ConfirmationState = 'loading' | 'confirmed' | 'already' | 'expired' | 'invalid' | 'not-found' | 'error'
 const navigateWindow = (url: string) => window.location.assign(url)
 
 function pageForPath(path: string): Page {
@@ -57,6 +58,7 @@ export function AuthApp({
   const token = tokenForPath(window.location.pathname)
   const params = new URLSearchParams(window.location.search)
   const passwordReset = params.get('password_reset') === '1'
+  const passwordResetRequested = params.get('password_reset_requested') === '1'
   const inviteToken = params.get('token') || undefined
   const [bootstrap, setBootstrap] = useState<RuntimeBootstrap | null>(null)
   const [bootError, setBootError] = useState('')
@@ -64,6 +66,7 @@ export function AuthApp({
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [registered, setRegistered] = useState<RegistrationResult | null>(null)
+  const [confirmationState, setConfirmationState] = useState<ConfirmationState>('loading')
 
   const load = () => {
     setBootError('')
@@ -78,13 +81,18 @@ export function AuthApp({
 
   useEffect(() => {
     if (page === 'login' && passwordReset) {
-      setNotice('Your password has been reset. Sign in with your new password.')
+      setNotice('Your password has been reset.')
+    } else if (page === 'login' && passwordResetRequested) {
+      setNotice('If that email is registered, password reset instructions were sent.')
     }
-  }, [page, passwordReset])
+  }, [page, passwordReset, passwordResetRequested])
 
   useEffect(() => {
     if (!bootstrap || page !== 'confirm-email') return
     const controller = new AbortController()
+    setConfirmationState('loading')
+    setError('')
+    setNotice('')
     void fetch(`/api/auth/confirm/${encodeURIComponent(token)}`, {
       credentials: 'same-origin',
       signal: controller.signal,
@@ -92,6 +100,7 @@ export function AuthApp({
       .then(async (response) => {
         if (!response.ok) throw await errorFromResponse(response, 'Confirm email')
         const result = (await response.json()) as { already_confirmed?: boolean }
+        setConfirmationState(result.already_confirmed ? 'already' : 'confirmed')
         setNotice(
           result.already_confirmed
             ? 'This email is already confirmed.'
@@ -99,8 +108,19 @@ export function AuthApp({
         )
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          setError(cause instanceof Error ? cause.message : 'Could not confirm this email.')
+        if (controller.signal.aborted) return
+        const message = cause instanceof Error ? cause.message : 'Could not confirm this email.'
+        const normalized = message.toLowerCase()
+        setConfirmationState(
+          normalized.includes('expired')
+            ? 'expired'
+            : normalized.includes('not found')
+              ? 'not-found'
+              : normalized.includes('invalid') || normalized.includes('not valid')
+                ? 'invalid'
+                : 'error',
+        )
+        setError(message)
       })
     return () => controller.abort()
   }, [bootstrap, page, token])
@@ -212,11 +232,12 @@ export function AuthApp({
           <h1 className="auth-pilot__title">Create your account</h1>
           <p className="auth-pilot__lede">
             {inviteToken
-              ? 'You were invited to join this Oneirodex library. Create your own account.'
+              ? "You were invited to join this Oneirodex library. Choose a username and password to create your own account — you will not share the inviter's login."
               : 'Registration requires a whitelisted email or a valid invite link.'}
           </p>
           <form
             className="auth-pilot__form"
+            noValidate
             onSubmit={(event) =>
               submit(event, async (data) => {
                 setRegistered(
@@ -267,28 +288,32 @@ export function AuthApp({
       )
     ) : page === 'reset-request' ? (
       <>
-        <h1 className="auth-pilot__title">Reset your password</h1>
+        <h1 className="auth-pilot__title">Reset password</h1>
         <p className="auth-pilot__lede">
-          Enter your account email. If it is registered, we’ll send reset instructions.
+          Enter your email and we will send a reset link if an account exists.
         </p>
         <form
           className="auth-pilot__form"
+          noValidate
           onSubmit={(event) =>
             submit(event, async (data) => {
-              const result = await requestPasswordReset(String(data.get('email') || ''))
-              setNotice(
-                result.message ||
-                  'If that email is registered, password reset instructions were sent.',
-              )
+              await requestPasswordReset(String(data.get('email') || ''))
+              navigate('/login?password_reset_requested=1')
             })
           }
         >
           <label className="auth-pilot__field">
             <span>Email</span>
-            <input autoComplete="email" name="email" type="email" required />
+            <input
+              autoComplete="email"
+              name="email"
+              placeholder="you@example.com"
+              type="email"
+              required
+            />
           </label>
           <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
-            {busy ? 'Sending…' : 'Send reset instructions'}
+            {busy ? 'Sending…' : 'Send reset link'}
           </Button>
         </form>
         <nav className="auth-pilot__links" aria-label="Account actions">
@@ -298,15 +323,21 @@ export function AuthApp({
     ) : page === 'reset-confirm' ? (
       <>
         <h1 className="auth-pilot__title">Choose a new password</h1>
+        <p className="auth-pilot__lede">Enter and confirm your new password to finish the reset.</p>
         <form
           className="auth-pilot__form"
+          noValidate
           onSubmit={(event) =>
             submit(event, async (data) => {
               const result = await resetPassword(token, {
                 password: String(data.get('password') || ''),
                 confirm_password: String(data.get('confirm_password') || ''),
               })
-              navigate(result.next_url || '/login?password_reset=1')
+              navigate(
+                result.next_url === '/login'
+                  ? '/login?password_reset=1'
+                  : result.next_url || '/login?password_reset=1',
+              )
             })
           }
         >
@@ -331,7 +362,7 @@ export function AuthApp({
             />
           </label>
           <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
-            {busy ? 'Saving…' : 'Save new password'}
+            {busy ? 'Saving…' : 'Reset password'}
           </Button>
         </form>
         <nav className="auth-pilot__links" aria-label="Account actions">
@@ -340,8 +371,36 @@ export function AuthApp({
       </>
     ) : (
       <>
-        <h1 className="auth-pilot__title">Confirm your email</h1>
-        <p className="auth-pilot__lede">We’re checking your confirmation link.</p>
+        <h1 className="auth-pilot__title">
+          {confirmationState === 'confirmed'
+            ? 'Account activated'
+            : confirmationState === 'already'
+              ? 'Already confirmed'
+              : confirmationState === 'expired'
+                ? 'Link expired'
+                : confirmationState === 'invalid'
+                  ? 'Invalid link'
+                  : confirmationState === 'not-found'
+                    ? 'Account not found'
+                    : confirmationState === 'error'
+                      ? 'Could not confirm this email'
+                      : 'Confirm your email'}
+        </h1>
+        <p className="auth-pilot__lede">
+          {confirmationState === 'confirmed'
+            ? 'Your email is confirmed. Sign in to open your household library.'
+            : confirmationState === 'already'
+              ? 'Your account is already activated. You can sign in and continue.'
+              : confirmationState === 'expired'
+                ? 'Request a new activation from an admin or try registering again with a fresh invite.'
+                : confirmationState === 'invalid'
+                  ? 'Check your email for the correct link, or sign in if your account is already active.'
+                  : confirmationState === 'not-found'
+                    ? 'The account for this confirmation link was not found.'
+                    : confirmationState === 'error'
+                      ? 'Please try again or return to sign in.'
+                      : 'We’re checking your confirmation link.'}
+        </p>
         <nav className="auth-pilot__links" aria-label="Account actions">
           <a href="/login">Back to sign in</a>
           <a href="/register">Create account</a>
