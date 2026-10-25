@@ -250,7 +250,7 @@ def test_auto_options_ignores_member_shell_catchall_for_non_page_paths():
     assert set(member_response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
 
 
-def test_auto_options_prefers_static_path_over_dynamic_sibling():
+def test_auto_options_combines_static_and_dynamic_sibling_methods():
     from fastapi import FastAPI
     from starlette.requests import Request
     from oneirodex.runtime_native.response_compat import flask_auto_options_response
@@ -279,7 +279,9 @@ def test_auto_options_prefers_static_path_over_dynamic_sibling():
     response = flask_auto_options_response({}, request, route_app=[static_app, dynamic_app])
 
     assert response is not None
-    assert set(response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+    assert set(response.headers['allow'].split(', ')) == {
+        'GET', 'HEAD', 'OPTIONS', 'POST', 'DELETE',
+    }
 
 
 def test_explicit_options_match_does_not_treat_mount_as_handler():

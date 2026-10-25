@@ -189,7 +189,13 @@ def _legacy_auto_options_methods(request, routing_app) -> list[str]:
 
 
 def _native_allowed_methods(request, *, route_app=None) -> list[str]:
-    """Collect methods from the most specific FastAPI path, then add defaults."""
+    """Collect methods from every matching FastAPI path, then add defaults.
+
+    Werkzeug includes methods from static and dynamic rules that both match a
+    path. Starlette also falls through from a static route that only partially
+    matches the method to a matching dynamic route, so its Allow header must
+    include both sets.
+    """
     from starlette.routing import Match
 
     apps = route_app or getattr(request, 'app', None)
@@ -198,13 +204,6 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
     method_candidates = []
     path_scope = dict(request.scope)
     path_scope['method'] = 'GET'
-
-    def specificity(route_path):
-        segments = [part for part in str(route_path or '').strip('/').split('/') if part]
-        literals = sum(not part.startswith('{') for part in segments)
-        parameters = len(segments) - literals
-        literal_length = sum(len(part) for part in segments if not part.startswith('{'))
-        return literals, -parameters, len(segments), literal_length
 
     def collect(routes, scope) -> None:
         for route in routes:
@@ -222,7 +221,7 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
                     continue
             route_methods = getattr(route, 'methods', ()) or ()
             if route_methods:
-                method_candidates.append((specificity(getattr(route, 'path', '')), route_methods))
+                method_candidates.append(route_methods)
             child_router = (
                 getattr(route, 'original_router', None)
                 or getattr(getattr(route, 'app', None), 'router', None)
@@ -234,11 +233,8 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
         router = getattr(app, 'router', None)
         collect(getattr(router, 'routes', ()), path_scope)
     methods = set()
-    if method_candidates:
-        most_specific = max(score for score, _methods in method_candidates)
-        for score, route_methods in method_candidates:
-            if score == most_specific:
-                methods.update(route_methods)
+    for route_methods in method_candidates:
+        methods.update(route_methods)
     if 'GET' in methods:
         methods.add('HEAD')
     if methods:
