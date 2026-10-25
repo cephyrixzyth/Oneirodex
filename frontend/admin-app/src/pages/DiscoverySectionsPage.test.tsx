@@ -72,6 +72,35 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
   })
 })
 
+test('pointer drag reorders shelves and persists the complete order', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  vi.mocked(postJson).mockResolvedValue({ ok: true })
+  render(<DiscoverySectionsPage />)
+
+  const source = await screen.findByRole('button', { name: 'Drag Libraries to reorder' })
+  const target = screen
+    .getByRole('list', { name: 'Discovery shelf order' })
+    .querySelectorAll('li')[1]
+  expect(target).toBeTruthy()
+  const dataTransfer = {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    setData: vi.fn(),
+    getData: vi.fn(() => '0'),
+  }
+  fireEvent.dragStart(source, { dataTransfer })
+  fireEvent.dragOver(target!, { dataTransfer })
+  fireEvent.drop(target!, { dataTransfer })
+
+  expect(await screen.findByText('Shelf order saved.')).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith('/admin/api/discovery_sections/order', {
+    sections: [
+      { id: 2, order: 0 },
+      { id: 1, order: 1 },
+    ],
+  })
+})
+
 test('manual search adds local results and UUID/order controls stay synchronized', async () => {
   vi.mocked(getJson)
     .mockResolvedValueOnce(state)

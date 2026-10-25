@@ -1,3 +1,4 @@
+import { useState, type DragEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { utcInput, useDiscoverySections } from './useDiscoverySections'
@@ -35,12 +36,27 @@ export function DiscoverySectionsPage() {
     search,
     saveShelf,
     move,
+    moveTo,
     remove,
     disabled,
     filterOptions,
     edit,
     API,
   } = useDiscoverySections()
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+
+  function finishDrop(to: number, event: DragEvent<HTMLLIElement>) {
+    event.preventDefault()
+    const rawSource = event.dataTransfer.getData('text/plain')
+    const source = dragIndex ?? (rawSource ? Number(rawSource) : -1)
+    if (!disabled && Number.isInteger(source) && source >= 0 && source < sections.length) {
+      moveTo(source, to)
+    }
+    setDragIndex(null)
+    setDropIndex(null)
+  }
+
   return (
     <Page
       title="Discovery sections"
@@ -68,9 +84,39 @@ export function DiscoverySectionsPage() {
         Built-in shelves can be reordered, hidden, scheduled and pinned; their selection cannot be
         edited or deleted.
       </p>
-      <ol className="od-admin-list" aria-label="Discovery shelf order">
+      <ol className="od-admin-list od-discovery-shelves" aria-label="Discovery shelf order">
         {sections.map((row, index) => (
-          <li key={row.id} className="od-admin-panel">
+          <li
+            key={row.id}
+            className={`od-admin-panel${dropIndex === index && dragIndex !== index ? ' is-drop-target' : ''}`}
+            onDragOver={(event) => {
+              if (dragIndex === null || disabled) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+              setDropIndex(index)
+            }}
+            onDrop={(event) => finishDrop(index, event)}
+          >
+            <Button
+              size="sm"
+              className="od-discovery-shelf__drag-handle"
+              draggable={!disabled}
+              disabled={disabled}
+              aria-label={`Drag ${row.name} to reorder`}
+              title="Drag to reorder; Move up and Move down also work with a keyboard."
+              onDragStart={(event) => {
+                setDragIndex(index)
+                setDropIndex(index)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', String(index))
+              }}
+              onDragEnd={() => {
+                setDragIndex(null)
+                setDropIndex(null)
+              }}
+            >
+              Drag
+            </Button>
             <h2 className="od-discovery-shelf-heading">{row.name}</h2>
             <p className="od-admin-hint">
               {row.section_type === 'custom'
