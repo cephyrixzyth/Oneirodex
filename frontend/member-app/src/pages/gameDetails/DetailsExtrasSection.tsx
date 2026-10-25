@@ -13,9 +13,11 @@ export function DetailsExtrasSection({
   setBusyVersionKey,
   setVersionActionStatus,
   handleVersionDownload,
+  canDownload = true,
 }: {
   game: DetailsGame
   extrasModel: ExtrasModel
+  canDownload?: boolean
 } & Pick<
   VersionActions,
   'busyVersionKey' | 'setBusyVersionKey' | 'setVersionActionStatus' | 'handleVersionDownload'
@@ -23,6 +25,11 @@ export function DetailsExtrasSection({
   return (
     <section className="od-details-page__section" id="extras">
       <h2>Extras &amp; DLC</h2>
+      {!canDownload ? (
+        <p className="od-details-page__muted" role="note">
+          Downloads and companion install actions are unavailable for child accounts.
+        </p>
+      ) : null}
       {extrasModel.loading ? (
         <p className="od-details-page__muted">Loading extras…</p>
       ) : extrasModel.rows.length === 0 ? (
@@ -60,7 +67,7 @@ export function DetailsExtrasSection({
                     ) : null}
                   </div>
                   <div className="od-details-page__version-actions">
-                    {row.download_url && !pathMissing ? (
+                    {canDownload && row.download_url && !pathMissing ? (
                       <Button
                         type="button"
                         disabled={Boolean(busyVersionKey)}
@@ -77,7 +84,8 @@ export function DetailsExtrasSection({
                           : 'Download'}
                       </Button>
                     ) : null}
-                    {seatCanUseCompanion() &&
+                    {canDownload &&
+                    seatCanUseCompanion() &&
                     game.client_connected &&
                     row.uuid &&
                     row.download_url &&

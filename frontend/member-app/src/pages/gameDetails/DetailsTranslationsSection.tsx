@@ -16,9 +16,11 @@ export function DetailsTranslationsSection({
   setBusyVersionKey,
   setVersionActionStatus,
   setRetryCount,
+  canDownload = true,
 }: {
   game: DetailsGame
   setRetryCount: (update: (n: number) => number) => void
+  canDownload?: boolean
 } & Pick<VersionActions, 'busyVersionKey' | 'setBusyVersionKey' | 'setVersionActionStatus'>) {
   const [catalogHits, setCatalogHits] = useState<CatalogHit[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
@@ -55,6 +57,11 @@ export function DetailsTranslationsSection({
         <Link to="/help#translations">Help → Translations</Link> guide or{' '}
         <code>docs/user/translation-patches.md</code>.
       </p>
+      {!canDownload ? (
+        <p className="od-details-page__muted" role="note">
+          Downloads and companion patch actions are unavailable for child accounts.
+        </p>
+      ) : null}
       {Array.isArray(game.translation_patches) && game.translation_patches.length > 0 ? (
         <ul className="od-details-page__versions">
           {game.translation_patches.map((patch: TranslationPatch) => {
@@ -62,6 +69,7 @@ export function DetailsTranslationsSection({
             const applyBusy = busyVersionKey === versionKey
             // TC-3: a thin seat gets the Guide link, never a queue button.
             const canApplyPatch =
+              canDownload &&
               seatCanUseCompanion() &&
               Boolean(game.client_connected) &&
               Boolean(game.rom_patch_apply_enabled)
@@ -77,13 +85,15 @@ export function DetailsTranslationsSection({
                     </span>
                   </div>
                   <div className="od-details-page__version-actions">
-                    <Button
-                      type="button"
-                      disabled={Boolean(busyVersionKey)}
-                      onClick={() => void downloadPatch(patch)}
-                    >
-                      {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
-                    </Button>
+                    {canDownload ? (
+                      <Button
+                        type="button"
+                        disabled={Boolean(busyVersionKey)}
+                        onClick={() => void downloadPatch(patch)}
+                      >
+                        {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
+                      </Button>
+                    ) : null}
                     {patch.source_url ? (
                       <a
                         className="od-btn"

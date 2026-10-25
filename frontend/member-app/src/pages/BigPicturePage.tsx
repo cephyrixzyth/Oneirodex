@@ -83,6 +83,7 @@ function focusGameFromQuery() {
 export function BigPicturePage() {
   const navigate = useNavigate()
   const shellConfig = useShellConfig()
+  const isChildAccount = String(shellConfig.role || '').toLowerCase() === 'child'
   const perPage = Number(shellConfig.perPage) || DEFAULT_PER_PAGE
   // Latched once per render rather than per press: the seat cannot change
   // while this page is mounted.
@@ -103,6 +104,7 @@ export function BigPicturePage() {
   }>({ games: [], index: 0, select: () => {}, download: () => {} })
 
   const requestDownload = async (uuid: string) => {
+    if (isChildAccount) return
     try {
       await initiateGameDownload(uuid)
       navigate('/downloads')
@@ -277,7 +279,7 @@ export function BigPicturePage() {
       case 'd':
       case 'D':
         event.preventDefault()
-        if (!refuseOnThinSeat()) {
+        if (!isChildAccount && !refuseOnThinSeat()) {
           void requestDownload(list[index].uuid)
         }
         break
@@ -310,7 +312,7 @@ export function BigPicturePage() {
           <h1 className="od-bp__title">Big Picture</h1>
           <p className="od-bp__hint">
             {shellConfig.role === 'child'
-              ? 'Kid mode — library already filtered by parental ACL · ← → browse · Esc exit · Y friends'
+              ? 'Kid mode — library filtered by parental ACL · downloads and companion install unavailable · ← → browse · Esc exit · Y friends'
               : '← → browse · Enter / A open · D download · B attract · Y friends · Esc blur · Home first'}
           </p>
         </div>
@@ -363,7 +365,7 @@ export function BigPicturePage() {
                 <Link className="od-bp__btn od-bp__btn--primary" to={gameDetailsUrl(selected.uuid)}>
                   Open
                 </Link>
-                {thinSeat ? null : (
+                {thinSeat || isChildAccount ? null : (
                   <button
                     type="button"
                     className="od-bp__btn"
@@ -373,6 +375,7 @@ export function BigPicturePage() {
                   </button>
                 )}
                 {!thinSeat &&
+                !isChildAccount &&
                 selected.client_connected &&
                 selected.lifecycle_state === 'downloaded' ? (
                   <button

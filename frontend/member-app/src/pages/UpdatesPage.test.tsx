@@ -113,6 +113,21 @@ test('inbox shows apply action and queues companion update pack', async () => {
   ).toBeInTheDocument()
 })
 
+test('child account inbox explains that update downloads and companion apply are unavailable', async () => {
+  render(
+    <MemoryRouter>
+      <ShellHarness shell={{ role: 'child' }}>
+        <UpdatesPage />
+      </ShellHarness>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('Behind Game')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Download update/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Apply with companion/i })).not.toBeInTheDocument()
+  expect(screen.getByRole('note')).toHaveTextContent(/downloads unavailable for child accounts/i)
+})
+
 test('manual Refresh shows brief feedback without wiping inbox', async () => {
   const user = userEvent.setup()
   let resolveInbox: ((value: any) => void) | undefined

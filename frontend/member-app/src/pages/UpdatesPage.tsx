@@ -5,7 +5,6 @@ import { initiateGameDownload } from '../api/downloads'
 import { ContextBar } from '../chrome/ContextBar'
 import { RailIcon } from '../chrome/railIcons'
 import { queueClientCommand } from '../api/clientCommands'
-import { ThinSeatNote } from '../components/ThinSeatNote'
 import { seatCanUseCompanion } from '../utils/seatMode'
 import {
   addWantedUpdate,
@@ -27,6 +26,7 @@ export function UpdatesPage() {
   const navigate = useNavigate()
   const shellConfig = useShellConfig()
   const useNewChrome = Boolean(shellConfig.enableNewChrome)
+  const canDownload = String(shellConfig.role || '').toLowerCase() !== 'child'
   const [items, setItems] = useState<any>(null)
   const [error, setError] = useState<any>(null)
   const [retryCount, setRetryCount] = useState(0)
@@ -386,7 +386,7 @@ export function UpdatesPage() {
                       ) : null}
                     </div>
                     <div className="od-updates__inbox-actions">
-                      {pack?.download_url && seatCanUseCompanion() ? (
+                      {pack?.download_url && canDownload && seatCanUseCompanion() ? (
                         <Button
                           type="button"
                           disabled={busyKey === applyKey}
@@ -415,7 +415,7 @@ export function UpdatesPage() {
                           Download {pack.kind}
                         </Button>
                       ) : null}
-                      {pack && game.client_connected && seatCanUseCompanion() ? (
+                      {pack && canDownload && game.client_connected && seatCanUseCompanion() ? (
                         <Button
                           type="button"
                           disabled={busyKey === applyKey}
@@ -425,6 +425,11 @@ export function UpdatesPage() {
                         >
                           {busyKey === applyKey ? 'Queuing…' : 'Apply with companion'}
                         </Button>
+                      ) : null}
+                      {pack?.download_url && !canDownload ? (
+                        <span className="od-updates__status" role="note">
+                          Downloads unavailable for child accounts
+                        </span>
                       ) : null}
                       <Link className="od-btn" to={`/game_details/${game.uuid}`}>
                         Details

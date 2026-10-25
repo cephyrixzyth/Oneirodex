@@ -91,7 +91,7 @@ Consequences worth knowing:
 | `admin` | Everything, including the admin shell |
 | `librarian` | Library and scan management |
 | `user` | Browse, download, play, chat |
-| `child` | Browse, play, and chat within the parental / library ACL. No admin, no library writes, no Acquire search, no companion download/install |
+| `child` | Browse, play, and chat within the parental / library ACL. No admin, library writes, server-file downloads, Acquire search, or companion download/install |
 
 Library allowlists and content filters are per-user, under **Admin → Users**.
 

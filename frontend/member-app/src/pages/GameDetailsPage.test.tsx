@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { GameDetailsPage } from './GameDetailsPage'
 import { stubFetch } from '../testJsonResponse'
 import { showToast } from '../utils/toast'
+import { ShellConfigProvider } from '@oneirodex/ui'
 
 vi.mock('../utils/toast', () => ({
   showToast: vi.fn(),
@@ -78,14 +79,16 @@ beforeEach(() => {
   })
 })
 
-function renderDetails(uuid = detailsPayload.uuid) {
+function renderDetails(uuid = detailsPayload.uuid, role = 'user') {
   return render(
-    <MemoryRouter initialEntries={[`/game_details/${uuid}`]}>
-      <Routes>
-        <Route path="/game_details/:gameUuid" element={<GameDetailsPage />} />
-        <Route path="/library" element={<div>Library</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <ShellConfigProvider value={{ role }}>
+      <MemoryRouter initialEntries={[`/game_details/${uuid}`]}>
+        <Routes>
+          <Route path="/game_details/:gameUuid" element={<GameDetailsPage />} />
+          <Route path="/library" element={<div>Library</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ShellConfigProvider>,
   )
 }
 
@@ -101,6 +104,54 @@ test('loads game details into SPA page with action bar', async () => {
   await waitFor(() => {
     expect(global.fetch).toHaveBeenCalled()
   })
+})
+
+test('child account details do not offer direct download or companion install actions', async () => {
+  stubFetch((url: any) => {
+    if (String(url).includes('/details')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ...detailsPayload,
+            show_translations_block: true,
+            translation_patches: [{ uuid: 'patch-1', label: 'English patch' }],
+            rom_patch_apply_enabled: true,
+          }),
+      })
+    }
+    if (String(url).includes('/versions')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            versions: [
+              {
+                kind: 'base',
+                uuid: detailsPayload.uuid,
+                label: 'Base game',
+                download_url: '/base',
+              },
+              { kind: 'update', uuid: 'update-1', label: 'Update 1', download_url: '/update' },
+              { kind: 'extra', uuid: 'extra-1', label: 'Artbook', download_url: '/extra' },
+            ],
+          }),
+      })
+    }
+    if (String(url).includes('/cheats')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ cheats: [] }) })
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
+  })
+  renderDetails(detailsPayload.uuid, 'child')
+
+  expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Download$/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Download patch$/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Download update$/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Apply with companion$/i })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /^Install$/i })).not.toBeInTheDocument()
+  expect(screen.getAllByText(/unavailable for child accounts/i).length).toBeGreaterThan(0)
 })
 
 test('shows Cheats panel only when cheat_surface is retroarch', async () => {

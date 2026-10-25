@@ -22,10 +22,12 @@ export function DetailsVersionsSection({
   cleanupBusy,
   handleCleanupOrphans,
   handleVersionDownload,
+  canDownload = true,
 }: {
   game: DetailsGame
   baseAndUpdates: VersionRow[]
   hasMissingVersions: boolean
+  canDownload?: boolean
 } & VersionActions) {
   return (
     <section className="od-details-page__section" id="updates">
@@ -52,17 +54,27 @@ export function DetailsVersionsSection({
           {versionActionStatus}
         </p>
       ) : null}
-      {!seatCanUseCompanion() ? <ThinSeatNote what="per-update download and apply" /> : null}
+      {!canDownload ? (
+        <p className="od-details-page__muted" role="note">
+          Downloads and companion install actions are unavailable for child accounts.
+        </p>
+      ) : !seatCanUseCompanion() ? (
+        <ThinSeatNote what="per-update download and apply" />
+      ) : null}
       <ul className="od-details-page__versions">
         {baseAndUpdates.map((row) => {
           const versionKey = `${row.kind}:${row.uuid}`
           const downloadKey = `download:${row.kind}:${row.uuid || 'base'}`
           const companionSeat = seatCanUseCompanion()
-          const canDownload = isVersionDownloadable(row) && companionSeat
+          const rowCanDownload = canDownload && isVersionDownloadable(row) && companionSeat
           const pathMissing = isVersionPathMissing(row)
           const sizeLabel = formatVersionSize(row.size)
           const canApply =
-            companionSeat && Boolean(game.client_connected) && row.kind === 'update' && canDownload
+            canDownload &&
+            companionSeat &&
+            Boolean(game.client_connected) &&
+            row.kind === 'update' &&
+            rowCanDownload
           const applyBusy = busyVersionKey === versionKey
           const downloadBusy = busyVersionKey === downloadKey
           return (
@@ -96,7 +108,7 @@ export function DetailsVersionsSection({
                     about versions. Per-update download stays, because
                     that is the one thing the action bar genuinely cannot
                     express: "I have the game, I only need patch 1.03". */}
-                  {canDownload && row.kind === 'update' ? (
+                  {rowCanDownload && row.kind === 'update' ? (
                     <Button
                       type="button"
                       disabled={Boolean(busyVersionKey)}

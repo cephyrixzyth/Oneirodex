@@ -77,6 +77,22 @@ test('shows loading then renders tiles and hero for the first game', async () =>
   expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
 })
 
+test('child Big Picture explains download restrictions and hides download/install controls', async () => {
+  vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({ games: GAMES })
+
+  renderPage(
+    <ShellHarness shell={{ role: 'child' }}>
+      <BigPicturePage />
+    </ShellHarness>,
+  )
+
+  expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent('Alpha Game')
+  expect(screen.getByText(/downloads and companion install unavailable/i)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument()
+  expect(downloadsApi.initiateGameDownload).not.toHaveBeenCalled()
+})
+
 test('arrow keys move the selection and update the hero', async () => {
   const user = userEvent.setup()
   vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({ games: GAMES })

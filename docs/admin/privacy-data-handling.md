@@ -82,6 +82,7 @@ Normal browser account flows and public invite redemption remain available.
 `child` is not a cosmetic label. On top of parental library allowlists:
 
 - No `admin`, `write:library`, or `write:download` — on **session cookies and Bearer tokens**
+- Server-file download initiation (base games, updates, extras, and translation patches) is denied for child accounts
 - Cannot mint those scopes (including the Desktop companion preset)
 - Existing Bearer-token scopes are checked against the current account role when companion commands are delivered; changing a member to `child` stops lifecycle command delivery even if an older token remains active
 - `GET /api/acquire/search` returns 403
