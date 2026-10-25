@@ -312,7 +312,7 @@ export function BigPicturePage() {
           <h1 className="od-bp__title">Big Picture</h1>
           <p className="od-bp__hint">
             {shellConfig.role === 'child'
-              ? 'Kid mode — library filtered by parental ACL · downloads and companion install unavailable · ← → browse · Esc exit · Y friends'
+              ? 'Kid mode · ← → browse · Esc exit · Y friends'
               : '← → browse · Enter / A open · D download · B attract · Y friends · Esc blur · Home first'}
           </p>
         </div>
