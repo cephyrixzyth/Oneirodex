@@ -16,6 +16,14 @@ from oneirodex.runtime_native.library_tools_mutations import (
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
+def test_game_path_readability_accepts_a_regular_file(tmp_path):
+    target = tmp_path / 'game.rom'
+    target.write_bytes(b'rom')
+
+    assert LibraryToolsMutationData().game_path_readable(str(target)) is True
+    assert LibraryToolsMutationData().game_path_readable(str(tmp_path / 'missing.rom')) is False
+
+
 def test_native_library_data_methods_use_scoped_session_without_app_context(monkeypatch):
     import oneirodex
     from oneirodex.models import Game, Library
@@ -165,9 +173,9 @@ class FakeData:
         self.calls.append(('write_proposals', rows))
         return [{'path': row['path'], 'ok': True} for row in rows]
 
-    def directory_readable(self, path):
-        self.calls.append(('directory_readable', path))
-        return path == '/safe/NewFolder'
+    def game_path_readable(self, path):
+        self.calls.append(('game_path_readable', path))
+        return path in {'/safe/NewFolder', '/safe/NewFile.rom'}
 
     def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
         self.calls.append(('unsafe_link_path', path, reason, actor_name, actor_id))
@@ -321,7 +329,13 @@ def test_link_existing_game_checks_path_and_preserves_response(runtime):
     assert ok.status_code == 200
     assert ok.json()['removed_from_unmatched'] is True
     assert ok.json()['library_uuid'] == 'lib1'
+    file_ok = request(app, '/api/library_tools/link_existing_game', cookie=cookies['admin'],
+                      json={'game_uuid': 'g1', 'full_disk_path': '/safe/NewFile.rom',
+                            'library_uuid': 'lib1'})
+    assert file_ok.status_code == 200
+    assert file_ok.json()['full_disk_path'] == '/safe/NewFile.rom'
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+    assert ('link_existing_game', 'g1', '/safe/NewFile.rom', 'admin') in data.calls
 
 
 def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime):
@@ -346,6 +360,10 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
             'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
             'library_uuid': 'lib1', 'from_unmatched': 'false', 'csrf_token': csrf,
         }, follow_redirects=False)
+        accepted_file = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFile.rom',
+            'library_uuid': 'lib1', 'from_unmatched': 'true', 'csrf_token': csrf,
+        }, follow_redirects=False)
         rejected_path = client.post('/link_existing_game', data={
             'game_uuid': 'g1', 'full_disk_path': '/outside/New Folder',
             'from_unmatched': 'true', 'csrf_token': csrf,
@@ -358,11 +376,14 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
     assert accepted.headers['location'] == '/scan_management?active_tab=unmatched'
     assert accepted_from_identify.status_code == 302
     assert accepted_from_identify.headers['location'] == '/scan_management?active_tab=unmatched'
+    assert accepted_file.status_code == 302
+    assert accepted_file.headers['location'] == '/scan_management?active_tab=unmatched'
     assert rejected_path.status_code == 302
     assert rejected_path.headers['location'] == (
         '/add_game_manual?full_disk_path=/outside/New+Folder&from_unmatched=true'
     )
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+    assert ('link_existing_game', 'g1', '/safe/NewFile.rom', 'admin') in data.calls
     assert ('unsafe_link_path', '/outside/New Folder', 'outside allowed roots', 'admin', 7) in data.calls
 
 

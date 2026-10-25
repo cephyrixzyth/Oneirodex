@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 _SCHEMAS = {
@@ -309,17 +310,17 @@ async def _catalog(request, app, data, auth, *, game_uuid, **_):
     if denied:
         return denied
     sources = data.catalog_sources()
-    source = (request.query_params.get('source') or '').strip().lower()
+    source = (first_query_value(request.query_params, 'source') or '').strip().lower()
     if source not in sources:
         return _error(400, 'bad_request', 'Unknown catalogue source', sources=sources)
     try:
         pack = data.load_mods(app, game_uuid)
         try:
-            limit = int(request.query_params.get('limit')) if request.query_params.get('limit') is not None else None
+            limit = int(first_query_value(request.query_params, 'limit')) if first_query_value(request.query_params, 'limit') is not None else None
         except (TypeError, ValueError):
             limit = None
         result = data.catalog_search(
-            app, source, game.name or '', (request.query_params.get('q') or '').strip(),
+            app, source, game.name or '', (first_query_value(request.query_params, 'q') or '').strip(),
             limit, pack['mods'],
         )
     except Exception:

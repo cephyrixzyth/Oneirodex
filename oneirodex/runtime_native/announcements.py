@@ -13,6 +13,7 @@ from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AnnouncementData:
@@ -74,7 +75,7 @@ def create_announcements_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
                 include_drafts = (
-                    request.query_params.get('include_drafts') == '1'
+                    first_query_value(request.query_params, 'include_drafts') == '1'
                     and auth.has_scope('admin')
                 )
                 rows = data.list(include_drafts=include_drafts)

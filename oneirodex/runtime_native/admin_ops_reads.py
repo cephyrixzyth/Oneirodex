@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
+from .query_compat import first_query_value
 from .request_auth import request_auth_context
 
 
@@ -115,7 +116,7 @@ def create_admin_ops_reads_router(
     flask_app, *, find_user, find_token, commit_token_touch,
     load_user_id=None, login_manager=None, data_access=None, database_scope=None,
 ):
-    from .acquire_status import _login_redirect
+    from .oidc_status import _login_redirect
 
     router = APIRouter()
     data = data_access or AdminOpsReadData()
@@ -187,10 +188,13 @@ def create_admin_ops_reads_router(
                     )
                     try:
                         if handler == 'logs':
-                            limit = _bounded_limit(request.query_params.get('limit'), 50, 200)
+                            limit = _bounded_limit(
+                                first_query_value(request.query_params, 'limit'), 50, 200,
+                            )
                             payload = data.logs(limit)
                         elif handler == 'devices':
-                            limit = _bounded_limit(request.query_params.get('limit'), 200, 1000)
+                            limit_value = first_query_value(request.query_params, 'limit')
+                            limit = _bounded_device_limit(limit_value)
                             from oneirodex.utils.api_contract import api_ok_payload
 
                             payload = api_ok_payload(data.devices(limit, flask_app))
@@ -269,24 +273,41 @@ def create_admin_ops_reads_router(
                             payload = data.library_health(flask_app)
                         if payload is not None:
                             response = JSONResponse(payload)
-                    except Exception:  # noqa: BLE001 — ops panels must fail safely
+                    except Exception as exc:  # noqa: BLE001 — ops panels must fail safely
                         if handler == 'clear_logs':
                             data.rollback()
                         from oneirodex.utils.api_contract import api_error_payload
 
-                        message = {
-                            'logs': 'Recent events are unavailable',
-                            'system': 'System snapshot is unavailable',
-                            'devices': 'Device list is unavailable',
-                            'summary': 'Ops summary is unavailable',
-                            'library_health': 'Library health is unavailable',
-                            'image_refresh_progress': 'Image refresh progress is unavailable',
-                            'library_delete_progress': 'Library deletion progress is unavailable',
-                            'library_deletion_sse': 'Library deletion progress is unavailable',
-                            'clear_logs': 'System logs could not be cleared',
-                        }[handler]
-                        body, status = api_error_payload(message, code='unavailable')
-                        response = JSONResponse(body, status_code=status)
+                        if handler == 'clear_logs':
+                            from oneirodex.utils.event_logging import log_system_event
+
+                            try:
+                                log_system_event(
+                                    f'Failed to clear system logs: {str(exc)}',
+                                    event_type='admin_action',
+                                    event_level='error',
+                                    audit_user=auth.user.id,
+                                )
+                            except Exception:  # noqa: BLE001 — retain the operation failure response
+                                pass
+                            body, status = api_error_payload(
+                                'Internal server error', code='internal',
+                            )
+                            response = JSONResponse(body, status_code=status)
+                        else:
+                            message = {
+                                'logs': 'Recent events are unavailable',
+                                'system': 'System snapshot is unavailable',
+                                'devices': 'Device list is unavailable',
+                                'summary': 'Ops summary is unavailable',
+                                'library_health': 'Library health is unavailable',
+                                'image_refresh_progress': 'Image refresh progress is unavailable',
+                                'library_delete_progress': 'Library deletion progress is unavailable',
+                                'library_deletion_sse': 'Library deletion progress is unavailable',
+                                'clear_logs': 'System logs could not be cleared',
+                            }[handler]
+                            body, status = api_error_payload(message, code='unavailable')
+                            response = JSONResponse(body, status_code=status)
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -315,6 +336,17 @@ def _bounded_limit(value, default, maximum):
     except (TypeError, ValueError):
         parsed = default
     return max(1, min(parsed, maximum))
+
+
+def _bounded_device_limit(value):
+    """Preserve the legacy zero-as-default device limit while bounding reads."""
+    try:
+        parsed = int(value) if value is not None else 200
+    except (TypeError, ValueError):
+        parsed = 200
+    if parsed == 0:
+        parsed = 200
+    return max(1, min(parsed, 1000))
 
 
 def _error(message, code, status):

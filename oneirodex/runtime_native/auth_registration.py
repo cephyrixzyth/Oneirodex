@@ -13,12 +13,17 @@ from sqlalchemy.exc import IntegrityError
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 _REGISTRATION_ACK = 'If the details can be used to create an account, check your email for next steps.'
 
 
-def _registration_ack():
-    return {'requested': True, 'message': _REGISTRATION_ACK, 'next_url': '/login'}
+def _registration_ack(*, account_created=None, confirmation_sent=False):
+    result = {'requested': True, 'message': _REGISTRATION_ACK, 'next_url': '/login'}
+    if account_created is not None:
+        result['_account_created'] = bool(account_created)
+        result['_confirmation_sent'] = bool(confirmation_sent)
+    return result
 
 
 class AuthRegistrationData:
@@ -48,15 +53,15 @@ class AuthRegistrationData:
         if db.session.execute(
             select(User).where(func.lower(User.email) == email)
         ).scalar_one_or_none():
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
         if invite is None and db.session.execute(
             select(Whitelist).where(func.lower(Whitelist.email) == email)
         ).scalar_one_or_none() is None:
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
         if db.session.execute(
             select(User).where(func.lower(User.name) == payload['username'].lower())
         ).scalars().first() is not None:
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
 
         now = datetime.now(timezone.utc)
         user_uuid = str(uuid4())
@@ -95,7 +100,7 @@ class AuthRegistrationData:
                 'Registration failed because a unique account value was claimed concurrently.',
                 event_type='registration', event_level='warning', audit_user='system',
             )
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
 
         log_system_event(
             f'New user registered: {user.name}',
@@ -103,11 +108,11 @@ class AuthRegistrationData:
         )
         origin = _trusted_public_origin(request, config)
         confirm_url = f'{origin}/confirm/{verification_token}'
-        send_email_quiet(
+        confirmation_sent = send_email_quiet(
             user.email, 'Please confirm your email', _registration_confirmation_email(confirm_url),
             preflight=True, audit_user='system',
         )
-        return _registration_ack(), None
+        return _registration_ack(account_created=True, confirmation_sent=confirmation_sent), None
 
 
 def create_auth_registration_router(
@@ -140,7 +145,7 @@ def create_auth_registration_router(
                     load_user_id=load_user_id, login_manager=login_manager,
                     allow_bearer=False,
                 )
-            invite_token = request.query_params.get('token')
+            invite_token = first_query_value(request.query_params, 'token')
             if response is None and auth.user is not None:
                 if invite_token:
                     for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
@@ -171,7 +176,11 @@ def create_auth_registration_router(
                             code, message, status, detail = failure
                             response = _error(message, code, status, detail=detail)
                         else:
-                            response = _ok(result, status=202)
+                            public_result = {
+                                key: value for key, value in result.items()
+                                if not key.startswith('_')
+                            }
+                            response = _ok(public_result, status=202)
             if auth is not None and auth.remember_action:
                 from oneirodex.runtime_native.auth_login import _write_remember_cookie
 

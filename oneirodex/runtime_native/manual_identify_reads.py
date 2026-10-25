@@ -11,6 +11,10 @@ from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
 
 
+def _platform_label(platform: Any) -> str:
+    return str(getattr(platform, 'value', '') or '')
+
+
 class ManualIdentifyReadData:
     def options(self):
         from sqlalchemy import select
@@ -18,6 +22,9 @@ class ManualIdentifyReadData:
         from oneirodex.models import (
             Category, GameMode, Genre, Library, Platform, PlayerPerspective,
             Status, Theme,
+        )
+        from oneirodex.utils.rom_archive_types import (
+            ARCHIVE_EXTENSIONS, GZIP_EXTENSIONS, ROM_EXTENSIONS,
         )
 
         taxonomies = {
@@ -27,7 +34,7 @@ class ManualIdentifyReadData:
         return {
             'libraries': [
                 {'uuid': row.uuid, 'name': row.name,
-                 'platform_name': row.platform.name if row.platform else ''}
+                 'platform_name': _platform_label(row.platform)}
                 for row in db.session.execute(select(Library).order_by(Library.name)).scalars().all()
             ],
             'taxonomies': {
@@ -37,6 +44,7 @@ class ManualIdentifyReadData:
             },
             'categories': [{'value': value.name, 'label': value.value} for value in Category],
             'statuses': [{'value': value.name, 'label': value.value} for value in Status],
+            'file_extensions': sorted(ROM_EXTENSIONS | ARCHIVE_EXTENSIONS | GZIP_EXTENSIONS),
         }
 
     def game_state(self, game_uuid: str):

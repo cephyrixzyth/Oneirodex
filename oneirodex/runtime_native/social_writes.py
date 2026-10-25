@@ -41,7 +41,7 @@ class SocialWriteData:
         if not target:
             return opaque, 200, None
         if target.id == user.id:
-            return None, 400, ('bad_request', 'Cannot friend yourself')
+            return None, 400, (400, 'bad_request', 'Cannot friend yourself')
         existing = db.session.execute(select(UserFriendship).where(or_(
             (UserFriendship.user_id == user.id) & (UserFriendship.friend_user_id == target.id),
             (UserFriendship.user_id == target.id) & (UserFriendship.friend_user_id == user.id),

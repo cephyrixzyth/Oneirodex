@@ -534,13 +534,19 @@ class GameVrProfile(db.Model):
     game = db.relationship('Game', backref=db.backref('vr_profiles', lazy='selectin', cascade='all, delete-orphan'))
 
     def to_dict(self) -> dict:
+        updated_at = self.updated_at
+        if updated_at and updated_at.tzinfo is not None:
+            # The v1.1.8 Flask contract emits UTC timestamps without an offset.
+            # Current DB drivers may return an aware datetime even for this
+            # timezone-naive column, so normalize the instant before serializing.
+            updated_at = updated_at.astimezone(timezone.utc).replace(tzinfo=None)
         return {
             'kind': self.kind,
             'runtime': self.runtime,
             'profile_url': self.profile_url,
             'notes': self.notes or '',
             'source': self.source or 'librarian',
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'updated_at': updated_at.isoformat() if updated_at else None,
         }
 
 

@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class OwnershipProviderData:
@@ -198,8 +199,8 @@ def create_ownership_provider_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                raw = request.query_params.get('after_id', '0')
-                status = request.query_params.get('status') or None
+                raw = first_query_value(request.query_params, 'after_id', '0')
+                status = first_query_value(request.query_params, 'status') or None
                 if (
                     not raw.isascii() or not raw.isdigit() or len(raw) > 10
                     or int(raw) > 2147483647

@@ -5,6 +5,7 @@ all database and filesystem work behind ``EmulatorMutationData``.
 """
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Any, Callable
@@ -15,6 +16,7 @@ from starlette.responses import JSONResponse, Response
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class EmulatorMutationData:
@@ -291,7 +293,7 @@ def create_emulator_mutations_router(
                             form, response = await _bounded_form(request, flask_app.config)
                             if form is not None:
                                 try:
-                                    upload = form.get('file')
+                                    upload = first_form_upload(form, 'file')
                                     if upload is None:
                                         response = _error(400, 'bad_request', 'Choose a firmware file to upload.')
                                     else:
@@ -430,7 +432,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                 if error is not None:
                     return error
                 try:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     if upload is not None and getattr(upload, 'filename', '').strip():
                         try:
                             payload = await upload.read()
@@ -469,10 +471,10 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
             if error is not None:
                 return error
             try:
-                upload = form.get('file') or form.get('save')
+                upload = first_form_upload(form, 'file') or first_form_upload(form, 'save')
                 if upload is None:
                     return _error(400, 'bad_request', 'multipart file field "file" is required')
-                slot = (str(form.get('slot') or request.query_params.get('slot') or 'slot1')).strip()
+                slot = (str(first_form_value(form, 'slot') or first_query_value(request.query_params, 'slot') or 'slot1')).strip()
                 try:
                     payload = await upload.read()
                     row = data.store_save(user.id, game_uuid, slot, getattr(upload, 'filename', None), payload)

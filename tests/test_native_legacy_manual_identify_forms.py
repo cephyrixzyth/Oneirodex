@@ -19,11 +19,11 @@ class FakeManualIdentifyData:
 
     def create(self, app, body, actor, *, from_unmatched):
         self.calls.append(('create', body, from_unmatched))
-        return {'game_uuid': 'new-game', 'redirect_url': '/libraries'}
+        return {'game_uuid': 'new-game', 'redirect_url': '/library'}
 
     def update(self, app, game_uuid, body, actor):
         self.calls.append(('update', game_uuid, body))
-        return {'game_uuid': game_uuid, 'redirect_url': '/libraries'}
+        return {'game_uuid': game_uuid, 'redirect_url': '/library'}
 
 
 @pytest.fixture

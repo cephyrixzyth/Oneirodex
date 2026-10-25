@@ -7,9 +7,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
-from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
-from .oidc_status import _set_session_cookie
+from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
 _PREFERENCE_FIELDS = (

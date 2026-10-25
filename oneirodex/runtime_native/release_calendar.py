@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from .request_auth import RequestAuthContext, request_auth_context
 from .response_compat import add_vary_header, flask_redirect_response
+from .query_compat import first_query_value
 
 
 def create_release_calendar_router(
@@ -52,9 +53,9 @@ def create_release_calendar_router(
                 )
 
             try:
-                days_ahead = int(request.query_params.get('days_ahead') or 60)
-                days_behind = int(request.query_params.get('days_behind') or 14)
-                limit = int(request.query_params.get('limit') or 40)
+                days_ahead = int(first_query_value(request.query_params, 'days_ahead') or 60)
+                days_behind = int(first_query_value(request.query_params, 'days_behind') or 14)
+                limit = int(first_query_value(request.query_params, 'limit') or 40)
             except (TypeError, ValueError):
                 from oneirodex.utils.api_contract import api_error_payload
 

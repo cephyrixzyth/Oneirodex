@@ -178,7 +178,17 @@ def create_auth_form_post_router(
                 _flash_errors(auth.session_data, failure[3])
                 return _finish(flask_redirect_response(_register_target(invite_token), status_code=302), flask_app, auth)
 
-            if result.get('confirmation_sent'):
+            if not result.get('_account_created'):
+                _flash(
+                    auth.session_data, 'message',
+                    result.get('message') or 'If the details can be used to create an account, check your email for next steps.',
+                )
+                return _finish(
+                    flask_redirect_response(_register_target(invite_token), status_code=302),
+                    flask_app, auth,
+                )
+
+            if result.get('_confirmation_sent'):
                 _flash(auth.session_data, 'success', 'A confirmation email has been sent via email.')
             else:
                 _flash(auth.session_data, 'warning', 'Your account was created, but the confirmation email could not be sent.')

@@ -1,6 +1,7 @@
 """Native FastAPI routes for the member UI locale preference."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import json
 import logging
 from contextlib import nullcontext
@@ -136,7 +137,7 @@ async def _locale_from_request(request: Request) -> str | None:
             form = await request.form()
         except (ValueError, RuntimeError):
             return None
-        return form.get('locale')
+        return first_form_value(form, 'locale')
 
     raw = await request.body()
     if content_type == 'application/json' or (

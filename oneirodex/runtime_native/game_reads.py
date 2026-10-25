@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -423,17 +424,25 @@ def create_game_reads_router(
                 try:
                     uuid.UUID(game_uuid, version=4)
                 except (TypeError, ValueError, AttributeError):
-                    response = flask_http_error_response(400, 'Invalid game UUID', head=request.method == 'HEAD')
+                    response = flask_http_error_response(
+                        400, 'Invalid game UUID', head=request.method == 'HEAD',
+                    )
             if response is None:
                 game = data.game(game_uuid)
                 if game is None:
-                    response = flask_http_error_response(404, 'Game not found', head=request.method == 'HEAD')
+                    response = flask_http_error_response(
+                        404, 'Game not found', head=request.method == 'HEAD',
+                    )
                 elif not data.can_access(auth.user, game):
-                    response = flask_http_error_response(403, head=request.method == 'HEAD')
+                    response = flask_http_error_response(
+                        403, head=request.method == 'HEAD',
+                    )
             if response is None:
                 allowed_bases = data.allowed_bases(flask_app)
                 if not allowed_bases:
-                    response = flask_http_error_response(500, 'Server configuration error', head=request.method == 'HEAD')
+                    response = flask_http_error_response(
+                        500, 'Server configuration error', head=request.method == 'HEAD',
+                    )
                 else:
                     try:
                         real_game = os.path.realpath(game.full_disk_path)
@@ -441,12 +450,16 @@ def create_game_reads_router(
                         real_game = game.full_disk_path
                     safe, _reason = data.safe_path(real_game, allowed_bases)
                     if not safe:
-                        response = flask_http_error_response(403, 'Access denied', head=request.method == 'HEAD')
+                        response = flask_http_error_response(
+                            403, 'Access denied', head=request.method == 'HEAD',
+                        )
                     elif image_type not in {'cover', 'screenshot'}:
-                        response = flask_http_error_response(400, 'Invalid image type', head=request.method == 'HEAD')
+                        response = flask_http_error_response(
+                            400, 'Invalid image type', head=request.method == 'HEAD',
+                        )
                     else:
                         try:
-                            index = int(request.query_params.get('index', '0'))
+                            index = int(first_query_value(request.query_params, 'index', '0'))
                         except (TypeError, ValueError):
                             index = 0
                         image_path = data.local_image_path(real_game, image_type, index)
@@ -456,7 +469,9 @@ def create_game_reads_router(
                             except (FileNotFoundError, OSError, ValueError):
                                 handle = None
                         if handle is None:
-                            response = flask_http_error_response(404, 'Image not found', head=request.method == 'HEAD')
+                            response = flask_http_error_response(
+                                404, 'Image not found', head=request.method == 'HEAD',
+                            )
                         else:
                             response = _local_image_response(request, handle, image_path)
             if auth.should_set_session_cookie:
@@ -606,7 +621,7 @@ def create_game_reads_router(
                 not role_at_least(getattr(auth.user, 'role', None), 'librarian')
                 or (auth.token is not None and not auth.has_scope('admin'))
             ):
-                response = _api_error('Librarian required', 'forbidden')
+                response = _api_error('Librarian or admin required', 'forbidden')
             if response is None:
                 try:
                     from oneirodex.schemas.arcade import InputFamilyBody

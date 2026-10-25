@@ -52,18 +52,31 @@ class ThemeManager:
         return themes
 
     def upload_theme(self, theme_zip):
-        from flask import flash
+        try:
+            from flask import flash, has_request_context
+        except ImportError:
+            # Flask is intentionally absent from the native FastAPI image.
+            flash = None
+            has_request_context = lambda: False
+
+        def notify(message, category):
+            # The upload service is shared by Flask's form route and the
+            # FastAPI admin API. Flask messages only belong to the former;
+            # calling flash() from the native API raises outside a request
+            # context and can turn a successful upload into an HTTP 500.
+            if flash is not None and has_request_context():
+                flash(message, category)
 
         if not os.path.exists(self.app.config['UPLOAD_FOLDER']):
-            flash('Error: Library folder does not exist.', 'error')
+            notify('Error: Library folder does not exist.', 'error')
             return None
 
         if not os.path.exists(self.theme_folder):
             try:
                 os.makedirs(self.theme_folder, exist_ok=True)
-                flash('Themes folder created successfully.', 'info')
+                notify('Themes folder created successfully.', 'info')
             except Exception as e:
-                flash(f'Error creating themes folder: {str(e)}', 'error')
+                notify(f'Error creating themes folder: {str(e)}', 'error')
                 return None
 
         temp_dir = None
@@ -125,26 +138,26 @@ class ThemeManager:
             # folder and theme library are on different filesystems.
             shutil.copytree(temp_dir, theme_path, dirs_exist_ok=True)
             reserved_theme_path = None
-            flash(f'Theme "{theme_data["name"]}" uploaded successfully.', 'success')
+            notify(f'Theme "{theme_data["name"]}" uploaded successfully.', 'success')
             return theme_data
         except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
-            flash(f'Error: Invalid zip file - {str(e)}', 'error')
+            notify(f'Error: Invalid zip file - {str(e)}', 'error')
             print(f"Zip file error during theme upload: {str(e)}")
             return None
         except json.JSONDecodeError as e:
-            flash('Error: Invalid theme.json file - not valid JSON.', 'error')
+            notify('Error: Invalid theme.json file - not valid JSON.', 'error')
             print(f"JSON decode error in theme upload: {str(e)}")
             return None
         except ValueError as e:
-            flash(f'Error: {str(e)}', 'error')
+            notify(f'Error: {str(e)}', 'error')
             print(f"Validation error during theme upload: {str(e)}")
             return None
         except (OSError, IOError) as e:
-            flash(f'Error: File system error - {str(e)}', 'error')
+            notify(f'Error: File system error - {str(e)}', 'error')
             print(f"File system error during theme upload: {str(e)}")
             return None
         except Exception as e:
-            flash(f'Error: Unexpected error during theme upload - {str(e)}', 'error')
+            notify(f'Error: Unexpected error during theme upload - {str(e)}', 'error')
             print(f"Unexpected error during theme upload: {str(e)}")
             return None
         finally:

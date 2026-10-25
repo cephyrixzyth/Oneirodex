@@ -5,6 +5,7 @@ path. ``vr_compat`` derives from the rows when a librarian did not set it.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -52,6 +53,14 @@ def game(db_session, tmp_path):
     db_session.add(row)
     db_session.commit()
     return row
+
+
+
+def test_vr_profile_updated_at_serializes_as_legacy_utc_naive():
+    aware = datetime(2026, 10, 20, 22, 3, 21, 123456, tzinfo=timezone.utc)
+    profile = GameVrProfile(kind='native', updated_at=aware)
+
+    assert profile.to_dict()['updated_at'] == '2026-10-20T22:03:21.123456'
 
 
 def test_vr_compat_derives_from_profile_rows_unless_stored(db_session, game):

@@ -78,6 +78,85 @@ def test_admin_ops_data_uses_injected_configuration_without_flask_context(monkey
     assert payload['active_users'] == 4
 
 
+def test_admin_ops_member_denial_redirects_instead_of_raising():
+    app = Flask('ops-member-denial-test')
+    app.config.update(SECRET_KEY='ops-member-denial-secret', CSP_ENABLED=False)
+    app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    member = SimpleNamespace(
+        id=9, role='member', is_active=True, state=True, is_authenticated=True,
+        session_fingerprint=lambda: 'fingerprint',
+    )
+    manager = SimpleNamespace(
+        login_view='login.login', blueprint_login_views={}, login_message='Sign in',
+        login_message_category='message', localize_callback=None,
+        session_protection='basic',
+    )
+    native = FastAPI()
+    native.include_router(admin_ops_reads.create_admin_ops_reads_router(
+        app,
+        find_user=lambda user_id: member if user_id == 9 else None,
+        find_token=lambda _prefix: None,
+        commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: member if value == '9:fingerprint' else None,
+        login_manager=manager,
+        data_access=SimpleNamespace(logs=lambda _limit: (_ for _ in ()).throw(
+            AssertionError('member reached admin Ops data'),
+        )),
+        database_scope=lambda _app: nullcontext(),
+    ))
+    client = TestClient(native, follow_redirects=False)
+    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    client.cookies.set('session', dump_session_cookie(session, app.config['SECRET_KEY']))
+
+    response = client.get('/admin/api/ops/logs')
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+
+
+def test_ops_limit_uses_first_value_when_query_parameter_is_repeated():
+    app = Flask('ops-repeated-limit-test')
+    app.config.update(SECRET_KEY='ops-repeated-limit-secret', CSP_ENABLED=False)
+    app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    admin = SimpleNamespace(
+        id=9, role='admin', is_active=True, state=True, is_authenticated=True,
+        session_fingerprint=lambda: 'fingerprint',
+    )
+    calls = []
+    data = SimpleNamespace(
+        logs=lambda limit: calls.append(('logs', limit)) or {'events': []},
+        devices=lambda limit, _app: calls.append(('devices', limit)) or [],
+    )
+    router = admin_ops_reads.create_admin_ops_reads_router(
+        app, find_user=lambda user_id: admin if user_id == 9 else None,
+        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: admin if value.split(':', 1)[0] == '9' else None,
+        login_manager=SimpleNamespace(
+            login_view='login.login', blueprint_login_views={}, login_message='Sign in',
+            login_message_category='message', localize_callback=None,
+            session_protection='basic',
+        ),
+        data_access=data, database_scope=lambda _app: nullcontext(),
+    )
+    native_app = FastAPI()
+    native_app.include_router(router)
+    client = TestClient(native_app)
+    client.cookies.set(
+        'session', dump_session_cookie(
+            {'_user_id': '9:fingerprint', '_fresh': True}, app.config['SECRET_KEY'],
+        ),
+    )
+
+    logs = client.get('/admin/api/ops/logs?limit=5&limit=2')
+    devices = client.get('/admin/api/ops/devices?limit=7&limit=3')
+    zero_limit_devices = client.get('/admin/api/ops/devices?limit=0')
+
+    assert logs.status_code == 200
+    assert devices.status_code == 200
+    assert zero_limit_devices.status_code == 200
+    assert calls == [('logs', 5), ('devices', 7), ('devices', 200)]
+
+
 def test_ops_summary_receives_explicit_config_and_task_owner_without_context(monkeypatch):
     from oneirodex import app_start_time
     from oneirodex.utils import ops_summary
@@ -232,7 +311,7 @@ def test_image_refresh_poll_preserves_cached_job_status_and_envelopes_missing_jo
     assert data.deletion_jobs == {}
 
 
-def test_clear_system_logs_requires_csrf_and_audits_the_admin_actor():
+def test_clear_system_logs_requires_csrf_audits_actor_and_matches_failure_contract(monkeypatch):
     app = Flask('ops-clear-test')
     app.config.update(SECRET_KEY='ops-clear-test-secret', CSP_ENABLED=False)
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -245,9 +324,12 @@ def test_clear_system_logs_requires_csrf_and_audits_the_admin_actor():
     class FakeOps:
         def __init__(self):
             self.calls = []
+            self.fail_clear = False
 
         def clear_logs(self, actor):
             self.calls.append(('clear', actor.id))
+            if self.fail_clear:
+                raise RuntimeError('synthetic database clear failure')
             return {'message': 'Successfully cleared 3 system logs', 'deleted_count': 3}
 
         def rollback(self):
@@ -286,6 +368,26 @@ def test_clear_system_logs_requires_csrf_and_audits_the_admin_actor():
     )
     assert accepted.status_code == 200 and accepted.json()['deleted_count'] == 3
     assert data.calls == [('clear', 9)]
+
+    failure_events = []
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event',
+        lambda text, **kwargs: failure_events.append((text, kwargs)),
+    )
+    data.fail_clear = True
+    failed = accepted_client.delete(
+        '/admin/api/system_logs/clear', headers={'X-CSRFToken': accepted_csrf},
+    )
+    assert failed.status_code == 500
+    assert failed.json() == {
+        'error': 'Internal server error', 'error_code': 'internal',
+        'message': 'Internal server error', 'ok': False, 'success': False,
+    }
+    assert data.calls == [('clear', 9), ('clear', 9), ('rollback',)]
+    assert failure_events == [(
+        'Failed to clear system logs: synthetic database clear failure',
+        {'event_type': 'admin_action', 'event_level': 'error', 'audit_user': 9},
+    )]
 
     cleared = accepted_client.post(
         '/admin/clear_permission_errors', headers={'X-CSRFToken': accepted_csrf},

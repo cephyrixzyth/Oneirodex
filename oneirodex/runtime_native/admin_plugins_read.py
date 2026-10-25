@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AdminPluginsData:
@@ -55,7 +56,7 @@ def create_admin_plugins_router(
                 payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                 response = JSONResponse(payload, status_code=status)
             elif plugin_id is None:
-                response = JSONResponse({'plugins': data.list(request.query_params.get('category'))})
+                response = JSONResponse({'plugins': data.list(first_query_value(request.query_params, 'category'))})
             else:
                 item = data.get(plugin_id)
                 if item is None:

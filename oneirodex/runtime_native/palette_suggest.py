@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class PaletteSuggestData:
@@ -52,7 +53,7 @@ def create_palette_suggest_router(
                 from oneirodex.utils.palette_suggest import clamp_suggest_limit
                 from starlette.responses import JSONResponse
 
-                limit = clamp_suggest_limit(request.query_params.get('limit'))
+                limit = clamp_suggest_limit(first_query_value(request.query_params, 'limit'))
                 response = JSONResponse(api_ok_payload(data.suggest(auth.user, limit)))
 
         from oneirodex.utils.security_headers import security_header_values

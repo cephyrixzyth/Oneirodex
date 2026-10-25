@@ -7,6 +7,7 @@ zero-Flask runtime.
 """
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from html import escape
 import inspect
 from pathlib import Path
@@ -216,7 +217,7 @@ def create_admin_pilot(
         )
         csrf_response = csrf_error_response(
             request, session, flask_app.config,
-            token=str(form.get('csrf_token') or ''),
+            token=str(first_form_value(form, 'csrf_token') or ''),
         )
         if csrf_response is not None:
             csrf_response = csrf_html_error_response(csrf_response)

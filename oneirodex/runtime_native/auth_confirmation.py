@@ -68,9 +68,17 @@ def create_auth_confirmation_router(*, data_access=None, database_scope=None, ap
             except Exception:  # noqa: BLE001 — keep token/database internals private
                 return _error('Confirmation is unavailable.', 'internal', 500)
             if outcome == 'expired':
-                response = _error('The confirmation link has expired.', 'bad_request', 400)
+                response = _error(
+                    'The confirmation link is invalid or has expired. Request a new activation '
+                    'from an admin or try registering again with a fresh invite.',
+                    'bad_request', 400,
+                )
             elif outcome == 'invalid':
-                response = _error('The confirmation link is invalid.', 'bad_request', 400)
+                response = _error(
+                    'This confirmation link is not valid. Check your email for the correct link, '
+                    'or sign in if your account is already active.',
+                    'bad_request', 400,
+                )
             elif outcome == 'not_found':
                 response = _error(
                     'The account for this confirmation link was not found.', 'not_found', 404,

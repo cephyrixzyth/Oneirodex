@@ -41,6 +41,22 @@
     border-radius: var(--od-radius-lg);
     overflow: hidden;
   }
+  /* On phones the real shell turns its rail into a fixed drawer. This chrome
+     specimen is deliberately bounded, so keep the rail inside its frame and
+     visible instead of letting the global drawer rule hide or cover the page. */
+  @media (max-width: 900px) {
+    .sg__chrome .od-rail {
+      position: relative;
+      inset: auto;
+      z-index: 2;
+      width: var(--od-rail-w);
+      height: 100%;
+      transform: none;
+      visibility: visible;
+      transition: none;
+      box-shadow: none;
+    }
+  }
   .sg__chrome-main { grid-area: main; padding: var(--od-gutter); color: var(--od-text-muted); font-size: var(--od-font-md); }
 </style>
 

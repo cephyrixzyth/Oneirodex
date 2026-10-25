@@ -34,26 +34,36 @@ def create_site_redirect_router(
                 commit_token_touch=commit_token_touch,
                 allow_bearer=False,
             )
-            from oneirodex.utils.setup import (
-                get_setup_redirect_url,
-                is_setup_in_progress,
-                is_setup_required,
-            )
+            csrf_response = None
+            if request.method == 'POST':
+                from .csrf_compat import csrf_error_response, csrf_html_error_response
 
-            if is_setup_required() or is_setup_in_progress():
-                target = get_setup_redirect_url()
-            elif auth.user is None:
-                target = '/login'
+                csrf_response = csrf_error_response(
+                    request, auth.session_data, runtime_app.config,
+                )
+            if csrf_response is not None:
+                response = csrf_html_error_response(csrf_response)
             else:
-                target = '/discover'
+                from oneirodex.utils.setup import (
+                    get_setup_redirect_url,
+                    is_setup_in_progress,
+                    is_setup_required,
+                )
 
-        from .response_compat import flask_redirect_response
+                if is_setup_required() or is_setup_in_progress():
+                    target = get_setup_redirect_url()
+                elif auth.user is None:
+                    target = '/login'
+                else:
+                    target = '/discover'
 
-        response = flask_redirect_response(target)
-        if auth.should_set_session_cookie:
-            from .oidc_status import _set_session_cookie
+                from .response_compat import flask_redirect_response
 
-            _set_session_cookie(response, runtime_app, auth)
+                response = flask_redirect_response(target)
+                if auth.should_set_session_cookie:
+                    from .oidc_status import _set_session_cookie
+
+                    _set_session_cookie(response, runtime_app, auth)
         from oneirodex.utils.security_headers import security_header_values
 
         for key, value in security_header_values(runtime_app.config).items():
@@ -81,8 +91,10 @@ def create_site_redirect_router(
                     runtime_app, request, getattr(runtime_app, 'login_manager', None), auth,
                 )
             else:
-                # The legacy route is the authenticated app entry page.
-                # `/welcome` now means first-run store setup.
+                # The legacy route is the authenticated app entry page. `/welcome`
+                # now means first-run store setup, so sending every legacy visit
+                # there changes the route's purpose. Discover is the current
+                # member landing page and preserves the original entry intent.
                 response = RedirectResponse('/discover', status_code=302)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, runtime_app, auth)

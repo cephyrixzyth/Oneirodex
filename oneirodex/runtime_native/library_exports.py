@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class LibraryExportData:
@@ -77,7 +78,7 @@ def create_library_export_router(
 
     @router.api_route('/api/export/esde', methods=['GET', 'HEAD'])
     async def export_esde(request: Request):
-        platform = (request.query_params.get('platform') or '').strip()
+        platform = (first_query_value(request.query_params, 'platform') or '').strip()
         return await _export(
             request, flask_app, data, 'esde', platform, find_user, find_token,
             commit_token_touch, load_user_id, login_manager, database_scope,
@@ -85,7 +86,7 @@ def create_library_export_router(
 
     @router.api_route('/api/export/pegasus', methods=['GET', 'HEAD'])
     async def export_pegasus(request: Request):
-        platform = (request.query_params.get('platform') or '').strip()
+        platform = (first_query_value(request.query_params, 'platform') or '').strip()
         return await _export(
             request, flask_app, data, 'pegasus', platform, find_user, find_token,
             commit_token_touch, load_user_id, login_manager, database_scope,

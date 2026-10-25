@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
@@ -127,11 +128,30 @@ def create_filter_reads_router(
                 if response is None:
                     try:
                         response = JSONResponse(data.taxonomy(_catalogue))
-                    except Exception:  # noqa: BLE001 — do not return DB driver details
+                    except SQLAlchemyError as exc:
+                        from oneirodex.utils.event_logging import log_system_event
+
+                        log_system_event(
+                            f'Database error fetching {_catalogue}: {exc}',
+                            event_type='filters_api', event_level='error',
+                        )
                         if _catalogue == 'igdb_platforms':
                             message = 'Database error retrieving igdb platforms'
                         else:
-                            message = f'Error retrieving {_catalogue}'
+                            message = f'Database error retrieving {_catalogue}'
+                        response = _api_error(message, 'internal')
+                    except Exception as exc:  # noqa: BLE001 — do not return DB driver details
+                        from oneirodex.utils.event_logging import log_system_event
+
+                        log_system_event(
+                            f'Unexpected error fetching {_catalogue}: {exc}',
+                            event_type='filters_api', event_level='error',
+                        )
+                        message = (
+                            'Database error retrieving igdb platforms'
+                            if _catalogue == 'igdb_platforms'
+                            else f'Error retrieving {_catalogue}'
+                        )
                         response = _api_error(message, 'internal')
                 _finish(response, flask_app, request, auth)
                 return response

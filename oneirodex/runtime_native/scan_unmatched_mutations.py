@@ -1,6 +1,7 @@
 """Native mutation API for unmatched-folder triage and update placement."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import os
 from contextlib import nullcontext
 from pathlib import Path
@@ -526,7 +527,7 @@ async def _run(
         if auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
                 form = await request.form(max_files=0, max_fields=20, max_part_size=16 * 1024)
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
                 pass
         response = csrf_error_response(
@@ -656,7 +657,7 @@ async def _compat_toggle_ignore(request, _app, data, auth, *, folder_id, **_):
 
 async def _compat_update_status(request, _app, data, auth, **_):
     form = await request.form(max_files=0, max_fields=20, max_part_size=16 * 1024)
-    folder_id = form.get('folder_id')
+    folder_id = first_form_value(form, 'folder_id')
     auth.session_data['active_tab'] = 'unmatched'
     try:
         status = data.toggle_status_compat(folder_id) if folder_id else None

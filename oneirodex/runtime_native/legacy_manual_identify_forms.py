@@ -1,6 +1,7 @@
 """FastAPI adapters for classic manual game add/edit form submissions."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ from starlette.responses import RedirectResponse, Response
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 from .manual_identify_mutations import ManualIdentifyMutationData
+from .query_compat import first_query_value
 
 _PROVIDER_KEYS = {
     'steam', 'gog', 'epicgames', 'itch', 'rawg', 'mobygames',
@@ -73,7 +75,7 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
         token_name = str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
         csrf = csrf_error_response(
             request, auth.session_data, app.config,
-            token=str(form.get(token_name) or ''),
+            token=str(first_form_value(form, token_name) or ''),
         ) if auth.token is None else None
         if csrf is not None:
             response = _csrf_html_response(csrf)
@@ -103,7 +105,7 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
                 if action == 'create':
                     outcome = data.create(
                         app, body, auth.user,
-                        from_unmatched=request.query_params.get('from_unmatched') == 'true',
+                        from_unmatched=first_query_value(request.query_params, 'from_unmatched') == 'true',
                     )
                 else:
                     outcome = data.update(app, game_uuid, body, auth.user)
@@ -121,7 +123,7 @@ async def _handle(request, app, data, *, action, game_uuid, find_user, find_toke
                     _flash(auth, 'success', 'Game added successfully.')
                     destination = (
                         '/scan_management?active_tab=unmatched'
-                        if request.query_params.get('from_unmatched') == 'true'
+                        if first_query_value(request.query_params, 'from_unmatched') == 'true'
                         else '/libraries'
                     )
                 else:
@@ -180,23 +182,23 @@ async def _bounded_form(request, config):
 
 def _form_payload(form, request):
     payload = {
-        'igdb_id': form.get('igdb_id'),
-        'name': form.get('name'),
-        'full_disk_path': form.get('full_disk_path'),
-        'library_uuid': form.get('library_uuid') or request.query_params.get('library_uuid'),
-        'summary': form.get('summary') or '',
-        'storyline': form.get('storyline') or '',
-        'url': form.get('url') or '',
-        'video_urls': form.get('video_urls') or '',
-        'aggregated_rating': form.get('aggregated_rating') or None,
-        'first_release_date': form.get('first_release_date') or None,
-        'status': str(form.get('status') or '').replace('Status.', '').strip(),
-        'category': str(form.get('category') or '').replace('Category.', '').strip(),
-        'developer': form.get('developer') or '',
-        'publisher': form.get('publisher') or '',
-        'item_kind': form.get('item_kind') or request.query_params.get('item_kind') or '',
+        'igdb_id': first_form_value(form, 'igdb_id'),
+        'name': first_form_value(form, 'name'),
+        'full_disk_path': first_form_value(form, 'full_disk_path'),
+        'library_uuid': first_form_value(form, 'library_uuid') or first_query_value(request.query_params, 'library_uuid'),
+        'summary': first_form_value(form, 'summary') or '',
+        'storyline': first_form_value(form, 'storyline') or '',
+        'url': first_form_value(form, 'url') or '',
+        'video_urls': first_form_value(form, 'video_urls') or '',
+        'aggregated_rating': first_form_value(form, 'aggregated_rating') or None,
+        'first_release_date': first_form_value(form, 'first_release_date') or None,
+        'status': str(first_form_value(form, 'status') or '').replace('Status.', '').strip(),
+        'category': str(first_form_value(form, 'category') or '').replace('Category.', '').strip(),
+        'developer': first_form_value(form, 'developer') or '',
+        'publisher': first_form_value(form, 'publisher') or '',
+        'item_kind': first_form_value(form, 'item_kind') or first_query_value(request.query_params, 'item_kind') or '',
         'provider_urls': {
-            key: str(form.get(f'provider_url_{key}') or '').strip()
+            key: str(first_form_value(form, f'provider_url_{key}') or '').strip()
             for key in _PROVIDER_KEYS if f'provider_url_{key}' in form
         },
     }
@@ -213,7 +215,7 @@ def _return_to_form(request, action):
     from urllib.parse import urlencode
 
     allowed = ('full_disk_path', 'library_uuid', 'from_unmatched', 'igdb_id', 'item_kind')
-    query = [(key, request.query_params.get(key)) for key in allowed if request.query_params.get(key)]
+    query = [(key, first_query_value(request.query_params, key)) for key in allowed if first_query_value(request.query_params, key)]
     return '/add_game_manual' + ('?' + urlencode(query) if query else '')
 
 

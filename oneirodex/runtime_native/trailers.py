@@ -20,6 +20,7 @@ from starlette.responses import JSONResponse, Response
 
 from .request_auth import RequestAuthContext, request_auth_context
 from .response_compat import add_vary_header, flask_redirect_response
+from .query_compat import first_query_value
 
 
 @dataclass(frozen=True)
@@ -171,8 +172,8 @@ def create_trailers_router(
             try:
                 # Validate comma-separated IDs at the HTTP boundary, matching the
                 # legacy handler's ValueError-to-safe-internal-envelope behavior.
-                parse_integer_list(request.query_params.get('genres'))
-                parse_integer_list(request.query_params.get('themes'))
+                parse_integer_list(first_query_value(request.query_params, 'genres'))
+                parse_integer_list(first_query_value(request.query_params, 'themes'))
                 ids = data.random_game_ids(context.user, request.query_params)
                 if not ids:
                     return decorate_response(_api_ok(_empty_payload(

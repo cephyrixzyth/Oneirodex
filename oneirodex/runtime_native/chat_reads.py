@@ -1,6 +1,7 @@
 """Native FastAPI read APIs for household chat surfaces."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -9,6 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 async def _bounded_form(request: Request, max_body_bytes: int):
@@ -75,6 +77,15 @@ class ChatReadData:
         if messages:
             mark_channel_read(channel_id, user.id, messages[-1]['id'])
         return {'messages': messages, 'channel': channel.to_dict()}
+
+    def channel_visible(self, user, channel_id: int) -> bool:
+        """Check channel access before validating query options, without read side effects."""
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import ChatChannel
+        from oneirodex.utils.chat import user_can_access_channel
+
+        channel = db.session.get(ChatChannel, channel_id)
+        return bool(channel and user_can_access_channel(user, channel))
 
     def search(self, user, query: str, *, limit: int):
         from oneirodex.utils.chat import search_messages
@@ -183,6 +194,7 @@ class ChatReadData:
 
     def attachment(self, user, file_name: str):
         from pathlib import Path
+        from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatMessageAttachment
@@ -190,7 +202,7 @@ class ChatReadData:
         from oneirodex.utils.chat_attachments import attachments_dir
 
         row = db.session.execute(
-            db.select(ChatMessageAttachment).where(
+            select(ChatMessageAttachment).where(
                 ChatMessageAttachment.file_name == file_name
             )
         ).scalars().first()
@@ -220,6 +232,8 @@ class ChatReadData:
         return space_member_rows(space)
 
     def space_invites(self, space_id: int):
+        from sqlalchemy import select
+
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatSpace, ChatSpaceInvite
 
@@ -227,7 +241,7 @@ class ChatReadData:
         if space is None:
             return None
         rows = db.session.execute(
-            db.select(ChatSpaceInvite).where(ChatSpaceInvite.space_id == space.id)
+            select(ChatSpaceInvite).where(ChatSpaceInvite.space_id == space.id)
         ).scalars().all()
         return [invite.to_dict() for invite in rows]
 
@@ -777,7 +791,7 @@ def create_chat_reads_router(
                     response = JSONResponse(body, status_code=status)
                 else:
                     try:
-                        upload = form.get('file') or form.get('image')
+                        upload = first_form_upload(form, 'file') or first_form_upload(form, 'image')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -785,8 +799,8 @@ def create_chat_reads_router(
                                 stream=BytesIO(raw), filename=upload.filename,
                                 content_type=upload.content_type,
                             )
-                        slug = str(form.get('slug') or '')
-                        label = str(form.get('label') or '')
+                        slug = str(first_form_value(form, 'slug') or '')
+                        label = str(first_form_value(form, 'label') or '')
                     finally:
                         await form.close()
                     try:
@@ -869,7 +883,7 @@ def create_chat_reads_router(
                     response = JSONResponse(body, status_code=status)
                 else:
                     try:
-                        upload = form.get('file') or form.get('attachment')
+                        upload = first_form_upload(form, 'file') or first_form_upload(form, 'attachment')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_ATTACHMENT_BYTES + 1)
@@ -1868,12 +1882,17 @@ def create_chat_reads_router(
                     detail={'required_scope': 'read:social'},
                 )
                 response = JSONResponse(body, status_code=status)
+            elif not data.channel_visible(auth.user, channel_id):
+                from oneirodex.utils.api_contract import api_error_payload
+
+                body, status = api_error_payload('Not found', code='not_found')
+                response = JSONResponse(body, status_code=status)
             else:
                 try:
                     from oneirodex.utils.chat import parse_chat_limit
 
                     limit = parse_chat_limit(
-                        request.query_params.get('limit'), default=50, maximum=100,
+                        first_query_value(request.query_params, 'limit'), default=50, maximum=100,
                     )
                 except ValueError as exc:
                     from oneirodex.utils.api_contract import api_error_payload
@@ -1881,8 +1900,8 @@ def create_chat_reads_router(
                     body, status = api_error_payload(str(exc), code='bad_request')
                     response = JSONResponse(body, status_code=status)
                 else:
-                    before = request.query_params.get('before')
-                    since = request.query_params.get('since')
+                    before = first_query_value(request.query_params, 'before')
+                    since = first_query_value(request.query_params, 'since')
                     before_id = int(before) if before and str(before).isdigit() else None
                     since_id = int(since) if since and str(since).isdigit() else None
                     try:
@@ -1936,12 +1955,12 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             else:
-                query = (request.query_params.get('q') or '').strip()
+                query = (first_query_value(request.query_params, 'q') or '').strip()
                 try:
                     from oneirodex.utils.chat import parse_chat_limit
 
                     limit = parse_chat_limit(
-                        request.query_params.get('limit'), default=20, maximum=50,
+                        first_query_value(request.query_params, 'limit'), default=20, maximum=50,
                     )
                     response = JSONResponse({
                         'results': data.search(auth.user, query, limit=limit), 'q': query,

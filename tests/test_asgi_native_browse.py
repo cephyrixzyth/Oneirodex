@@ -10684,7 +10684,7 @@ def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
     fake = SimpleNamespace(
         allowed_bases=lambda _app: ['/safe'],
         safe_path=lambda _app, path: (path.startswith('/safe'), 'outside allowed roots'),
-        directory_readable=lambda path: path == '/safe/Game',
+        game_path_readable=lambda path: path == '/safe/Game',
         link_existing_game=lambda _app, game_uuid, path, actor, actor_id: (
             calls.append((game_uuid, path, actor, actor_id)) or {
                 'game_uuid': game_uuid, 'game_name': 'Game', 'full_disk_path': path,

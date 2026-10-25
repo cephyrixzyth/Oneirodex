@@ -50,9 +50,9 @@ class LibraryToolsMutationData:
         from oneirodex.utils.library_doctor import doctor_write_proposals
         return doctor_write_proposals(rows)
 
-    def directory_readable(self, path):
-        import os
-        return os.path.isdir(path) and os.access(path, os.R_OK)
+    def game_path_readable(self, path):
+        from oneirodex.utils.security import is_readable_game_path
+        return is_readable_game_path(path)
 
     def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
         from oneirodex.utils.event_logging import log_system_event
@@ -341,7 +341,7 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                                     getattr(auth.user, 'id', None),
                                 )
                                 message, category = f'Access denied: {reason}', 'error'
-                            elif not data.directory_readable(full_disk_path):
+                            elif not data.game_path_readable(full_disk_path):
                                 message, category = 'The selected folder does not exist or cannot be read.', 'error'
                             else:
                                 result, error_code = data.link_existing_game(
@@ -559,7 +559,7 @@ async def _link_existing_game(request, app, data):
     safe, error = data.safe_path(app, body.full_disk_path)
     if not safe:
         return _error(403, 'forbidden', error or 'Unsafe path')
-    if not data.directory_readable(body.full_disk_path):
+    if not data.game_path_readable(body.full_disk_path):
         return _error(400, 'bad_request', 'The selected folder does not exist or cannot be read')
     result, error_code = data.link_existing_game(
         app, body.game_uuid, body.full_disk_path,

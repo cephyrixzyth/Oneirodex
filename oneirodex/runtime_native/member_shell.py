@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse, Response
 
 from oneirodex.runtime_native.request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 STATIC_MEMBER_TITLES = {
@@ -402,8 +403,8 @@ def create_member_shell_router(flask_app, *, database_scope):
                         saved_filters = {}
 
                 query = request.query_params
-                library_uuid = query.get('library_uuid') or saved_filters.get('library_uuid')
-                library_name = query.get('library_name')
+                library_uuid = first_query_value(query, 'library_uuid') or saved_filters.get('library_uuid')
+                library_name = first_query_value(query, 'library_name')
                 if library_name:
                     library = native_db.session.execute(
                         select(Library).filter_by(name=library_name)
@@ -422,12 +423,12 @@ def create_member_shell_router(flask_app, *, database_scope):
                     library_uuid = library.uuid
 
                 per_page = getattr(preferences, 'items_per_page', None) or 50
-                raw_per_page = query.get('per_page')
+                raw_per_page = first_query_value(query, 'per_page')
                 try:
                     per_page = int(raw_per_page) or per_page if raw_per_page else per_page
                 except (TypeError, ValueError):
                     pass
-                raw_rating = query.get('rating')
+                raw_rating = first_query_value(query, 'rating')
                 try:
                     rating = int(raw_rating) if raw_rating else None
                 except (TypeError, ValueError):
@@ -438,11 +439,11 @@ def create_member_shell_router(flask_app, *, database_scope):
 
                 filters = {
                     'library_uuid': library_uuid,
-                    'genre': query.get('genre') or saved_filters.get('genre'),
+                    'genre': first_query_value(query, 'genre') or saved_filters.get('genre'),
                     'rating': rating,
-                    'game_mode': query.get('game_mode') or saved_filters.get('game_mode'),
-                    'player_perspective': query.get('player_perspective') or saved_filters.get('player_perspective'),
-                    'theme': query.get('theme') or saved_filters.get('theme'),
+                    'game_mode': first_query_value(query, 'game_mode') or saved_filters.get('game_mode'),
+                    'player_perspective': first_query_value(query, 'player_perspective') or saved_filters.get('player_perspective'),
+                    'theme': first_query_value(query, 'theme') or saved_filters.get('theme'),
                 }
                 first_run = get_first_run_state()
                 extra = {
@@ -452,8 +453,8 @@ def create_member_shell_router(flask_app, *, database_scope):
                     'scan_has_run': first_run['scan_has_run'],
                     'unmatched_count': first_run['unmatched_count'],
                     'user_per_page': per_page,
-                    'user_default_sort': query.get('sort_by') or preferences.default_sort or 'name',
-                    'user_default_sort_order': query.get('sort_order') or preferences.default_sort_order or 'asc',
+                    'user_default_sort': first_query_value(query, 'sort_by') or preferences.default_sort or 'name',
+                    'user_default_sort_order': first_query_value(query, 'sort_order') or preferences.default_sort_order or 'asc',
                     'filters': {key: value for key, value in filters.items() if value is not None},
                 }
 

@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class IGDBCompanyRoleData:
@@ -79,8 +80,8 @@ def create_igdb_company_role_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                game_id = request.query_params.get('game_igdb_id')
-                company_id = request.query_params.get('company_id')
+                game_id = first_query_value(request.query_params, 'game_igdb_id')
+                company_id = first_query_value(request.query_params, 'company_id')
                 if not game_id or not company_id or not game_id.isdigit() or not company_id.isdigit():
                     response = _api_error(
                         'Invalid input. Both game_igdb_id and company_id must be provided and numeric.',
@@ -148,7 +149,7 @@ def create_igdb_company_role_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                igdb_id = request.query_params.get('igdb_id')
+                igdb_id = first_query_value(request.query_params, 'igdb_id')
                 if not igdb_id:
                     response = _api_error(
                         'IGDB ID is required', 'bad_request', 400, config=flask_app.config,

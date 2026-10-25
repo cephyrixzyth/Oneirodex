@@ -7,6 +7,59 @@ from sqlalchemy.exc import OperationalError
 from oneirodex.models import User
 
 
+def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from flask import Flask
+
+    from oneirodex.runtime_native.notifications import create_notifications_router
+    from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+
+    app = Flask('notification-bus-member-denial-test')
+    app.config.update(
+        SECRET_KEY='notification-bus-member-denial-secret',
+        WTF_CSRF_ENABLED=True, CSP_ENABLED=False,
+    )
+    app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    member = SimpleNamespace(
+        id=9, role='member', state=True, is_active=True, is_authenticated=True,
+        session_fingerprint=lambda: 'fingerprint',
+    )
+    manager = SimpleNamespace(
+        login_view='login.login', blueprint_login_views={}, login_message='Sign in',
+        login_message_category='message', localize_callback=None,
+        session_protection='basic',
+    )
+    bus_calls = []
+    native = FastAPI()
+    native.include_router(create_notifications_router(
+        app,
+        find_user=lambda user_id: member if user_id == 9 else None,
+        find_token=lambda _prefix: None,
+        commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: member if value == '9:fingerprint' else None,
+        login_manager=manager,
+        data_access=SimpleNamespace(
+            bus_status=lambda: bus_calls.append('status') or {'configured': True},
+            emit_test=lambda: bus_calls.append('emit') or True,
+        ),
+        database_scope=lambda _app: nullcontext(),
+    ))
+    client = TestClient(native, follow_redirects=False)
+    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    csrf = generate_csrf_token(session, app.config['SECRET_KEY'])
+    client.cookies.set('session', dump_session_cookie(session, app.config['SECRET_KEY']))
+
+    response = client.post('/api/admin/notify-bus/test', headers={'X-CSRFToken': csrf})
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert bus_calls == []
+
+
 @pytest.mark.parametrize(
     'failure',
     [

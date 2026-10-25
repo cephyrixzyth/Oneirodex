@@ -76,3 +76,44 @@ def test_admin_resolve_is_scoped_and_not_found_is_explicit():
     assert response.json()['ticket']['status'] == 'resolved'
     assert data.resolved == [(17, 7), (18, 7)]
     assert missing.status_code == 404
+
+
+def test_admin_scoped_bearer_can_resolve_but_unscoped_or_member_cannot(monkeypatch):
+    from oneirodex.runtime_native import support_mutations
+
+    data = FakeSupport()
+    admin = SimpleNamespace(id=7, role='admin')
+    member = SimpleNamespace(id=8, role='user')
+
+    def resolve_auth(request, *_args, **_kwargs):
+        bearer = request.headers.get('authorization')
+        if bearer == 'Bearer scoped-admin':
+            return SimpleNamespace(user=admin, token=object(), has_scope=lambda scope: scope == 'admin', should_set_session_cookie=False)
+        if bearer == 'Bearer unscoped-admin':
+            return SimpleNamespace(user=admin, token=object(), has_scope=lambda _scope: False, should_set_session_cookie=False)
+        if bearer == 'Bearer member-admin-scope':
+            return SimpleNamespace(user=member, token=object(), has_scope=lambda scope: scope == 'admin', should_set_session_cookie=False)
+        return SimpleNamespace(user=None, token=None, has_scope=lambda _scope: False, should_set_session_cookie=False)
+
+    monkeypatch.setattr(support_mutations, 'request_auth_context', resolve_auth)
+    app = FastAPI()
+    flask_app = Flask(__name__)
+    flask_app.config.update(SECRET_KEY='native-support-mutations-secret', TESTING=True, WTF_CSRF_ENABLED=False)
+    app.include_router(create_support_mutation_router(
+        flask_app, find_user=lambda _value: None, find_token=lambda _prefix: None,
+        commit_token_touch=lambda _token: None, load_user_id=None,
+        login_manager=None, data_access=data,
+    ))
+    client = TestClient(app)
+
+    allowed = client.post('/api/support/tickets/17/resolve', headers={'Authorization': 'Bearer scoped-admin'})
+    unscoped = client.post('/api/support/tickets/17/resolve', headers={'Authorization': 'Bearer unscoped-admin'})
+    member = client.post('/api/support/tickets/17/resolve', headers={'Authorization': 'Bearer member-admin-scope'})
+    create = client.post('/api/support/tickets', json={'title': 'Not allowed'}, headers={'Authorization': 'Bearer scoped-admin'})
+
+    assert allowed.status_code == 200
+    assert unscoped.status_code == 403
+    assert member.status_code == 403
+    assert create.status_code == 403
+    assert data.created is None
+    assert data.resolved == [(17, 7)]

@@ -206,7 +206,7 @@ def create_admin_art_studio_action_router(
             payload = service.download(pack_id, flask_app.root_path)
             response = Response(
                 payload, media_type='application/zip',
-                headers={'Content-Disposition': f'attachment; filename="oneirodex-art-{pack_id}.zip"'},
+                headers={'Content-Disposition': f'attachment; filename=oneirodex-art-{pack_id}.zip'},
             )
         except ValueError as exc:
             response = _api_error(str(exc), 'bad_request')

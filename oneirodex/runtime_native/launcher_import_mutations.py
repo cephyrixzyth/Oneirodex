@@ -1,6 +1,7 @@
 """Native bounded upload and raw-body routes for launcher ownership imports."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 import logging
 from typing import Any, Callable
@@ -11,6 +12,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 _MAX_UPLOAD = 8 * 1024 * 1024
 _SAFE_LAUNCHER_IMPORT_ERRORS = frozenset({
@@ -136,8 +138,8 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                             response = _playnite_result(result, api_error_payload, api_ok_payload)
                 else:
                     filename = upload.filename or '' if upload is not None else ''
-                    launcher = ((form.get('launcher') if form is not None else None)
-                                or request.query_params.get('launcher') or None)
+                    launcher = ((first_form_value(form, 'launcher') if form is not None else None)
+                                or first_query_value(request.query_params, 'launcher') or None)
                     if not body_bytes.strip():
                         payload, status = api_error_payload('JSON body or file upload required', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
@@ -192,7 +194,7 @@ async def _request_payload(request):
     upload = None
     if request.headers.get('content-type', '').lower().startswith('multipart/form-data'):
         form = await request.form(max_files=1, max_fields=12, max_part_size=_MAX_UPLOAD)
-        candidate = form.get('file')
+        candidate = first_form_upload(form, 'file')
         if isinstance(candidate, UploadFile):
             upload = candidate
             content = await candidate.read(_MAX_UPLOAD + 1)

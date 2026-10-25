@@ -79,6 +79,7 @@ def make_client(*, role='admin', data=None, csrf_enabled=False):
     ))
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-ra-settings-secret'))
+    client.flask_app = flask_app
     return client
 
 
@@ -122,6 +123,49 @@ def test_invalid_member_handle_is_rejected():
     assert data.member_saved is None
 
 
+
+def test_member_retroachievements_validation_matches_legacy_envelope():
+    client = make_client(role='user')
+
+    response = client.put('/api/me/retroachievements', json={'ra_username': None})
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Invalid request.'
+    assert response.json()['error_code'] == 'unprocessable'
+    assert response.json()['detail'] == {'ra_username': 'Input should be a valid string'}
+
+
+def test_member_retroachievements_malformed_body_uses_empty_legacy_model():
+    data = FakeRetroAchievements()
+    client = make_client(role='user', data=data)
+
+    response = client.put(
+        '/api/me/retroachievements', data='{invalid',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 200
+    assert data.member_saved == ''
+    assert response.json()['ra_username'] is None
+
+
+def test_member_retroachievements_database_error_uses_legacy_message():
+    class FailingData(FakeRetroAchievements):
+        def save_member(self, _user, _name):
+            raise RuntimeError('private database detail')
+
+    client = make_client(role='user', data=FailingData())
+    with client.flask_app.app_context():
+        response = client.put(
+            '/api/me/retroachievements', json={'ra_username': 'member_name'},
+        )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert response.json()['message'] == 'Something went wrong on our end. The error has been logged.'
+    assert 'private database detail' not in response.text
+
+
 def test_game_achievements_keeps_acl_scoped_read_projection():
     response = make_client(role='user').get('/api/games/game-1/achievements')
 
@@ -150,23 +194,6 @@ def test_admin_match_empty_body_uses_safe_legacy_validation_envelope():
     assert 'pydantic.dev' not in response.text
 
 
-def test_admin_match_non_object_body_uses_legacy_root_validation():
-    response = make_client().post('/api/retroachievements/match', json=[])
-
-    assert response.status_code == 422
-    assert response.json()['detail'] == {
-        '__root__': 'Input should be a valid dictionary or instance of MatchBody'
-    }
-
-
-def test_admin_match_requires_csrf_before_body_validation():
-    response = make_client(csrf_enabled=True).post('/api/retroachievements/match', json={})
-
-    assert response.status_code == 400
-    assert response.json()['error_code'] == 'bad_request'
-    assert 'detail' not in response.json()
-
-
 def test_admin_match_ignores_json_body_with_non_json_content_type():
     response = make_client().post(
         '/api/retroachievements/match', data='{"platform":"SNES"}',
@@ -186,6 +213,14 @@ def test_admin_match_accepts_vendor_json_content_type():
     assert response.status_code == 200
     assert response.json()['platform'] == 'SNES'
 
+
+def test_admin_match_non_object_body_uses_legacy_root_validation():
+    response = make_client().post('/api/retroachievements/match', json=[])
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of MatchBody'
+    }
 
 
 def test_admin_match_malformed_json_uses_legacy_root_validation():
@@ -207,3 +242,11 @@ def test_admin_match_false_json_uses_legacy_root_validation():
     assert response.json()['detail'] == {
         '__root__': 'Input should be a valid dictionary or instance of MatchBody'
     }
+
+
+def test_admin_match_requires_csrf_before_body_validation():
+    response = make_client(csrf_enabled=True).post('/api/retroachievements/match', json={})
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert 'detail' not in response.json()

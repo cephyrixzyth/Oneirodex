@@ -1,6 +1,7 @@
 """Native FastAPI admin image queue mutation routes."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value, form_uploads
 import logging
 import os
 from contextlib import nullcontext
@@ -359,7 +360,7 @@ def create_admin_image_mutation_router(
             if response is None:
                 csrf = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get('csrf_token') if form is not None else None,
+                    token=first_form_value(form, 'csrf_token') if form is not None else None,
                 ) if auth.token is None else None
                 if csrf is not None:
                     import json
@@ -389,14 +390,14 @@ def create_admin_image_mutation_router(
                     payload, status = _error('No file was included.', 'bad_request')
                     response = JSONResponse(payload, status_code=status)
                 if response is None:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     if upload is None or not getattr(upload, 'filename', ''):
                         payload, status = _error('No file was included.', 'bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
                             image_type = parse_image_kind(
-                                form.get('image_type') or form.get('kind'),
+                                first_form_value(form, 'image_type') or first_form_value(form, 'kind'),
                                 default='screenshot',
                             )
                         except ValueError:
@@ -559,7 +560,7 @@ def create_admin_image_mutation_router(
                         form = await request.form(max_files=100, max_fields=12, max_part_size=16 * 1024 * 1024)
                         csrf = csrf_error_response(
                             request, auth.session_data, flask_app.config,
-                            token=form.get('csrf_token'),
+                            token=first_form_value(form, 'csrf_token'),
                         ) if auth.token is None else None
                     if csrf is not None:
                         response = csrf
@@ -567,13 +568,13 @@ def create_admin_image_mutation_router(
                         payload, status = _error('Choose one or more image files.', 'bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        files = form.getlist('files') or form.getlist('file')
+                        files = form_uploads(form, 'files') or form_uploads(form, 'file')
                         if not files:
                             payload, status = _error('Choose one or more image files.', 'bad_request')
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            default_kind = form.get('image_type') or form.get('kind') or 'cover'
-                            explicit_uuid = (form.get('game_uuid') or '').strip()
+                            default_kind = first_form_value(form, 'image_type') or first_form_value(form, 'kind') or 'cover'
+                            explicit_uuid = (first_form_value(form, 'game_uuid') or '').strip()
                             result = data.upload_files(
                                 flask_app, files, default_kind, explicit_uuid,
                             )

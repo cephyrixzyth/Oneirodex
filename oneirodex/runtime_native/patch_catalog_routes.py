@@ -152,7 +152,6 @@ def _search(request, data, api_error_payload):
     except (TypeError, ValueError):
         limit = 20
     hits = data.search(query, platform=platform, region=region, target_lang=target_lang, limit=limit)
-    from starlette.responses import JSONResponse
     return JSONResponse({'query': query, 'platform': platform, 'region': region,
                          'target_lang': target_lang, 'hits': [hit.to_dict() for hit in hits]})
 
@@ -174,9 +173,9 @@ async def _read_json(request):
     return value if isinstance(value, dict) else None
 
 
-def _attach(body, user, data, api_error_payload, api_ok_payload):
-    from oneirodex.schemas.patch_catalog import AttachPatchGuideBody
+def _attach(body, user, data, api_error_payload, api_ok_payload, *, concise_missing_fields=True):
     from pydantic import ValidationError
+    from oneirodex.schemas.patch_catalog import AttachPatchGuideBody
     try:
         model = AttachPatchGuideBody.model_validate(body)
     except ValidationError as exc:
@@ -186,7 +185,7 @@ def _attach(body, user, data, api_error_payload, api_ok_payload):
             and tuple(error.get('loc') or ()) in {('game_uuid',), ('source_url',)}
             for error in errors
         )
-        if missing_required_fields:
+        if missing_required_fields and concise_missing_fields:
             payload, status = api_error_payload(
                 'Provide a game UUID and source URL.', code='bad_request'
             )

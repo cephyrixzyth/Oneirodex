@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AuthLoginData:
@@ -115,7 +116,7 @@ def create_auth_login_router(
                     allow_bearer=False,
                 )
                 if auth.user is not None:
-                    response = _ok({'next_url': _safe_next(request.query_params.get('next'))})
+                    response = _ok({'next_url': _safe_next(first_query_value(request.query_params, 'next'))})
             if response is None:
                 body, validation_error = await _validated_body(request)
                 if validation_error:
@@ -143,7 +144,7 @@ def create_auth_login_router(
                             trusted_forwarded_for(request, flask_app.config),
                         )
                         auth.session_data['_remember'] = 'set'
-                        response = _ok({'next_url': _safe_next(request.query_params.get('next'))})
+                        response = _ok({'next_url': _safe_next(first_query_value(request.query_params, 'next'))})
 
             if auth is not None and auth.remember_action:
                 _write_remember_cookie(response, auth.session_data, flask_app.config)

@@ -1,6 +1,7 @@
 """FastAPI admin upload/delete actions for operator supplied theme fonts."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -85,12 +86,12 @@ async def _handle(
                         from .csrf_compat import csrf_error_response
                         csrf = csrf_error_response(
                             request, auth.session_data, flask_app.config,
-                            token=form.get('csrf_token'),
+                            token=first_form_value(form, 'csrf_token'),
                         ) if auth.token is None else None
                         if csrf is not None:
                             response = csrf
                         else:
-                            upload = form.get('file')
+                            upload = first_form_upload(form, 'file')
                             if upload is None or not hasattr(upload, 'file'):
                                 payload, status = api_error_payload(
                                     'Choose a font file to upload.', code='bad_request',

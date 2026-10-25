@@ -39,6 +39,7 @@ def is_safe_path(user_path, allowed_bases, *, logger=None):
     if not user_path or not isinstance(user_path, str):
         return False, "Invalid path format"
 
+
     user_path = user_path.strip()
     if not user_path:
         return False, "Empty path"
@@ -75,6 +76,20 @@ def is_safe_path(user_path, allowed_bases, *, logger=None):
         active_logger = _active_logger(logger)
         active_logger.warning(f"Path validation error for {sanitize_path_for_logging(user_path)}: {e}")
         return False, "Invalid path format"
+
+
+def is_readable_game_path(user_path):
+    """Return whether a game target is a readable regular file or directory.
+
+    Callers must first validate that the path stays within an allowed storage
+    root with :func:`is_safe_path`.
+    """
+    if not isinstance(user_path, str) or not user_path.strip() or '\x00' in user_path:
+        return False
+    return (
+        (os.path.isfile(user_path) or os.path.isdir(user_path))
+        and os.access(user_path, os.R_OK)
+    )
 
 
 def is_safe_path_strict(user_path, allowed_bases, *, logger=None):

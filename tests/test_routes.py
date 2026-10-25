@@ -413,6 +413,31 @@ class TestMainBlueprint:
         assert response.status_code == 200
 
     @patch('flask_login.current_user')
+    @patch('oneirodex.routes_admin_ext.scan_jobs.get_game_names_from_folder')
+    def test_scan_folder_rejects_library_outside_database_choices(
+        self, mock_get_games, mock_current_user, client, app, db_session,
+        admin_user, test_library,
+    ):
+        mock_current_user.is_authenticated = True
+        mock_current_user.role = 'admin'
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+
+        response = client.post('/scan_manual_folder', data={
+            'folder_path': '/test/folder',
+            'library_uuid': 'not-a-library',
+            'csrf_token': 'test_token',
+            'scan_mode': 'folders',
+        })
+
+        assert response.status_code == 200
+        # WTForms rejects the unknown value, but this legacy template does not
+        # render field errors. The current React flow gives the same rejection
+        # a visible flash instead of silently redisplaying the form.
+        assert b'Not a valid choice.' not in response.data
+        mock_get_games.assert_not_called()
+
+    @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.scan_jobs.os.path.exists')
     def test_scan_folder_invalid_path(self, mock_exists, mock_current_user, client, app, db_session, admin_user, test_library):
         """Test scan_folder with invalid folder path."""

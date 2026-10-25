@@ -159,7 +159,7 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
             response = _login_redirect(flask_app, request, login_manager, auth,
                 message=getattr(login_manager, 'login_message', None),
                 category=getattr(login_manager, 'login_message_category', 'message'), include_next=True)
-        elif auth.token is not None:
+        elif auth.token is not None and ticket_id is None:
             payload, status = api_error_payload('Sign in with your site account to manage support reports', code='forbidden')
             response = JSONResponse(payload, status_code=status)
         elif ticket_id is None:
@@ -170,13 +170,18 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
                 body = await _read_json(request)
                 try:
                     from oneirodex.schemas.support import CreateSupportTicketBody
-                    if body is None:
-                        raise ValueError('A valid JSON object is required.')
-                    model = CreateSupportTicketBody.model_validate(body)
+                    model = CreateSupportTicketBody.model_validate(
+                        body if body is not None else {},
+                    )
                     result = data.create(auth.user, model.model_dump(), datetime.now(timezone.utc))
                     response = JSONResponse(api_ok_payload({'ticket': result}), status_code=201)
-                except (ValidationError, ValueError):
-                    payload, status = api_error_payload('Support report could not be validated.', code='bad_request')
+                except ValidationError as exc:
+                    from oneirodex.utils.validation import format_validation_errors
+
+                    payload, status = api_error_payload(
+                        'Invalid request.', code='unprocessable',
+                        detail=format_validation_errors(exc),
+                    )
                     response = JSONResponse(payload, status_code=status)
                 except Exception:
                     from oneirodex.runtime_native.db_session import native_db as db
@@ -217,6 +222,6 @@ async def _read_json(request):
             if len(raw) > 16 * 1024:
                 return None
         value = json.loads(raw)
-        return value if isinstance(value, dict) else None
+        return value
     except (ValueError, UnicodeDecodeError):
         return None

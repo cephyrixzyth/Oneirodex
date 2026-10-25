@@ -5,6 +5,7 @@ can use in-memory fakes and never touch the user's library.
 """
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class LibraryToolsData:
@@ -207,12 +209,12 @@ async def _run(request, *, flask_app, data, find_user, find_token,
 
 async def _manual_preview(request, app, data):
     import os
-    library_uuid = (request.query_params.get('library_uuid') or '').strip()
+    library_uuid = (first_query_value(request.query_params, 'library_uuid') or '').strip()
     library = data.library(app, library_uuid) if library_uuid else None
     if not library:
         return _error(400, 'bad_request', 'Choose a valid library')
     folder, error = data.resolve_scan_path(
-        app, request.query_params.get('folder') or '', request.query_params.get('root') or '',
+        app, first_query_value(request.query_params, 'folder') or '', first_query_value(request.query_params, 'root') or '',
     )
     if error:
         return _error(400, 'bad_request', 'The selected scan location is unavailable')
@@ -221,7 +223,7 @@ async def _manual_preview(request, app, data):
         return _error(403, 'forbidden', path_error or 'Unsafe path')
     if not data.readable_directory(folder):
         return _error(400, 'bad_request', 'The selected folder does not exist or cannot be read')
-    mode = data.scan_mode(app, folder, request.query_params.get('scan_mode') or 'auto')
+    mode = data.scan_mode(app, folder, first_query_value(request.query_params, 'scan_mode') or 'auto')
     if mode == 'folders':
         games = data.games_in_folder(app, folder, library)
     else:
@@ -244,8 +246,8 @@ async def _propose_leaf(request, app, data):
             body = await request.json()
         except Exception:
             body = {}
-    root = str(body.get('root') or body.get('path') or request.query_params.get('root')
-               or request.query_params.get('path') or '').strip() if isinstance(body, dict) else ''
+    root = str(body.get('root') or body.get('path') or first_query_value(request.query_params, 'root')
+               or first_query_value(request.query_params, 'path') or '').strip() if isinstance(body, dict) else ''
     if not root:
         return _error(400, 'bad_request', 'root path required')
     safe, error = data.safe_path(app, root)
@@ -264,7 +266,7 @@ async def _import_preview(request, app, data):
     content_type = request.headers.get('content-type', '')
     if 'multipart/form-data' in content_type:
         form = await request.form()
-        upload = form.get('file')
+        upload = first_form_upload(form, 'file')
         if isinstance(upload, UploadFile) and upload.filename:
             filename = upload.filename.lower()
             raw = await upload.read()
@@ -278,13 +280,13 @@ async def _import_preview(request, app, data):
                 return _error(400, 'bad_request', 'File must be UTF-8 text', auto_create=False)
             try:
                 result = data.import_preview(
-                    text, csv_format=filename.endswith('.csv') or str(form.get('format') or '').lower() == 'csv',
+                    text, csv_format=filename.endswith('.csv') or str(first_form_value(form, 'format') or '').lower() == 'csv',
                     allowed_bases=bases,
                 )
             finally:
                 await form.close()
             return JSONResponse(result)
-        csv_text = form.get('csv') or form.get('text')
+        csv_text = first_form_value(form, 'csv') or first_form_value(form, 'text')
         if csv_text:
             try:
                 result = data.import_preview(csv_text, csv_format=True, allowed_bases=bases)
@@ -349,17 +351,24 @@ async def _scan_proposals(request, app, data):
 
 async def _doctor_dry_run(request, app, data):
     try:
-        body = await request.json()
+        payload = await request.json()
     except Exception:
-        body = {}
-    if not isinstance(body, dict) or not isinstance(body.get('roots'), list) or not body['roots']:
-        return _error(400, 'bad_request', 'roots must be a non-empty list')
-    roots = [root for root in body['roots']
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import DoctorDryRunBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = DoctorDryRunBody.model_validate(payload if payload is not None else {})
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
+    roots = [root for root in body.roots
              if isinstance(root, str) and data.safe_path(app, root)[0]]
     if not roots:
         return _error(403, 'forbidden', 'No safe roots')
-    rows = data.doctor_dry_run(roots, template=body.get('template') or '{title}',
-                               limit=body.get('limit'))
+    rows = data.doctor_dry_run(roots, template=body.template or '{title}',
+                               limit=body.limit)
     return _ok({'rows': rows, 'count': len(rows)})
 
 

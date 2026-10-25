@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class ArrIndexersData:
@@ -246,16 +247,16 @@ def create_arr_indexers_router(
                     else:
                         response = JSONResponse(data.module_status(config=flask_app.config))
                 elif request.url.path == '/api/arr/search':
-                    query = (request.query_params.get('q') or request.query_params.get('query') or '').strip()
+                    query = (first_query_value(request.query_params, 'q') or first_query_value(request.query_params, 'query') or '').strip()
                     if not query:
                         payload, status = api_error_payload('Query parameter q is required', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
-                            limit = min(int(request.query_params.get('limit') or 25), 50)
+                            limit = min(int(first_query_value(request.query_params, 'limit') or 25), 50)
                         except (TypeError, ValueError):
                             limit = 25
-                        include_disallowed = (request.query_params.get('include_disallowed') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+                        include_disallowed = (first_query_value(request.query_params, 'include_disallowed') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
                         try:
                             response = JSONResponse(data.search(
                                 query, limit=limit, include_disallowed=include_disallowed,

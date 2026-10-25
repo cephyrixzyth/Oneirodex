@@ -1,6 +1,7 @@
 """Native FastAPI routes for store ownership connections and imports."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 import json
 from contextlib import nullcontext
 from typing import Any, Callable
@@ -352,13 +353,13 @@ async def _read_csv_payload(request, flask_app):
         replayed = _request_with_body(request, raw)
         try:
             form = await replayed.form(max_files=1, max_fields=10)
-            upload = form.get('file')
+            upload = first_form_upload(form, 'file')
             if upload is not None and hasattr(upload, 'read'):
                 try:
                     return (await upload.read()).decode('utf-8', errors='replace'), None
                 finally:
                     await form.close()
-            value = form.get('csv') or ''
+            value = first_form_value(form, 'csv') or ''
             await form.close()
             return (value if isinstance(value, str) else ''), None
         except Exception:
@@ -369,7 +370,7 @@ async def _read_csv_payload(request, flask_app):
             form = await replayed.form(max_fields=10)
         except Exception:
             return None, _error(400, 'bad_request', 'Invalid form data')
-        value = form.get('csv') or ''
+        value = first_form_value(form, 'csv') or ''
         return (value if isinstance(value, str) else ''), None
     return '', None
 

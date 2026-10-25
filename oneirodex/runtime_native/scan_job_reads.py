@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
+from .query_compat import first_query_value
 from .request_auth import request_auth_context
 
 
@@ -103,9 +104,15 @@ def create_scan_job_reads_router(
 
                     query = request.query_params
                     filters = {
-                        'statuses': parse_scan_job_status_filter(query.get('status')),
-                        'library_uuid': (query.get('library_uuid') or '').strip(),
-                        'q': (query.get('q') or query.get('name') or '').strip(),
+                        'statuses': parse_scan_job_status_filter(
+                            first_query_value(query, 'status'),
+                        ),
+                        'library_uuid': (first_query_value(query, 'library_uuid') or '').strip(),
+                        'q': (
+                            first_query_value(query, 'q')
+                            or first_query_value(query, 'name')
+                            or ''
+                        ).strip(),
                     }
                     rows = []
                     for job in data.list_jobs(filters):
@@ -185,8 +192,11 @@ def create_scan_job_reads_router(
                     body, status = api_error_payload('Admin required', code='forbidden')
                     response = JSONResponse(body, status_code=status)
             if response is None:
-                raw = (request.query_params.get('path')
-                       or request.query_params.get('full_disk_path') or '').strip()
+                raw = (
+                    first_query_value(request.query_params, 'path')
+                    or first_query_value(request.query_params, 'full_disk_path')
+                    or ''
+                ).strip()
                 if not raw:
                     from oneirodex.utils.api_contract import api_error_payload
 
