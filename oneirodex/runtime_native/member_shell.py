@@ -386,7 +386,14 @@ def create_member_shell_router(flask_app, *, database_scope):
                 )
 
                 preferences = getattr(auth.user, 'preferences', None)
-                if preferences is None:
+                # Opening Preferences through the compatibility URL should be
+                # a read-only first visit, as it was in v1.1.8. Ordinary
+                # library entry still establishes its persisted 50-item
+                # default.
+                opens_preferences = first_query_value(
+                    request.query_params, 'preferences',
+                ) == '1'
+                if preferences is None and not opens_preferences:
                     preferences = UserPreference(user_id=auth.user.id)
                     native_db.session.add(preferences)
                     native_db.session.commit()
@@ -453,8 +460,8 @@ def create_member_shell_router(flask_app, *, database_scope):
                     'scan_has_run': first_run['scan_has_run'],
                     'unmatched_count': first_run['unmatched_count'],
                     'user_per_page': per_page,
-                    'user_default_sort': first_query_value(query, 'sort_by') or preferences.default_sort or 'name',
-                    'user_default_sort_order': first_query_value(query, 'sort_order') or preferences.default_sort_order or 'asc',
+                    'user_default_sort': first_query_value(query, 'sort_by') or getattr(preferences, 'default_sort', None) or 'name',
+                    'user_default_sort_order': first_query_value(query, 'sort_order') or getattr(preferences, 'default_sort_order', None) or 'asc',
                     'filters': {key: value for key, value in filters.items() if value is not None},
                 }
 

@@ -24,7 +24,9 @@ def normalize_tile_percent(raw) -> str:
 
 def stored_preference_formdata(prefs) -> dict:
     return {
-        'items_per_page': str(getattr(prefs, 'items_per_page', None) or 50),
+        # Match the legacy Preferences form for a user who has never visited
+        # the library and therefore has no persisted preference row.
+        'items_per_page': str(getattr(prefs, 'items_per_page', None) or 20),
         'default_sort': getattr(prefs, 'default_sort', None) or 'name',
         'default_sort_order': getattr(prefs, 'default_sort_order', None) or 'asc',
         'theme': getattr(prefs, 'theme', None) or 'default',

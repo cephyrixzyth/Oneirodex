@@ -255,6 +255,28 @@ def test_library_shell_creates_missing_preferences_in_native_session(monkeypatch
     assert session.added[0].user_id == user.id
     assert session.commits == 1
     assert user.preferences is session.added[0]
+    assert 'data-per-page="50"' in response.text
+
+
+def test_opening_preferences_does_not_create_missing_library_preferences(monkeypatch):
+    from oneirodex.utils.helpers import counts
+
+    monkeypatch.setattr(counts, 'get_library_count', lambda: 0)
+    monkeypatch.setattr(counts, 'get_games_count', lambda: 0)
+    monkeypatch.setattr(counts, 'get_first_run_state', lambda: {
+        'scan_has_run': False, 'unmatched_count': 0,
+    })
+    user = Member()
+    user.preferences = None
+    session = SimpleNamespace(added=[], commits=0)
+    client, _ = _native_client(monkeypatch, user=user, native_session=session)
+
+    response = client.get('/library?preferences=1')
+
+    assert response.status_code == 200
+    assert session.added == []
+    assert session.commits == 0
+    assert user.preferences is None
 
 
 def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):

@@ -6,6 +6,7 @@ from flask import Flask
 from types import SimpleNamespace
 
 from oneirodex.runtime_native.account_preferences import create_account_preferences_router
+from oneirodex.forms_native import stored_preference_formdata
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
@@ -61,6 +62,10 @@ def signed_session(*, csrf=False):
     state = {'_user_id': '167:fp', '_fresh': True}
     token = generate_csrf_token(state, 'native-preferences-secret') if csrf else None
     return dump_session_cookie(state, 'native-preferences-secret'), token
+
+
+def test_unpersisted_preferences_use_legacy_page_size_default():
+    assert stored_preference_formdata(None)['items_per_page'] == '20'
 
 
 def test_preferences_get_preserves_payload_and_signed_session_access():
