@@ -127,25 +127,28 @@ export function DiscoverySectionsPage() {
                   ? `${row.count} items`
                   : 'Empty'}
             </p>
-            <label className="od-admin-field">
-              <input
-                type="checkbox"
-                checked={row.is_visible}
-                disabled={disabled}
-                onChange={(event) => {
-                  const visible = event.target.checked
-                  void action(async () => {
-                    await postJson(`${API}/visibility`, { section_id: row.id, is_visible: visible })
-                    await refresh()
-                    setMessage('Shelf visibility saved.')
-                  })
-                }}
-              />{' '}
-              Visible {row.name}
-            </label>
-            <details className="od-discovery-shelf__actions">
-              <summary>More actions</summary>
-              <div className="od-admin-actions-row">
+            <div className="od-discovery-shelf__footer">
+              <label className="od-admin-field">
+                <input
+                  type="checkbox"
+                  className="od-discovery-shelf__visibility-toggle"
+                  checked={row.is_visible}
+                  aria-label={`Visible ${row.name}`}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const visible = event.target.checked
+                    void action(async () => {
+                      await postJson(`${API}/visibility`, { section_id: row.id, is_visible: visible })
+                      await refresh()
+                      setMessage('Shelf visibility saved.')
+                    })
+                  }}
+                />{' '}
+                Visible
+              </label>
+              <details className="od-discovery-shelf__actions">
+                <summary aria-label={`More actions for ${row.name}`}>Actions</summary>
+                <div className="od-admin-actions-row">
                 <Button
                   disabled={disabled || index === 0}
                   aria-label={`Move ${row.name} up`}
@@ -196,8 +199,9 @@ export function DiscoverySectionsPage() {
                     </Button>
                   </>
                 ) : null}
-              </div>
-            </details>
+                </div>
+              </details>
+            </div>
           </li>
         ))}
       </ol>

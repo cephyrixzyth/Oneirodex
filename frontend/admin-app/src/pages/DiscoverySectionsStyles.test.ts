@@ -16,3 +16,10 @@ test('repeated shelf and modal headings use the shared compact type scale', () =
   )
   expect(css).toMatch(/h3\s*\{\s*font-size: var\(--od-font-lg\);/)
 })
+
+test('discovery cards preserve legacy density with visible controls kept on one compact row', () => {
+  expect(css).toMatch(/grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, 13rem\), 1fr\)\)/)
+  expect(css).toMatch(/\.od-discovery-shelf__footer\s*\{[^}]*display:\s*flex/s)
+  expect(css).toMatch(/\.od-discovery-shelf__visibility-toggle:focus-visible\s*\{[^}]*outline:/s)
+  expect(css).toMatch(/@media \(max-width: 40rem\)[\s\S]*?\.od-discovery-shelves\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/)
+})

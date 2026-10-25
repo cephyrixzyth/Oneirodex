@@ -45,7 +45,7 @@ const state = {
 async function openShelfActions(name: string) {
   const checkbox = await screen.findByRole('checkbox', { name: `Visible ${name}` })
   const row = checkbox.closest('li')!
-  fireEvent.click(within(row).getByText('More actions'))
+  fireEvent.click(within(row).getByText('Actions'))
   return row
 }
 
@@ -62,7 +62,7 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
   const checkbox = await screen.findByRole('checkbox', { name: 'Visible Libraries' })
   const builtinRow = checkbox.closest('li')!
   expect(within(builtinRow).queryByRole('button', { name: 'Delete Libraries' })).toBeNull()
-  fireEvent.click(within(builtinRow).getByText('More actions'))
+  fireEvent.click(within(builtinRow).getByText('Actions'))
   expect(within(builtinRow).getByRole('button', { name: 'Move Libraries up' })).toBeDisabled()
   fireEvent.click(checkbox)
   await waitFor(() => expect(checkbox).not.toBeChecked())
