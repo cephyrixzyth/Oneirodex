@@ -192,8 +192,9 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
     """Collect all FastAPI methods for the path, then apply Flask defaults."""
     from starlette.routing import Match
 
-    app = route_app or getattr(request, 'app', None)
-    router = getattr(app, 'router', None)
+    apps = route_app or getattr(request, 'app', None)
+    if not isinstance(apps, (list, tuple)):
+        apps = (apps,)
     methods = set()
     path_scope = dict(request.scope)
     path_scope['method'] = 'GET'
@@ -210,7 +211,9 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
             if child_router is not None:
                 collect(getattr(child_router, 'routes', ()), {**scope, **child_scope})
 
-    collect(getattr(router, 'routes', ()), path_scope)
+    for app in apps:
+        router = getattr(app, 'router', None)
+        collect(getattr(router, 'routes', ()), path_scope)
     if 'GET' in methods:
         methods.add('HEAD')
     if methods:

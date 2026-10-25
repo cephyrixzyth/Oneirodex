@@ -181,6 +181,39 @@ def test_automatic_options_preserves_flask_method_order(runtime):
     assert response.content == b''
 
 
+def test_auto_options_combines_methods_from_split_native_routers():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    get_app = FastAPI()
+    post_app = FastAPI()
+
+    @get_app.get('/shared')
+    async def read_shared():
+        return {}
+
+    @post_app.post('/shared')
+    async def write_shared():
+        return {}
+
+    request = Request({
+        'type': 'http', 'method': 'OPTIONS', 'path': '/shared',
+        'raw_path': b'/shared', 'query_string': b'', 'headers': [],
+        'scheme': 'http', 'server': ('testserver', 80),
+        'client': ('testclient', 50000),
+    })
+    response = flask_auto_options_response(
+        {}, request, route_app=[get_app, post_app],
+    )
+
+    assert response is not None
+    assert response.status_code == 200
+    assert set(response.headers['allow'].split(', ')) == {
+        'OPTIONS', 'HEAD', 'GET', 'POST',
+    }
+
+
 def test_propose_leaf_options_matches_legacy_method_order(runtime):
     app, _data, _cookies = runtime
     path = '/api/library_tools/propose_leaf_libraries'

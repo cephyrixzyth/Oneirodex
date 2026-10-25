@@ -327,3 +327,15 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     playromtest_response = asyncio.run(playromtest_request())
     assert playromtest_response.status_code == 200
     assert 'Use Play from a game details page for browser emulation.' in playromtest_response.text
+
+    async def options_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+        ) as http:
+            return await http.options('/discover/zone/popular')
+
+    options_response = asyncio.run(options_request())
+    assert options_response.status_code == 200
+    assert set(options_response.headers['allow'].split(', ')) == {'OPTIONS', 'HEAD', 'GET'}
+    assert options_response.content == b''

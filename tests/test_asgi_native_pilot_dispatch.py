@@ -114,9 +114,10 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
         ) as client:
             get_response = await client.get('/pulse')
             head_response = await client.head('/pulse')
-        return get_response, head_response
+            options_response = await client.options('/pulse')
+        return get_response, head_response, options_response
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.json() == {
         'status': 'ok', 'probe': 'liveness', 'version': app_version,
@@ -127,6 +128,9 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert options_response.headers['allow'] == 'OPTIONS, HEAD, GET'
+    assert options_response.content == b''
 
 
 def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):

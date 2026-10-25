@@ -2991,6 +2991,10 @@ class LazyASGIApp:
             if await self._send_legacy_setup_gate_if_required(scope, send):
                 return
 
+            if scope.get('method', '').upper() == 'OPTIONS':
+                if await self._handle_automatic_options(scope, receive, send):
+                    return
+
             if path == '/manifest.webmanifest' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_app_manifest(scope, send)
                 return
@@ -4147,6 +4151,63 @@ class LazyASGIApp:
                 await self._native_admin_pilot(scope, receive, send)
                 return
             await self._native_read_api_app(scope, receive, send)
+
+    async def _handle_automatic_options(self, scope, receive, send) -> bool:
+        """Preserve Flask's automatic OPTIONS reply across split native apps."""
+        from starlette.responses import Response
+
+        direct_routes = {
+            '/api/emulator/installed-cores.js',
+            '/awake',
+            '/favicon.ico',
+            '/manifest.webmanifest',
+            '/offline',
+            '/pulse',
+            '/sw.js',
+            '/vr/sw.js',
+        }
+        path = scope.get('path', '/')
+        if path in direct_routes:
+            response = Response(
+                content=b'',
+                status_code=200,
+                headers={
+                    'Allow': 'OPTIONS, HEAD, GET',
+                    **self._configured_security_headers(),
+                },
+                media_type='text/html',
+            )
+            await response(scope, receive, send)
+            return True
+
+        await self._ensure_flask()
+        route_apps = [
+            self._native_read_api_app,
+            self._native_member_shell_app,
+            self._native_admin_pilot,
+        ]
+        route_apps = [app for app in route_apps if app is not None]
+
+        # Some routes deliberately implement OPTIONS. Preserve their handler
+        # instead of replacing it with Flask's generated empty response.
+        for app in route_apps:
+            if self._matches_native_app_route(app, scope):
+                await app(scope, receive, send)
+                return True
+
+        from starlette.requests import Request
+        from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+        response = flask_auto_options_response(
+            self._flask_app,
+            Request(scope, receive),
+            route_app=route_apps,
+            routing_app=self._flask_app,
+        )
+        if response is None:
+            return False
+        await response(scope, receive, send)
+        return True
 
     @staticmethod
     def _configured_security_headers():
