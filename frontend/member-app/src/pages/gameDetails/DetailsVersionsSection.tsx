@@ -66,15 +66,9 @@ export function DetailsVersionsSection({
           const versionKey = `${row.kind}:${row.uuid}`
           const downloadKey = `download:${row.kind}:${row.uuid || 'base'}`
           const companionSeat = seatCanUseCompanion()
-          const rowCanDownload = canDownload && isVersionDownloadable(row) && companionSeat
+          const rowHasDownload = isVersionDownloadable(row) && companionSeat
           const pathMissing = isVersionPathMissing(row)
           const sizeLabel = formatVersionSize(row.size)
-          const canApply =
-            canDownload &&
-            companionSeat &&
-            Boolean(game.client_connected) &&
-            row.kind === 'update' &&
-            rowCanDownload
           const applyBusy = busyVersionKey === versionKey
           const downloadBusy = busyVersionKey === downloadKey
           return (
@@ -108,11 +102,13 @@ export function DetailsVersionsSection({
                     about versions. Per-update download stays, because
                     that is the one thing the action bar genuinely cannot
                     express: "I have the game, I only need patch 1.03". */}
-                  {rowCanDownload && row.kind === 'update' ? (
+                  {rowHasDownload && row.kind === 'update' ? (
                     <Button
                       type="button"
-                      disabled={Boolean(busyVersionKey)}
+                      disabled={!canDownload || Boolean(busyVersionKey)}
+                      title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
                       onClick={() => {
+                        if (!canDownload) return
                         void handleVersionDownload({
                           kind: 'update',
                           versionUuid: row.uuid,
@@ -123,11 +119,13 @@ export function DetailsVersionsSection({
                       {downloadBusy ? 'Queuing…' : 'Download'}
                     </Button>
                   ) : null}
-                  {canApply ? (
+                  {companionSeat && Boolean(game.client_connected) && row.kind === 'update' && rowHasDownload ? (
                     <Button
                       type="button"
-                      disabled={Boolean(busyVersionKey)}
+                      disabled={!canDownload || Boolean(busyVersionKey)}
+                      title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
                       onClick={() => {
+                        if (!canDownload) return
                         setBusyVersionKey(versionKey)
                         setVersionActionStatus(null)
                         void queueClientCommand(game.uuid, 'update', {

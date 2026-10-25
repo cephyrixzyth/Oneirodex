@@ -147,6 +147,7 @@ export function GameActionBar({
   }
 
   function onInstallClick() {
+    if (!canDownload) return
     if (busyAction) return
     if (!clientConnected) {
       explain('Start the Oneirodex companion and keep it signed in, then try again.')
@@ -164,6 +165,10 @@ export function GameActionBar({
   }
 
   function onUpdateClick(event: any) {
+    if (!canDownload) {
+      event?.preventDefault?.()
+      return
+    }
     if (busyAction) {
       event?.preventDefault?.()
       return
@@ -184,6 +189,7 @@ export function GameActionBar({
   }
 
   function onUninstallClick() {
+    if (!canDownload) return
     if (busyAction) return
     if (!clientConnected) {
       explain('Start the Oneirodex companion to uninstall the local copy.')
@@ -304,71 +310,69 @@ export function GameActionBar({
           {clientConnected ? 'Companion online' : 'Companion offline'}
         </span>
       ) : null}
-      {canDownload ? (
-        <button
-          type="button"
-          className="od-action-bar__btn od-action-bar__btn--primary"
-          data-action="download"
-          disabled={busyAction === 'download_file'}
-          onClick={() => {
-            void onDownloadClick()
-          }}
-        >
-          {busyAction === 'download_file' ? 'Queuing…' : 'Download'}
-        </button>
-      ) : (
+      {!canDownload ? (
         <span className="od-action-bar__status" role="status">
           Downloads and companion install actions are unavailable for child accounts.
         </span>
-      )}
-      {canDownload ? (
-        <button
-          type="button"
-          className="od-action-bar__btn"
-          title={installTitle}
-          aria-disabled={!companionInstallReady && !companionDownloadReady}
-          data-action="install"
-          onClick={onInstallClick}
-        >
-          {installLabel}
-        </button>
       ) : null}
-      {canDownload && companionUpdateReady ? (
+      <button
+        type="button"
+        className="od-action-bar__btn od-action-bar__btn--primary"
+        data-action="download"
+        title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+        disabled={!canDownload || busyAction === 'download_file'}
+        onClick={() => {
+          void onDownloadClick()
+        }}
+      >
+        {busyAction === 'download_file' ? 'Queuing…' : 'Download'}
+      </button>
+      <button
+        type="button"
+        className="od-action-bar__btn"
+        title={!canDownload ? 'Companion install is unavailable for child accounts' : installTitle}
+        aria-disabled={!canDownload || (!companionInstallReady && !companionDownloadReady)}
+        data-action="install"
+        onClick={onInstallClick}
+      >
+        {installLabel}
+      </button>
+      {clientConnected && lifecycleState === 'update_available' ? (
         <button
           type="button"
           className="od-action-bar__btn"
           title={updateTitle}
+          aria-disabled={!canDownload}
           data-action="update"
           onClick={() => {
+            if (!canDownload) return
             void sendCommand('update')
           }}
         >
           {busyAction === 'update' ? 'Queuing…' : 'Update'}
         </button>
-      ) : canDownload ? (
+      ) : (
         <a
           className={`od-action-bar__btn${lifecycleState !== 'update_available' ? ' is-disabled' : ''}`}
           href={updatesUrl}
           title={updateTitle}
-          aria-disabled={lifecycleState !== 'update_available'}
+          aria-disabled={!canDownload || lifecycleState !== 'update_available'}
           data-action="update"
           onClick={onUpdateClick}
         >
           Update
         </a>
-      ) : null}
-      {canDownload ? (
-        <button
-          type="button"
-          className="od-action-bar__btn od-action-bar__btn--danger"
-          title={uninstallTitle}
-          aria-disabled={!companionUninstallReady}
-          data-action="uninstall"
-          onClick={onUninstallClick}
-        >
-          {busyAction === 'uninstall' ? 'Queuing…' : 'Uninstall'}
-        </button>
-      ) : null}
+      )}
+      <button
+        type="button"
+        className="od-action-bar__btn od-action-bar__btn--danger"
+        title={!canDownload ? 'Companion uninstall is unavailable for child accounts' : uninstallTitle}
+        aria-disabled={!canDownload || !companionUninstallReady}
+        data-action="uninstall"
+        onClick={onUninstallClick}
+      >
+        {busyAction === 'uninstall' ? 'Queuing…' : 'Uninstall'}
+      </button>
       {assistPack ? (
         <button
           type="button"

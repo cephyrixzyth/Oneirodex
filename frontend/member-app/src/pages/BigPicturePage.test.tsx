@@ -77,8 +77,10 @@ test('shows loading then renders tiles and hero for the first game', async () =>
   expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
 })
 
-test('child Big Picture explains download restrictions and hides download/install controls', async () => {
-  vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({ games: GAMES })
+test('child Big Picture preserves download/install controls in a disabled state', async () => {
+  vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({
+    games: [{ ...GAMES[0], client_connected: true, lifecycle_state: 'downloaded' }, ...GAMES.slice(1)],
+  })
 
   renderPage(
     <ShellHarness shell={{ role: 'child' }}>
@@ -88,8 +90,8 @@ test('child Big Picture explains download restrictions and hides download/instal
 
   expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent('Alpha Game')
   expect(screen.getByText(/downloads and companion install unavailable/i)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Install' })).toBeDisabled()
   expect(downloadsApi.initiateGameDownload).not.toHaveBeenCalled()
 })
 

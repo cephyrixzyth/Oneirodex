@@ -68,8 +68,7 @@ export function DetailsTranslationsSection({
             const versionKey = `patch:${patch.uuid}`
             const applyBusy = busyVersionKey === versionKey
             // TC-3: a thin seat gets the Guide link, never a queue button.
-            const canApplyPatch =
-              canDownload &&
+            const patchCompanionAvailable =
               seatCanUseCompanion() &&
               Boolean(game.client_connected) &&
               Boolean(game.rom_patch_apply_enabled)
@@ -85,15 +84,17 @@ export function DetailsTranslationsSection({
                     </span>
                   </div>
                   <div className="od-details-page__version-actions">
-                    {canDownload ? (
-                      <Button
-                        type="button"
-                        disabled={Boolean(busyVersionKey)}
-                        onClick={() => void downloadPatch(patch)}
-                      >
-                        {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
-                      </Button>
-                    ) : null}
+                    <Button
+                      type="button"
+                      disabled={!canDownload || Boolean(busyVersionKey)}
+                      title={!canDownload ? 'Patch downloads are unavailable for child accounts' : undefined}
+                      onClick={() => {
+                        if (!canDownload) return
+                        void downloadPatch(patch)
+                      }}
+                    >
+                      {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
+                    </Button>
                     {patch.source_url ? (
                       <a
                         className="od-btn"
@@ -104,11 +105,13 @@ export function DetailsTranslationsSection({
                         Guide
                       </a>
                     ) : null}
-                    {canApplyPatch ? (
+                    {patchCompanionAvailable ? (
                       <Button
                         type="button"
-                        disabled={Boolean(busyVersionKey)}
+                        disabled={!canDownload || Boolean(busyVersionKey)}
+                        title={!canDownload ? 'Companion patch actions are unavailable for child accounts' : undefined}
                         onClick={() => {
+                          if (!canDownload) return
                           setBusyVersionKey(versionKey)
                           setVersionActionStatus(null)
                           void queueClientCommand(game.uuid, 'apply_patch', {

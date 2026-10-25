@@ -365,23 +365,27 @@ export function BigPicturePage() {
                 <Link className="od-bp__btn od-bp__btn--primary" to={gameDetailsUrl(selected.uuid)}>
                   Open
                 </Link>
-                {thinSeat || isChildAccount ? null : (
+                {!thinSeat ? (
                   <button
                     type="button"
                     className="od-bp__btn"
+                    disabled={isChildAccount}
+                    title={isChildAccount ? 'Downloads are unavailable for child accounts' : undefined}
                     onClick={() => void requestDownload(selected.uuid)}
                   >
                     Download
                   </button>
-                )}
+                ) : null}
                 {!thinSeat &&
-                !isChildAccount &&
                 selected.client_connected &&
                 selected.lifecycle_state === 'downloaded' ? (
                   <button
                     type="button"
                     className="od-bp__btn"
+                    disabled={isChildAccount}
+                    title={isChildAccount ? 'Companion actions are unavailable for child accounts' : undefined}
                     onClick={() => {
+                      if (isChildAccount) return
                       void queueClientCommand(selected.uuid, 'install').then(() => {
                         showToast('Install queued for companion', 'success')
                       })

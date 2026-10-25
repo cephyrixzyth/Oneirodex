@@ -47,6 +47,10 @@ export function DetailsExtrasSection({
                   : null
             const sizeLabel = formatVersionSize(row.size)
             const pathMissing = row.path_missing === true || isVersionPathMissing(row)
+            const hasDownload = Boolean(row.download_url && !pathMissing)
+            const canApplyWithCompanion = Boolean(
+              seatCanUseCompanion() && game.client_connected && row.uuid && hasDownload,
+            )
             return (
               <li key={row.id || row.uuid || row.label}>
                 <div className="od-details-page__version-row">
@@ -67,11 +71,13 @@ export function DetailsExtrasSection({
                     ) : null}
                   </div>
                   <div className="od-details-page__version-actions">
-                    {canDownload && row.download_url && !pathMissing ? (
+                    {hasDownload ? (
                       <Button
                         type="button"
-                        disabled={Boolean(busyVersionKey)}
+                        disabled={!canDownload || Boolean(busyVersionKey)}
+                        title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
                         onClick={() => {
+                          if (!canDownload) return
                           void handleVersionDownload({
                             kind: 'extra',
                             versionUuid: row.uuid,
@@ -84,16 +90,13 @@ export function DetailsExtrasSection({
                           : 'Download'}
                       </Button>
                     ) : null}
-                    {canDownload &&
-                    seatCanUseCompanion() &&
-                    game.client_connected &&
-                    row.uuid &&
-                    row.download_url &&
-                    !pathMissing ? (
+                    {canApplyWithCompanion ? (
                       <Button
                         type="button"
-                        disabled={Boolean(busyVersionKey)}
+                        disabled={!canDownload || Boolean(busyVersionKey)}
+                        title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
                         onClick={() => {
+                          if (!canDownload) return
                           setBusyVersionKey(versionKey)
                           setVersionActionStatus(null)
                           void queueClientCommand(game.uuid, 'update', {

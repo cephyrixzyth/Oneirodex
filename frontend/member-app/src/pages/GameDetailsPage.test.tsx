@@ -15,7 +15,12 @@ vi.mock('../api/downloads', () => ({
   initiateGameDownload: vi.fn(),
 }))
 
+vi.mock('../api/clientCommands', () => ({
+  queueClientCommand: vi.fn(),
+}))
+
 import { initiateGameDownload } from '../api/downloads'
+import { queueClientCommand } from '../api/clientCommands'
 
 const detailsPayload = {
   uuid: '11111111-1111-4111-8111-111111111111',
@@ -38,6 +43,7 @@ const detailsPayload = {
 beforeEach(() => {
   vi.mocked(showToast).mockReset()
   vi.mocked(initiateGameDownload).mockReset()
+  vi.mocked(queueClientCommand).mockReset()
   stubFetch((url: any) => {
     if (String(url).includes('/details')) {
       return Promise.resolve({
@@ -106,7 +112,7 @@ test('loads game details into SPA page with action bar', async () => {
   })
 })
 
-test('child account details do not offer direct download or companion install actions', async () => {
+test('child account details preserve download actions as disabled while the server denies them', async () => {
   stubFetch((url: any) => {
     if (String(url).includes('/details')) {
       return Promise.resolve({
@@ -146,12 +152,24 @@ test('child account details do not offer direct download or companion install ac
   renderDetails(detailsPayload.uuid, 'child')
 
   expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Download$/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Download patch$/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Download update$/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Apply with companion$/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /^Install$/i })).not.toBeInTheDocument()
+  const downloadButtons = screen.getAllByRole('button', { name: /^Download$/i })
+  expect(downloadButtons).toHaveLength(3)
+  downloadButtons.forEach((button) => expect(button).toBeDisabled())
+  expect(screen.getByRole('button', { name: /^Download patch$/i })).toBeDisabled()
+  screen
+    .getAllByRole('button', { name: /^Apply with companion$/i })
+    .forEach((button) => expect(button).toBeDisabled())
+  expect(screen.getByRole('button', { name: /^Install$/i })).toHaveAttribute('aria-disabled', 'true')
+  expect(screen.getByRole('button', { name: /^Uninstall$/i })).toHaveAttribute('aria-disabled', 'true')
+  expect(screen.getByRole('link', { name: /^Update$/i })).toHaveAttribute('aria-disabled', 'true')
   expect(screen.getAllByText(/unavailable for child accounts/i).length).toBeGreaterThan(0)
+  expect(initiateGameDownload).not.toHaveBeenCalled()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /^Install$/i }))
+  await user.click(screen.getByRole('button', { name: /^Uninstall$/i }))
+  await user.click(screen.getByRole('link', { name: /^Update$/i }))
+  expect(queueClientCommand).not.toHaveBeenCalled()
+  expect(initiateGameDownload).not.toHaveBeenCalled()
 })
 
 test('shows Cheats panel only when cheat_surface is retroarch', async () => {

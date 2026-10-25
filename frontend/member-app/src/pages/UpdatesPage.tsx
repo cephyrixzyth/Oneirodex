@@ -386,11 +386,13 @@ export function UpdatesPage() {
                       ) : null}
                     </div>
                     <div className="od-updates__inbox-actions">
-                      {pack?.download_url && canDownload && seatCanUseCompanion() ? (
+                      {pack?.download_url && seatCanUseCompanion() ? (
                         <Button
                           type="button"
-                          disabled={busyKey === applyKey}
+                          disabled={!canDownload || busyKey === applyKey}
+                          title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
                           onClick={() => {
+                            if (!canDownload) return
                             if (!pack || !pack.kind || !pack.uuid) return
                             setBusyKey(applyKey)
                             void initiateGameDownload(game.uuid, {
@@ -415,11 +417,13 @@ export function UpdatesPage() {
                           Download {pack.kind}
                         </Button>
                       ) : null}
-                      {pack && canDownload && game.client_connected && seatCanUseCompanion() ? (
+                      {pack && game.client_connected && seatCanUseCompanion() ? (
                         <Button
                           type="button"
-                          disabled={busyKey === applyKey}
+                          disabled={!canDownload || busyKey === applyKey}
+                          title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
                           onClick={() => {
+                            if (!canDownload) return
                             void applyPack(game, pack)
                           }}
                         >

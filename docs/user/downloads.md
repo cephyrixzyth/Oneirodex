@@ -15,13 +15,14 @@
 - Legacy direct download URLs no longer create requests with `GET`; browser sessions must use the app's CSRF-protected action, and integrations should create a request with `POST /api/downloads/games/{game_uuid}` (`kind` and optional `version_uuid`). API tokens need the `write:download` scope.
 - Version list honesty: `path_missing` / `downloadable` / measured `size` · **Default** chip on the base install · librarians/admins can **Remove missing versions** (orphan cleanup).
 - Web UI does not install/extract on your PC — that needs the optional desktop companion (**Install / Update / Uninstall**). See [desktop-companion.md](desktop-companion.md).
+- Child accounts keep the familiar Download and companion action slots visible when the game or version supports them. Those controls are disabled with an explanation, and the server independently denies restricted download and companion operations.
 - History lists past downloads for your account; queue shows in-progress work when the client/server reports it.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| Button missing / disabled | No path on disk (`path_missing` / not downloadable), ACL, or unfinished scan |
+| Button missing / disabled | No path on disk (`path_missing` / not downloadable), ACL or child-account restriction, or unfinished scan. Child restrictions are explained beside the disabled controls. |
 | “Missing on disk” on a version | Path gone after move/delete — librarian **Remove missing versions** cleans orphans |
 | Download fails mid-stream | Disk full, path moved, reverse-proxy timeouts |
 | Page unstyled | Missing `member-app.css` — admin rebuild |
