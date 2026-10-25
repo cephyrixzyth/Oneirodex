@@ -260,6 +260,15 @@ describe('useRowScroll arrow hover', () => {
     vi.unstubAllGlobals()
   })
 
+  function touch(type: string, x: number, y = 100) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'touches', {
+      value: type === 'touchstart' ? [{ clientX: x, clientY: y }] : [],
+    })
+    Object.defineProperty(event, 'changedTouches', { value: [{ clientX: x, clientY: y }] })
+    return event
+  }
+
   test('hovering an arrow eases the track along', () => {
     const { result } = renderHook(() => useRowScroll({ edgeSpeed: 10 }))
     result.current.ref.current = track
@@ -312,6 +321,17 @@ describe('useRowScroll arrow hover', () => {
     expect(track.scrollLeft).toBe(800)
   })
 
+  test('Discover delegates a first-to-last wrap when the row is lazy-loaded', () => {
+    const onWrapToEnd = vi.fn()
+    const { result } = renderHook(() => useRowScroll({ wrapAround: true, onWrapToEnd }))
+    result.current.ref.current = track
+
+    act(() => result.current.scrollByPage(-1))
+
+    expect(onWrapToEnd).toHaveBeenCalledOnce()
+    expect(track.scrollLeft).toBe(0)
+  })
+
   test('Discover can wrap right from the last tile to the first', () => {
     const { result } = renderHook(() => useRowScroll({ wrapAround: true }))
     result.current.ref.current = track
@@ -320,6 +340,88 @@ describe('useRowScroll arrow hover', () => {
     act(() => result.current.scrollByPage(1))
 
     expect(track.scrollLeft).toBe(0)
+  })
+
+  test('Discover wraps a touch swipe right from the first tile to the last', () => {
+    renderHook(() => {
+      const scroll = useRowScroll({ bindKey: 1, wrapAround: true })
+      scroll.ref.current = track
+      return scroll
+    })
+
+    act(() => {
+      track.dispatchEvent(touch('touchstart', 80))
+      track.dispatchEvent(touch('touchend', 150))
+    })
+
+    expect(track.scrollLeft).toBe(800)
+  })
+
+  test('Discover delegates a lazy-loaded touch wrap from the first tile', () => {
+    const onWrapToEnd = vi.fn()
+    renderHook(() => {
+      const scroll = useRowScroll({ bindKey: 1, wrapAround: true, onWrapToEnd })
+      scroll.ref.current = track
+      return scroll
+    })
+
+    act(() => {
+      track.dispatchEvent(touch('touchstart', 80))
+      track.dispatchEvent(touch('touchend', 150))
+    })
+
+    expect(onWrapToEnd).toHaveBeenCalledOnce()
+    expect(track.scrollLeft).toBe(0)
+  })
+
+  test('Discover wraps a touch swipe left from the last tile to the first', () => {
+    track.scrollLeft = 800
+    renderHook(() => {
+      const scroll = useRowScroll({ bindKey: 1, wrapAround: true })
+      scroll.ref.current = track
+      return scroll
+    })
+
+    act(() => {
+      track.dispatchEvent(touch('touchstart', 150))
+      track.dispatchEvent(touch('touchend', 80))
+    })
+
+    expect(track.scrollLeft).toBe(0)
+  })
+
+  test('Discover still wraps when load-ahead grows the row during a touch', () => {
+    track.scrollLeft = 800
+    renderHook(() => {
+      const scroll = useRowScroll({ bindKey: 1, wrapAround: true })
+      scroll.ref.current = track
+      return scroll
+    })
+
+    act(() => {
+      track.dispatchEvent(touch('touchstart', 150))
+      Object.defineProperty(track, 'scrollWidth', { configurable: true, value: 1800 })
+      track.dispatchEvent(touch('touchend', 80))
+    })
+
+    expect(track.scrollLeft).toBe(0)
+  })
+
+  test('a vertical touch swipe does not wrap a Discover row', () => {
+    renderHook(() => {
+      const scroll = useRowScroll({ bindKey: 1, wrapAround: true })
+      scroll.ref.current = track
+      return scroll
+    })
+
+    const end = touch('touchend', 90, 180)
+    act(() => {
+      track.dispatchEvent(touch('touchstart', 80, 100))
+      track.dispatchEvent(end)
+    })
+
+    expect(track.scrollLeft).toBe(0)
+    expect(end.defaultPrevented).toBe(false)
   })
 })
 
