@@ -228,7 +228,7 @@ The bar carries **one** control: **Expand all** puts every topic in the pane in 
 
 ## Big Picture
 
-Gamepad-friendly browse at **More → Big Picture**. Esc exits; Attract opens trailers. Full button map (Xbox + DualSense): [controllers-and-vr.md](controllers-and-vr.md).
+Gamepad-friendly browse at **More → Big Picture**. **Y** opens Friends; **B** opens Attract. On the keyboard, **Esc** clears the selected game's focus; use the visible **Exit** control to return to the Library. Full button map (Xbox + DualSense): [controllers-and-vr.md](controllers-and-vr.md).
 
 ## VR / headsets
 

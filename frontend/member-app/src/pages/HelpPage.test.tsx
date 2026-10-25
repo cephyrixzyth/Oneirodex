@@ -43,6 +43,24 @@ test('picking a card swaps the pane underneath', async () => {
   expect(screen.queryByText(/Ctrl\+K \/ ⌘K/)).toBeNull()
 })
 
+test('Big Picture help lists the supported controls and child download restriction', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter>
+      <ShellHarness>
+        <HelpPage />
+      </ShellHarness>
+    </MemoryRouter>,
+  )
+
+  await user.click(screen.getByRole('button', { name: /Controllers & VR/i }))
+
+  expect(
+    screen.getByText(/Enter \/ A opens; D \/ X downloads; B opens Attract; Y toggles Friends/i),
+  ).toBeInTheDocument()
+  expect(screen.getByText(/Child downloads are unavailable/i)).toBeInTheDocument()
+})
+
 test('one fold button, and its label names the state it moves you to', async () => {
   // Expand all and Collapse all as a permanent pair meant one of the two was
   // always a no-op. It is one control that reports which mode you are in.

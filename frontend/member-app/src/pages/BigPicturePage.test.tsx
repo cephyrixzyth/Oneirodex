@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BigPicturePage } from './BigPicturePage'
@@ -79,7 +79,10 @@ test('shows loading then renders tiles and hero for the first game', async () =>
 
 test('child Big Picture preserves download/install controls in a disabled state', async () => {
   vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({
-    games: [{ ...GAMES[0], client_connected: true, lifecycle_state: 'downloaded' }, ...GAMES.slice(1)],
+    games: [
+      { ...GAMES[0], client_connected: true, lifecycle_state: 'downloaded' },
+      ...GAMES.slice(1),
+    ],
   })
 
   renderPage(
@@ -89,12 +92,55 @@ test('child Big Picture preserves download/install controls in a disabled state'
   )
 
   expect(await screen.findByRole('heading', { level: 2 })).toHaveTextContent('Alpha Game')
-  expect(screen.getByText(/Kid mode · ← → browse · Esc exit · Y friends/i)).toBeInTheDocument()
-  expect(screen.getByText(/downloads and companion install actions are unavailable/i))
-    .toHaveClass('visually-hidden')
+  expect(
+    screen.getByText(
+      /Kid mode · ← → browse · A \/ Enter open · B attract · Y friends · Esc blur · Home first/i,
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByText(/downloads and companion install actions are unavailable/i)).toHaveClass(
+    'visually-hidden',
+  )
   expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Install' })).toBeDisabled()
   expect(downloadsApi.initiateGameDownload).not.toHaveBeenCalled()
+})
+
+test('Big Picture gamepad Y toggles the Friends companion', async () => {
+  vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({ games: GAMES })
+  const originalGetGamepads = Object.getOwnPropertyDescriptor(navigator, 'getGamepads')
+  const buttons = Array.from({ length: 16 }, (_, index) => ({ pressed: index === 3 }))
+  Object.defineProperty(navigator, 'getGamepads', {
+    configurable: true,
+    value: () => [{ axes: [0], buttons }],
+  })
+  let nextFrame: FrameRequestCallback | undefined
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    nextFrame = callback
+    return 1
+  })
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+  vi.spyOn(performance, 'now').mockReturnValue(300)
+
+  try {
+    renderPage(
+      <ShellHarness shell={{}}>
+        <BigPicturePage />
+      </ShellHarness>,
+    )
+
+    await screen.findByRole('heading', { level: 2, name: 'Alpha Game' })
+    await waitFor(() => expect(nextFrame).toBeDefined())
+    act(() => nextFrame?.(300))
+
+    expect(screen.getByRole('button', { name: 'Friends' })).toHaveAttribute('aria-pressed', 'true')
+  } finally {
+    vi.restoreAllMocks()
+    if (originalGetGamepads) {
+      Object.defineProperty(navigator, 'getGamepads', originalGetGamepads)
+    } else {
+      delete (navigator as Navigator & { getGamepads?: () => Gamepad[] }).getGamepads
+    }
+  }
 })
 
 test('arrow keys move the selection and update the hero', async () => {

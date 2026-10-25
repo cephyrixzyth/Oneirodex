@@ -203,7 +203,7 @@ const FAQ_SECTIONS = [
     short: 'Controllers',
     summary: 'Big Picture and headset browse',
     items: [
-      'More → Big Picture: A open, X download, B Attract, Y Friends, Esc exit.',
+      'More → Big Picture: arrows browse; Enter / A opens; D / X downloads; B opens Attract; Y toggles Friends; Home selects the first game; Esc clears selection focus. Child downloads are unavailable.',
       'VR browse (/vr) is headset-friendly for any seat — not Quest-only.',
       'VR badge sits in the top-left stack; Sense controllers do not drive the website.',
     ],

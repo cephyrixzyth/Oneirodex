@@ -16,7 +16,7 @@ Open **More → Big Picture** for a gamepad-first library rail.
 | Exit / blur | — | — | `Esc` |
 | First / last | — | — | `Home` / `End` |
 
-Kid mode uses the same browse controls; parental ACL already filters the list. Download may be unavailable for child accounts.
+Kid mode uses the same browse and open controls; parental ACL filters the list. Download and install controls remain visible but disabled for child accounts.
 
 **Steam Deck / Steam Input:** If you launch the browser from Steam, Steam can remap controls. Oneirodex uses the browser Gamepad API — it does not ship a separate Steam Input profile yet.
 

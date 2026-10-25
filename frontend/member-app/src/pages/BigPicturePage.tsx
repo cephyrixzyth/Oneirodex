@@ -101,7 +101,8 @@ export function BigPicturePage() {
     index: number
     select: (nextIndex: number) => void
     download: (uuid: string) => void
-  }>({ games: [], index: 0, select: () => {}, download: () => {} })
+    toggleFriends: () => void
+  }>({ games: [], index: 0, select: () => {}, download: () => {}, toggleFriends: () => {} })
 
   const requestDownload = async (uuid: string) => {
     if (isChildAccount) return
@@ -163,7 +164,13 @@ export function BigPicturePage() {
   }
 
   useEffect(() => {
-    padState.current = { games: list, index, select, download: requestDownload }
+    padState.current = {
+      games: list,
+      index,
+      select,
+      download: requestDownload,
+      toggleFriends: () => setSocialOpen((value) => !value),
+    }
   })
 
   useEffect(() => {
@@ -183,16 +190,33 @@ export function BigPicturePage() {
     let axisLatch = 0
     let lastNav = 0
     let confirmLatch = false
+    let friendsLatch = false
 
     const poll = () => {
       const pad = (navigator.getGamepads() || [])[0]
       const { games: padGames, index: padIndex } = padState.current
-      if (!pad || !padGames.length) {
+      if (!pad) {
         frame = requestAnimationFrame(poll)
         return
       }
 
       const now = performance.now()
+      const friends = pad.buttons[3]?.pressed
+      if (friends) {
+        if (!friendsLatch && now - lastNav > GAMEPAD_REPEAT_MS) {
+          padState.current.toggleFriends()
+          lastNav = now
+        }
+        friendsLatch = true
+      } else {
+        friendsLatch = false
+      }
+
+      if (!padGames.length) {
+        frame = requestAnimationFrame(poll)
+        return
+      }
+
       const axisX = pad.axes[0] || 0
       const dpadLeft = pad.buttons[14]?.pressed
       const dpadRight = pad.buttons[15]?.pressed
@@ -312,7 +336,7 @@ export function BigPicturePage() {
           <h1 className="od-bp__title">Big Picture</h1>
           <p className="od-bp__hint">
             {shellConfig.role === 'child'
-              ? 'Kid mode · ← → browse · Esc exit · Y friends'
+              ? 'Kid mode · ← → browse · A / Enter open · B attract · Y friends · Esc blur · Home first'
               : '← → browse · Enter / A open · D download · B attract · Y friends · Esc blur · Home first'}
           </p>
         </div>
@@ -379,7 +403,9 @@ export function BigPicturePage() {
                     type="button"
                     className="od-bp__btn"
                     disabled={isChildAccount}
-                    title={isChildAccount ? 'Downloads are unavailable for child accounts' : undefined}
+                    title={
+                      isChildAccount ? 'Downloads are unavailable for child accounts' : undefined
+                    }
                     aria-describedby={
                       isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
                     }
@@ -395,7 +421,11 @@ export function BigPicturePage() {
                     type="button"
                     className="od-bp__btn"
                     disabled={isChildAccount}
-                    title={isChildAccount ? 'Companion actions are unavailable for child accounts' : undefined}
+                    title={
+                      isChildAccount
+                        ? 'Companion actions are unavailable for child accounts'
+                        : undefined
+                    }
                     aria-describedby={
                       isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
                     }
