@@ -237,3 +237,18 @@ def test_disconnect_and_feature_gate_preserve_response_contract(native_client):
     assert denied.status_code == 403
     assert denied.json()['error_code'] == 'forbidden'
     assert len([call for call in data.calls if call[0] == 'csv']) == 0
+
+
+def test_ownership_action_routes_are_limited_to_supported_store_slugs(native_client):
+    runtime, data = native_client
+
+    reserved = (
+        ('POST', '/api/ownership/connections', 404),
+        ('DELETE', '/api/ownership/providers', 404),
+        ('POST', '/api/ownership/titles', 404),
+        ('DELETE', '/api/ownership/sync-all', 405),
+    )
+    for method, path, expected_status in reserved:
+        response = _request(runtime, method, path)
+        assert response.status_code == expected_status, (method, path, response.text)
+    assert data.calls == []

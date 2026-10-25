@@ -319,11 +319,8 @@ def create_reference_sets_router(
         return response
 
     @router.api_route('/api/reference-sets', methods=['GET', 'HEAD', 'POST'])
-    @router.api_route('/api/reference-sets/{set_id}', methods=['DELETE'])
-    async def api_reference_sets(request: Request, set_id: str | None = None):
-        if request.method == 'DELETE' and set_id is not None and not set_id.isdecimal():
-            return flask_route_not_found_response(flask_app, request)
-
+    @router.api_route('/api/reference-sets/{set_id:int}', methods=['DELETE'])
+    async def api_reference_sets(request: Request, set_id: int | None = None):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None

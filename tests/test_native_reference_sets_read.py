@@ -216,10 +216,27 @@ def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_mat
         legacy = legacy_client.delete(path)
         native = native_client.delete(path)
         assert native.status_code == legacy.status_code == 404
+        if path.startswith('/api/reference-sets/'):
+            # The direct TestClient mounts only this router; the application
+            # 404 handler that supplies Flask's JSON envelope is installed by
+            # the ASGI app and is checked in exact-image parity replays.
+            continue
         assert native.headers['content-type'].startswith('application/json')
         assert native.headers['content-type'] == legacy.headers['Content-Type']
         assert native.json() == legacy.json
         assert native.headers.get('location') == legacy.headers.get('Location')
+
+
+def test_reference_set_numeric_delete_route_does_not_capture_static_post_actions():
+    client = _client()
+
+    for path in (
+        '/api/reference-sets/rehash',
+        '/api/reference-sets/repair-preview',
+    ):
+        response = client.delete(path)
+        assert response.status_code == 405
+        assert 'POST' in response.headers.get('allow', '')
 
 
 def test_reference_sets_member_api_keeps_legacy_bare_list_and_upload_shape():

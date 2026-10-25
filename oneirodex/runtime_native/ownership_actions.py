@@ -101,50 +101,35 @@ def create_ownership_actions_router(
     router = APIRouter()
     data = data_access or OwnershipActionsData()
 
-    # Keep this exact route before the one-segment store route below.
-    @router.post('/api/ownership/sync-all')
-    async def sync_all_ownership(request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='sync_all',
-        )
+    def endpoint(action, store=None):
+        async def handle(request: Request):
+            return await _handle_action(
+                request, flask_app, data, find_user=find_user, find_token=find_token,
+                commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                login_manager=login_manager, database_scope=database_scope,
+                action=action, store=store,
+            )
 
-    @router.post('/api/ownership/{store:str}')
-    async def connect_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='connect', store=store,
-        )
+        return handle
 
-    @router.delete('/api/ownership/{store:str}')
-    async def disconnect_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='disconnect', store=store,
+    router.add_api_route(
+        '/api/ownership/sync-all', endpoint('sync_all'), methods=['POST'],
+    )
+    # Explicit store paths keep reserved read/action names out of the dynamic
+    # method table, matching Flask's per-provider routes and its 405 behavior.
+    for store in sorted(_LIVE_STORES):
+        router.add_api_route(
+            f'/api/ownership/{store}', endpoint('connect', store), methods=['POST'],
         )
-
-    @router.post('/api/ownership/{store:str}/sync')
-    async def sync_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='sync', store=store,
+        router.add_api_route(
+            f'/api/ownership/{store}', endpoint('disconnect', store), methods=['DELETE'],
         )
-
-    @router.post('/api/ownership/{store:str}/csv')
-    async def import_ownership_csv(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='csv', store=store,
+        router.add_api_route(
+            f'/api/ownership/{store}/sync', endpoint('sync', store), methods=['POST'],
+        )
+    for store in sorted(_CSV_STORES):
+        router.add_api_route(
+            f'/api/ownership/{store}/csv', endpoint('csv', store), methods=['POST'],
         )
 
     return router
