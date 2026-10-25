@@ -121,12 +121,18 @@ test('keeps scan start errors visible in the automatic scan form', async () => {
       ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
       : {
           roots: [
-            { id: 'games', label: 'Games', path: '/games', default: true, exists: true, read: true },
+            {
+              id: 'games',
+              label: 'Games',
+              path: '/games',
+              default: true,
+              exists: true,
+              read: true,
+            },
           ],
         },
   )
-  scanError.current =
-    'Invalid cron expression: cron must have 5 fields: minute hour dom month dow'
+  scanError.current = 'Invalid cron expression: cron must have 5 fields: minute hour dom month dow'
   vi.mocked(clearScanError).mockImplementation(() => {
     scanError.current = ''
   })
@@ -176,7 +182,7 @@ test('lists manual identify candidates without starting a scan and links to the 
   const identify = await screen.findByRole('link', { name: 'Identify' })
   expect(identify).toHaveAttribute(
     'href',
-    '/add_game_manual?full_disk_path=%2Fgames%2FMetroid&library_uuid=lib-1&name=Metroid',
+    '/add_game_manual?full_disk_path=%2Fgames%2FMetroid&library_uuid=lib-1',
   )
   expect(postJson).toHaveBeenCalledWith(
     '/api/library_tools/manual_identify/list',
@@ -212,7 +218,7 @@ test('restores candidates from the legacy manual-folder session after its redire
   const identify = await screen.findByRole('link', { name: 'Identify' })
   expect(identify).toHaveAttribute(
     'href',
-    '/add_game_manual?full_disk_path=%2Fstorage%2FParityRoot%2FParity+Sample+Game&library_uuid=lib-legacy&name=Parity+Sample+Game',
+    '/add_game_manual?full_disk_path=%2Fstorage%2FParityRoot%2FParity+Sample+Game&library_uuid=lib-legacy',
   )
   expect(screen.getByText('Parity Sample Game')).toBeInTheDocument()
   expect(scan).not.toHaveBeenCalled()

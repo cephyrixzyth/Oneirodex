@@ -71,7 +71,9 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   expect(await screen.findByLabelText('Name')).toHaveValue('Sample')
   expect(screen.getByLabelText('Full disk path')).toHaveValue('/games/Sample')
   expect(screen.getByText('Platform: PC Windows')).toBeInTheDocument()
-  expect(screen.getByRole('option', { name: 'Parity Batch Library · PC Windows' })).toBeInTheDocument()
+  expect(
+    screen.getByRole('option', { name: 'Parity Batch Library · PC Windows' }),
+  ).toBeInTheDocument()
   const libraryPanel = screen.getByRole('region', { name: 'Library selection' })
   const identityPanel = screen.getByRole('region', { name: 'Game identity' })
   expect(
@@ -323,7 +325,10 @@ test('shows duplicate IGDB ID errors before the long edit form', async () => {
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent(conflictMessage)
-  expect(alert.compareDocumentPosition(screen.getByLabelText('Library')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(
+    alert.compareDocumentPosition(screen.getByLabelText('Library')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })
 
 test('shows an out-of-root path rejection as an accessible save alert', async () => {
@@ -355,7 +360,11 @@ test('shows an out-of-root path rejection as an accessible save alert', async ()
   })
   globalThis.fetch = fetchMock as unknown as typeof fetch
   render(
-    <MemoryRouter initialEntries={['/add_game_manual?igdb_id=2000777751&library_uuid=lib-1&name=Path+probe&full_disk_path=%2Foutside%2FOneirodexParity%2Fnot-a-real-file.rom']}>
+    <MemoryRouter
+      initialEntries={[
+        '/add_game_manual?igdb_id=2000777751&library_uuid=lib-1&name=Path+probe&full_disk_path=%2Foutside%2FOneirodexParity%2Fnot-a-real-file.rom',
+      ]}
+    >
       <Routes>
         <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
       </Routes>
@@ -369,11 +378,15 @@ test('shows an out-of-root path rejection as an accessible save alert', async ()
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent(message)
-  expect(alert.compareDocumentPosition(screen.getByLabelText('Library')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(
+    alert.compareDocumentPosition(screen.getByLabelText('Library')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })
 
 test('keeps missing provider-key guidance inline as a polite status', async () => {
-  const note = 'MOBYGAMES_API_KEY not configured — empty results. Set env or GlobalSettings.mobygames_api_key.'
+  const note =
+    'MOBYGAMES_API_KEY not configured — empty results. Set env or GlobalSettings.mobygames_api_key.'
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.endsWith('/api/admin/manual-identify/options'))
@@ -413,7 +426,10 @@ test('keeps missing provider-key guidance inline as a polite status', async () =
   const status = await screen.findByRole('status')
   expect(status).toHaveTextContent(note)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(status.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(
+    status.compareDocumentPosition(screen.getByLabelText('Full disk path')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })
 
 test('explains that a game name is required before searching other providers', async () => {
@@ -449,7 +465,9 @@ test('explains that a game name is required before searching other providers', a
 
   expect(await screen.findByRole('status')).toHaveTextContent('Enter a game name first')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?'))).toBe(false)
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?')),
+  ).toBe(false)
 })
 
 test('explains that a game name is required before searching IGDB', async () => {
@@ -485,7 +503,9 @@ test('explains that a game name is required before searching IGDB', async () => 
 
   expect(await screen.findByRole('status')).toHaveTextContent('Enter a game name first')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(false)
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?')),
+  ).toBe(false)
 })
 
 test('keeps an empty IGDB result as inline guidance instead of an error alert', async () => {
@@ -505,8 +525,7 @@ test('keeps an empty IGDB result as inline guidance instead of an error alert', 
         categories: [],
         statuses: [],
       }) as any
-    if (url.startsWith('/api/search_igdb_by_name?'))
-      return response({ results: [] }) as any
+    if (url.startsWith('/api/search_igdb_by_name?')) return response({ results: [] }) as any
     return response({}) as any
   })
   globalThis.fetch = fetchMock as unknown as typeof fetch
@@ -522,7 +541,9 @@ test('keeps an empty IGDB result as inline guidance instead of an error alert', 
 
   expect(await screen.findByRole('status')).toHaveTextContent(note)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(true)
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?')),
+  ).toBe(true)
 })
 
 test('keeps provider failures beside the provider search controls', async () => {
@@ -563,8 +584,13 @@ test('keeps provider failures beside the provider search controls', async () => 
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent(note)
-  expect(alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?'))).toBe(true)
+  expect(
+    alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_metadata?')),
+  ).toBe(true)
 })
 
 test('announces IGDB transport failures beside the search controls', async () => {
@@ -599,14 +625,20 @@ test('announces IGDB transport failures beside the search controls', async () =>
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Failed to fetch')
-  expect(alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?'))).toBe(true)
+  expect(
+    alert.compareDocumentPosition(screen.getByLabelText('Full disk path')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/search_igdb_by_name?')),
+  ).toBe(true)
 })
 
 test.each([
   ['/storage/ParityRoot/Alpha.rom', 'Alpha'],
   ['C:\\Games\\Beta.nes', 'Beta'],
   ['/games/Final.Fantasy.IX', 'Final.Fantasy.IX'],
+  ['/storage/ParityRoot/ParityManualGame', 'ParityManualGame'],
 ])('derives a title from a path when no explicit name is supplied: %s', async (path, title) => {
   globalThis.fetch = vi.fn(async () =>
     response({

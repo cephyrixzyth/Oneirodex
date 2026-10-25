@@ -91,11 +91,7 @@ export function ScanControlsPage() {
   useEffect(() => {
     const sectionId =
       hash.slice(1) ||
-      (activeTab === 'manual'
-        ? 'manual-identify'
-        : activeTab === 'jobs'
-          ? 'scan-jobs'
-          : '')
+      (activeTab === 'manual' ? 'manual-identify' : activeTab === 'jobs' ? 'scan-jobs' : '')
     if (!['automatic-scan', 'manual-identify', 'scan-jobs'].includes(sectionId)) return
     const target = document.getElementById(sectionId)
     if (!target) return
@@ -364,8 +360,8 @@ export function ScanControlsPage() {
             {manualError.toLowerCase().includes('write permissions') ? (
               <p className="od-admin-hint">
                 Manual identification needs write access to the selected game folders when local
-                metadata files are enabled. Grant Oneirodex write access or turn off “Write
-                metadata file on manual ID” in Server Settings.{' '}
+                metadata files are enabled. Grant Oneirodex write access or turn off “Write metadata
+                file on manual ID” in Server Settings.{' '}
                 <a href="/admin/new_server_settings">Open Server Settings</a>
               </p>
             ) : null}
@@ -398,7 +394,6 @@ export function ScanControlsPage() {
                   const params = new URLSearchParams({
                     full_disk_path: row.full_path,
                     library_uuid: libraryUuid,
-                    name: row.name,
                   })
                   return (
                     <tr key={row.full_path}>
