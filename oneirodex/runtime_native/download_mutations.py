@@ -651,7 +651,20 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
     detail_url = f'/game_details/{game_uuid}'
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
-        if request.method == 'GET':
+        if request.method == 'OPTIONS':
+            response = Response(
+                status_code=200,
+                headers={
+                    'Allow': 'OPTIONS, HEAD, GET, POST',
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Content-Length': '0',
+                },
+            )
+            for key, value in security_header_values(flask_app.config).items():
+                response.headers.setdefault(key, value)
+            response.headers.setdefault('Cache-Control', 'no-store')
+            return response
+        if request.method in ('GET', 'HEAD'):
             response = _legacy_other_get_preflight(
                 request, flask_app=flask_app, data=data,
                 find_user=find_user, find_token=find_token,
@@ -660,6 +673,15 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
                 game_uuid=game_uuid, file_id=file_id,
             )
             if response is not None:
+                if request.method == 'HEAD':
+                    headers = dict(response.headers)
+                    if getattr(response, 'body', b'') and 'content-length' not in {
+                        key.lower() for key in headers
+                    }:
+                        headers['Content-Length'] = str(len(response.body))
+                    response = Response(
+                        content=b'', status_code=response.status_code, headers=headers,
+                    )
                 for key, value in security_header_values(flask_app.config).items():
                     response.headers.setdefault(key, value)
                 response.headers.setdefault('Cache-Control', 'no-store')

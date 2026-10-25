@@ -1035,12 +1035,9 @@ def test_legacy_download_get_and_head_never_create_requests():
 
 
 @pytest.mark.parametrize('method', ['GET', 'HEAD', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
-@pytest.mark.parametrize(('rule', 'path'), [
-    ('/download_game/<game_uuid>', '/download_game/12345678-1234-1234-1234-123456789abc'),
-    ('/download_other/<file_type>/<game_uuid>/<file_id>',
-     '/download_other/update/12345678-1234-1234-1234-123456789abc/42'),
-])
-def test_native_post_only_download_methods_match_current_flask_bridge(method, rule, path):
+def test_native_post_only_game_download_methods_match_current_flask_bridge(method):
+    rule = '/download_game/<game_uuid>'
+    path = '/download_game/12345678-1234-1234-1234-123456789abc'
     legacy = Flask(__name__)
     legacy.add_url_rule(
         rule, endpoint='download', view_func=lambda **_kwargs: 'ok', methods=['POST'],
@@ -1055,6 +1052,49 @@ def test_native_post_only_download_methods_match_current_flask_bridge(method, ru
     assert response.headers.get('content-type') == expected.headers.get('Content-Type')
     assert response.headers.get('content-length') == expected.headers.get('Content-Length')
     assert response.content == expected.get_data()
+    assert data.created is None
+
+
+def test_download_other_options_advertises_supported_get_head_and_post():
+    data = FakeDownloads()
+    response = make_client(data=data, role='user').options(
+        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert set(response.headers['allow'].split(', ')) == {'OPTIONS', 'HEAD', 'GET', 'POST'}
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.content == b''
+    assert data.created is None
+
+
+def test_download_other_head_preserves_unauthenticated_redirect_without_body():
+    data = FakeDownloads()
+    client = make_client(data=data, role='user')
+    client.cookies.clear()
+
+    response = client.head(
+        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers.get('location')
+    assert response.content == b''
+    assert data.created is None
+
+
+def test_download_other_head_does_not_repeat_state_changing_legacy_get():
+    data = FakeDownloads()
+    response = make_client(data=data, role='user').head(
+        '/download_other/update/12345678-1234-1234-1234-123456789abc/42',
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 405
+    assert set(response.headers['allow'].split(', ')) == {'POST', 'OPTIONS'}
+    assert response.content == b''
     assert data.created is None
 
 
