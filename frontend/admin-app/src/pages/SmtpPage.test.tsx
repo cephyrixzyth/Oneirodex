@@ -30,11 +30,16 @@ test('loads safe settings, saves blank password, and tests the saved connection 
   expect(screen.getByLabelText('Username')).toHaveAttribute('id', 'smtp_username')
   expect(screen.getByLabelText('Password')).toHaveAttribute('id', 'smtp_password')
   expect(screen.getByLabelText('Use TLS')).toHaveAttribute('id', 'smtp_use_tls')
-  expect(screen.getByLabelText('Default sender email')).toHaveAttribute(
-    'id',
-    'smtp_default_sender',
-  )
+  expect(screen.getByLabelText('Default sender email')).toHaveAttribute('id', 'smtp_default_sender')
   expect(screen.getByLabelText('Password')).toHaveValue('')
+  const saveActions = screen
+    .getByRole('button', { name: 'Save Settings' })
+    .closest('.od-admin-actions.od-smtp-actions')
+  const settingsFields = screen.getByRole('group', { name: 'Connection settings' })
+  expect(saveActions).not.toBeNull()
+  expect(
+    saveActions!.compareDocumentPosition(settingsFields!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
   fireEvent.change(port, { target: { value: '2525' } })
   expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))

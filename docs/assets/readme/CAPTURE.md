@@ -14,6 +14,8 @@ honestly it is skipped and the run says so.
 
 ## Recipe
 
+**Targeted admin refresh:** 2026-10-26 — `admin-smtp-settings.png` and `admin-igdb-settings.png` were refreshed from exact-image current captures after settings action-label, order, sizing, and accessibility-name parity changes. This was a two-page targeted capture, not a rerun of all 55 surfaces.
+
 **Latest full still capture:** 2026-10-17 — all 55 member/admin surfaces passed
 the health gate against the throwaway `oneirodexcapture` instance. README
 screenshot slots were refreshed, then the hero, section art, feature cards,

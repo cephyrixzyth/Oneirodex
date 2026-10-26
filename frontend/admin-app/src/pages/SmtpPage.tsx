@@ -139,6 +139,19 @@ export function SmtpPage() {
         <PageStatus loading loadingMessage="Loading SMTP settings…" />
       ) : (
         <form className="od-admin-panel" noValidate onSubmit={save}>
+          <p className="od-admin-hint">
+            Save changes before testing. The test checks the saved connection and authentication
+            without sending email.
+          </p>
+          <div className="od-admin-actions od-smtp-actions">
+            <Button type="submit" variant="primary" disabled={disabled}>
+              {busy ? 'Working…' : 'Save Settings'}
+            </Button>
+            <Button disabled={disabled} onClick={testConnection}>
+              Test Settings
+            </Button>
+          </div>
+          {lastTested ? <p className="od-admin-hint">Last tested: {lastTested}</p> : null}
           <fieldset className="od-admin-panel" disabled={disabled}>
             <legend>Connection settings</legend>
             <label className="od-admin-field">
@@ -218,19 +231,6 @@ export function SmtpPage() {
               />
             </label>
           </fieldset>
-          <p className="od-admin-hint">
-            Save changes before testing. The test checks the saved connection and authentication
-            without sending email.
-          </p>
-          {lastTested ? <p className="od-admin-hint">Last tested: {lastTested}</p> : null}
-          <div className="od-admin-actions">
-            <Button type="submit" variant="primary" disabled={disabled}>
-              {busy ? 'Working…' : 'Save Settings'}
-            </Button>
-            <Button disabled={disabled} onClick={testConnection}>
-              Test Settings
-            </Button>
-          </div>
           <details className="od-admin-panel">
             <summary>SMTP setup help</summary>
             <h3>Option 1: Use your internet service provider’s SMTP server</h3>
