@@ -1,7 +1,7 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{copy, Write};
+use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
@@ -735,6 +735,38 @@ fn extract_zip_within_roots(
     extract_zip_to_dir(archive, destination)
 }
 
+const MAX_GAME_ARCHIVE_FILE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
+const MAX_GAME_ARCHIVE_ENTRIES: u64 = 250_000;
+const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
+
+fn validate_game_zip_limits(
+    zip: &mut ZipArchive<File>,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+) -> Result<u64, String> {
+    let entry_count = zip.len() as u64;
+    if entry_count > max_entries {
+        return Err(format!(
+            "Game archive exceeds the {max_entries}-entry limit"
+        ));
+    }
+
+    let mut expanded_bytes = 0_u64;
+    for index in 0..zip.len() {
+        let entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        expanded_bytes = expanded_bytes
+            .checked_add(entry.size())
+            .ok_or_else(|| "Game archive expanded size overflow".to_string())?;
+        if expanded_bytes > max_expanded_bytes {
+            return Err(format!(
+                "Game archive exceeds the {} GiB expanded-size limit",
+                max_expanded_bytes / (1024 * 1024 * 1024)
+            ));
+        }
+    }
+    Ok(expanded_bytes)
+}
+
 /// Extract every entry of `archive` under `destination`, restoring unix
 /// permission bits, and return the extract path plus a best-guess entry point.
 ///
@@ -742,17 +774,43 @@ fn extract_zip_within_roots(
 /// handling is unit-testable without a `tauri::AppHandle`. The command wrapper
 /// still owns the app-root containment check on `archive` / `destination`.
 fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_limits(
+        archive,
+        destination,
+        MAX_GAME_ARCHIVE_ENTRIES,
+        MAX_GAME_ARCHIVE_EXPANDED_BYTES,
+    )
+}
+
+fn extract_zip_to_dir_with_limits(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+) -> Result<ExtractZipResult, String> {
     if !archive.is_file() {
         return Err(format!("Archive not found: {}", archive.display()));
     }
+    let archive_size = fs::metadata(archive)
+        .map_err(|error| error.to_string())?
+        .len();
+    if archive_size > MAX_GAME_ARCHIVE_FILE_BYTES {
+        return Err("Game archive exceeds the 100 GiB download limit".into());
+    }
+
+    let file = File::open(archive).map_err(|error| error.to_string())?;
+    let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
+    // Validate the central directory and declared expanded sizes before
+    // removing an existing installation at the destination.
+    validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
 
     if destination.exists() {
         remove_path_inner(destination)?;
     }
     fs::create_dir_all(destination).map_err(|error| error.to_string())?;
 
-    let file = File::open(archive).map_err(|error| error.to_string())?;
-    let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
+    let mut expanded_bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
 
     for index in 0..zip.len() {
         let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
@@ -781,7 +839,24 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
         }
 
         let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
-        copy(&mut entry, &mut out).map_err(|error| error.to_string())?;
+        loop {
+            use std::io::Read;
+            let read = entry.read(&mut buffer).map_err(|error| error.to_string())?;
+            if read == 0 {
+                break;
+            }
+            expanded_bytes = expanded_bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "Game archive expanded size overflow".to_string())?;
+            if expanded_bytes > max_expanded_bytes {
+                return Err(format!(
+                    "Game archive exceeds the {} GiB expanded-size limit",
+                    max_expanded_bytes / (1024 * 1024 * 1024)
+                ));
+            }
+            out.write_all(&buffer[..read])
+                .map_err(|error| error.to_string())?;
+        }
 
         // Restore the archived permission bits on unix. Without this every
         // extracted file lands 0644 and `launch_game` fails with "permission
@@ -1971,6 +2046,42 @@ mod tests {
         assert!(dest.join("game/data.bin").is_file());
         assert_eq!(fs::read(dest.join("game/data.bin")).unwrap(), b"payload");
         assert!(dest.join("readme.txt").is_file());
+    }
+
+    #[test]
+    fn game_archive_limits_reject_entry_count_and_expanded_size_before_replacing_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("one.bin", b"1234"), ("two.bin", b"5678")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let entries_error =
+            extract_zip_to_dir_with_limits(&archive, &destination, 1, 8).unwrap_err();
+        assert!(
+            entries_error.contains("1-entry limit"),
+            "got: {entries_error}"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+
+        let size_error = extract_zip_to_dir_with_limits(&archive, &destination, 2, 7).unwrap_err();
+        assert!(
+            size_error.contains("expanded-size limit"),
+            "got: {size_error}"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+
+        extract_zip_to_dir_with_limits(&archive, &destination, 2, 8).unwrap();
+        assert!(!destination.join("existing.bin").exists());
+        assert_eq!(fs::read(destination.join("one.bin")).unwrap(), b"1234");
+        assert_eq!(fs::read(destination.join("two.bin")).unwrap(), b"5678");
     }
 
     #[test]

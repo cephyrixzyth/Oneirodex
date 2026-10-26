@@ -28,6 +28,94 @@ export interface DownloadProgress {
 
 export type DownloadProgressCallback = (progress: DownloadProgress) => void
 
+// Game archives can be large, but downloads remain bounded when the server
+// omits or lies about Content-Length. The browser fallback buffers in memory,
+// so it deliberately uses a lower ceiling than Tauri's disk-streamed path.
+export const MAX_GAME_ARCHIVE_BYTES = 100 * 1024 * 1024 * 1024
+const MAX_BUFFERED_GAME_ARCHIVE_BYTES = 1024 * 1024 * 1024
+const MAX_DOWNLOAD_ERROR_BODY_BYTES = 64 * 1024
+
+function contentLength(response: Response): number | null {
+  const value = response.headers.get('content-length')
+  if (!value || !/^\d+$/.test(value.trim())) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function assertContentLengthWithinLimit(
+  response: Response,
+  totalBytes: number | null,
+  maxBytes: number,
+): void {
+  if (totalBytes !== null && totalBytes > maxBytes) {
+    try {
+      void Promise.resolve(response.body?.cancel()).catch(() => undefined)
+    } catch {
+      // A stub response or already-locked stream may not be cancellable.
+    }
+    throw new Error(
+      `Game archive exceeds the download size limit (${downloadLimitLabel(maxBytes)})`,
+    )
+  }
+}
+
+function downloadLimitLabel(maxBytes: number): string {
+  const gibibyte = 1024 * 1024 * 1024
+  return maxBytes >= gibibyte && maxBytes % gibibyte === 0
+    ? `${maxBytes / gibibyte} GiB`
+    : `${maxBytes} byte${maxBytes === 1 ? '' : 's'}`
+}
+
+/** Consume a response stream under a cumulative byte ceiling. */
+export async function consumeLimitedDownloadBody(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  onChunk: (chunk: Uint8Array) => Promise<void> | void,
+  onProgress?: DownloadProgressCallback,
+  totalBytes: number | null = null,
+): Promise<number> {
+  const reader = body.getReader()
+  let bytesReceived = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      if (value.byteLength > maxBytes - bytesReceived) {
+        throw new Error(
+          `Game archive exceeds the download size limit (${downloadLimitLabel(maxBytes)})`,
+        )
+      }
+      bytesReceived += value.byteLength
+      await onChunk(value)
+      onProgress?.({ bytesReceived, totalBytes })
+    }
+    return bytesReceived
+  } catch (error) {
+    await reader.cancel().catch(() => undefined)
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+async function readBoundedDownloadError(response: Response): Promise<string> {
+  if (!response.body) return ''
+  const decoder = new TextDecoder()
+  let text = ''
+  try {
+    await consumeLimitedDownloadBody(response.body, MAX_DOWNLOAD_ERROR_BODY_BYTES, (chunk) => {
+      text += decoder.decode(chunk, { stream: true })
+    })
+    text += decoder.decode()
+    return text
+  } catch {
+    // Oversized or unreadable error bodies are canceled; retain the status-only
+    // error instead of allowing a server response to allocate unbounded memory.
+    return ''
+  }
+}
+
 async function getDownloadsDir(): Promise<string> {
   if (!isTauriRuntime()) {
     return '/tmp/oneirodex/downloads'
@@ -120,33 +208,25 @@ export async function fetchDownloadStream(
   assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
-    const text = await response.text()
+    const text = await readBoundedDownloadError(response)
     throw new Error(text || `Download failed with HTTP ${response.status}`)
   }
 
-  const totalHeader = response.headers.get('content-length')
-  const totalBytes = totalHeader ? Number.parseInt(totalHeader, 10) : null
+  const totalBytes = contentLength(response)
+  assertContentLengthWithinLimit(response, totalBytes, MAX_BUFFERED_GAME_ARCHIVE_BYTES)
   const body = response.body
+  if (!body) throw new Error('Game archive response did not provide a readable body')
 
-  if (!body || !options.onProgress) {
-    return response.arrayBuffer()
-  }
-
-  const reader = body.getReader()
   const chunks: Uint8Array[] = []
-  let bytesReceived = 0
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) {
-      break
-    }
-    if (value) {
-      chunks.push(value)
-      bytesReceived += value.byteLength
-      options.onProgress({ bytesReceived, totalBytes })
-    }
-  }
+  const bytesReceived = await consumeLimitedDownloadBody(
+    body,
+    MAX_BUFFERED_GAME_ARCHIVE_BYTES,
+    (chunk) => {
+      chunks.push(chunk)
+    },
+    options.onProgress,
+    totalBytes,
+  )
 
   const merged = new Uint8Array(bytesReceived)
   let offset = 0
@@ -182,42 +262,34 @@ export async function streamDownloadToFile(
   assertDownloadFinalUrlAllowed(response)
 
   if (!response.ok) {
-    const text = await response.text()
+    const text = await readBoundedDownloadError(response)
     throw new Error(text || `Download failed with HTTP ${response.status}`)
   }
 
-  const totalHeader = response.headers.get('content-length')
-  const totalBytes = totalHeader ? Number.parseInt(totalHeader, 10) : null
+  const totalBytes = contentLength(response)
+  assertContentLengthWithinLimit(response, totalBytes, MAX_GAME_ARCHIVE_BYTES)
   const body = response.body
 
   if (!isTauriRuntime()) {
     return
   }
 
-  // Truncate / create destination.
+  if (!body) throw new Error('Game archive response did not provide a readable body')
+
+  // Truncate / create destination only after the declared size check. If the
+  // stream later exceeds the limit or fails, remove the partial archive.
   await invoke('write_file_bytes', { path: archivePath, bytes: new Uint8Array(0) })
-
-  if (!body) {
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    if (bytes.byteLength > 0) {
-      await invoke('append_file_bytes', { path: archivePath, bytes })
-    }
-    options.onProgress?.({ bytesReceived: bytes.byteLength, totalBytes })
-    return
-  }
-
-  const reader = body.getReader()
-  let bytesReceived = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) {
-      break
-    }
-    if (value) {
-      await invoke('append_file_bytes', { path: archivePath, bytes: value })
-      bytesReceived += value.byteLength
-      options.onProgress?.({ bytesReceived, totalBytes })
-    }
+  try {
+    await consumeLimitedDownloadBody(
+      body,
+      MAX_GAME_ARCHIVE_BYTES,
+      (chunk) => invoke('append_file_bytes', { path: archivePath, bytes: chunk }),
+      options.onProgress,
+      totalBytes,
+    )
+  } catch (error) {
+    await invoke('remove_path', { path: archivePath }).catch(() => undefined)
+    throw error
   }
 }
 
@@ -345,9 +417,8 @@ export function promptForDownloadVersion(
   }
 
   return new Promise<GameVersionItem | null>((resolve) => {
-    const returnFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
+    const returnFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     const defaultIndex = Math.max(
       versions.findIndex((version) => version.is_default),
       0,
