@@ -17,6 +17,7 @@ from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context, touch_resolved_bearer
 
 _logger = logging.getLogger(__name__)
+_PASSWORD_JSON_MAX_BYTES = 64 * 1024
 
 
 class AccountPasswordData:
@@ -158,30 +159,42 @@ def create_account_password_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
                 from .account_avatar_upload import _flash
+                from oneirodex.schemas.account import password_exceeds_byte_limit
 
                 user = data.get_user(auth.user.id)
+                current_password = first_form_value(form, 'current_password')
+                new_password = first_form_value(form, 'password') or ''
+                confirm_password = first_form_value(form, 'confirm_password') or ''
                 if user is None:
                     _flash(auth.session_data, 'error', 'Account not found.')
-                elif not first_form_value(form, 'current_password'):
+                elif not current_password:
                     _flash(auth.session_data, 'error', 'Current Password: This field is required.')
-                elif not user.check_password(form['current_password']):
+                elif any((
+                    password_exceeds_byte_limit('current_password', current_password),
+                    password_exceeds_byte_limit('new_password', new_password),
+                    password_exceeds_byte_limit('confirm_password', confirm_password),
+                )):
+                    _flash(
+                        auth.session_data, 'error',
+                        'Passwords must be within the supported length.',
+                    )
+                elif not user.check_password(current_password):
                     _flash(auth.session_data, 'error', 'Current password is incorrect.')
-                elif len(first_form_value(form, 'password') or '') < 8:
+                elif len(new_password) < 8:
                     _flash(
                         auth.session_data,
                         'error',
                         'New Password: Field must be at least 8 characters long.',
                     )
                 elif (
-                    first_form_value(form, 'password')
-                    != first_form_value(form, 'confirm_password')
+                    new_password != confirm_password
                 ):
                     _flash(auth.session_data, 'error', 'Confirm Password: Passwords must match')
-                elif first_form_value(form, 'password') == first_form_value(form, 'current_password'):
+                elif new_password == current_password:
                     _flash(auth.session_data, 'error', "Pick a password you're not already using.")
                 else:
                     try:
-                        user.set_password(form['password'])
+                        user.set_password(new_password)
                         data.commit()
                         _refresh_password_session(auth.session_data, user, request, flask_app.config)
                         remember_cookie = True
@@ -216,8 +229,30 @@ async def _validated_body(request: Request, model):
     from oneirodex.utils.api_contract import api_error_payload
     from oneirodex.utils.validation import format_validation_errors
 
+    content_length = request.headers.get('content-length')
     try:
-        value = json.loads(await request.body() or b'{}')
+        if content_length is not None and int(content_length) > _PASSWORD_JSON_MAX_BYTES:
+            payload, status = api_error_payload(
+                'Request body is too large.', code='payload_too_large',
+            )
+            from starlette.responses import JSONResponse
+
+            return None, JSONResponse(payload, status_code=status)
+    except ValueError:
+        pass
+
+    raw_body = bytearray()
+    async for chunk in request.stream():
+        if len(raw_body) + len(chunk) > _PASSWORD_JSON_MAX_BYTES:
+            payload, status = api_error_payload(
+                'Request body is too large.', code='payload_too_large',
+            )
+            from starlette.responses import JSONResponse
+
+            return None, JSONResponse(payload, status_code=status)
+        raw_body.extend(chunk)
+    try:
+        value = json.loads(bytes(raw_body) or b'{}')
     except (TypeError, ValueError):
         value = {}
     try:
@@ -243,8 +278,10 @@ async def _legacy_password_form(request: Request):
         if len(body) > 64 * 1024:
             return {}, Response(status_code=413)
     try:
-        fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
-    except UnicodeDecodeError:
+        fields = parse_qs(
+            bytes(body).decode('utf-8'), keep_blank_values=True, max_num_fields=16,
+        )
+    except (UnicodeDecodeError, ValueError):
         return {}, Response(status_code=400)
     return first_form_values(fields), None
 

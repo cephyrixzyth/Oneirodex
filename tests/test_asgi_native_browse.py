@@ -1985,6 +1985,84 @@ def test_native_locale_write_rejects_missing_csrf_without_mutation(monkeypatch):
     assert runtime._fake_locale.calls == []
 
 
+@pytest.mark.parametrize('body,content_type', [
+    (b'{"locale":"es","padding":"' + b'x' * (64 * 1024) + b'"}', 'application/json'),
+    (b'&'.join([b'locale=es'] * 17), 'application/x-www-form-urlencoded'),
+], ids=['body-bytes', 'form-field-count'])
+def test_native_locale_write_bounds_body_and_form_field_count(monkeypatch, body, content_type):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/locale', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': content_type},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_locale.calls == []
+
+
+def test_native_locale_write_ignores_small_file_parts_like_flask(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/locale', data={'locale': 'es'},
+                files={'unused': ('ignored.txt', b'ignored')},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 200
+    assert response.json()['locale'] == 'es'
+    assert runtime._fake_locale.calls == [(7, 'es')]
+
+
+@pytest.mark.parametrize('overflow', ['fields', 'files'])
+def test_native_locale_write_rejects_multipart_part_count_overflow(monkeypatch, overflow):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            if overflow == 'fields':
+                return await client.post(
+                    '/api/locale',
+                    data={f'locale-{index}': 'es' for index in range(17)},
+                    files={'unused': ('ignored.txt', b'ignored')},
+                    headers={'X-CSRFToken': csrf},
+                )
+            return await client.post(
+                '/api/locale',
+                data={'locale': 'es'},
+                files=[(f'upload-{index}', (f'{index}.txt', b'x')) for index in range(9)],
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_locale.calls == []
+
+
 def _bearer_runtime(monkeypatch, scopes):
     import hashlib
 

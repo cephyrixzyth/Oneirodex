@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 
 from flask import current_app, request, url_for
 from flask_login import current_user, login_required
@@ -50,6 +51,36 @@ from . import apis_bp
 INVITE_TTL_HOURS = 48
 
 MIN_PASSWORD_LENGTH = 8
+PASSWORD_CHANGE_BODY_MAX_BYTES = 64 * 1024
+
+
+def _limit_password_change_body(view):
+    """Bound only the password-change JSON request before schema parsing."""
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        from werkzeug.exceptions import RequestEntityTooLarge
+
+        if (
+            request.content_length is not None
+            and request.content_length > PASSWORD_CHANGE_BODY_MAX_BYTES
+        ):
+            return api_error(
+                'Request body is too large.', code='payload_too_large', status=413,
+            )
+        configured_limit = request.max_content_length
+        request.max_content_length = min(
+            configured_limit if configured_limit is not None else PASSWORD_CHANGE_BODY_MAX_BYTES,
+            PASSWORD_CHANGE_BODY_MAX_BYTES,
+        )
+        try:
+            return view(*args, **kwargs)
+        except RequestEntityTooLarge:
+            return api_error(
+                'Request body is too large.', code='payload_too_large', status=413,
+            )
+
+    return wrapped
 
 
 def _smtp_ready() -> bool:
@@ -214,6 +245,7 @@ def account_stock_avatar(body: StockAvatarBody):
 
 @apis_bp.route('/account/password', methods=['POST'])
 @login_required
+@_limit_password_change_body
 @validate_body(ChangePasswordBody)
 def account_password(body: ChangePasswordBody):
     current = body.current_password

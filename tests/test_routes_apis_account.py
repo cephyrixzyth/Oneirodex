@@ -74,6 +74,32 @@ class TestAccountSummary:
 
 
 class TestPasswordChange:
+    @pytest.mark.parametrize('without_content_length', [False, True])
+    def test_oversized_password_body_is_refused_before_json_parse(
+        self, client, member, without_content_length
+    ):
+        from oneirodex.routes_apis.account import PASSWORD_CHANGE_BODY_MAX_BYTES
+
+        login(client, member)
+        body = b'{"padding":"' + b'x' * PASSWORD_CHANGE_BODY_MAX_BYTES + b'"}'
+        response = client.post(
+            '/api/account/password', data=body, content_type='application/json',
+        ) if not without_content_length else None
+        if without_content_length:
+            from werkzeug.test import EnvironBuilder
+
+            environ = EnvironBuilder(
+                method='POST', path='/api/account/password',
+                input_stream=io.BytesIO(body), content_type='application/json',
+            ).get_environ()
+            environ.pop('CONTENT_LENGTH', None)
+            environ['wsgi.input_terminated'] = True
+            response = client.open(environ)
+
+        assert response.status_code == 413
+        assert response.get_json()['error_code'] == 'payload_too_large'
+        assert member.check_password('correct horse battery')
+
     def test_wrong_current_password_is_refused(self, client, member):
         login(client, member)
         response = client.post('/api/account/password', json={

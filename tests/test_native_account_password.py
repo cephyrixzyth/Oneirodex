@@ -159,6 +159,83 @@ def test_password_change_malformed_json_returns_unprocessable():
     assert data.commits == 0
 
 
+def test_password_change_rejects_oversized_json_before_parsing():
+    from oneirodex.runtime_native.account_password import _PASSWORD_JSON_MAX_BYTES
+
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        content=b'{"padding":"' + b'x' * _PASSWORD_JSON_MAX_BYTES + b'"}',
+        headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_password_change_caps_secret_utf8_bytes_before_argon2():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'OldPassword1!',
+            'new_password': '😀' * 1025,
+            'confirm_password': '😀' * 1025,
+        },
+        headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert 'new_password' in response.json()['detail']
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_legacy_password_form_caps_repeated_field_count():
+    client, user, data = make_client()
+
+    response = client.post(
+        '/settings_password',
+        content='&'.join(f'field{i}=x' for i in range(17)),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert response.status_code == 400
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_legacy_password_form_caps_password_bytes_before_verify_and_hash():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/settings_password',
+        data={
+            'csrf_token': csrf,
+            'current_password': 'OldPassword1!',
+            'password': '😀' * 1025,
+            'confirm_password': '😀' * 1025,
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+    assert '😀' not in response.text
+
+
 def test_password_change_updates_session_and_remember_cookie_fingerprint():
     client, user, data = make_client()
     cookie, csrf = credentials()

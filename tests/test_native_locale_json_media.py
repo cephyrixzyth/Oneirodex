@@ -61,3 +61,18 @@ def test_locale_json_media_types_match_flask_request_parser():
     assert vendor_locale == 'fr'
     assert unrelated_suffix is None
     assert misleading_jsonp is None
+
+
+def test_locale_multipart_parser_keeps_small_form_compatibility():
+    boundary = 'locale-boundary'
+    body = (
+        f'--{boundary}\r\n'
+        'Content-Disposition: form-data; name="locale"\r\n\r\n'
+        'es\r\n'
+        f'--{boundary}--\r\n'
+    ).encode('ascii')
+    parsed = asyncio.run(_locale_from_request(
+        _native_request(f'multipart/form-data; boundary={boundary}', body),
+    ))
+
+    assert parsed == 'es'
