@@ -38,6 +38,12 @@ becomes a starting point in the **Scan location** picker on Auto Scan and Manual
 and a row in Ops path health. The picker only renders once there is more than
 one location, so single-location installs are unchanged.
 
+Batch scans apply the same configured-root check to each submitted or remembered
+folder before it enters the queue. A queued or scheduled scan checks the current
+roots again when it starts; if the location has since been removed or resolves
+outside the current roots, the job fails and can be resubmitted after the root is
+restored.
+
 **Symlinks inside a game folder are ignored.** A link such as `game.bin ->
 /somewhere/else` is not hashed, bundled, zipped into a folder download, served as
 a ROM or used as `cover.jpg` / `screenshot-N.png` / the `oneirodex.json` sidecar —

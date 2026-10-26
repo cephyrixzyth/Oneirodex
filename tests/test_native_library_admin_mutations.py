@@ -448,6 +448,43 @@ def test_batch_scan_keeps_aliases_queue_result_and_partial_rows(native_client):
     assert scan[3]['download_missing_images'] is True
 
 
+@pytest.mark.parametrize(('body', 'expected_folder'), [
+    ({'folder': '/safe/root/shared'}, '/safe/root/shared'),
+    ({'folders': {'lib-1': '/safe/root/mapped'}}, '/safe/root/mapped'),
+])
+def test_batch_scan_resolves_shared_and_per_library_folders(
+    native_client, body, expected_folder,
+):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/batch/scan',
+        json={'uuids': ['lib-1'], **body},
+    )
+
+    assert response.status_code == 200
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[2] == expected_folder
+
+
+def test_batch_scan_rejects_out_of_root_path_without_queueing(native_client):
+    runtime, data = native_client
+    denied_path = '/outside/private'
+
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/batch/scan',
+        json={'uuids': ['lib-1'], 'folder': denied_path},
+    )
+
+    assert response.status_code == 200
+    row = response.json()['results'][0]
+    assert response.json()['failed'] == 1
+    assert row['status'] == 'rejected'
+    assert row['error'] == 'forbidden'
+    assert 'Access denied' in row['message']
+    assert denied_path not in response.text
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
 def test_single_scan_resolves_location_and_preserves_scan_options(native_client):
     runtime, data = native_client
     response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={

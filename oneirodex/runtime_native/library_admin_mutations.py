@@ -1117,9 +1117,50 @@ async def _scan(request, app, data, user, *, database_scope=None):
                             'status': 'skipped', 'message': 'No folder provided and library has no last_scan_folder. Run one Auto Scan first or pass folder/folders.'})
             skipped += 1
             continue
+        # Match single-scan handling of JSON scalars before applying the same
+        # configured-root resolution and allowlist checks. Keep the submitted
+        # path out of row errors and logs.
+        if not isinstance(folder, str):
+            folder = str(folder)
+        folder = folder.strip()
+        if not folder:
+            results.append({
+                'uuid': uuid, 'name': library.name, 'ok': False,
+                'error': 'no_scan_folder', 'status': 'skipped',
+                'message': 'No scan folder was provided.',
+            })
+            skipped += 1
+            continue
         try:
+            resolved, root_error = data.resolve_scan_path(app, folder, None)
+            if root_error:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'bad_request', 'status': 'rejected',
+                    'message': 'Unknown scan location.',
+                })
+                failed += 1
+                continue
+            allowed_bases = data.allowed_bases(app)
+            if not allowed_bases:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'unavailable', 'status': 'rejected',
+                    'message': 'Scan locations are not configured.',
+                })
+                failed += 1
+                continue
+            safe, _path_error = data.safe_path(resolved, allowed_bases)
+            if not safe:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'forbidden', 'status': 'rejected',
+                    'message': 'Access denied for this scan location.',
+                })
+                failed += 1
+                continue
             outcome = data.start_scan(
-                library=library, folder=folder, options=options, app=app,
+                library=library, folder=resolved, options=options, app=app,
                 database_scope=database_scope,
             )
             status = outcome.get('status')

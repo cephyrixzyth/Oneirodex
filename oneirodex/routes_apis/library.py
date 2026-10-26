@@ -452,6 +452,8 @@ def batch_scan_libraries():
         parse_queue_policy,
         start_or_queue_scan,
     )
+    from oneirodex.utils.library_roots import resolve_scan_path
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 
     data = request.get_json(silent=True) or {}
     uuids, err = parse_library_uuids(data)
@@ -508,9 +510,61 @@ def batch_scan_libraries():
             })
             skipped += 1
             continue
+        if not isinstance(folder, str):
+            folder = str(folder)
+        folder = folder.strip()
+        if not folder:
+            results.append({
+                'uuid': library_uuid,
+                'name': library.name,
+                'ok': False,
+                'error': 'no_scan_folder',
+                'status': 'skipped',
+                'message': 'No scan folder was provided.',
+            })
+            skipped += 1
+            continue
         try:
+            resolved, root_error = resolve_scan_path(
+                folder, None, current_app._get_current_object(),
+            )
+            if root_error:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'bad_request',
+                    'status': 'rejected',
+                    'message': 'Unknown scan location.',
+                })
+                failed += 1
+                continue
+            allowed_bases = get_allowed_base_directories(current_app._get_current_object())
+            if not allowed_bases:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'unavailable',
+                    'status': 'rejected',
+                    'message': 'Scan locations are not configured.',
+                })
+                failed += 1
+                continue
+            safe, _path_error = is_safe_path(resolved, allowed_bases)
+            if not safe:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'forbidden',
+                    'status': 'rejected',
+                    'message': 'Access denied for this scan location.',
+                })
+                failed += 1
+                continue
             result = start_or_queue_scan(
-                folder_path=folder,
+                folder_path=resolved,
                 library_uuid=library_uuid,
                 scan_mode=scan_mode,
                 remove_missing=_bool('remove_missing'),
@@ -541,13 +595,14 @@ def batch_scan_libraries():
                 row['ok'] = False
                 row['error'] = result.get('message') or result.get('status') or 'rejected'
             results.append(row)
-        except Exception as exc:
+        except Exception:
             results.append({
                 'uuid': library_uuid,
                 'name': library.name,
                 'ok': False,
-                'error': str(exc),
+                'error': 'internal',
                 'status': 'error',
+                'message': 'Could not queue this scan.',
             })
             failed += 1
 

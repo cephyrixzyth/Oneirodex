@@ -148,6 +148,70 @@ def test_empty_success_preserves_recurring_schedule(
         assert target.next_run.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc)
 
 
+def test_worker_revalidates_queued_path_against_current_scan_roots(
+    app, db_session, library, tmp_path, monkeypatch,
+):
+    allowed_root = tmp_path / 'currently-allowed'
+    allowed_root.mkdir()
+    outside_root = tmp_path / 'no-longer-allowed'
+    outside_root.mkdir()
+    app.config.update({
+        'DATA_FOLDER_GAMES': str(allowed_root),
+        'BASE_FOLDER_POSIX': str(allowed_root),
+        'BASE_FOLDER_WINDOWS': str(allowed_root),
+        'LIBRARY_ROOTS': [],
+    })
+    target = make_job(
+        db_session, library, outside_root, 'Running',
+        scan_folder=str(outside_root),
+        folders={str(outside_root): True},
+    )
+    body = Mock()
+    monkeypatch.setattr(scans, '_scan_and_add_games_body', body)
+    monkeypatch.setattr(scans, '_drain_scan_queue_safe', lambda *_a, **_k: None)
+
+    scans.scan_and_add_games(
+        str(outside_root), library_uuid=library.uuid, existing_job=target, app=app,
+    )
+
+    db_session.expire_all()
+    persisted = db_session.get(ScanJob, target.id)
+    assert persisted.status == 'Failed'
+    assert persisted.error_message == 'Scan location is no longer allowed.'
+    body.assert_not_called()
+
+
+def test_worker_fails_closed_and_drains_on_malformed_scan_root_config(
+    app, db_session, library, tmp_path, monkeypatch,
+):
+    allowed_root = tmp_path / 'configured'
+    allowed_root.mkdir()
+    app.config.update({
+        'DATA_FOLDER_GAMES': str(allowed_root),
+        'BASE_FOLDER_POSIX': str(allowed_root),
+        'BASE_FOLDER_WINDOWS': str(allowed_root),
+        'LIBRARY_ROOTS': [None],
+    })
+    target = make_job(
+        db_session, library, allowed_root, 'Running',
+        scan_folder=str(allowed_root),
+        folders={str(allowed_root): True},
+    )
+    body = Mock()
+    monkeypatch.setattr(scans, '_scan_and_add_games_body', body)
+    monkeypatch.setattr(scans, '_drain_scan_queue_safe', lambda *_a, **_k: None)
+
+    scans.scan_and_add_games(
+        str(allowed_root), library_uuid=library.uuid, existing_job=target, app=app,
+    )
+
+    db_session.expire_all()
+    persisted = db_session.get(ScanJob, target.id)
+    assert persisted.status == 'Failed'
+    assert persisted.error_message == 'Scan location is no longer allowed.'
+    body.assert_not_called()
+
+
 class InlinePool:
     """Exercise the pool branch without leaking test DB sessions to threads."""
     def __init__(self, **kwargs):
