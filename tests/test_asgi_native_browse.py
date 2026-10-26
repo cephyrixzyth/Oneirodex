@@ -3259,6 +3259,37 @@ def test_native_batch_favorite_keeps_order_dedupe_acl_and_partial_payload(monkey
     ]
 
 
+@pytest.mark.parametrize('path', [
+    '/api/games/batch/favorite',
+    '/api/games/batch/status',
+    '/api/games/batch/wishlist',
+])
+def test_native_batch_actions_reject_oversized_json_before_processing(monkeypatch, path):
+    from oneirodex.runtime_native.batch_favorite import BATCH_JSON_BODY_MAX_BYTES
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_JSON_BODY_MAX_BYTES + b'"}'
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_batch_favorite.calls == []
+    assert runtime._fake_batch_status.calls == []
+    assert runtime._fake_batch_wishlist.calls == []
+
+
 def test_native_batch_favorite_validation_caps_and_commit_error_are_safe(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
@@ -6733,6 +6764,19 @@ def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
             client.cookies.set('session', cookie)
             admin = await client.get('/api/layouts/detail')
             mine = await client.get('/api/layouts/detail/mine')
+            oversized = b'{"padding":"' + (b'x' * layouts._LAYOUT_JSON_MAX_BYTES) + b'"}'
+            admin_too_large = await client.put(
+                '/api/layouts/detail', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+            mine_too_large = await client.put(
+                '/api/layouts/detail/mine', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+            preset_too_large = await client.post(
+                '/api/layouts/detail/presets', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
             rejected = await client.put('/api/layouts/detail/mine', json={'sections': []})
             saved = await client.put(
                 '/api/layouts/detail/mine', json={'sections': ['videos']},
@@ -6743,12 +6787,20 @@ def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
                 json={'name': 'Compact', 'layout': {'sections': ['hero']}},
                 headers={'X-CSRFToken': csrf},
             )
-            return admin, mine, rejected, saved, preset
+            return (
+                admin, mine, admin_too_large, mine_too_large, preset_too_large,
+                rejected, saved, preset,
+            )
 
-    admin, mine, rejected, saved, preset = asyncio.run(calls_api())
+    (
+        admin, mine, admin_too_large, mine_too_large, preset_too_large,
+        rejected, saved, preset,
+    ) = asyncio.run(calls_api())
     assert admin.status_code == mine.status_code == 200
     assert admin.json() == {'sections': ['hero']}
     assert mine.json() == {'layout': {'sections': ['summary']}, 'is_override': True}
+    assert admin_too_large.status_code == mine_too_large.status_code == preset_too_large.status_code == 413
+    assert admin_too_large.json()['error_code'] == 'payload_too_large'
     assert rejected.status_code == 400
     assert saved.status_code == 200 and saved.json()['is_override'] is True
     assert preset.status_code == 201 and preset.json()['id'] == 3

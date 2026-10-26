@@ -10,7 +10,10 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .batch_favorite import BATCH_FAVORITE_MAX, _api_error, _normalize_uuids
+from .batch_favorite import (
+    BATCH_FAVORITE_MAX, JSON_BODY_TOO_LARGE, _api_error, _normalize_uuids,
+    bounded_json_object,
+)
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
@@ -121,33 +124,39 @@ def create_batch_status_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
                 payload = await _json_object(request)
-                uuids, refusal = _normalize_uuids(payload.get('uuids'), max_size=BATCH_STATUS_MAX)
-                if refusal is not None:
-                    body, status_code = refusal
-                    response = JSONResponse(body, status_code=status_code)
-                elif 'status' not in payload:
+                if payload is JSON_BODY_TOO_LARGE:
                     response = _api_error(
-                        'status required', 'bad_request', updated=[], skipped=[],
-                        errors=[], limit=BATCH_STATUS_MAX,
+                        'Request body is too large.', 'payload_too_large',
+                        updated=[], skipped=[], errors=[], limit=BATCH_STATUS_MAX,
                     )
                 else:
-                    raw_status = payload.get('status')
-                    if raw_status is None:
-                        raw_status = ''
-                    if not isinstance(raw_status, str):
+                    uuids, refusal = _normalize_uuids(payload.get('uuids'), max_size=BATCH_STATUS_MAX)
+                    if refusal is not None:
+                        body, status_code = refusal
+                        response = JSONResponse(body, status_code=status_code)
+                    elif 'status' not in payload:
                         response = _api_error(
-                            'status must be a string', 'bad_request', updated=[],
-                            skipped=[], errors=[], limit=BATCH_STATUS_MAX,
+                            'status required', 'bad_request', updated=[], skipped=[],
+                            errors=[], limit=BATCH_STATUS_MAX,
                         )
                     else:
-                        status = raw_status.strip()
-                        from oneirodex.utils.play_status import PLAY_STATUS_VALUES
-
-                        if status not in PLAY_STATUS_VALUES:
+                        raw_status = payload.get('status')
+                        if raw_status is None:
+                            raw_status = ''
+                        if not isinstance(raw_status, str):
                             response = _api_error(
-                                'Invalid status value', 'bad_request', updated=[],
+                                'status must be a string', 'bad_request', updated=[],
                                 skipped=[], errors=[], limit=BATCH_STATUS_MAX,
                             )
+                        else:
+                            status = raw_status.strip()
+                            from oneirodex.utils.play_status import PLAY_STATUS_VALUES
+
+                            if status not in PLAY_STATUS_VALUES:
+                                response = _api_error(
+                                    'Invalid status value', 'bad_request', updated=[],
+                                    skipped=[], errors=[], limit=BATCH_STATUS_MAX,
+                                )
                 if response is None:
                     status_out = status or None
                     status_info = data.status_info(status_out)
@@ -224,16 +233,7 @@ def mount_batch_status_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
-    try:
-        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-        if content_type != 'application/json' and not (
-            content_type.startswith('application/') and content_type.endswith('+json')
-        ):
-            return {}
-        payload = await request.json()
-        return payload if isinstance(payload, dict) else {}
-    except Exception:  # noqa: BLE001 — match Flask silent parsing for missing/bad JSON
-        return {}
+    return await bounded_json_object(request)
 
 
 def _finish(response, flask_app, auth):

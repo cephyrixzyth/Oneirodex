@@ -9,7 +9,10 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .batch_favorite import _normalize_uuids, _api_error, _finish
+from .batch_favorite import (
+    JSON_BODY_TOO_LARGE, _normalize_uuids, _api_error, _finish,
+    bounded_json_object,
+)
 from .request_auth import request_auth_context
 
 BATCH_WISHLIST_MAX = 50
@@ -121,16 +124,22 @@ def create_batch_wishlist_router(
                 )
             if response is None:
                 payload = await _json_object(request)
-                action = str(payload.get('action') or 'add').strip().lower()
-                if action not in ('add', 'remove'):
-                    response = _api_error('action must be add or remove', 'bad_request')
-                else:
-                    uuids, refusal = _normalize_uuids(
-                        payload.get('uuids'), max_size=BATCH_WISHLIST_MAX,
+                if payload is JSON_BODY_TOO_LARGE:
+                    response = _api_error(
+                        'Request body is too large.', 'payload_too_large',
+                        updated=[], skipped=[], errors=[], limit=BATCH_WISHLIST_MAX,
                     )
-                    if refusal is not None:
-                        body, status = refusal
-                        response = JSONResponse(body, status_code=status)
+                else:
+                    action = str(payload.get('action') or 'add').strip().lower()
+                    if action not in ('add', 'remove'):
+                        response = _api_error('action must be add or remove', 'bad_request')
+                    else:
+                        uuids, refusal = _normalize_uuids(
+                            payload.get('uuids'), max_size=BATCH_WISHLIST_MAX,
+                        )
+                        if refusal is not None:
+                            body, status = refusal
+                            response = JSONResponse(body, status_code=status)
             if response is None and not uuids:
                 from oneirodex.utils.api_contract import api_ok_payload
 
@@ -243,15 +252,6 @@ def mount_batch_wishlist_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
-    try:
-        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-        if content_type != 'application/json' and not (
-            content_type.startswith('application/') and content_type.endswith('+json')
-        ):
-            return {}
-        payload = await request.json()
-        return payload if isinstance(payload, dict) else {}
-    except Exception:  # noqa: BLE001 — Flask's silent JSON parsing
-        return {}
+    return await bounded_json_object(request)
 
 
