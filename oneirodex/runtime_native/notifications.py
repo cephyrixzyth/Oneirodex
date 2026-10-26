@@ -16,6 +16,9 @@ _PREFERENCE_FIELDS = (
     'notify_chat', 'notify_free_games', 'email_notify_social',
     'email_digest_daily', 'share_activity',
 )
+NOTIFICATION_READ_BODY_MAX_BYTES = 64 * 1024
+NOTIFICATION_READ_IDS_MAX = 500
+_BODY_TOO_LARGE = object()
 
 
 class NotificationData:
@@ -134,26 +137,42 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 else:
-                    payload = _notification_write_json_object(await request.body())
-                    if payload is None:
+                    raw_body = await _bounded_request_body(
+                        request, NOTIFICATION_READ_BODY_MAX_BYTES,
+                    )
+                    if raw_body is _BODY_TOO_LARGE:
                         response = _api_error(
-                            'Something went wrong on our end. The error has been logged.',
-                            'internal',
+                            'Request body is too large.', 'payload_too_large',
+                            limit=NOTIFICATION_READ_BODY_MAX_BYTES,
                         )
                     else:
-                        all_read = bool(payload.get('all'))
-                        ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
-                        cleaned = []
-                        for value in ids:
-                            try:
-                                cleaned.append(int(value))
-                            except (TypeError, ValueError, OverflowError):
-                                continue
-                        from oneirodex.utils.api_contract import api_ok_payload
+                        payload = _notification_write_json_object(raw_body)
+                        if payload is None:
+                            response = _api_error(
+                                'Something went wrong on our end. The error has been logged.',
+                                'internal',
+                            )
+                        else:
+                            all_read = bool(payload.get('all'))
+                            ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
+                            if len(ids) > NOTIFICATION_READ_IDS_MAX:
+                                response = _api_error(
+                                    'Too many notification IDs.', 'payload_too_large',
+                                    limit=NOTIFICATION_READ_IDS_MAX,
+                                    requested=len(ids),
+                                )
+                            else:
+                                cleaned = []
+                                for value in ids:
+                                    try:
+                                        cleaned.append(int(value))
+                                    except (TypeError, ValueError, OverflowError):
+                                        continue
+                                from oneirodex.utils.api_contract import api_ok_payload
 
-                        response = JSONResponse(api_ok_payload(data.mark_read(
-                            auth.user.id, cleaned, all_read=all_read
-                        )))
+                                response = JSONResponse(api_ok_payload(data.mark_read(
+                                    auth.user.id, cleaned, all_read=all_read
+                                )))
             _finish(response, flask_app, request, auth)
             return response
 
@@ -322,6 +341,23 @@ def _json_object(raw_body: bytes) -> dict:
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+async def _bounded_request_body(request, max_bytes: int):
+    """Collect at most max_bytes, stopping as soon as a chunk exceeds the cap."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _notification_write_json_object(

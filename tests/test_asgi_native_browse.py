@@ -6227,26 +6227,73 @@ def test_native_chat_message_post_requires_csrf_and_preserves_envelope(monkeypat
         calls.append((user.id, channel_id, payload))
         return {'id': 48, 'body': payload.get('body'), 'user_id': user.id}
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'channel_visible', lambda _self, _user, _id: True)
     monkeypatch.setattr(chat_reads.ChatReadData, 'post_message', post_message)
     cookie, csrf = _signed_session_with_csrf()
 
-    async def send(*, with_csrf=True):
+    async def send(*, with_csrf=True, content=None, json_payload=None):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
         ) as client:
             client.cookies.set('session', cookie)
             headers = {'X-CSRFToken': csrf} if with_csrf else {}
+            if content is not None:
+                headers['Content-Type'] = 'application/json'
+                return await client.post('/api/chat/channels/29/messages', content=content, headers=headers)
             return await client.post(
-                '/api/chat/channels/29/messages', json={'body': 'hello'}, headers=headers,
+                '/api/chat/channels/29/messages', json=json_payload or {'body': 'hello'},
+                headers=headers,
             )
 
     rejected = asyncio.run(send(with_csrf=False))
     accepted = asyncio.run(send())
+    too_large_body = b'{"body":"' + b'x' * chat_reads._CHAT_MESSAGE_JSON_MAX_BYTES + b'"}'
+    too_large = asyncio.run(send(content=too_large_body))
+    too_many_attachments = asyncio.run(send(json_payload={
+        'body': 'hello', 'attachment_ids': [1, 2, 3, 4, 5, 6],
+    }))
+    invalid_attachment_id = asyncio.run(send(json_payload={
+        'body': 'hello', 'attachment_ids': [1.5],
+    }))
 
     assert rejected.status_code == 400
     assert accepted.status_code == 201
     assert accepted.json()['message'] == {'id': 48, 'body': 'hello', 'user_id': 7}
+    assert too_large.status_code == 413
+    assert too_large.json()['error_code'] == 'payload_too_large'
+    assert too_many_attachments.status_code == 400
+    assert invalid_attachment_id.status_code == 400
     assert calls == [(7, 29, {'body': 'hello'})]
+
+
+def test_native_chat_message_checks_channel_access_before_body_read(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'channel_visible',
+        lambda _self, _user, _channel_id: calls.append('authorization') or False,
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'post_message',
+        lambda *_args: calls.append('post') or {'id': 1},
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"body":"' + b'x' * chat_reads._CHAT_MESSAGE_JSON_MAX_BYTES + b'"}'
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/chat/channels/29/messages', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 404
+    assert calls == ['authorization']
 
 
 def test_native_chat_reaction_toggle_requires_csrf_and_maps_not_found(monkeypatch):
@@ -6987,6 +7034,38 @@ def test_native_notifications_mark_read_normalizes_ids_and_uses_csrf(monkeypatch
     assert runtime._fake_notifications.calls == [('mark', 7, [2, 4], False)]
 
 
+@pytest.mark.parametrize('body_kind', ['ids', 'bytes'])
+def test_native_notifications_mark_read_bounds_ids_and_body(monkeypatch, body_kind):
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social', 'write:social']
+    )
+    from oneirodex.runtime_native.notifications import (
+        NOTIFICATION_READ_BODY_MAX_BYTES, NOTIFICATION_READ_IDS_MAX,
+    )
+
+    if body_kind == 'ids':
+        body = {'ids': list(range(NOTIFICATION_READ_IDS_MAX + 1))}
+        payload = None
+    else:
+        body = None
+        payload = b'{"all":true,"padding":"' + b'a' * NOTIFICATION_READ_BODY_MAX_BYTES + b'"}'
+
+    async def mark():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/notifications/read', json=body, content=payload,
+                headers={'Authorization': authorization, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(mark())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_notifications.calls == []
+
+
 def test_native_notifications_enforce_bearer_social_scope(monkeypatch):
     runtime, authorization = _bearer_runtime(monkeypatch, ['read:library'])
 
@@ -7288,6 +7367,30 @@ def test_lazy_asgi_dispatches_collection_mutations_with_csrf(
         assert response.json()['ok'] is True
     else:
         assert expected_field in response.json()
+
+
+def test_lazy_asgi_rejects_oversized_collection_reorder_before_data_access(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.runtime_native.collection_reads import COLLECTION_REORDER_BODY_MAX_BYTES
+
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"game_uuids":[],"padding":"' + (b'x' * COLLECTION_REORDER_BODY_MAX_BYTES) + b'"}'
+
+    async def perform():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.put(
+                '/api/collections/collection-1/items/order',
+                content=body,
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(perform())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
 
 
 def test_lazy_asgi_dispatches_member_remote_play_status_without_flask_request(monkeypatch):

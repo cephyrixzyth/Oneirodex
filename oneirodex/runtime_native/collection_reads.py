@@ -11,6 +11,9 @@ from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
 from .csrf_compat import csrf_error_response
 
+COLLECTION_REORDER_BODY_MAX_BYTES = 64 * 1024
+_BODY_TOO_LARGE = object()
+
 
 class CollectionReadData:
     def list(self, user, *, admin_access: bool):
@@ -532,8 +535,19 @@ async def _parse_body(request, operation):
         'add_collection_item': AddCollectionItemBody,
         'reorder_collection_items': ReorderCollectionItemsBody,
     }
+    max_bytes = (
+        COLLECTION_REORDER_BODY_MAX_BYTES
+        if operation == 'reorder_collection_items' else 64 * 1024
+    )
+    raw_body = await _bounded_request_body(request, max_bytes)
+    if raw_body is _BODY_TOO_LARGE:
+        payload, status = api_error_payload(
+            'Request body is too large.', code='payload_too_large',
+            limit=max_bytes,
+        )
+        return None, JSONResponse(payload, status_code=status)
     try:
-        raw = json.loads(await request.body() or b'{}')
+        raw = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         raw = {}
     try:
@@ -545,6 +559,23 @@ async def _parse_body(request, operation):
         )
         return None, JSONResponse(payload, status_code=status)
     return body, None
+
+
+async def _bounded_request_body(request, max_bytes: int):
+    """Read a bounded body without aggregating an untrusted oversized stream."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _json_object(raw_body: bytes) -> dict:

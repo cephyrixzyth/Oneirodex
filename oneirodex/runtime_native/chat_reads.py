@@ -12,6 +12,57 @@ from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
 
+_CHAT_MESSAGE_JSON_MAX_BYTES = 64 * 1024
+_CHAT_MESSAGE_MAX_ATTACHMENT_IDS = 5
+
+
+class _ChatMessageBodyTooLarge(Exception):
+    pass
+
+
+async def _read_chat_message_json(request: Request):
+    """Read a message payload without buffering or parsing an unbounded body."""
+    declared = request.headers.get('content-length')
+    if declared is not None:
+        try:
+            declared_size = int(declared)
+        except ValueError:
+            declared_size = None
+        if declared_size is not None and declared_size > _CHAT_MESSAGE_JSON_MAX_BYTES:
+            raise _ChatMessageBodyTooLarge
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _CHAT_MESSAGE_JSON_MAX_BYTES:
+            raise _ChatMessageBodyTooLarge
+        body.extend(chunk)
+    import json
+
+    return json.loads(bytes(body) or b'{}')
+
+
+def _validated_attachment_ids(payload: dict) -> list[int]:
+    raw_ids = payload.get('attachment_ids')
+    if raw_ids is None:
+        return []
+    if not isinstance(raw_ids, list):
+        raise ValueError('attachment_ids must be a list')
+    if len(raw_ids) > _CHAT_MESSAGE_MAX_ATTACHMENT_IDS:
+        raise ValueError(f'Max {_CHAT_MESSAGE_MAX_ATTACHMENT_IDS} attachments per message')
+
+    attachment_ids = []
+    for value in raw_ids:
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ValueError('Invalid attachment_ids')
+        try:
+            attachment_id = int(value)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError('Invalid attachment_ids') from None
+        if attachment_id <= 0:
+            raise ValueError('Invalid attachment_ids')
+        attachment_ids.append(attachment_id)
+    return attachment_ids
+
 
 async def _bounded_form(request: Request, max_body_bytes: int):
     """Parse one bounded multipart form without buffering unbounded uploads."""
@@ -166,13 +217,7 @@ class ChatReadData:
                 parent_id = int(parent_raw)
             except (TypeError, ValueError):
                 raise ValueError('Invalid parent_message_id') from None
-        raw_ids = payload.get('attachment_ids') or []
-        if raw_ids and not isinstance(raw_ids, list):
-            raise ValueError('attachment_ids must be a list')
-        try:
-            attachment_ids = [int(value) for value in raw_ids] if raw_ids else []
-        except (TypeError, ValueError):
-            raise ValueError('Invalid attachment_ids') from None
+        attachment_ids = _validated_attachment_ids(payload)
         message = post_message(
             channel, user, payload.get('body') or '', parent_message_id=parent_id,
             attachment_ids=attachment_ids,
@@ -1024,35 +1069,8 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
-                except (TypeError, ValueError):
-                    payload = {}
-                if not isinstance(payload, dict):
-                    payload = {}
-                try:
-                    message = data.post_message(auth.user, channel_id, payload)
-                    if message is None:
-                        from oneirodex.utils.api_contract import api_error_payload
-
-                        body, status = api_error_payload('Not found', code='not_found')
-                        response = JSONResponse(body, status_code=status)
-                    else:
-                        from oneirodex.utils.api_contract import api_ok_payload
-
-                        response = JSONResponse(
-                            api_ok_payload({'message': message}), status_code=201,
-                        )
-                except (ValueError, PermissionError) as exc:
-                    from oneirodex.runtime_native.db_session import native_db as db
-                    from oneirodex.utils.api_contract import api_error_payload
-
-                    db.session.rollback()
-                    code = 'forbidden' if isinstance(exc, PermissionError) else 'bad_request'
-                    body, status = api_error_payload(str(exc), code=code)
-                    response = JSONResponse(body, status_code=status)
+                    channel_visible = data.channel_visible(auth.user, channel_id)
                 except Exception:  # noqa: BLE001 — keep persistence detail private
                     from oneirodex.runtime_native.db_session import native_db as db
                     from oneirodex.utils.api_contract import api_error_payload
@@ -1062,6 +1080,59 @@ def create_chat_reads_router(
                         'Could not post chat message', code='internal',
                     )
                     response = JSONResponse(body, status_code=status)
+                if response is None and not channel_visible:
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    body, status = api_error_payload('Not found', code='not_found')
+                    response = JSONResponse(body, status_code=status)
+                elif response is None:
+                    try:
+                        payload = await _read_chat_message_json(request)
+                    except _ChatMessageBodyTooLarge:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Request body is too large.', code='payload_too_large',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    except (TypeError, ValueError):
+                        payload = {}
+                if response is None:
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    try:
+                        attachment_ids = _validated_attachment_ids(payload)
+                        if 'attachment_ids' in payload:
+                            payload['attachment_ids'] = attachment_ids
+                        message = data.post_message(auth.user, channel_id, payload)
+                        if message is None:
+                            from oneirodex.utils.api_contract import api_error_payload
+
+                            body, status = api_error_payload('Not found', code='not_found')
+                            response = JSONResponse(body, status_code=status)
+                        else:
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            response = JSONResponse(
+                                api_ok_payload({'message': message}), status_code=201,
+                            )
+                    except (ValueError, PermissionError) as exc:
+                        from oneirodex.runtime_native.db_session import native_db as db
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        db.session.rollback()
+                        code = 'forbidden' if isinstance(exc, PermissionError) else 'bad_request'
+                        body, status = api_error_payload(str(exc), code=code)
+                        response = JSONResponse(body, status_code=status)
+                    except Exception:  # noqa: BLE001 — keep persistence detail private
+                        from oneirodex.runtime_native.db_session import native_db as db
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        db.session.rollback()
+                        body, status = api_error_payload(
+                            'Could not post chat message', code='internal',
+                        )
+                        response = JSONResponse(body, status_code=status)
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
