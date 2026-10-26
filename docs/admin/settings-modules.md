@@ -348,7 +348,7 @@ The React admin page preserves the IGDB settings URL. Its direct page GET is ser
 
 ### Household chat emoji
 
-The React admin page preserves the custom emoji URL and upload constraints. Each emoji image file is limited to 256 KiB. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
+The React admin page preserves the custom emoji URL and upload constraints. Each emoji image file is limited to 256 KiB and 4 megapixels. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
 
 ### Features
 

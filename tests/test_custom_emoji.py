@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import struct
 from uuid import uuid4
+import zlib
 
 import pytest
 from PIL import Image
@@ -44,6 +46,21 @@ def _png_file(name='party.png', size=(64, 64)):
     Image.new('RGBA', size, (255, 0, 0, 255)).save(buf, format='PNG')
     buf.seek(0)
     return FileStorage(stream=buf, filename=name, content_type='image/png')
+
+
+def _png_header(width, height):
+    header = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
+
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', header)
+        + chunk(b'IDAT', zlib.compress(b''))
+        + chunk(b'IEND', b'')
+    )
 
 
 def test_normalize_slug():
@@ -93,6 +110,26 @@ def test_upload_rejects_duplicate_and_cap(app, db_session, admin, tmp_path, monk
             )
         with pytest.raises(ValueError, match='limit'):
             upload_custom_emoji(slug='overflow', label='X', file=_png_file(), uploader=admin)
+
+
+def test_upload_rejects_oversized_dimensions_before_decode_or_file_creation(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized emoji image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'load', fail_if_decoded)
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    upload = FileStorage(
+        stream=BytesIO(_png_header(3000, 3000)),
+        filename='large.png', content_type='image/png',
+    )
+
+    with app.app_context(), pytest.raises(ValueError, match='dimensions are too large'):
+        upload_custom_emoji(slug='large', label='Large', file=upload, uploader=admin)
+
+    assert not (tmp_path / 'chat-emoji').exists()
 
 
 def test_fixed_set_unchanged():

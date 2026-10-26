@@ -15,6 +15,7 @@ from werkzeug.utils import secure_filename
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import CustomEmoji, User
+from oneirodex.utils.image_upload_limits import CUSTOM_EMOJI_MAX_PIXELS
 
 SLUG_RE = re.compile(r'^[a-z0-9_-]{2,24}$')
 MAX_CUSTOM_EMOJI = 20
@@ -97,8 +98,17 @@ def upload_custom_emoji(
 
     try:
         img = Image.open(BytesIO(raw))
+    except Exception as exc:
+        raise ValueError(f'Invalid image: {exc}') from exc
+
+    if img.width <= 0 or img.height <= 0 or img.width * img.height > CUSTOM_EMOJI_MAX_PIXELS:
+        img.close()
+        raise ValueError('Image dimensions are too large for a custom emoji.')
+
+    try:
         img.load()
     except Exception as exc:
+        img.close()
         raise ValueError(f'Invalid image: {exc}') from exc
 
     if img.mode not in ('RGB', 'RGBA'):

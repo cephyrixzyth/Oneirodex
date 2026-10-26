@@ -22,6 +22,11 @@ from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 from .response_compat import flask_redirect_response
 from .query_compat import first_query_value
+from oneirodex.utils.image_upload_limits import (
+    LIBRARY_IMAGE_MAX_BYTES,
+    LIBRARY_IMAGE_MAX_PIXELS,
+    LIBRARY_PREVIEW_MAX_BODY_BYTES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +39,18 @@ class LibraryAdminMutationData:
 
         if image_data.startswith('data:image'):
             image_data = image_data.split(',', 1)[1]
+        max_encoded_bytes = ((LIBRARY_IMAGE_MAX_BYTES + 2) // 3) * 4
+        if len(image_data) > max_encoded_bytes:
+            raise ValueError('Library image must be 10 MB or smaller.')
         image_bytes = base64.b64decode(image_data)
+        if len(image_bytes) > LIBRARY_IMAGE_MAX_BYTES:
+            raise ValueError('Library image must be 10 MB or smaller.')
         with PILImage.open(BytesIO(image_bytes)) as opened:
+            if (
+                opened.width <= 0 or opened.height <= 0
+                or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS
+            ):
+                raise ValueError('Library image dimensions are too large.')
             image = opened.convert('RGBA')
             if image.width > 1024 or image.height > 1024:
                 image.thumbnail((1024, 1024), PILImage.LANCZOS)
@@ -63,7 +78,7 @@ class LibraryAdminMutationData:
         saved_path = None
         if image_bytes:
             with PILImage.open(BytesIO(image_bytes)) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     raise ValueError('Library image dimensions are too large.')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:
@@ -105,7 +120,7 @@ class LibraryAdminMutationData:
         if image:
             filename, content = image
             with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     raise ValueError('Library image dimensions are too large.')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:
@@ -447,7 +462,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
             filename = ''
             if isinstance(upload, UploadFile) and upload.filename:
                 filename = upload.filename
-                raw_image = await upload.read(10 * 1024 * 1024 + 1)
+                raw_image = await upload.read(LIBRARY_IMAGE_MAX_BYTES + 1)
 
         try:
             cookie_name = str(app.config.get('SESSION_COOKIE_NAME') or 'session')
@@ -484,7 +499,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
             if response is None:
                 if too_large:
                     message = 'Request body is too large.'
-                elif raw_image is not None and len(raw_image) > 10 * 1024 * 1024:
+                elif raw_image is not None and len(raw_image) > LIBRARY_IMAGE_MAX_BYTES:
                     message = 'File size is too large. Maximum allowed is 10 MB.'
                 else:
                     name = str(form_values.get('name') or '').strip()
@@ -530,7 +545,10 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     from io import BytesIO
                                     try:
                                         with PILImage.open(BytesIO(raw_image)) as opened:
-                                            if opened.width * opened.height > 80_000_000:
+                                            if (
+                                                opened.width <= 0 or opened.height <= 0
+                                                or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS
+                                            ):
                                                 message = 'Library image dimensions are too large.'
                                             else:
                                                 image = raw_image
@@ -735,7 +753,18 @@ async def _preview_cropped_image(request, data):
     )
     if is_json:
         try:
-            body = await request.json()
+            declared_size = int(request.headers.get('content-length', '0') or 0)
+        except (TypeError, ValueError):
+            declared_size = LIBRARY_PREVIEW_MAX_BODY_BYTES + 1
+        if declared_size > LIBRARY_PREVIEW_MAX_BODY_BYTES:
+            return _error('Request body is too large.', 'bad_request', 413)
+        raw_body = bytearray()
+        async for chunk in request.stream():
+            raw_body.extend(chunk)
+            if len(raw_body) > LIBRARY_PREVIEW_MAX_BODY_BYTES:
+                return _error('Request body is too large.', 'bad_request', 413)
+        try:
+            body = json.loads(raw_body)
         except Exception:
             body = {}
     else:
@@ -785,12 +814,12 @@ async def _create(request, app, data, user):
         extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
         if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
             return _error('Choose a JPG, PNG, GIF, or WebP library image.', 'bad_request', 400)
-        if len(content) > 10 * 1024 * 1024:
+        if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
             with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     return _error('Library image dimensions are too large.', 'bad_request', 400)
         except (UnidentifiedImageError, OSError, ValueError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
@@ -830,12 +859,12 @@ async def _update(request, app, data, user, library_uuid):
         extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
         if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
             return _error('Choose a JPG, PNG, GIF, or WebP library image.', 'bad_request', 400)
-        if len(content) > 10 * 1024 * 1024:
+        if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
             with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     return _error('Library image dimensions are too large.', 'bad_request', 400)
         except (UnidentifiedImageError, OSError, ValueError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)

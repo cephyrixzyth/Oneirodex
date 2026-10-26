@@ -22,6 +22,10 @@ from oneirodex.utils.library_watch import (
     is_library_watch_enabled,
     library_watch_effective,
 )
+from oneirodex.utils.image_upload_limits import (
+    LIBRARY_IMAGE_MAX_BYTES,
+    LIBRARY_IMAGE_MAX_PIXELS,
+)
 from oneirodex.utils.rbac import is_librarian
 from sqlalchemy import func, select
 from uuid import uuid4
@@ -31,7 +35,6 @@ from . import apis_bp
 
 _DEFAULT_LIBRARY_IMAGE = 'newstyle/default_library.jpg'
 _LIBRARY_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-_LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 
 @apis_bp.route('/admin/libraries', methods=['POST'])
@@ -66,11 +69,11 @@ def create_library():
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
-        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+        if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
             with PILImage.open(image.stream) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     return api_error('Library image dimensions are too large.', code='bad_request')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:
@@ -219,11 +222,11 @@ def admin_library_detail(library_uuid):
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
-        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+        if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
             with PILImage.open(image.stream) as opened:
-                if opened.width * opened.height > 80_000_000:
+                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
                     return api_error('Library image dimensions are too large.', code='bad_request')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:

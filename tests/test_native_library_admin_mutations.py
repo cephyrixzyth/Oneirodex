@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import struct
 from contextlib import nullcontext
 from io import BytesIO
 from types import SimpleNamespace
@@ -21,6 +23,23 @@ from oneirodex.runtime_native.session_compat import (
 )
 
 LIBRARY_UUID = '00000000-0000-0000-0000-000000000001'
+
+
+def _png_header(width, height):
+    import zlib
+
+    header = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
+
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', header)
+        + chunk(b'IDAT', zlib.compress(b''))
+        + chunk(b'IEND', b'')
+    )
 
 
 class FakeLibraryAdminMutations:
@@ -199,6 +218,73 @@ def test_library_create_api_rejects_corrupt_image_without_adapter_call(native_cl
     assert response.status_code == 400
     assert 'could not be read' in response.json()['message']
     assert data.calls == []
+
+
+def test_library_create_rejects_oversized_image_before_decode_or_adapter_call(
+    native_client, monkeypatch,
+):
+    runtime, data = native_client
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Oversized library image', 'platform': 'PCWIN'},
+        files={'image': ('too-large.png', _png_header(5000, 5000), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'dimensions are too large' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_update_rejects_oversized_image_before_decode_or_adapter_call(
+    native_client, monkeypatch,
+):
+    runtime, data = native_client
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = _request(
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}',
+        data={'name': 'Oversized library image', 'platform': 'PCWIN'},
+        files={'image': ('too-large.png', _png_header(5000, 5000), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'dimensions are too large' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_preview_rejects_oversized_body_before_processing(native_client):
+    from oneirodex.utils.image_upload_limits import LIBRARY_PREVIEW_MAX_BODY_BYTES
+
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/library/preview-cropped-image',
+        json={'image_data': 'x' * LIBRARY_PREVIEW_MAX_BODY_BYTES},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'bad_request'
+    assert data.calls == []
+
+
+def test_library_preview_rejects_oversized_dimensions_before_conversion(monkeypatch):
+    data = LibraryAdminMutationData()
+
+    def fail_if_converted(*_args, **_kwargs):
+        raise AssertionError('oversized preview must be rejected before conversion')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_converted)
+    encoded = base64.b64encode(_png_header(5000, 5000)).decode('ascii')
+
+    with pytest.raises(ValueError, match='dimensions are too large'):
+        data.preview_image('data:image/png;base64,' + encoded)
 
 
 def test_library_create_form_and_api_keep_transport_specific_admin_denial(native_client):
