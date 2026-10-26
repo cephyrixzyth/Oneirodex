@@ -47,9 +47,9 @@ test('saved secret is never populated; dirty drafts can test saved settings and 
   expect(secret).toHaveValue('')
   expect(secret).toHaveAttribute('type', 'password')
   fireEvent.change(secret, { target: { value: 'new-test-secret-value' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Show entered secret' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle password visibility' }))
   expect(secret).toHaveAttribute('type', 'text')
-  expect(screen.getByRole('button', { name: 'Hide entered secret' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Toggle password visibility' })).toHaveAttribute(
     'aria-pressed',
     'true',
   )
@@ -62,7 +62,7 @@ test('saved secret is never populated; dirty drafts can test saved settings and 
   })
   expect(secret).toHaveValue('new-test-secret-value')
   expect(secret).toHaveAttribute('type', 'text')
-  expect(screen.getByRole('button', { name: 'Hide entered secret' })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Toggle password visibility' })).toHaveAttribute(
     'aria-pressed',
     'true',
   )

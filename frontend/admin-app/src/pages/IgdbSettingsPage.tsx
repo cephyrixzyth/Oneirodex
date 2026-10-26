@@ -220,10 +220,10 @@ export function IgdbSettingsPage() {
                 />
                 <Button
                   className="od-igdb-secret-toggle"
-                  aria-label={showSecret ? 'Hide entered secret' : 'Show entered secret'}
+                  aria-label="Toggle password visibility"
                   aria-controls="igdb_client_secret"
                   aria-pressed={showSecret}
-                  title={showSecret ? 'Hide entered secret' : 'Show entered secret'}
+                  title="Toggle password visibility"
                   onClick={() => setShowSecret((value) => !value)}
                 >
                   {showSecret ? (
