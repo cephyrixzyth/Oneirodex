@@ -66,6 +66,7 @@ export function AnnouncementsPage() {
   return (
     <Page
       title="Announcements"
+      visuallyHiddenTitle
       lede={
         <>
           Publish blasts that appear on the member News page alongside gaming headlines. Save as

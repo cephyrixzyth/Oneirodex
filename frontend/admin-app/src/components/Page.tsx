@@ -18,6 +18,7 @@ export function useAdminDocumentTitle(pageTitle: string) {
 export function Page({
   title,
   documentTitle,
+  visuallyHiddenTitle = false,
   lede,
   actions,
   className,
@@ -25,6 +26,7 @@ export function Page({
 }: {
   title: ReactNode
   documentTitle?: string
+  visuallyHiddenTitle?: boolean
   lede?: ReactNode
   actions?: ReactNode
   className?: string
@@ -46,14 +48,14 @@ export function Page({
       {actions ? (
         <div className="od-admin-page__heading">
           <div>
-            <h1 ref={headingRef}>{title}</h1>
+            <h1 ref={headingRef} className={visuallyHiddenTitle ? 'visually-hidden' : undefined}>{title}</h1>
             {lede ? <p className="od-admin-lede">{lede}</p> : null}
           </div>
           <div className="od-admin-page__actions">{actions}</div>
         </div>
       ) : (
         <>
-          <h1 ref={headingRef}>{title}</h1>
+          <h1 ref={headingRef} className={visuallyHiddenTitle ? 'visually-hidden' : undefined}>{title}</h1>
           {lede ? <p className="od-admin-lede">{lede}</p> : null}
         </>
       )}
