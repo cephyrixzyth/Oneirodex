@@ -164,7 +164,7 @@ export function SmtpPage() {
               Enable SMTP
             </label>
             <label className="od-admin-field">
-              SMTP server
+              SMTP Server <span aria-hidden="true">*</span>
               <input
                 className="od-admin-input"
                 id="smtp_server"
@@ -221,7 +221,7 @@ export function SmtpPage() {
               Use TLS
             </label>
             <label className="od-admin-field">
-              Default sender email
+              Default Sender Email
               <input
                 className="od-admin-input"
                 id="smtp_default_sender"
