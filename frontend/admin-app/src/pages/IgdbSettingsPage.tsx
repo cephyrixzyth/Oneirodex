@@ -106,9 +106,8 @@ export function IgdbSettingsPage() {
       setMessage('IGDB API test successful')
       showToast('IGDB API test successful', 'success')
     } catch (err) {
-      const text = errorText(err) || 'IGDB connection failed.'
-      setError(text)
-      showToast(text, 'error')
+      const detail = errorText(err) || 'IGDB connection failed.'
+      showToast(`IGDB API test failed: ${detail}`, 'error')
     } finally {
       setBusy(false)
     }

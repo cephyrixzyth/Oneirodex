@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { IgdbSettingsPage } from './IgdbSettingsPage'
 import { getJson, postJson } from '../api/adminApi'
+import { showToast } from '../utils/toast'
 vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
+vi.mock('../utils/toast', () => ({ showToast: vi.fn() }))
 afterEach(() => vi.resetAllMocks())
 const settings = {
   igdb_client_id: 'review-client-01234567',
@@ -92,7 +94,13 @@ test('failed save retains draft; missing credentials reach the legacy test endpo
   expect(screen.getByRole('button', { name: 'Test Connection' })).toBeEnabled()
   vi.mocked(postJson).mockRejectedValueOnce(new Error('IGDB settings not configured'))
   fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('IGDB settings not configured')
+  await waitFor(() =>
+    expect(showToast).toHaveBeenCalledWith(
+      'IGDB API test failed: IGDB settings not configured',
+      'error',
+    ),
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith('/admin/test_igdb')
   fireEvent.change(secret, { target: { value: 'draft-test-secret-value' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
