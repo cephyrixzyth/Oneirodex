@@ -36,13 +36,13 @@ test('loads safe settings, saves blank password, and tests the saved connection 
   )
   expect(screen.getByLabelText('Password')).toHaveValue('')
   fireEvent.change(port, { target: { value: '2525' } })
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
   expect(
     await screen.findByText('SMTP connection successful. No email was sent.'),
   ).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith('/admin/smtp_test')
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
   expect(await screen.findByText('SMTP settings saved successfully')).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith(
     '/admin/smtp_settings',
@@ -55,7 +55,7 @@ test('connection test failure shows one persistent page error', async () => {
   vi.mocked(postJson).mockResolvedValue({ success: false, message: 'SMTP connection failed' })
   render(<SmtpPage />)
   await screen.findByLabelText('SMTP server')
-  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'SMTP connection failed: SMTP connection failed',
   )
@@ -67,11 +67,11 @@ test('load failure guards save and test; retry recovers', async () => {
     .mockResolvedValueOnce({ settings: state })
   render(<SmtpPage />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Settings unavailable')
-  expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save Settings' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Retry loading settings' }))
   expect(await screen.findByLabelText('SMTP server')).toHaveValue('smtp.example.com')
-  expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Save Settings' })).toBeEnabled()
 })
 
 test('save failure retains draft including replacement password', async () => {
@@ -80,12 +80,12 @@ test('save failure retains draft including replacement password', async () => {
   render(<SmtpPage />)
   const password = await screen.findByLabelText('Password')
   fireEvent.change(password, { target: { value: 'draft-test-password' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Error saving SMTP settings: Could not save SMTP settings',
   )
   expect(password).toHaveValue('draft-test-password')
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
 })
 
 test('editing a field clears stale action feedback', async () => {
@@ -93,7 +93,7 @@ test('editing a field clears stale action feedback', async () => {
   vi.mocked(postJson).mockRejectedValue(new Error('Could not save SMTP settings'))
   render(<SmtpPage />)
   const server = await screen.findByLabelText('SMTP server')
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not save SMTP settings')
   fireEvent.change(server, { target: { value: 'smtp.updated.example' } })
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
@@ -104,9 +104,9 @@ test('disabled SMTP still tests the saved configuration, and help remains availa
   vi.mocked(postJson).mockResolvedValue({ success: true, result: 'connected' })
   render(<SmtpPage />)
   await screen.findByLabelText('SMTP server')
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
   expect(screen.getByText('SMTP setup help')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
   expect(
     await screen.findByText('SMTP connection successful. No email was sent.'),
   ).toBeInTheDocument()
@@ -122,7 +122,7 @@ test('legacy save posts form values without the modern API field restrictions', 
   const legacyLongValue = 'x'.repeat(256)
   fireEvent.change(server, { target: { value: legacyLongValue } })
   fireEvent.change(sender, { target: { value: 'not-an-email' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
   expect(await screen.findByText('SMTP settings saved successfully')).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith(
     '/admin/smtp_settings',

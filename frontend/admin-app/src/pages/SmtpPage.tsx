@@ -225,10 +225,10 @@ export function SmtpPage() {
           {lastTested ? <p className="od-admin-hint">Last tested: {lastTested}</p> : null}
           <div className="od-admin-actions">
             <Button type="submit" variant="primary" disabled={disabled}>
-              {busy ? 'Working…' : 'Save settings'}
+              {busy ? 'Working…' : 'Save Settings'}
             </Button>
             <Button disabled={disabled} onClick={testConnection}>
-              Test connection
+              Test Settings
             </Button>
           </div>
           <details className="od-admin-panel">
