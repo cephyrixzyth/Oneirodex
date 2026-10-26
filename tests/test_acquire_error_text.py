@@ -158,6 +158,26 @@ def test_the_admin_download_route_no_longer_500s_or_leaks(signed_in, monkeypatch
     assert INTERNAL_IP not in reply.get_data(as_text=True)
 
 
+def test_admin_arr_download_rejects_unrelated_schemes_but_keeps_magnets(signed_in, monkeypatch):
+    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    sent = []
+    monkeypatch.setattr(
+        'oneirodex.routes_arr.qbittorrent_add_url',
+        lambda url: sent.append(url) or {'status': 'queued', 'download_url': url},
+    )
+    magnet = 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'
+    accepted = signed_in.post('/api/arr/download', json={'download_url': magnet})
+    rejected = [
+        signed_in.post('/api/arr/download', json={'download_url': url})
+        for url in ('file:///etc/passwd', 'javascript:alert(1)', 'ftp://downloads.example/item')
+    ]
+
+    assert accepted.status_code == 202
+    assert sent == [magnet]
+    assert all(reply.status_code == 400 for reply in rejected)
+    assert all(reply.get_json()['error_code'] == 'bad_request' for reply in rejected)
+
+
 @pytest.mark.parametrize('exc', [
     requests.exceptions.InvalidURL(f"Invalid URL 'http://u:{SAB_KEY}@qbit.lan/?apikey={SAB_KEY}': No host supplied"),
     requests.exceptions.MissingSchema(f"Invalid URL 'qbit.lan/?apikey={SAB_KEY}': No scheme supplied"),

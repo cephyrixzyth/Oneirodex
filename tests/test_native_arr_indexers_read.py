@@ -228,6 +228,32 @@ def test_arr_download_checks_csrf_validates_outbound_url_and_keeps_accepted_stat
     assert invalid_body.status_code == 422
 
 
+def test_arr_download_allows_valid_magnets_and_rejects_unrelated_schemes():
+    client = _client()
+    headers = {'X-CSRFToken': client.csrf_token}
+    magnet = client.post(
+        '/api/arr/download',
+        json={'download_url': 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'},
+        headers=headers,
+    )
+    bad_links = [
+        'file:///etc/passwd',
+        'javascript:alert(1)',
+        'ftp://downloads.example/item.torrent',
+        'magnet:?dn=missing-info-hash',
+        'magnet://downloads.example/item',
+    ]
+    rejected = [
+        client.post('/api/arr/download', json={'download_url': value}, headers=headers)
+        for value in bad_links
+    ]
+
+    assert magnet.status_code == 202
+    assert magnet.json()['url'].startswith('magnet:?xt=urn:btih:')
+    assert all(response.status_code == 400 for response in rejected)
+    assert all(response.json()['error_code'] == 'bad_request' for response in rejected)
+
+
 def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
     client = _client()
     invalid_csrf = client.post('/api/arr/hardlink/preview', json={'library_dest_dir': 'library'})

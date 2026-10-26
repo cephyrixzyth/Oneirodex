@@ -12,7 +12,7 @@ import stat
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from requests.exceptions import RequestException
 from requests.models import PreparedRequest
@@ -650,6 +650,30 @@ def validate_connector_http_url(url: str) -> tuple[bool, str]:
 def validate_user_outbound_http_url(url: str) -> tuple[bool, str]:
     """User/indexer/metadata fetches — never LAN even if the homelab flag is on."""
     return validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
+
+
+def validate_download_client_url(url: str) -> tuple[bool, str]:
+    """Allow public HTTP(S) links and valid BitTorrent magnets to download clients."""
+    if not isinstance(url, str) or not url.strip():
+        return False, 'Download URL is required'
+
+    candidate = url.strip()
+    parsed = urlparse(candidate)
+    scheme = parsed.scheme.lower()
+    if scheme in {'http', 'https'}:
+        return validate_user_outbound_http_url(candidate)
+
+    if scheme == 'magnet' and not parsed.netloc:
+        xt_values = parse_qs(parsed.query).get('xt', [])
+        valid_xt = any(
+            value.startswith(('urn:btih:', 'urn:btmh:'))
+            and bool(value.partition(':')[2].partition(':')[2])
+            for value in xt_values
+        )
+        if valid_xt:
+            return True, candidate
+
+    return False, 'Download URL scheme must be http, https, or a valid magnet URI'
 
 
 def validate_community_chat_url(url: str) -> tuple[bool, str]:

@@ -284,16 +284,15 @@ def create_arr_indexers_router(
                             response = JSONResponse(payload, status_code=status)
                         else:
                             url = (model.download_url or model.url or '').strip()
-                            if url.lower().startswith(('http://', 'https://')):
-                                from oneirodex.utils.security import validate_user_outbound_http_url
+                            from oneirodex.utils.security import validate_download_client_url
 
-                                ok, result = validate_user_outbound_http_url(url)
-                                if not ok:
-                                    payload, status = api_error_payload(result, code='bad_request')
-                                    response = JSONResponse(payload, status_code=status)
-                                    url = ''
-                                else:
-                                    url = result
+                            ok, result = validate_download_client_url(url)
+                            if not ok:
+                                payload, status = api_error_payload(result, code='bad_request')
+                                response = JSONResponse(payload, status_code=status)
+                                url = ''
+                            else:
+                                url = result
                             if url:
                                 try:
                                     result = data.download(url)
