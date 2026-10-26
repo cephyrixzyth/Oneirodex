@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from oneirodex.models import Game, GlobalSettings, Library, StoreAccount, User, UserOwnedTitle
 from oneirodex.platform import LibraryPlatform
+from oneirodex.utils import store_ownership
 from oneirodex.utils.store_ownership import (
     connect_gog_account,
     disconnect_epic_account,
@@ -360,6 +361,19 @@ def test_ownership_gog_api_disabled(client, app, db_session, user):
     _login(client, app, user)
     resp = client.post('/api/ownership/gog/csv', json={'csv': '123,Game\n'})
     assert resp.status_code == 403
+
+
+def test_store_csv_title_limit_rejects_before_database_writes(app, monkeypatch):
+    monkeypatch.setattr(store_ownership, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(
+        store_ownership,
+        'upsert_owned_title',
+        lambda *_args, **_kwargs: pytest.fail('over-limit CSV must be rejected before writes'),
+    )
+    csv_text = ''.join(f'{index},Title {index}\n' for index in range(store_ownership.MAX_TITLES + 1))
+
+    with app.app_context(), pytest.raises(ValueError, match='more than 50000 titles'):
+        store_ownership.import_store_csv(1, 'gog', csv_text)
 
 
 def test_browse_includes_owned_when_matched(client, app, db_session, lib, user):
