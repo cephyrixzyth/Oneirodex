@@ -11,6 +11,10 @@ from starlette.responses import JSONResponse
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_ADMIN_USER_BODY_BYTES = 64 * 1024
+_MAX_CONTENT_FILTER_VALUES = 100
+_MAX_CONTENT_FILTER_NAME_LENGTH = 50
+
 
 class AdminUserMutationData:
     def _lock_and_reload_actor(self, actor_id):
@@ -64,6 +68,13 @@ class AdminUserMutationData:
         from oneirodex.utils.library_acl import (
             get_user_content_filters, set_user_content_filters, set_user_library_allowlist,
         )
+
+        # Validate bounded filter data before locking or mutating any rows. The
+        # model's primary key uses a 50-character name column and each submitted
+        # entry can otherwise cause an individual insert.
+        filter_error = _validate_content_filters(body)
+        if filter_error is not None:
+            return None, (filter_error, 'bad_request', None), False
 
         actor = self._lock_and_reload_actor(actor_id)
         if actor is None:
@@ -270,16 +281,23 @@ def create_admin_user_mutation_router(
                     if request.method == 'DELETE':
                         payload, error = data.delete(user_id, actor.id)
                         refresh_session = False
+                        response = _result(payload, error)
                     else:
-                        body = await _json_object(request)
-                        if body is None:
-                            payload, error, refresh_session = None, ('No data provided', 'bad_request', None), False
+                        raw_body = await _bounded_request_body(request, _MAX_ADMIN_USER_BODY_BYTES)
+                        if raw_body is _BODY_TOO_LARGE:
+                            response = _error(
+                                'Request body is too large.', 'payload_too_large',
+                            )
                         else:
-                            payload, error, refresh_session = data.update(user_id, body, actor.id)
-                    response = _result(payload, error)
-                    if refresh_session:
-                        _refresh_password_session(auth.session_data, actor, request, flask_app.config)
-                        _write_remember_cookie(response, flask_app, auth.session_data)
+                            body = _json_object(raw_body)
+                            if body is None:
+                                payload, error, refresh_session = None, ('No data provided', 'bad_request', None), False
+                            else:
+                                payload, error, refresh_session = data.update(user_id, body, actor.id)
+                            response = _result(payload, error)
+                            if refresh_session:
+                                _refresh_password_session(auth.session_data, actor, request, flask_app.config)
+                                _write_remember_cookie(response, flask_app, auth.session_data)
                 except Exception:  # noqa: BLE001 — mutation routes fail closed
                     response = _error('Failed to update user' if request.method == 'PUT' else 'Failed to delete user', 'internal')
             if auth.should_set_session_cookie:
@@ -293,13 +311,54 @@ def create_admin_user_mutation_router(
     return router
 
 
-async def _json_object(request):
+_BODY_TOO_LARGE = object()
+
+
+async def _bounded_request_body(request, max_bytes: int):
+    """Read at most max_bytes from an untrusted request stream."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
+
+
+def _json_object(raw_body):
     import json
     try:
-        body = json.loads(await request.body() or b'null')
-    except (TypeError, ValueError, UnicodeDecodeError):
+        body = json.loads(raw_body or b'null')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     return body if isinstance(body, dict) else None
+
+
+def _validate_content_filters(body):
+    for field in ('denied_genres', 'denied_themes'):
+        values = body.get(field)
+        if values is None:
+            continue
+        if not isinstance(values, list):
+            return f'{field} must be a list'
+        if len(values) > _MAX_CONTENT_FILTER_VALUES:
+            return f'{field} cannot contain more than {_MAX_CONTENT_FILTER_VALUES} values'
+        for value in values:
+            # None and blank strings have historically been ignored by the
+            # ACL helper, so keep that behavior while rejecting unsafe types.
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                return f'{field} values must be strings'
+            if len(value.strip()) > _MAX_CONTENT_FILTER_NAME_LENGTH:
+                return f'{field} values cannot exceed {_MAX_CONTENT_FILTER_NAME_LENGTH} characters'
+    return None
 
 
 def _result(payload, error):

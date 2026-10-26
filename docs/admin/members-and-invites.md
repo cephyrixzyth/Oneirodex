@@ -94,6 +94,8 @@ Consequences worth knowing:
 | `child` | Browse, play, and chat within the parental / library ACL. No admin, library writes, server-file downloads, Acquire search, or companion download/install |
 
 Library allowlists and content filters are per-user, under **Admin → Users**.
+Each genre or theme filter accepts up to 100 names, with each name limited to
+50 characters.
 
 ## Troubleshooting
 

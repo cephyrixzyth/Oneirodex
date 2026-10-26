@@ -11,6 +11,11 @@ from starlette.responses import JSONResponse, Response
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
+# Manual shelves persist at most 60 distinct game UUIDs. Allow some duplicate
+# cleanup for older/client payloads, but bound both parsing and normalization.
+_SHELF_JSON_BODY_MAX_BYTES = 64 * 1024
+_SHELF_GAME_UUIDS_MAX_ITEMS = 512
+
 
 class AdminDiscoverySectionsData:
     """Database adapter for shelf CRUD, schedule, pin, and visibility actions."""
@@ -328,7 +333,7 @@ async def _dispatch_action(request, data, user, section_id):
     if path == '/admin/api/discovery_sections' and method in ('GET', 'HEAD'):
         return _ok(data.state())
     if path == '/admin/api/discovery_sections' and method == 'POST':
-        body = await _model_body(request, DiscoveryShelfBody)
+        body = await _shelf_model_body(request, DiscoveryShelfBody)
         if isinstance(body, Response):
             return body
         payload, error = data.create(body, user.id)
@@ -340,7 +345,7 @@ async def _dispatch_action(request, data, user, section_id):
         payload, error = data.pin(section_id, await _json_body(request), user.id)
         return _result(payload, error)
     if section_id is not None and method == 'PUT':
-        body = await _model_body(request, DiscoveryShelfBody)
+        body = await _shelf_model_body(request, DiscoveryShelfBody)
         if isinstance(body, Response):
             return body
         payload, error = data.update(section_id, body, user.id)
@@ -361,6 +366,65 @@ async def _dispatch_action(request, data, user, section_id):
         payload, error = data.visibility(body, user.id)
         return _result(payload, error)
     return Response(status_code=405)
+
+
+async def _shelf_model_body(request, model_type):
+    """Validate a shelf mutation body after bounding its raw JSON input."""
+    import json
+
+    from pydantic import ValidationError
+    from oneirodex.utils.validation import format_validation_errors
+
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
+
+    try:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
+        payload = {}
+    if payload is None:
+        payload = {}
+
+    # game_uuids is Any to retain the existing textarea-string and JSON-array
+    # contracts. Reject oversized arrays before Pydantic or the normalizer can
+    # traverse a duplicate-heavy list.
+    if isinstance(payload, dict):
+        raw_uuids = payload.get('game_uuids')
+        if isinstance(raw_uuids, list) and len(raw_uuids) > _SHELF_GAME_UUIDS_MAX_ITEMS:
+            return _error(
+                'Too many game UUID entries.', 'payload_too_large', 413,
+                limit=_SHELF_GAME_UUIDS_MAX_ITEMS,
+            )
+
+    try:
+        return model_type.model_validate(payload)
+    except ValidationError as exc:
+        return _error(
+            'Invalid request.', 'unprocessable', 422,
+            detail=format_validation_errors(exc),
+        )
+
+
+async def _bounded_shelf_body(request):
+    """Read at most the shelf JSON byte limit, including chunked requests."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > _SHELF_JSON_BODY_MAX_BYTES:
+                return _error('Request body is too large.', 'payload_too_large', 413)
+        except ValueError:
+            # An invalid Content-Length is not trusted; the streamed limit below
+            # still guarantees that the application never buffers an unbounded
+            # body.
+            pass
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _SHELF_JSON_BODY_MAX_BYTES:
+            return _error('Request body is too large.', 'payload_too_large', 413)
+        body.extend(chunk)
+    return bytes(body)
 
 
 async def _model_body(request, model_type):

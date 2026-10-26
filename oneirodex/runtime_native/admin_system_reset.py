@@ -12,6 +12,11 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_RESET_BODY_BYTES = 16 * 1024
+_MAX_RESET_SCOPES = 16
+_MAX_RESET_SCOPE_LENGTH = 32
+_BODY_TOO_LARGE = object()
+
 
 def create_admin_system_reset_router(
     flask_app,
@@ -57,59 +62,86 @@ def create_admin_system_reset_router(
                 if csrf is not None:
                     response = csrf
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    body = body if isinstance(body, dict) else {}
-                    service = reset_service or _reset_service()
-                    scopes = body.get('scopes')
-                    if not isinstance(scopes, list) or not scopes:
+                    raw_body = await _bounded_request_body(request, _MAX_RESET_BODY_BYTES)
+                    if raw_body is _BODY_TOO_LARGE:
                         payload, status = api_error_payload(
-                            'Choose at least one thing to reset.', code='bad_request',
-                            detail={'valid_scopes': sorted(service.scopes)},
+                            'Request body is too large.', code='payload_too_large',
                         )
                         response = JSONResponse(payload, status_code=status)
+                        body = None
                     else:
-                        unknown = [value for value in scopes if value not in service.scopes]
-                        if unknown:
+                        try:
+                            import json
+                            body = json.loads(raw_body or b'null')
+                        except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
+                            body = {}
+                    body = body if isinstance(body, dict) else {}
+                    if raw_body is _BODY_TOO_LARGE:
+                        pass
+                    else:
+                        service = reset_service or _reset_service()
+                        scopes = body.get('scopes')
+                        if not isinstance(scopes, list) or not scopes:
                             payload, status = api_error_payload(
-                                f"Unknown reset scope: {', '.join(sorted(unknown))}.",
-                                code='bad_request',
+                                'Choose at least one thing to reset.', code='bad_request',
                                 detail={'valid_scopes': sorted(service.scopes)},
                             )
                             response = JSONResponse(payload, status_code=status)
-                        elif body.get('confirm') is None:
-                            response = JSONResponse(api_ok_payload(
-                                service.plan(scopes), performed=False,
-                            ))
+                        elif len(scopes) > _MAX_RESET_SCOPES:
+                            payload, status = api_error_payload(
+                                'Too many reset scopes were supplied.', code='bad_request',
+                                detail={'valid_scopes': sorted(service.scopes)},
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        elif any(
+                            not isinstance(value, str) or len(value) > _MAX_RESET_SCOPE_LENGTH
+                            for value in scopes
+                        ):
+                            payload, status = api_error_payload(
+                                'Reset scopes must be short strings.', code='bad_request',
+                                detail={'valid_scopes': sorted(service.scopes)},
+                            )
+                            response = JSONResponse(payload, status_code=status)
                         else:
-                            from oneirodex.product import RESET_CONFIRM_PHRASE, is_reset_confirm
-                            if not is_reset_confirm(body.get('confirm')):
+                            unknown = [value for value in scopes if value not in service.scopes]
+                            if unknown:
                                 payload, status = api_error_payload(
-                                    f'Type "{RESET_CONFIRM_PHRASE}" exactly to confirm.',
-                                    code='unprocessable',
+                                    f"Unknown reset scope: {', '.join(sorted(unknown))}.",
+                                    code='bad_request',
+                                    detail={'valid_scopes': sorted(service.scopes)},
                                 )
                                 response = JSONResponse(payload, status_code=status)
+                            elif body.get('confirm') is None:
+                                response = JSONResponse(api_ok_payload(
+                                    service.plan(scopes), performed=False,
+                                ))
                             else:
-                                expanded = service.expand(scopes)
-                                audit = event_logger or _event_logger
-                                audit(
-                                    f"System reset requested (scopes: {', '.join(expanded)})",
-                                    event_type='admin_action', event_level='warning',
-                                    audit_user=user.id,
-                                )
-                                try:
-                                    result = service.perform(expanded, actor_user_id=user.id)
-                                except Exception as exc:  # noqa: BLE001 — no internal details in client response
-                                    flask_app.logger.exception('System reset failed')
+                                from oneirodex.product import RESET_CONFIRM_PHRASE, is_reset_confirm
+                                if not is_reset_confirm(body.get('confirm')):
                                     payload, status = api_error_payload(
-                                        'Reset failed and nothing was changed.', code='internal',
-                                        detail={'reason': type(exc).__name__},
+                                        f'Type "{RESET_CONFIRM_PHRASE}" exactly to confirm.',
+                                        code='unprocessable',
                                     )
                                     response = JSONResponse(payload, status_code=status)
                                 else:
-                                    response = JSONResponse(api_ok_payload(result))
+                                    expanded = service.expand(scopes)
+                                    audit = event_logger or _event_logger
+                                    audit(
+                                        f"System reset requested (scopes: {', '.join(expanded)})",
+                                        event_type='admin_action', event_level='warning',
+                                        audit_user=user.id,
+                                    )
+                                    try:
+                                        result = service.perform(expanded, actor_user_id=user.id)
+                                    except Exception as exc:  # noqa: BLE001 — no internal details in client response
+                                        flask_app.logger.exception('System reset failed')
+                                        payload, status = api_error_payload(
+                                            'Reset failed and nothing was changed.', code='internal',
+                                            detail={'reason': type(exc).__name__},
+                                        )
+                                        response = JSONResponse(payload, status_code=status)
+                                    else:
+                                        response = JSONResponse(api_ok_payload(result))
 
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
@@ -142,6 +174,23 @@ class _ResetService:
 
 def _reset_service():
     return _ResetService()
+
+
+async def _bounded_request_body(request: Request, max_bytes: int):
+    """Read a bounded body without collecting oversized untrusted streams."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _event_logger(*args, **kwargs):

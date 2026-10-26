@@ -4,6 +4,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -76,6 +77,17 @@ def test_user_update_and_delete_require_csrf_and_preserve_native_dispatch():
     assert data.calls == [
         ('update', 42, {'about': 'child account'}, 18), ('delete', 42, 18),
     ]
+
+
+def test_admin_user_mutation_rejects_oversized_json_body_before_data_access():
+    client, data, csrf = _client()
+    response = client.put(
+        '/admin/api/user/42', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
 
 
 def test_user_mutations_reject_non_admin_before_data_access():
@@ -154,3 +166,17 @@ def test_native_mutation_adapter_allows_deactivation_when_another_admin_remains(
     assert error is None and payload == {} and refresh is False
     db.session.refresh(target)
     assert target.state is False
+
+
+@pytest.mark.parametrize(('field', 'value', 'message'), [
+    ('denied_genres', ['genre'] * 101, 'denied_genres cannot contain more than 100 values'),
+    ('denied_themes', ['x' * 51], 'denied_themes values cannot exceed 50 characters'),
+    ('denied_genres', [42], 'denied_genres values must be strings'),
+])
+def test_content_filters_are_bounded_before_admin_database_mutation(field, value, message):
+    from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+
+    payload, error, refresh = AdminUserMutationData().update(999, {field: value}, 999)
+    assert payload is None
+    assert error[:2] == (message, 'bad_request')
+    assert refresh is False

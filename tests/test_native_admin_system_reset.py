@@ -90,6 +90,32 @@ def test_reset_requires_valid_scopes_and_exact_confirmation_phrase():
     assert reset.calls == [] and events == []
 
 
+def test_reset_rejects_excessive_or_non_string_scopes_without_echoing_input():
+    client, reset, events = _client()
+    too_many = client.post(
+        '/admin/api/system/reset', json={'scopes': ['unknown'] * 17},
+    )
+    invalid_type = client.post(
+        '/admin/api/system/reset', json={'scopes': [{'untrusted': 'object'}]},
+    )
+    assert too_many.status_code == 400
+    assert too_many.json()['error'] == 'Too many reset scopes were supplied.'
+    assert invalid_type.status_code == 400
+    assert invalid_type.json()['error'] == 'Reset scopes must be short strings.'
+    assert reset.calls == [] and events == []
+
+
+def test_reset_rejects_oversized_json_before_reset_service():
+    client, reset, events = _client()
+    response = client.post(
+        '/admin/api/system/reset', content=b' ' * (16 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert reset.calls == [] and events == []
+
+
 def test_reset_confirm_uses_fake_transaction_adapter_and_records_actor():
     client, reset, events = _client()
     response = client.post('/admin/api/system/reset', json={
