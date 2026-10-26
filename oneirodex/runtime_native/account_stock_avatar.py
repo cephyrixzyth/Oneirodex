@@ -88,6 +88,7 @@ def create_account_stock_avatar_router(
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
+                    previous_path = getattr(auth.user, 'avatarpath', None)
                     path, error = data.set_stock(parsed.id, auth.user, flask_app)
                     if error:
                         payload, status = api_error_payload(error, code='bad_request')
@@ -97,6 +98,11 @@ def create_account_stock_avatar_router(
                             data.commit()
                         except Exception as exc:
                             data.rollback()
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=False,
+                            )
                             flask_app.logger.warning('stock avatar commit failed: %s', exc)
                             payload, status = api_error_payload(
                                 "Couldn't save that avatar. Try a different image.",
@@ -104,6 +110,11 @@ def create_account_stock_avatar_router(
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=True,
+                            )
                             response = JSONResponse(api_ok_payload({
                                 'avatar_path': path,
                                 'avatar_url': data.avatar_url(path),

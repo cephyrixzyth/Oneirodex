@@ -285,12 +285,29 @@ def _remove_previous(upload_folder: str, previous_path: str | None) -> None:
             pass
 
 
+def finalize_avatar_change(
+    app, previous_path: str | None, new_path: str | None, *, committed: bool,
+) -> None:
+    """Retire files only after the database decides which avatar path is live."""
+    upload_root = app.config.get('UPLOAD_FOLDER')
+    if not upload_root:
+        return
+    upload_folder = os.path.join(upload_root, 'images/avatars_users')
+    if committed:
+        if previous_path != new_path:
+            _remove_previous(upload_folder, previous_path)
+    elif new_path and new_path.startswith(AVATAR_URL_PREFIX):
+        # A failed commit rolled the model back to the previous value. Remove
+        # the newly written files while retaining the old avatar on disk.
+        _remove_previous(upload_folder, new_path)
+
+
 def save_avatar(file, user, app) -> tuple[str | None, str | None]:
     """Store ``file`` as ``user``'s avatar.
 
     Returns ``(avatarpath, error)`` — exactly one of the two is set. The caller
-    commits; this function only touches the filesystem and the in-memory user,
-    so a failed commit does not leave a half-applied change.
+    commits and then calls :func:`finalize_avatar_change`, so a failed commit
+    retains the previous file and removes the newly written files.
     """
     error = validate_avatar(file)
     if error:
@@ -308,7 +325,6 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
     stored_name = f'{uuid4()}.{extension}'
     image_path = os.path.join(upload_folder, stored_name)
 
-    previous = user.avatarpath
     img = None
     try:
         from oneirodex.utils.functions import square_image
@@ -337,7 +353,6 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
         _remove_partial_avatar_files(image_path)
         return None, 'That file could not be read as an image.'
 
-    _remove_previous(upload_folder, previous)
     user.avatarpath = AVATAR_URL_PREFIX + stored_name
     return user.avatarpath, None
 
@@ -363,13 +378,12 @@ def set_stock_avatar(avatar_id: str, user, app) -> tuple[str | None, str | None]
 
     Same contract as :func:`save_avatar` — ``(avatarpath, error)`` — so the
     route can treat "uploaded a file" and "picked a stock one" identically. The
-    previously uploaded file is retired here too; otherwise switching to a stock
-    avatar would quietly leave an orphan behind on every switch.
+    caller retires the previous uploaded file only after the database commit
+    succeeds, using :func:`finalize_avatar_change`.
     """
     entry = stock_avatar(avatar_id)
     if entry is None:
         return None, 'That is not one of the avatars we ship.'
 
-    _remove_previous(avatar_upload_folder(app), user.avatarpath)
     user.avatarpath = entry['path']
     return user.avatarpath, None

@@ -27,6 +27,7 @@ from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.avatar import (
     STOCK_AVATARS,
     avatar_url,
+    finalize_avatar_change,
     save_avatar,
     set_stock_avatar,
 )
@@ -156,6 +157,7 @@ def account_avatar():
     if not file:
         return api_error('Choose an image first.', code='bad_request')
 
+    previous_path = current_user.avatarpath
     path, error = save_avatar(file, current_user, current_app)
     if error:
         return api_error(error, code='unprocessable')
@@ -164,8 +166,11 @@ def account_avatar():
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        finalize_avatar_change(current_app, previous_path, path, committed=False)
         current_app.logger.warning('avatar commit failed: %s', exc)
         return api_error("Couldn't save that avatar. Try a different image.", code='internal')
+
+    finalize_avatar_change(current_app, previous_path, path, committed=True)
 
     # Cache-busted so the rail and the modal both show the new image
     # immediately; the filename is a fresh uuid, so this is belt and braces for
@@ -186,6 +191,7 @@ def account_stock_avatar(body: StockAvatarBody):
     arbitrary-file setter aimed at the static tree, and the whole point of a
     fixed set is that the server already knows every legal answer.
     """
+    previous_path = current_user.avatarpath
     path, error = set_stock_avatar(body.id, current_user, current_app)
     if error:
         return api_error(error, code='bad_request')
@@ -194,8 +200,11 @@ def account_stock_avatar(body: StockAvatarBody):
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        finalize_avatar_change(current_app, previous_path, path, committed=False)
         current_app.logger.warning('stock avatar commit failed: %s', exc)
         return api_error("Couldn't save that avatar. Try a different image.", code='internal')
+
+    finalize_avatar_change(current_app, previous_path, path, committed=True)
 
     return api_ok({
         'avatar_path': path,

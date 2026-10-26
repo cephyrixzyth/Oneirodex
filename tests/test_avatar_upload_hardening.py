@@ -121,6 +121,33 @@ def test_animated_avatar_over_frame_limit_keeps_previous_avatar_and_cleans_files
     assert set(upload_folder.iterdir()) == {old_avatar}
 
 
+def test_avatar_file_cleanup_follows_database_commit_outcome(tmp_path):
+    app = Flask(__name__)
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    upload_folder = tmp_path / "images" / "avatars_users"
+    upload_folder.mkdir(parents=True)
+    old_path = f"{avatar.AVATAR_URL_PREFIX}old.png"
+    new_path = f"{avatar.AVATAR_URL_PREFIX}new.png"
+    old_image = upload_folder / "old.png"
+    old_thumbnail = upload_folder / "old_thumbnail.png"
+    new_image = upload_folder / "new.png"
+    new_thumbnail = upload_folder / "new_thumbnail.png"
+    for path in (old_image, old_thumbnail, new_image, new_thumbnail):
+        path.write_bytes(path.name.encode())
+
+    avatar.finalize_avatar_change(app, old_path, new_path, committed=False)
+
+    assert old_image.exists() and old_thumbnail.exists()
+    assert not new_image.exists() and not new_thumbnail.exists()
+
+    new_image.write_bytes(b"new image")
+    new_thumbnail.write_bytes(b"new thumbnail")
+    avatar.finalize_avatar_change(app, old_path, new_path, committed=True)
+
+    assert not old_image.exists() and not old_thumbnail.exists()
+    assert new_image.exists() and new_thumbnail.exists()
+
+
 class _FakeFrame:
     def __init__(self, copies):
         self.copies = copies

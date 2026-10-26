@@ -88,6 +88,7 @@ def create_account_avatar_upload_router(
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
+                    previous_path = getattr(auth.user, 'avatarpath', None)
                     path, error = data.save(file, auth.user, flask_app)
                     if error:
                         payload, status = api_error_payload(error, code='unprocessable')
@@ -97,6 +98,11 @@ def create_account_avatar_upload_router(
                             data.commit()
                         except Exception as exc:
                             data.rollback()
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=False,
+                            )
                             flask_app.logger.warning('avatar commit failed: %s', exc)
                             payload, status = api_error_payload(
                                 "Couldn't save that avatar. Try a different image.",
@@ -104,6 +110,11 @@ def create_account_avatar_upload_router(
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=True,
+                            )
                             response = JSONResponse(api_ok_payload({
                                 'avatar_path': path,
                                 'avatar_url': data.avatar_url(path),
@@ -162,15 +173,26 @@ def create_account_avatar_upload_router(
                             data.rollback()
                             _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
                     else:
+                        previous_path = getattr(auth.user, 'avatarpath', None)
                         path, error = data.save(file, auth.user, flask_app)
                         if error:
                             _flash(auth.session_data, 'error', error)
                         else:
                             try:
                                 data.commit()
+                                from oneirodex.utils.avatar import finalize_avatar_change
+
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=True,
+                                )
                                 _flash(auth.session_data, 'success', 'Profile updated successfully!')
                             except Exception:
                                 data.rollback()
+                                from oneirodex.utils.avatar import finalize_avatar_change
+
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=False,
+                                )
                                 _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
                     if response is None:
                         response = _legacy_redirect_response('/settings_profile_edit')
