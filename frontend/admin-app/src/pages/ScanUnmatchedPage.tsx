@@ -1120,7 +1120,15 @@ export function ScanUnmatchedPage() {
                   <td>{row.platform_name || '—'}</td>
                   <td>{row.rom_region || '—'}</td>
                   <td>
-                    <details className="od-scan-unmatched__row-menu">
+                    <details
+                      className="od-scan-unmatched__row-menu"
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Escape' || !event.currentTarget.open) return
+                        event.preventDefault()
+                        event.currentTarget.open = false
+                        event.currentTarget.querySelector('summary')?.focus()
+                      }}
+                    >
                       <summary className="od-btn od-scan-unmatched__row-menu-summary">
                         Actions
                       </summary>

@@ -479,6 +479,26 @@
   line-height: 1.55;
 }
 
+/* The table scrolls in both axes so its wide columns remain usable on phones.
+   An absolutely positioned menu remains a descendant of that scrollport and
+   gets clipped at its edges. Lift the open menu into the viewport on narrow
+   screens so its full action list can scroll independently of the table. */
+@media (max-width: 600px) {
+  .od-scan-unmatched__row-menu[open] > .od-scan-unmatched__row-actions {
+    position: fixed;
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    z-index: 1080;
+    box-sizing: border-box;
+    width: min(20rem, calc(100vw - 1.5rem));
+    min-width: 0;
+    max-width: calc(100vw - 1.5rem);
+    max-height: min(70dvh, 32rem);
+    transform: translate(-50%, -50%);
+  }
+}
+
 @media (max-width: 680px) {
   .od-scan-unmatched__filters {
     grid-template-columns: minmax(0, 1fr);

@@ -198,8 +198,15 @@ test('disk deletion requires confirmation before the destructive request', async
   expect(within(row).getByRole('button', { name: 'Save' })).toHaveClass(
     'od-scan-unmatched__save',
   )
-  expect(within(row).getByText('Actions')).toHaveClass('od-scan-unmatched__row-menu-summary')
-  fireEvent.click(within(row).getByText('Actions'))
+  const actions = within(row).getByText('Actions')
+  expect(actions).toHaveClass('od-scan-unmatched__row-menu-summary')
+  const menu = actions.closest('details')
+  fireEvent.click(actions)
+  expect(menu).toHaveProperty('open', true)
+  fireEvent.keyDown(actions, { key: 'Escape' })
+  expect(menu).toHaveProperty('open', false)
+  expect(actions).toHaveFocus()
+  fireEvent.click(actions)
   fireEvent.click(screen.getByRole('button', { name: 'Delete from disk' }))
   expect(window.confirm).toHaveBeenCalledWith(
     'Are you sure you want to delete the folder /storage/review/delete-me FROM DISK?',
