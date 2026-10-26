@@ -197,10 +197,12 @@ async def _json_object(request):
     return await bounded_json_object(request)
 
 
-async def bounded_json_object(request, *, max_bytes=BATCH_JSON_BODY_MAX_BYTES):
+async def bounded_json_object(
+    request, *, max_bytes=BATCH_JSON_BODY_MAX_BYTES, require_json_content_type=True,
+):
     """Parse a JSON object only after enforcing a small streamed body limit."""
     content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-    if content_type != 'application/json' and not (
+    if require_json_content_type and content_type != 'application/json' and not (
         content_type.startswith('application/') and content_type.endswith('+json')
     ):
         return {}

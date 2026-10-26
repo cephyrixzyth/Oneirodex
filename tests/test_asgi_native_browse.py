@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -8412,6 +8413,122 @@ def test_lazy_asgi_dispatches_malware_scan_with_admin_csrf_and_root_gate(monkeyp
     assert denied.status_code == 403
     assert missing_csrf.status_code == 400
     assert fake.scanned == [str(allowed_path)]
+
+
+def test_native_admin_path_json_routes_enforce_64k_streamed_body_limit(monkeypatch, tmp_path):
+    class FakeMalwareScanData:
+        def __init__(self):
+            self.scanned = []
+
+        def allowed_roots(self, _config):
+            return [str(tmp_path)]
+
+        def scan(self, path, *, config):
+            self.scanned.append(path)
+            return {'clean': True, 'engine': 'fake'}, True
+
+    class FakeHardlinksData:
+        def __init__(self):
+            self.previews = []
+
+        def paths_allowed(self, *_args, **_kwargs):
+            return True, None
+
+        def preview(self, source, dest):
+            self.previews.append((source, dest))
+            return {'ok': True, 'would_succeed': True}
+
+    class OversizedBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"path":"/private/marker'
+            yield b'x' * (64 * 1024)
+            yield b'"}'
+
+        async def aclose(self):
+            return None
+
+    malware = FakeMalwareScanData()
+    hardlinks = FakeHardlinksData()
+    monkeypatch.setattr(native_malware_scan_mutation, 'MalwareScanData', lambda: malware)
+    monkeypatch.setattr(native_storage_hardlinks, 'StorageHardlinksData', lambda: hardlinks)
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app.config.update(
+        DATA_FOLDER_GAMES=str(tmp_path),
+        ENABLE_HARDLINK_HELPERS=True,
+        ALLOW_HARDLINK_APPLY=False,
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    csrf_headers = {'X-CSRFToken': csrf}
+
+    declared_too_large = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': str(64 * 1024 + 1)},
+        content=b'{"path":"/private/marker"}',
+    )
+    declared_hardlink_too_large = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': str(64 * 1024 + 1)},
+        content=b'{"source":"/private/marker"}',
+    )
+    streamed_malware = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': '10'},
+        content=OversizedBody(),
+    )
+    streamed_hardlink = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': '10'},
+        content=OversizedBody(),
+    )
+    valid_malware = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        json_body={'path': str(tmp_path / 'sample.bin')},
+    )
+    valid_hardlink = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        json_body={'source': str(tmp_path / 'source'), 'dest': str(tmp_path / 'dest')},
+    )
+    valid_malware_without_json_content_type = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        content=json.dumps({
+            'path': str(tmp_path / 'sample-no-content-type.bin'),
+        }).encode(),
+    )
+    valid_hardlink_without_json_content_type = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        content=json.dumps({
+            'source': str(tmp_path / 'source-no-content-type'),
+            'dest': str(tmp_path / 'dest-no-content-type'),
+        }).encode(),
+    )
+
+    for response in (
+        declared_too_large, declared_hardlink_too_large,
+        streamed_malware, streamed_hardlink,
+    ):
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+        assert '/private/marker' not in response.text
+    assert valid_malware.status_code == 200
+    assert valid_hardlink.status_code == 200
+    assert valid_malware_without_json_content_type.status_code == 200
+    assert valid_hardlink_without_json_content_type.status_code == 200
+    assert malware.scanned == [
+        str(tmp_path / 'sample.bin'),
+        str(tmp_path / 'sample-no-content-type.bin'),
+    ]
+    assert hardlinks.previews == [
+        (str(tmp_path / 'source'), str(tmp_path / 'dest')),
+        (str(tmp_path / 'source-no-content-type'), str(tmp_path / 'dest-no-content-type')),
+    ]
 
 
 def test_lazy_asgi_dispatches_cropped_library_image_preview_with_admin_csrf(monkeypatch):
