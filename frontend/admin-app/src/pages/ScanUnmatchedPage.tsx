@@ -1040,6 +1040,7 @@ export function ScanUnmatchedPage() {
                       />
                       <Button
                         type="button"
+                        className="od-scan-unmatched__save"
                         disabled={busyId === row.id}
                         onClick={() => void saveSearchName(row)}
                       >

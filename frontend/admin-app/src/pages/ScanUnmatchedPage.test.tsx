@@ -194,7 +194,12 @@ test('disk deletion requires confirmation before the destructive request', async
   )
 
   await screen.findByText('delete-me')
-  fireEvent.click(within(screen.getByRole('row', { name: /delete-me/ })).getByText('Actions'))
+  const row = screen.getByRole('row', { name: /delete-me/ })
+  expect(within(row).getByRole('button', { name: 'Save' })).toHaveClass(
+    'od-scan-unmatched__save',
+  )
+  expect(within(row).getByText('Actions')).toHaveClass('od-scan-unmatched__row-menu-summary')
+  fireEvent.click(within(row).getByText('Actions'))
   fireEvent.click(screen.getByRole('button', { name: 'Delete from disk' }))
   expect(window.confirm).toHaveBeenCalledWith(
     'Are you sure you want to delete the folder /storage/review/delete-me FROM DISK?',

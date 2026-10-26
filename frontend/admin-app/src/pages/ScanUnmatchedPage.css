@@ -370,6 +370,18 @@
   font: inherit;
 }
 
+.od-scan-unmatched__name-edit .od-scan-unmatched__save {
+  --od-btn-h-min: 1.95rem;
+  --od-btn-pad-y: 0.25rem;
+  --od-btn-pad-x: 0.5rem;
+  box-sizing: border-box;
+  min-height: var(--od-btn-h-min);
+  padding: var(--od-btn-pad-y) var(--od-btn-pad-x);
+  align-self: flex-start;
+  font-size: calc(var(--od-font-sm) + 0.06rem);
+  line-height: 1.5;
+}
+
 .od-scan-unmatched__path small {
   display: block;
   margin-top: 0.25rem;
@@ -419,7 +431,7 @@
 .od-scan-unmatched__row-menu-summary {
   display: inline-flex;
   align-items: center;
-  min-height: 2.25rem;
+  min-height: 1.85rem;
   cursor: pointer;
   list-style: none;
 }
@@ -441,7 +453,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: var(--od-space-1, 0.25rem);
-  min-width: 12rem;
+  min-width: 19.25rem;
   max-width: min(20rem, 70vw);
   max-height: min(70vh, 32rem);
   overflow: auto;
@@ -458,6 +470,13 @@
 
 .od-scan-unmatched__row-menu[open] .od-scan-unmatched__row-actions button {
   justify-content: flex-start;
+}
+
+.od-scan-unmatched__row-actions > .od-btn {
+  min-height: 2.25rem;
+  padding: 0.34em 0.65em;
+  font-size: inherit;
+  line-height: 1.55;
 }
 
 @media (max-width: 680px) {
