@@ -5,6 +5,7 @@ all database and filesystem work behind ``EmulatorMutationData``.
 """
 from __future__ import annotations
 
+import json
 from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from io import BytesIO
@@ -17,6 +18,13 @@ from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+
+_MULTIPART_OVERHEAD_BYTES = 64 * 1024
+_CHEAT_JSON_BODY_BYTES = 1024 * 1024 + _MULTIPART_OVERHEAD_BYTES
+_MAX_CHEAT_CODES = 1000
+_MAX_CHEAT_CODE_CHARS = 4096
+_MAX_CHEAT_DESCRIPTION_CHARS = 1024
+_MAX_CHEAT_NAME_CHARS = 160
 
 
 class EmulatorMutationData:
@@ -428,7 +436,12 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if operation == 'cheats' and method == 'POST':
             content_type = request.headers.get('content-type', '').lower()
             if content_type.startswith('multipart/form-data'):
-                form, error = await _bounded_form(request, flask_app.config)
+                from oneirodex.utils.emulator_cheats import MAX_CHEAT_FILE_BYTES
+
+                form, error = await _bounded_form(
+                    request, flask_app.config,
+                    max_bytes=MAX_CHEAT_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+                )
                 if error is not None:
                     return error
                 try:
@@ -445,8 +458,14 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                         return JSONResponse(row, status_code=201)
                 finally:
                     await form.close()
-            body = await _json(request)
+                return _error(400, 'bad_request', 'Send a .cht file, or a JSON body with name and codes')
+            body, error = await _bounded_json(request, flask_app.config, _CHEAT_JSON_BODY_BYTES)
+            if error is not None:
+                return error
             if isinstance(body, dict):
+                error = _validate_cheat_json_limits(body)
+                if error is not None:
+                    return error
                 try:
                     row = data.create_cheat(game_uuid, name=body.get('name'),
                                             codes=body.get('codes'), dialect=body.get('dialect'))
@@ -467,7 +486,12 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if operation == 'saves' and method == 'POST':
             if not data.save_sync_enabled():
                 return _error(403, 'forbidden', 'Emulator save sync is disabled')
-            form, error = await _bounded_form(request, flask_app.config)
+            from oneirodex.utils.emulator_saves import MAX_SAVE_BYTES
+
+            form, error = await _bounded_form(
+                request, flask_app.config,
+                max_bytes=MAX_SAVE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+            )
             if error is not None:
                 return error
             try:
@@ -598,21 +622,26 @@ def _body_limit(config):
     return max(0, value)
 
 
-def _too_large(config):
-    limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+def _too_large(config, limit_bytes=None):
+    if limit_bytes is None:
+        limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+    else:
+        limit_mb = max(1, (limit_bytes + (1024 * 1024) - 1) // (1024 * 1024))
     return _error(
         413, 'payload_too_large',
-        f'The file you tried to upload is too large. Maximum size is {limit_mb}MB.',
+        f'The upload request is too large. Maximum size is {limit_mb}MB.',
     )
 
 
-async def _bounded_form(request, config):
-    """Read no more than Flask's total request limit before multipart parsing."""
+async def _bounded_form(request, config, *, max_bytes=None):
+    """Read no more than the configured or route-specific request limit."""
     limit = _body_limit(config)
+    if max_bytes is not None:
+        limit = min(limit, max(0, int(max_bytes)))
     declared = request.headers.get('content-length')
     try:
         if declared is not None and int(declared) > limit:
-            return None, _too_large(config)
+            return None, _too_large(config, limit if max_bytes is not None else None)
     except ValueError:
         return None, _error(400, 'bad_request', 'Invalid content length')
 
@@ -621,7 +650,7 @@ async def _bounded_form(request, config):
     async for chunk in request.stream():
         size += len(chunk)
         if size > limit:
-            return None, _too_large(config)
+            return None, _too_large(config, limit if max_bytes is not None else None)
         chunks.append(chunk)
     body = b''.join(chunks)
     delivered = False
@@ -640,6 +669,69 @@ async def _bounded_form(request, config):
         return await parsed_request.form(), None
     except Exception:
         return None, _error(400, 'bad_request', 'Invalid multipart form data')
+
+
+async def _bounded_json(request, config, max_bytes):
+    """Parse bounded JSON without trusting Content-Length or request.json()."""
+    limit = min(_body_limit(config), max(0, int(max_bytes)))
+    declared = request.headers.get('content-length')
+    try:
+        if declared is not None and int(declared) > limit:
+            return None, _too_large(config, limit)
+    except ValueError:
+        return None, _error(400, 'bad_request', 'Invalid content length')
+
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            return None, _too_large(config, limit)
+        chunks.append(chunk)
+    try:
+        return json.loads(b''.join(chunks)), None
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        return None, None
+
+
+def _validate_cheat_json_limits(body):
+    """Reject extreme easy-create payloads before generating the .cht string."""
+    name = body.get('name')
+    if name is not None and not isinstance(name, str):
+        return _error(400, 'bad_request', 'name must be text')
+    if isinstance(name, str) and len(name) > _MAX_CHEAT_NAME_CHARS:
+        return _error(413, 'payload_too_large', 'Cheat name is too long')
+
+    dialect = body.get('dialect')
+    if dialect is not None and not isinstance(dialect, str):
+        return _error(400, 'bad_request', 'dialect must be text')
+    if isinstance(dialect, str) and len(dialect) > 32:
+        return _error(413, 'payload_too_large', 'Cheat dialect is too long')
+
+    codes = body.get('codes')
+    if not isinstance(codes, list):
+        return None
+    if len(codes) > _MAX_CHEAT_CODES:
+        return _error(
+            413, 'payload_too_large',
+            f'Cheat files may contain at most {_MAX_CHEAT_CODES} codes',
+        )
+    for row in codes:
+        if not isinstance(row, dict):
+            continue
+        code = row.get('code')
+        if code is not None:
+            if not isinstance(code, (str, int, float, bool)):
+                return _error(400, 'bad_request', 'Cheat codes must be text or numbers')
+            if len(str(code)) > _MAX_CHEAT_CODE_CHARS:
+                return _error(413, 'payload_too_large', 'A cheat code is too long')
+        desc = row.get('desc') or row.get('description')
+        if desc is not None:
+            if not isinstance(desc, str):
+                return _error(400, 'bad_request', 'Code descriptions must be text')
+            if len(desc) > _MAX_CHEAT_DESCRIPTION_CHARS:
+                return _error(413, 'payload_too_large', 'A cheat description is too long')
+    return None
 
 
 def _ok(payload=None, status=200):

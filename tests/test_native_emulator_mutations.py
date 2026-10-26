@@ -632,5 +632,70 @@ def test_multipart_upload_rejects_declared_and_streamed_oversize_before_form_par
         return {'type': 'http.disconnect'}
 
     request = Request({'type': 'http', 'method': 'POST', 'path': '/upload', 'headers': []}, receive)
-    form, error = asyncio.run(_bounded_form(request, {'MAX_CONTENT_LENGTH': 6, 'MAX_UPLOAD_MB': 1}))
+    form, error = asyncio.run(_bounded_form(
+        request, {'MAX_CONTENT_LENGTH': 128 * 1024 * 1024}, max_bytes=6,
+    ))
     assert form is None and error.status_code == 413
+
+
+def test_save_and_uploaded_cheat_use_file_specific_request_caps(native):
+    from oneirodex.utils.emulator_cheats import MAX_CHEAT_FILE_BYTES
+    from oneirodex.utils.emulator_saves import MAX_SAVE_BYTES
+
+    app, api, data, _user = native
+    app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024
+    cookie, csrf = _cookie(app, csrf=True)
+    for path, file_limit, field_name in (
+        ('/api/games/game-1/saves', MAX_SAVE_BYTES, 'file'),
+        ('/api/games/game-1/cheats', MAX_CHEAT_FILE_BYTES, 'file'),
+    ):
+        response = _request(
+            api, 'POST', path, cookie=cookie, csrf=csrf, content=b'',
+            extra_headers={
+                'Content-Type': 'multipart/form-data; boundary=test',
+                'Content-Length': str(file_limit + 64 * 1024 + 1),
+            },
+        )
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] in {'store_save', 'store_cheat'} for call in data.calls)
+
+
+def test_easy_create_cheat_json_is_bounded_before_generation(native):
+    from oneirodex.runtime_native.emulator_mutations import _MAX_CHEAT_CODES
+
+    app, api, data, _user = native
+    cookie, csrf = _cookie(app, csrf=True)
+    app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024
+    too_many = _request(
+        api, 'POST', '/api/games/game-1/cheats', cookie=cookie, csrf=csrf,
+        json={'name': 'large set', 'codes': [{'code': 'AA'}] * (_MAX_CHEAT_CODES + 1)},
+    )
+    too_long = _request(
+        api, 'POST', '/api/games/game-1/cheats', cookie=cookie, csrf=csrf,
+        json={'name': 'large code', 'codes': [{'code': 'A' * 4097}]},
+    )
+
+    assert too_many.status_code == 413
+    assert too_long.status_code == 413
+    assert not any(call[0] == 'create_cheat' for call in data.calls)
+
+
+def test_easy_create_cheat_json_rejects_large_request_before_json_parse(native):
+    from oneirodex.runtime_native.emulator_mutations import _CHEAT_JSON_BODY_BYTES
+
+    app, api, data, _user = native
+    app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024
+    cookie, csrf = _cookie(app, csrf=True)
+    response = _request(
+        api, 'POST', '/api/games/game-1/cheats', cookie=cookie, csrf=csrf,
+        content=b'',
+        extra_headers={
+            'Content-Type': 'application/json',
+            'Content-Length': str(_CHEAT_JSON_BODY_BYTES + 1),
+        },
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] == 'create_cheat' for call in data.calls)
