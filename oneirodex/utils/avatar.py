@@ -17,6 +17,9 @@ from werkzeug.utils import secure_filename
 from oneirodex.utils.library_paths import library_dir
 
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
+MAX_AVATAR_PIXELS = 16_000_000
+MAX_AVATAR_TOTAL_PIXELS = 32_000_000
+MAX_AVATAR_FRAMES = 200
 ALLOWED_AVATAR_EXTENSIONS = frozenset({'jpg', 'jpeg', 'png', 'gif', 'webp'})
 
 # The unset-avatar mark: a gamepad in grey rather than the accent, so it reads
@@ -165,6 +168,35 @@ AVATAR_MAX_EDGE = 500
 THUMBNAIL_MAX_EDGE = 50
 
 
+class AvatarResourceLimitError(ValueError):
+    """The compressed image is small enough, but costly to decode or animate."""
+
+
+def _close_image(img) -> None:
+    if img is not None:
+        try:
+            img.close()
+        except Exception:  # cleanup must still run if a decoder close fails
+            pass
+
+
+def _remove_partial_avatar_files(image_path: str) -> None:
+    for candidate in (image_path, _thumbnail_path(image_path)):
+        try:
+            if os.path.exists(candidate):
+                os.remove(candidate)
+        except OSError:
+            pass
+
+
+def _validate_avatar_dimensions(img) -> None:
+    width, height = img.size
+    if width <= 0 or height <= 0 or width * height > MAX_AVATAR_PIXELS:
+        raise AvatarResourceLimitError(
+            f'Image exceeds the {MAX_AVATAR_PIXELS // 1_000_000}-megapixel avatar limit.'
+        )
+
+
 def avatar_upload_folder(app) -> str:
     """Where avatars live on disk. Created on demand."""
     return os.path.join(app.config['UPLOAD_FOLDER'], 'images/avatars_users')
@@ -201,8 +233,20 @@ def validate_avatar(file) -> str | None:
 def _resize_animated_gif(img, image_path: str) -> None:
     """Keep the animation. Resizing frame by frame is the only way to."""
     frames = []
+    total_pixels = 0
     try:
         while True:
+            if len(frames) >= MAX_AVATAR_FRAMES:
+                raise AvatarResourceLimitError(
+                    f'Animated avatar exceeds the {MAX_AVATAR_FRAMES}-frame limit.'
+                )
+            width, height = img.size
+            total_pixels += width * height
+            if total_pixels > MAX_AVATAR_TOTAL_PIXELS:
+                raise AvatarResourceLimitError(
+                    'Animated avatar exceeds the '
+                    f'{MAX_AVATAR_TOTAL_PIXELS // 1_000_000}-megapixel total frame limit.'
+                )
             frame = img.copy()
             frame.thumbnail((AVATAR_MAX_EDGE, AVATAR_MAX_EDGE), PILImage.LANCZOS)
             frames.append(frame)
@@ -265,11 +309,13 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
     image_path = os.path.join(upload_folder, stored_name)
 
     previous = user.avatarpath
+    img = None
     try:
         from oneirodex.utils.functions import square_image
 
         file.save(image_path)
         img = PILImage.open(image_path)
+        _validate_avatar_dimensions(img)
         if img.format == 'GIF' and 'duration' in img.info:
             _resize_animated_gif(img, image_path)
         else:
@@ -278,13 +324,17 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
             thumbnail = squared.copy()
             thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), PILImage.LANCZOS)
             thumbnail.save(_thumbnail_path(image_path))
+        _close_image(img)
+        img = None
+    except AvatarResourceLimitError as exc:
+        _close_image(img)
+        app.logger.info('avatar upload rejected by image limits: %s', exc)
+        _remove_partial_avatar_files(image_path)
+        return None, str(exc)
     except Exception as exc:  # Pillow raises a wide family for bad image data
+        _close_image(img)
         app.logger.warning('avatar processing failed: %s', exc)
-        try:
-            if os.path.exists(image_path):
-                os.remove(image_path)
-        except OSError:
-            pass
+        _remove_partial_avatar_files(image_path)
         return None, 'That file could not be read as an image.'
 
     _remove_previous(upload_folder, previous)
