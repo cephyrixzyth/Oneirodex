@@ -201,19 +201,28 @@ def create_notifications_router(
                         break
             if response is None:
                 if request.method == 'POST':
-                    payload = _notification_write_json_object(
-                        await request.body(), allow_membership_only=True,
+                    raw_body = await _bounded_request_body(
+                        request, NOTIFICATION_READ_BODY_MAX_BYTES,
                     )
-                    if payload is None:
+                    if raw_body is _BODY_TOO_LARGE:
                         response = _api_error(
-                            'Something went wrong on our end. The error has been logged.',
-                            'internal',
+                            'Request body is too large.', 'payload_too_large',
+                            limit=NOTIFICATION_READ_BODY_MAX_BYTES,
                         )
                     else:
-                        data.update_preferences(auth.user, payload)
-                        from oneirodex.utils.api_contract import api_ok_payload
+                        payload = _notification_write_json_object(
+                            raw_body, allow_membership_only=True,
+                        )
+                        if payload is None:
+                            response = _api_error(
+                                'Something went wrong on our end. The error has been logged.',
+                                'internal',
+                            )
+                        else:
+                            data.update_preferences(auth.user, payload)
+                            from oneirodex.utils.api_contract import api_ok_payload
 
-                        response = JSONResponse(api_ok_payload())
+                            response = JSONResponse(api_ok_payload())
                 elif request.method == 'HEAD':
                     # Flask's legacy handler only selected the preference
                     # projection for GET. Automatic HEAD called the view with

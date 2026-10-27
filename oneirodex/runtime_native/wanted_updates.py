@@ -173,7 +173,18 @@ async def _validated(request, operation):
         is_json = content_type == 'application/json' or (
             content_type.startswith('application/') and content_type.endswith('+json')
         )
-        raw = json.loads(await request.body() or b'{}') if is_json else {}
+        if is_json:
+            from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+            raw_body = await read_bounded_body(request, 64 * 1024)
+            if raw_body is BODY_TOO_LARGE:
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large',
+                )
+                return None, JSONResponse(payload, status_code=status)
+            raw = json.loads(raw_body or b'{}')
+        else:
+            raw = {}
     except (TypeError, ValueError):
         raw = {}
     try:

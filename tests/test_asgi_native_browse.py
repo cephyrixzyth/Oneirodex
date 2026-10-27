@@ -1508,6 +1508,23 @@ def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies
     return asyncio.run(perform())
 
 
+def _run_chunked(app, path, *, cookie, method, body, headers=None):
+    async def perform():
+        async def chunks():
+            yield body[:7]
+            yield body[7:]
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.request(
+                method, path, content=chunks(), headers=headers or {},
+            )
+
+    return asyncio.run(perform())
+
+
 def _runtime(monkeypatch, *, admin=False):
     monkeypatch.delenv('ONEIRODEX_NATIVE_ADMIN_PILOT', raising=False)
     flask_app = Flask(__name__)
@@ -3295,6 +3312,27 @@ def test_native_saved_filter_preview_keeps_bounded_member_sample(monkeypatch):
     assert response.json()['count'] == 4
     assert response.json()['sample'] == [{'uuid': 'game-1', 'name': 'Fixture'}]
     assert runtime._fake_saved_filters.calls[-1][0] == 'preview'
+
+
+def test_native_saved_filter_json_writes_reject_chunked_oversize_before_data_access(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(saved_filters, '_SAVED_FILTER_BODY_MAX_BYTES', 24)
+    cookie, csrf = _signed_session_with_csrf()
+    headers = {'X-CSRFToken': csrf, 'Content-Type': 'application/json'}
+    body = b'{"name":"ok","tree":{},"padding":"' + (b'x' * 64) + b'"}'
+
+    responses = [
+        _run_chunked(runtime, '/api/filters/saved', cookie=cookie, method='POST',
+                     body=body, headers=headers),
+        _run_chunked(runtime, '/api/filters/saved/1', cookie=cookie, method='PUT',
+                     body=body, headers=headers),
+        _run_chunked(runtime, '/api/filters/preview', cookie=cookie, method='POST',
+                     body=body, headers=headers),
+    ]
+
+    assert [response.status_code for response in responses] == [413, 413, 413]
+    assert all(response.json()['error_code'] == 'payload_too_large' for response in responses)
+    assert runtime._fake_saved_filters.calls == []
 
 
 def test_native_batch_favorite_keeps_order_dedupe_acl_and_partial_payload(monkeypatch):
@@ -5622,6 +5660,23 @@ def test_native_ownership_match_decisions_keep_csrf_revision_and_undo(monkeypatc
     assert runtime._fake_ownership.decisions.count(('rollback',)) == 1
 
 
+def test_native_ownership_match_rejects_chunked_oversize_before_decision(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(
+        ownership_providers, '_OWNERSHIP_DECISION_BODY_MAX_BYTES', 24,
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run_chunked(
+        runtime, '/api/ownership/titles/5/match', cookie=cookie, method='POST',
+        body=b'{"expected_revision":2,"game_uuid":"game-1","padding":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_ownership.decisions == []
+
+
 @pytest.mark.parametrize(
     ('path', 'body'),
     [
@@ -6060,6 +6115,21 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
     assert written.status_code == 200
     assert written.json()['ok'] is True
     assert runtime._fake_notifications.calls == [('preferences', {'notify_chat': False})]
+
+
+def test_native_notification_preferences_reject_chunked_oversize_before_update(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(notifications, 'NOTIFICATION_READ_BODY_MAX_BYTES', 24)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run_chunked(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        body=b'{"notify_chat":false,"padding":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_notifications.calls == []
 
 
 def test_native_notification_preferences_match_legacy_internal_error_for_truthy_scalar_json(monkeypatch):
@@ -7343,6 +7413,26 @@ def test_native_wanted_update_mutations_use_csrf_and_asgi_dispatch(
     assert runtime._fake_wanted.calls
 
 
+@pytest.mark.parametrize(
+    ('path', 'method'),
+    [('/api/updates/wanted', 'POST'), ('/api/updates/wanted/fulfill', 'POST')],
+)
+def test_native_wanted_update_rejects_chunked_oversize_before_write(
+    monkeypatch, path, method,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"game_uuid":"game-1","kind":"dlc","padding":"' + b'x' * (64 * 1024) + b'"}'
+    response = _run_chunked(
+        runtime, path, cookie=cookie, method=method, body=body,
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_wanted.calls == []
+
+
 def test_native_wanted_update_requires_json_content_type(monkeypatch):
     runtime = _runtime(monkeypatch)[1]
     cookie, csrf = _signed_session_with_csrf()
@@ -7563,6 +7653,19 @@ def test_lazy_asgi_rejects_oversized_collection_reorder_before_data_access(monke
             )
 
     response = asyncio.run(perform())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
+def test_lazy_asgi_rejects_chunked_oversize_collection_patch_before_update(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"name":"Renamed","padding":"' + b'x' * (64 * 1024) + b'"}'
+    response = _run_chunked(
+        runtime, '/api/collections/collection-1', cookie=cookie, method='PATCH',
+        body=body, headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
 
     assert response.status_code == 413
     assert response.json()['error_code'] == 'payload_too_large'

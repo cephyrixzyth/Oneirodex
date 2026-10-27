@@ -305,12 +305,21 @@ def create_collection_reads_router(
             elif auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                payload = _json_object(await request.body())
-                result, refusal = data.update(
-                    auth.user, collection_uuid, payload,
-                    admin_access=_admin_access(auth.user, auth.token),
-                )
-                response = _error_response(refusal) if refusal else JSONResponse(result)
+                raw_body = await _bounded_request_body(request, 64 * 1024)
+                if raw_body is _BODY_TOO_LARGE:
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    payload, status = api_error_payload(
+                        'Request body is too large.', code='payload_too_large',
+                    )
+                    response = JSONResponse(payload, status_code=status)
+                else:
+                    payload = _json_object(raw_body)
+                    result, refusal = data.update(
+                        auth.user, collection_uuid, payload,
+                        admin_access=_admin_access(auth.user, auth.token),
+                    )
+                    response = _error_response(refusal) if refusal else JSONResponse(result)
             _finish_auth(response, flask_app, request, auth)
             return response
 

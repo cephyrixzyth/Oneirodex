@@ -30,6 +30,8 @@ Related: [members-and-invites.md](members-and-invites.md) · [settings-modules.m
 
 There is no Oneirodex cloud account, no product analytics SaaS, and no Discord.
 
+Native member JSON write APIs stream request bodies with a 64 KiB limit for saved filters and previews, collection updates, wanted-update entries, ownership match decisions, and notification preferences. Oversized bodies receive HTTP 413 before these writes reach persistence.
+
 ## What can leave the machine (only if you turn it on)
 
 | Channel | When | What goes out |
