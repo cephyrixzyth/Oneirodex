@@ -1930,6 +1930,17 @@ def _runtime(monkeypatch, *, admin=False):
     return flask_app, runtime
 
 
+def _dispose_runtime_test_engines(flask_app, runtime):
+    """Close the per-test SQLite pools opened by ASGI request fixtures."""
+    from oneirodex import db
+
+    native_engine = getattr(runtime, '_native_sqlalchemy_engine', None)
+    if native_engine is not None:
+        native_engine.dispose()
+    for engine in getattr(db, '_app_engines', {}).get(flask_app, {}).values():
+        engine.dispose()
+
+
 def _signed_session():
     return dump_session_cookie(
         {'_user_id': '7:fp', '_fresh': True}, 'native-asgi-browse-secret'
@@ -5267,9 +5278,10 @@ def test_lazy_asgi_dispatches_password_change_without_flask(monkeypatch):
         ('/api/client/lifecycle', {'records': [{'game_uuid': 'game-7', 'state': 'installed'}]}),
     ],
 )
-def test_lazy_asgi_dispatches_client_reads_without_flask(monkeypatch, path, expected):
+def test_lazy_asgi_dispatches_client_reads_without_flask(monkeypatch, request, path, expected):
     flask_app, runtime = _runtime(monkeypatch)
     asyncio.run(runtime._ensure_flask())
+    request.addfinalizer(lambda: _dispose_runtime_test_engines(flask_app, runtime))
     flask_app.app_context = lambda: (_ for _ in ()).throw(
         AssertionError('Flask app context used')
     )
@@ -10356,7 +10368,7 @@ def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projectio
     assert calls == [{'showHelpButton': False}]
 
 
-def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
+def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch, request):
     calls = []
     data = SimpleNamespace(
         logs=lambda limit: calls.append(('logs', limit)) or {'events': []},
@@ -10395,6 +10407,7 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
         native_scan_job_mutations, 'ScanJobMutationData', FakeScanJobMutations,
     )
     flask_app, runtime = _runtime(monkeypatch, admin=True)
+    request.addfinalizer(lambda: _dispose_runtime_test_engines(flask_app, runtime))
     flask_app.app_context = lambda: (_ for _ in ()).throw(
         AssertionError('Native Ops route pushed a Flask app context')
     )
