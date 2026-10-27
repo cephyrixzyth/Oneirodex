@@ -829,7 +829,11 @@ fn extract_zip_to_dir_with_limits(
             continue;
         }
 
-        if entry.name().ends_with('/') {
+        if entry
+            .name()
+            .map_err(|error| error.to_string())?
+            .ends_with('/')
+        {
             fs::create_dir_all(&entry_path).map_err(|error| error.to_string())?;
             continue;
         }
@@ -1165,7 +1169,10 @@ fn extract_staged_mod_zip(
             Some(path) => path,
             None => continue,
         };
-        let is_directory = entry.name().ends_with('/');
+        let is_directory = entry
+            .name()
+            .map_err(|error| error.to_string())?
+            .ends_with('/');
         let entry_path = safe_mod_entry_path(destination_root, &relative, is_directory)?;
         if is_directory {
             continue;
@@ -1998,7 +2005,9 @@ mod tests {
             write_zip_with_raw_unix_mode(&archive, "game", b"payload", hostile_mode);
             let mut zip = ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
             let parsed_mode = zip.by_index(0).unwrap().unix_mode().unwrap();
-            assert_eq!(parsed_mode, hostile_mode);
+            // zip 9 filters special permission bits while reading Unix mode
+            // metadata; retain the app-level mask as defense in depth.
+            assert_eq!(parsed_mode, hostile_mode & !0o7000);
 
             let safe = safe_archive_file_mode(parsed_mode);
             assert_eq!(safe, hostile_mode & 0o777);

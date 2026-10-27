@@ -22,7 +22,7 @@ pydantic==2.13.5
 pydantic-core==2.46.5
 
 argon2_cffi==25.1.0
-pillow==12.3.0
+pillow==13.0.0
 WTForms_SQLAlchemy==0.4.2
 requests==2.34.2
 psycopg2_binary==2.9.13
@@ -34,7 +34,7 @@ uvicorn[standard]==0.54.0
 aiofiles==25.1.0
 zipstream_new==1.1.8
 howlongtobeatpy==1.0.24
-authlib==1.8.0
+authlib==1.9.1
 # Authlib's Starlette client uses HTTPX2 at runtime (the Flask integration is
 # intentionally absent from the native image).
 httpx2==2.13.1

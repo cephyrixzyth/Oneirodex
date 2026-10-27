@@ -1428,6 +1428,18 @@ class LazyASGIApp:
                 redoc_url=None,
                 openapi_url=None,
             )
+            from oneirodex.runtime_native.bounded_request_body import ASGIBodyLimitMiddleware
+            from oneirodex.utils.security_headers import security_header_values
+
+            native_body_limit = int(
+                self._flask_app.config.get('MAX_CONTENT_LENGTH') or 128 * 1024 * 1024
+            )
+            native_error_headers = security_header_values(self._flask_app.config)
+            self._native_read_api_app.add_middleware(
+                ASGIBodyLimitMiddleware,
+                max_bytes=native_body_limit,
+                response_headers=native_error_headers,
+            )
             self._native_read_api_app.router.redirect_slashes = False
             mount_site_redirect_routes(
                 self._native_read_api_app,
@@ -1457,6 +1469,11 @@ class LazyASGIApp:
 
             self._native_member_shell_app = FastAPI(
                 docs_url=None, redoc_url=None, openapi_url=None,
+            )
+            self._native_member_shell_app.add_middleware(
+                ASGIBodyLimitMiddleware,
+                max_bytes=native_body_limit,
+                response_headers=native_error_headers,
             )
             self._native_member_shell_app.router.redirect_slashes = False
             self._native_member_shell_app.include_router(create_member_shell_router(
