@@ -376,10 +376,10 @@ const PRIVATE_HOST_SUFFIXES: [&str; 5] =
 /// Does this host name a machine on the user's own network?
 ///
 /// Besides the literal local address ranges: the house-network suffixes
-/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and a
-/// bare single-label name such as `nas` or `localhost`, which only resolve
-/// through the local resolver / search domain. Anything with a public-looking
-/// dotted name is not local, however much like a LAN address it reads
+/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and
+/// `localhost`. Other bare names are not proof of a local destination: resolver
+/// search domains can send them elsewhere. Anything with a public-looking dotted
+/// name is not local, however much like a LAN address it reads
 /// (`192.168.1.1.evil.com`).
 fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
     match host {
@@ -392,7 +392,7 @@ fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
                 .find_map(|suffix| name.strip_suffix(suffix))
             {
                 Some(label) => !label.is_empty(),
-                None => !name.is_empty() && !name.contains('.'),
+                None => name == "localhost",
             }
         }
     }
@@ -426,7 +426,7 @@ fn validate_server_base_url(raw: &str) -> Result<(), String> {
                 return Ok(());
             }
             Err(format!(
-                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names).",
+                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names; bare host names other than localhost are refused because resolver search domains can send them elsewhere).",
                 url.host_str().unwrap_or("this server")
             ))
         }

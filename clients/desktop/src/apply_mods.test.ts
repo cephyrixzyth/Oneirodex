@@ -448,11 +448,10 @@ describe('apply_mods helpers', () => {
       }
     })
 
-    it('allows http:// on the local network (LAN address, .local, bare name, loopback)', async () => {
+    it('allows http:// on the local network (LAN address, .local, loopback)', async () => {
       for (const source of [
         'http://192.168.1.20:8080/hd.zip',
         'http://nas.local/hd.zip',
-        'http://nas/hd.zip',
         'http://127.0.0.1:9000/hd.zip',
         'https://cdn.example.com/hd.zip',
       ]) {
