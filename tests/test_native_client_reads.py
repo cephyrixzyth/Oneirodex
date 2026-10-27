@@ -243,6 +243,21 @@ def test_lifecycle_write_caps_json_before_schema_validation(monkeypatch):
     assert client.data.lifecycle_calls == []
 
 
+def test_heartbeat_caps_json_body_before_presence_write(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_HEARTBEAT_BODY_BYTES', 8)
+    client = make_client(scopes=('write:presence',))
+
+    response = client.post(
+        '/api/client/heartbeat',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}', 'Content-Type': 'application/json'},
+        content=b'{"device_id":"too-long"}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert client.data.heartbeat_calls == []
+
+
 def test_head_lifecycle_has_empty_body_and_security_headers():
     client = make_client(scopes=('read:library',))
     response = client.head(
@@ -401,6 +416,21 @@ def test_command_queue_checks_game_and_translation_patch_version():
     assert client.data.command_calls[-1] == (
         27, 'game-1', 'apply_patch', {'kind': 'extra', 'version_uuid': 'patch-1'},
     )
+
+
+def test_command_and_ack_body_caps_prevent_mutations(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_COMMAND_BODY_BYTES', 8)
+    client = make_client(scopes=('write:download', 'write:library'))
+    headers = {
+        **bearer_headers(client), 'Content-Type': 'application/json',
+    }
+
+    command = client.post('/api/client/commands', headers=headers, content=b'{"action":"download"}')
+    ack = client.post('/api/client/commands/ack', headers=headers, content=b'{"ids":["x"]}')
+
+    assert command.status_code == ack.status_code == 413
+    assert command.json()['error_code'] == ack.json()['error_code'] == 'payload_too_large'
+    assert client.data.command_calls == []
 
 
 def test_ack_and_nack_require_lifecycle_scope_and_return_legacy_counts():

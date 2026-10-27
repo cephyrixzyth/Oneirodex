@@ -41,6 +41,23 @@ async def _read_chat_message_json(request: Request):
     return json.loads(bytes(body) or b'{}')
 
 
+def _chat_body_too_large_response(flask_app, request, auth):
+    from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.security_headers import security_header_values
+
+    body, status = api_error_payload(
+        'Request body is too large.', code='payload_too_large', status=413,
+    )
+    response = JSONResponse(body, status_code=status)
+    if auth.should_set_session_cookie:
+        from .oidc_status import _set_session_cookie
+
+        _set_session_cookie(response, flask_app, auth)
+    for key, value in security_header_values(flask_app.config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
 def _validated_attachment_ids(payload: dict) -> list[int]:
     raw_ids = payload.get('attachment_ids')
     if raw_ids is None:
@@ -546,10 +563,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -611,14 +628,14 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 from pydantic import ValidationError
                 from oneirodex.schemas.chat import MuteChannelBody
                 from oneirodex.utils.validation import format_validation_errors
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -753,10 +770,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1166,10 +1183,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1292,10 +1309,10 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1366,10 +1383,10 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1484,14 +1501,14 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 from pydantic import ValidationError
                 from oneirodex.schemas.chat_spaces import AddSpaceMemberBody
                 from oneirodex.utils.validation import format_validation_errors
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1657,11 +1674,12 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
                 from datetime import datetime, timedelta, timezone
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1795,10 +1813,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):

@@ -6320,6 +6320,80 @@ def test_native_chat_dm_open_requires_csrf_and_keeps_not_found(monkeypatch):
     assert calls == [(7, {'username': 'Sam'}), (7, {'username': 'missing'})]
 
 
+@pytest.mark.parametrize(
+    ('path', 'payload', 'admin'),
+    [
+        ('/api/chat/channels', {'name': 'Family'}, False),
+        ('/api/chat/channels/15/mute', {'muted': True}, False),
+        ('/api/chat/dm', {'username': 'Sam'}, False),
+        ('/api/chat/messages/15/reactions', {'emoji': '🎮'}, False),
+        ('/api/chat/spaces/join', {'token': 'invite-token'}, False),
+        ('/api/chat/spaces', {'name': 'Family'}, True),
+        ('/api/chat/spaces/15/channels', {'name': 'General'}, True),
+        ('/api/chat/spaces/15/members', {'user_id': 8, 'role': 'member'}, True),
+        ('/api/chat/spaces/15/invites', {'max_uses': 2}, True),
+    ],
+)
+def test_native_chat_json_writes_cap_chunked_bodies(monkeypatch, path, payload, admin):
+    _flask_app, runtime = _runtime(monkeypatch, admin=admin)
+    calls = []
+    monkeypatch.setattr(chat_reads, '_CHAT_MESSAGE_JSON_MAX_BYTES', 8)
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_channel', lambda *_args: calls.append('create'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'mute_channel', lambda *_args: calls.append('mute'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'open_dm', lambda *_args: calls.append('dm'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'toggle_reaction', lambda *_args: calls.append('reaction'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'join_space', lambda *_args: calls.append('join'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space', lambda *_args: calls.append('space'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space_channel',
+        lambda *_args: calls.append('space_channel'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'add_space_member',
+        lambda *_args: calls.append('space_member'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space_invite',
+        lambda *_args: calls.append('invite'),
+    )
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send():
+        raw = json.dumps(payload).encode()
+
+        async def chunks():
+            yield raw[:5]
+            yield raw[5:]
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, content=chunks(), headers={
+                    'X-CSRFToken': csrf, 'Content-Type': 'application/json',
+                },
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert calls == []
+
+
 def test_native_chat_message_post_requires_csrf_and_preserves_envelope(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     calls = []

@@ -64,6 +64,7 @@ else now.
 - Open Chat, select a channel, click **Mute** / **Unmute**.
 - Muted channels show `muted` in the sidebar.
 - While muted, you still see messages in Chat, but @mentions and DM notifications for that thread are suppressed.
+- Chat JSON write requests are limited to 64 KiB; attachment uploads use their separate upload limit.
 
 ## Create / manage household rooms
 

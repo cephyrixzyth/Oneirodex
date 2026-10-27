@@ -14,6 +14,12 @@ from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
 
 _MAX_LIFECYCLE_BODY_BYTES = 1024 * 1024
+_MAX_HEARTBEAT_BODY_BYTES = 16 * 1024
+_MAX_COMMAND_BODY_BYTES = 64 * 1024
+
+
+class _ClientRequestBodyTooLarge(Exception):
+    pass
 
 
 def api_error(message, *, code='bad_request', status=None, detail=None, **extra):
@@ -209,9 +215,32 @@ def create_client_reads_router(
                 if csrf_response is not None:
                     response = csrf_response
                 else:
+                    try:
+                        payload = await _heartbeat_payload(
+                            request, data, auth.user.id, auth.token, auth.user
+                        )
+                    except _ClientRequestBodyTooLarge:
+                        response, _ = api_error(
+                            'Request body is too large.', code='payload_too_large', status=413,
+                        )
+                    else:
+                        from starlette.responses import JSONResponse
+
+                        response = JSONResponse(payload)
+                        if auth.should_set_session_cookie:
+                            from .oidc_status import _set_session_cookie
+
+                            _set_session_cookie(response, flask_app, auth)
+            else:
+                try:
                     payload = await _heartbeat_payload(
                         request, data, auth.user.id, auth.token, auth.user
                     )
+                except _ClientRequestBodyTooLarge:
+                    response, _ = api_error(
+                        'Request body is too large.', code='payload_too_large', status=413,
+                    )
+                else:
                     from starlette.responses import JSONResponse
 
                     response = JSONResponse(payload)
@@ -219,17 +248,6 @@ def create_client_reads_router(
                         from .oidc_status import _set_session_cookie
 
                         _set_session_cookie(response, flask_app, auth)
-            else:
-                payload = await _heartbeat_payload(
-                    request, data, auth.user.id, auth.token, auth.user
-                )
-                from starlette.responses import JSONResponse
-
-                response = JSONResponse(payload)
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
-
-                    _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -303,6 +321,11 @@ def create_client_reads_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
                 body = await _json_body(request)
+                from .bounded_request_body import BODY_TOO_LARGE
+
+                too_large = body is BODY_TOO_LARGE
+                if too_large:
+                    body = {}
                 game_uuid = _text(body.get('game_uuid'))
                 action = _text(body.get('action')).lower()
                 kind = body.get('kind')
@@ -312,7 +335,11 @@ def create_client_reads_router(
 
                 from oneirodex.utils.client_commands import WRITE_DOWNLOAD_ACTIONS
 
-                if action in WRITE_DOWNLOAD_ACTIONS and not auth.has_scope('write:download'):
+                if too_large:
+                    response, _ = api_error(
+                        'Request body is too large.', code='payload_too_large', status=413,
+                    )
+                elif action in WRITE_DOWNLOAD_ACTIONS and not auth.has_scope('write:download'):
                     flask_response, status = api_error(
                         'Missing scope: write:download', code='forbidden',
                         detail={'required_scope': 'write:download'},
@@ -541,8 +568,11 @@ async def _lifecycle_body(request: Request):
 
 async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-    body = await request.body()
+    body = await read_bounded_body(request, _MAX_HEARTBEAT_BODY_BYTES)
+    if body is BODY_TOO_LARGE:
+        raise _ClientRequestBodyTooLarge
     try:
         value = json.loads(body or b'{}')
     except (TypeError, ValueError):
@@ -565,11 +595,15 @@ async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
     )
 
 
-async def _json_body(request: Request) -> dict:
+async def _json_body(request: Request) -> Any:
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
+    raw_body = await read_bounded_body(request, _MAX_COMMAND_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return BODY_TOO_LARGE
     try:
-        body = json.loads(await request.body() or b'{}')
+        body = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         return {}
     return body if isinstance(body, dict) else {}
@@ -629,16 +663,27 @@ async def _client_command_ack(
             response = _from_flask_response(flask_response, status)
         else:
             body = await _json_body(request)
+            from .bounded_request_body import BODY_TOO_LARGE
+
+            too_large = body is BODY_TOO_LARGE
+            if too_large:
+                body = {}
             ids = body.get('ids') if isinstance(body.get('ids'), list) else []
             ids = [str(value) for value in ids]
-            count = (
-                data.acknowledge(auth.user.id, ids)
-                if action == 'ack'
-                else data.negative_acknowledge(auth.user.id, ids)
-            )
-            field = 'removed' if action == 'ack' else 'released'
-            flask_response, status = api_ok({field: count})
-            response = _from_flask_response(flask_response, status)
+            if too_large:
+                flask_response, status = api_error(
+                    'Request body is too large.', code='payload_too_large', status=413,
+                )
+                response = _from_flask_response(flask_response, status)
+            else:
+                count = (
+                    data.acknowledge(auth.user.id, ids)
+                    if action == 'ack'
+                    else data.negative_acknowledge(auth.user.id, ids)
+                )
+                field = 'removed' if action == 'ack' else 'released'
+                flask_response, status = api_ok({field: count})
+                response = _from_flask_response(flask_response, status)
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 
