@@ -83,7 +83,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 
 **Household access**
 - Invite-based membership with quotas and a whitelist; parental / library ACL; roles admin · librarian · member · child
-- **Store ownership registers** — Steam / GOG / Epic / Amazon, plus unofficial opt-in Xbox and PlayStation; CSV import always works. Per-account register limit: 100,000 titles. A register of what you own, never a store download
+- **Store ownership registers** — Steam / GOG / Epic / Amazon, plus unofficial opt-in Xbox and PlayStation; CSV import works without provider APIs. Per-account register limit: 100,000 titles. A register of what you own, never a store download
 - Colour themes **and** independent icon packs (Outline · Filled · Duotone · Pixel · Soft · Mono); **decade rooms** as scenery; **era fonts** that ship with Oneirodex and install themselves on boot — [preferences-themes.md](docs/user/preferences-themes.md) · [theme-fonts-and-images.md](docs/admin/theme-fonts-and-images.md)
 - Mobile density: hamburger nav, stacked filters, Chat touch targets ≤ 900 px
 
