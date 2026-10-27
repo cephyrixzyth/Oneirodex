@@ -83,3 +83,18 @@ def test_artwork_auto_pick_maps_downloaded_filter_and_uses_envelope():
     assert data.calls[0]['missing_cover'] is False
     assert data.calls[0]['limit_games'] == 5
     assert data.calls[0]['policy'] == 'best_available'
+
+
+def test_cover_batch_mutations_reject_oversized_json_before_data_work():
+    for path in (
+        '/admin/api/covers/batch/apply',
+        '/admin/api/artwork/auto-pick',
+    ):
+        client, data = _client()
+        response = client.post(
+            path, content=b' ' * (64 * 1024 + 1),
+            headers={'Content-Type': 'application/json'},
+        )
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+        assert data.calls == []

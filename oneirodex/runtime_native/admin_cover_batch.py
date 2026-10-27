@@ -8,6 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
+from .bounded_request_body import BODY_TOO_LARGE
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
@@ -58,6 +59,8 @@ def create_admin_cover_batch_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body = await _json_object(request)
+        if body is BODY_TOO_LARGE:
+            return _finish(_body_too_large_response(), flask_app, auth, scope)
         try:
             limit = min(int(body.get('limit_games') or body.get('limit') or 25), 100)
         except (TypeError, ValueError):
@@ -81,6 +84,8 @@ def create_admin_cover_batch_router(
         from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
         from oneirodex.utils.cover_selection import resolve_policy
         body = await _json_object(request)
+        if body is BODY_TOO_LARGE:
+            return _finish(_body_too_large_response(), flask_app, auth, scope)
         policy = (body.get('policy') or 'best_available').strip() or 'best_available'
         try:
             limit = min(int(body.get('limit_games') or body.get('limit') or 25), 100)
@@ -133,11 +138,27 @@ def _filters(body, *, default_policy):
 
 
 async def _json_object(request):
+    from .bounded_request_body import read_bounded_body
+
+    raw = await read_bounded_body(request, 64 * 1024)
+    if raw is BODY_TOO_LARGE:
+        return BODY_TOO_LARGE
     try:
-        body = await request.json()
+        import json
+
+        body = json.loads(raw or b'{}')
     except Exception:
         return {}
     return body if isinstance(body, dict) else {}
+
+
+def _body_too_large_response():
+    from oneirodex.utils.api_contract import api_error_payload
+
+    payload, status = api_error_payload(
+        'Request body is too large.', code='payload_too_large', status=413,
+    )
+    return JSONResponse(payload, status_code=status)
 
 
 def _auth(request, app, find_user, find_token, commit_token_touch,
