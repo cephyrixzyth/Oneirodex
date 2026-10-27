@@ -16,6 +16,7 @@ from .request_auth import request_auth_context
 from .query_compat import first_query_value
 
 _REGISTRATION_ACK = 'If the details can be used to create an account, check your email for next steps.'
+_AUTH_JSON_MAX_BYTES = 64 * 1024
 
 
 def _registration_ack(*, account_created=None, confirmation_sent=False):
@@ -205,9 +206,16 @@ def mount_auth_registration_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _validated_body(request):
     from oneirodex.schemas.registration import RegistrationBody
+    from oneirodex.runtime_native.bounded_request_body import (
+        BODY_TOO_LARGE, read_bounded_body,
+    )
+
+    raw_body = await read_bounded_body(request, _AUTH_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error('Request body is too large.', 'payload_too_large', 413)
 
     try:
-        body = RegistrationBody.model_validate_json(await request.body())
+        body = RegistrationBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

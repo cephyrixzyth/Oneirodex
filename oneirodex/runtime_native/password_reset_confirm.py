@@ -240,8 +240,13 @@ def _password_form_errors(body):
 async def _validated_reset_request(request):
     from oneirodex.schemas.password_reset import PasswordResetRequestBody
 
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
-        body = PasswordResetRequestBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = PasswordResetRequestBody.model_validate_json(raw_body)
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors
 
@@ -345,9 +350,13 @@ def _security_headers(response, config):
 
 async def _validated_body(request):
     from oneirodex.schemas.password_reset import PasswordResetConfirmBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        body = PasswordResetConfirmBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = PasswordResetConfirmBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

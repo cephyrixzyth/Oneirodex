@@ -11,6 +11,8 @@ from starlette.responses import JSONResponse
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
 
+_AUTH_JSON_MAX_BYTES = 64 * 1024
+
 
 class AuthLoginData:
     def authenticate(self, username, password, ip):
@@ -165,9 +167,16 @@ def mount_auth_login_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _validated_body(request):
     from oneirodex.schemas.auth import LoginBody
+    from oneirodex.runtime_native.bounded_request_body import (
+        BODY_TOO_LARGE, read_bounded_body,
+    )
+
+    raw_body = await read_bounded_body(request, _AUTH_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error('Request body is too large.', 'payload_too_large', 413)
 
     try:
-        body = LoginBody.model_validate_json(await request.body())
+        body = LoginBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

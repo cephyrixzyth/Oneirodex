@@ -9932,6 +9932,45 @@ def test_lazy_asgi_dispatches_password_reset_request_without_disclosing_account_
     ]
 
 
+def test_lazy_asgi_password_reset_endpoints_reject_oversized_bodies(monkeypatch):
+    calls = []
+    data = SimpleNamespace(
+        request_reset=lambda *args: calls.append(('request', args)) or 'requested',
+        reset=lambda *args: calls.append(('confirm', args)) or True,
+    )
+    monkeypatch.setattr(native_password_reset_confirm, 'PasswordResetConfirmData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+    headers = {'X-CSRFToken': csrf}
+    async def oversized_chunks():
+        yield b' ' * (64 * 1024)
+        yield b' '
+
+    async def send_chunked_requests():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            request_response = await client.post(
+                '/api/auth/password-reset/request', headers=headers,
+                content=oversized_chunks(),
+            )
+            confirm_response = await client.post(
+                '/api/auth/password-reset/signed-token', headers=headers,
+                content=oversized_chunks(),
+            )
+            return request_response, confirm_response
+
+    request_response, confirm_response = asyncio.run(send_chunked_requests())
+
+    assert request_response.status_code == confirm_response.status_code == 413
+    assert request_response.json()['error_code'] == 'payload_too_large'
+    assert confirm_response.json()['error_code'] == 'payload_too_large'
+    assert calls == []
+
+
 def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projection(monkeypatch):
     calls = []
     state = {

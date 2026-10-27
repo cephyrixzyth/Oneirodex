@@ -3069,6 +3069,8 @@ class LazyASGIApp:
             await self._ensure_flask()
             from oneirodex.runtime_native.admin_csrf_preflight import (
                 admin_request_wants_json,
+                bearer_admin_csrf_exempt,
+                csrf_session_has_token,
                 empty_admin_mutation_csrf_error,
                 inspect_multipart_csrf_body,
                 inspect_urlencoded_csrf_body,
@@ -3077,17 +3079,37 @@ class LazyASGIApp:
             )
 
             csrf_error = None
-            if is_admin_mutation_scope(scope) and (
+            native_admin_mutation = is_admin_mutation_scope(scope) and (
                     native_route_matches(self._native_read_api_app, scope)
                     or native_route_matches(self._native_admin_pilot, scope)
-            ):
+            )
+            if native_admin_mutation:
                 csrf_error = empty_admin_mutation_csrf_error(
                     scope, self._flask_app.config,
+                )
+            headers = {key.lower(): value for key, value in scope.get('headers', ())}
+            content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
+            if (
+                csrf_error is None
+                and native_admin_mutation
+                and content_type in {
+                    b'multipart/form-data', b'application/x-www-form-urlencoded',
+                }
+                and not bearer_admin_csrf_exempt(scope)
+                and not csrf_session_has_token(scope, self._flask_app.config)
+            ):
+                # A body form token cannot validate without the signed
+                # per-session CSRF value. Reject before consuming a request
+                # body that cannot pass CSRF, except on exact Bearer routes
+                # whose handlers validate token and admin scope themselves.
+                csrf_error = empty_admin_mutation_csrf_error(
+                    scope, self._flask_app.config, form_inspected=True,
                 )
             if (
                 csrf_error is None
                 and (path == '/admin' or path.startswith('/admin/'))
                 and scope.get('method', '').upper() in {'POST', 'PUT', 'PATCH', 'DELETE'}
+                and not bearer_admin_csrf_exempt(scope)
             ):
                 form_token, replay_receive, form_inspected = await inspect_urlencoded_csrf_body(
                     scope, receive, self._flask_app.config,

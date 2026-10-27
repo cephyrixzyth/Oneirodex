@@ -1,11 +1,14 @@
 import asyncio
 
 import httpx
+import pytest
 from flask import Flask
 
 import asgi
 from oneirodex.runtime_native.admin_csrf_preflight import (
     admin_request_wants_json,
+    bearer_admin_csrf_exempt,
+    csrf_session_has_token,
     empty_admin_mutation_csrf_error,
     inspect_multipart_csrf_body,
     inspect_urlencoded_csrf_body,
@@ -102,6 +105,19 @@ def test_admin_user_create_bearer_reaches_route_scope_check_only():
     assert empty_admin_mutation_csrf_error(
         _scope(path='/admin/api/user/0', method='PUT'), {},
     ) == 'The CSRF token is missing.'
+
+
+def test_bearer_csrf_exemption_is_limited_to_existing_exact_routes():
+    bearer = (b'authorization', b'Bearer untrusted-placeholder')
+    assert bearer_admin_csrf_exempt(
+        _scope(path='/admin/api/system_logs/clear', method='DELETE', headers=[bearer]),
+    )
+    assert bearer_admin_csrf_exempt(
+        _scope(path='/admin/api/user/0', method='PUT', headers=[bearer]),
+    )
+    assert not bearer_admin_csrf_exempt(
+        _scope(path='/admin/api/images/batch_upload', method='POST', headers=[bearer]),
+    )
     assert empty_admin_mutation_csrf_error(
         _scope(path='/admin/api/user/00', method='PUT', headers=[bearer]), {},
     ) == 'The CSRF token is missing.'
@@ -149,6 +165,85 @@ def test_valid_header_token_uses_signed_flask_session():
         (b'cookie', f'session={cookie}'.encode()),
     ])
     assert empty_admin_mutation_csrf_error(scope, {'SECRET_KEY': secret}) is None
+
+
+def test_valid_hidden_form_token_uses_signed_flask_session():
+    from oneirodex.runtime_native.session_compat import (
+        dump_session_cookie,
+        generate_csrf_token,
+    )
+
+    secret = 'csrf-preflight-hidden-form-secret'
+    session = {}
+    token = generate_csrf_token(session, secret)
+    cookie = dump_session_cookie(session, secret)
+    scope = _scope(headers=[
+        (b'content-type', b'multipart/form-data; boundary=form-token'),
+        (b'content-length', b'100'),
+        (b'cookie', f'session={cookie}'.encode()),
+    ])
+    assert csrf_session_has_token(scope, {'SECRET_KEY': secret})
+    assert empty_admin_mutation_csrf_error(
+        scope, {'SECRET_KEY': secret}, form_token=token, form_inspected=True,
+    ) is None
+
+
+def test_csrf_session_gate_requires_signed_session_secret():
+    from oneirodex.runtime_native.session_compat import (
+        dump_session_cookie,
+        generate_csrf_token,
+    )
+
+    secret = 'csrf-preflight-session-gate-secret'
+    assert not csrf_session_has_token(_scope(), {'SECRET_KEY': secret})
+    session = {}
+    generate_csrf_token(session, secret)
+    signed_scope = _scope(headers=[(
+        b'cookie', f"session={dump_session_cookie(session, secret)}".encode(),
+    )])
+    assert csrf_session_has_token(signed_scope, {'SECRET_KEY': secret})
+
+
+@pytest.mark.parametrize('authorization', [None, b'Bearer junk'])
+def test_unauthenticated_multipart_rejects_before_consuming_upload_body(monkeypatch, authorization):
+    runtime = asgi.LazyASGIApp()
+    runtime._flask_app = Flask(__name__)
+    runtime._flask_app.config.update(SECRET_KEY='csrf-preflight-upload-secret')
+
+    async def ready():
+        return None
+
+    monkeypatch.setattr(runtime, '_ensure_flask', ready)
+    receive_count = 0
+    sent = []
+
+    async def receive():
+        nonlocal receive_count
+        receive_count += 1
+        return {
+            'type': 'http.request', 'body': b'large upload body',
+            'more_body': False,
+        }
+
+    async def send(message):
+        sent.append(message)
+
+    async def run():
+        await runtime({
+            'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1',
+            'method': 'POST', 'scheme': 'http', 'path': '/admin/api/images/batch_upload',
+            'raw_path': b'/admin/api/images/batch_upload', 'query_string': b'',
+            'headers': [
+                (b'content-type', b'multipart/form-data; boundary=body-limit-test'),
+                (b'content-length', b'17'),
+            ] + ([(b'authorization', authorization)] if authorization else []),
+            'client': ('127.0.0.1', 1000), 'server': ('testserver', 80),
+        }, receive, send)
+
+    asyncio.run(run())
+    response_start = next(message for message in sent if message['type'] == 'http.response.start')
+    assert response_start['status'] == 400
+    assert receive_count == 0
 
 
 def test_urlencoded_form_csrf_inspection_replays_request_body():

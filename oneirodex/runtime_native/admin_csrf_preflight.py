@@ -44,6 +44,47 @@ def native_route_matches(native_app, scope: Mapping) -> bool:
     return False
 
 
+def csrf_session_has_token(scope: Mapping, config: Mapping) -> bool:
+    """Return whether this request has a signed session CSRF secret.
+
+    Multipart form tokens are only useful when paired with the per-session
+    secret. If that secret is absent, parsing a potentially large upload can
+    never make the request pass CSRF validation.
+    """
+    if not config.get('WTF_CSRF_ENABLED', True):
+        return True
+    headers = {key.lower(): value for key, value in scope.get('headers', ())}
+    session_data = _session_from_cookie(headers, config)
+    field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+    return field_name in session_data
+
+
+def bearer_admin_csrf_exempt(scope: Mapping) -> bool:
+    """Return whether this exact admin mutation is exempt from browser CSRF.
+
+    These routes authenticate Bearer credentials and enforce their own admin
+    scope. A Bearer header on any other route is not evidence of authorization.
+    """
+    headers = {key.lower(): value for key, value in scope.get('headers', ())}
+    authorization = headers.get(b'authorization', b'').lower()
+    if not authorization.startswith(b'bearer '):
+        return False
+    path = str(scope.get('path') or '')
+    method = str(scope.get('method') or '').upper()
+    path_parts = path.strip('/').split('/')
+    return (
+        path == '/admin/api/system_logs/clear'
+        or (method == 'PUT' and path == '/admin/api/user/0')
+        or (
+            method in {'PUT', 'DELETE'}
+            and len(path_parts) == 4
+            and path_parts[:3] == ['admin', 'api', 'user']
+            and path_parts[3].isdigit()
+            and int(path_parts[3]) > 0
+        )
+    )
+
+
 async def inspect_urlencoded_csrf_body(scope: Mapping, receive, config: Mapping):
     """Read and replay a small URL-encoded body so CSRF precedes route auth.
 
@@ -213,30 +254,7 @@ def empty_admin_mutation_csrf_error(
         return None
 
     headers = {key.lower(): value for key, value in scope.get('headers', ())}
-    authorization = headers.get(b'authorization', b'').lower()
-    path_parts = path.strip('/').split('/')
-    method = str(scope.get('method') or '').upper()
-    bearer_admin_user_create = (
-        authorization.startswith(b'bearer ')
-        and method == 'PUT'
-        and path == '/admin/api/user/0'
-    )
-    bearer_admin_user_mutation = (
-        authorization.startswith(b'bearer ')
-        and method in {'PUT', 'DELETE'}
-        and len(path_parts) == 4
-        and path_parts[:3] == ['admin', 'api', 'user']
-        and path_parts[3].isdigit()
-        and int(path_parts[3]) > 0
-    )
-    if (
-        authorization.startswith(b'bearer ')
-        and (
-            path == '/admin/api/system_logs/clear'
-            or bearer_admin_user_create
-            or bearer_admin_user_mutation
-        )
-    ):
+    if bearer_admin_csrf_exempt(scope):
         # These routes authenticate the token and check its admin scope before
         # mutation. Let that authorization run instead of rejecting a
         # non-cookie client at the browser-session CSRF gate.
