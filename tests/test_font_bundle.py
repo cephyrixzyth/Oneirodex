@@ -44,13 +44,12 @@ def test_the_licence_travels_with_the_faces():
 
 def test_seeding_installs_every_face_with_no_network(tmp_path, monkeypatch):
     """The copy is the install path. Any socket use here is the bug returning."""
-    import urllib.request
+    import oneirodex.utils.font_install as font_install
 
     def _no_network(*args, **kwargs):  # pragma: no cover - only runs on regression
         raise AssertionError('seed_builtin_fonts must not touch the network')
 
-    monkeypatch.setattr(urllib.request, 'build_opener', _no_network)
-    monkeypatch.setattr(urllib.request, 'urlopen', _no_network)
+    monkeypatch.setattr(font_install, 'safe_get', _no_network)
 
     root = str(tmp_path / 'fonts')
     written = seed_builtin_fonts(root)

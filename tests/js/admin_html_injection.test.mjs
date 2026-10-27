@@ -32,6 +32,7 @@ const ROOT = path.resolve(HERE, '..', '..', 'oneirodex');
 const LIBRARY_TOOLS = process.env.OD_LIBRARY_TOOLS_JS || path.join(ROOT, 'static', 'js', 'od_admin_library_tools.js');
 const GAME_DETAILS = process.env.OD_GAME_DETAILS_JS || path.join(ROOT, 'setup', 'default_theme', 'js', 'game_details.js');
 const SCANJOBS = process.env.OD_SCANJOBS_JS || path.join(ROOT, 'setup', 'default_theme', 'js', 'admin_manage_scanjobs.js');
+const IMAGE_QUEUE = process.env.OD_IMAGE_QUEUE_JS || path.join(ROOT, 'static', 'js', 'od_admin_scanjobs_inline.js');
 
 const PAYLOADS = [
     '<img src=x onerror=alert(1)>',
@@ -387,6 +388,30 @@ for (const payload of PAYLOADS) {
     assert.equal(file.children[0].attrs['data-kind'], 'game');
     assert.equal(file.attrs.title, 'setup.exe - 1.5 KB');
     assert.equal(file.children[2].textValue, '(1.5 KB)');
+}
+
+// The admin image queue puts database IDs into data attributes used by actions.
+// Keep those values escaped at the HTML sink, even though the current model uses
+// integer primary keys.
+{
+    const source = fs.readFileSync(IMAGE_QUEUE, 'utf8');
+    const sandbox = {
+        document: { getElementById() { return null; }, addEventListener() {} },
+        window: null,
+    };
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox, { filename: IMAGE_QUEUE });
+
+    for (const payload of PAYLOADS) {
+        const markup = sandbox.imageRowHtml({ id: payload, status: 'failed' });
+        assertInert(markup, 'image queue action ID');
+        const args = [...markup.matchAll(/data-od-arg="([^"]*)"/g)].map((match) => decodeEntities(match[1]));
+        assert.equal(args.length, 2, 'retry and delete actions both carry their ID');
+        assert.ok(args.every((value) => value === payload), 'action ID round-trips through an escaped attribute');
+    }
+
+    assert.ok(sandbox.imageRowHtml({ id: 42, status: 'failed' }).includes('data-od-arg="42"'));
 }
 
 console.log('admin_html_injection: all assertions passed');

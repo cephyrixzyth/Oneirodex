@@ -45,7 +45,7 @@ faces chosen to *evoke* each era:
 | Step | What happens |
 |---|---|
 | Boot, phase 4 | `seed_builtin_fonts()` copies any missing bundled face into the fonts folder — same model as the icon packs beside it |
-| Face not in the bundle | Falls back to a background download from google/fonts; `FETCH_FONTS_ON_BOOT=false` disables that half only |
+| Face not in the bundle | Falls back to a background download from google/fonts through the shared public-URL and redirect checks; responses are limited to 8 MiB. `FETCH_FONTS_ON_BOOT=false` disables that half only |
 | Copy fails | Logged, boot continues — a missing face degrades to the next family in its CSS stack |
 
 Runtime location is `oneirodex/static/library/fonts/` (override with
