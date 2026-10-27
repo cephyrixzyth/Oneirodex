@@ -13,6 +13,8 @@ from .request_auth import request_auth_context
 
 _UNSUPPORTED_JSON_CONTENT_TYPE = object()
 _INVALID_JSON_PAYLOAD = object()
+_TOO_LARGE_JSON_PAYLOAD = object()
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class MemberGameStateData:
@@ -202,7 +204,11 @@ def create_member_game_state_router(
                     response = _api_error('Game not found', 'not_found')
                 else:
                     payload = await _json_payload(request)
-                    if payload is _UNSUPPORTED_JSON_CONTENT_TYPE:
+                    if payload is _TOO_LARGE_JSON_PAYLOAD:
+                        response = _api_error(
+                            'Request body is too large.', 'payload_too_large', status=413,
+                        )
+                    elif payload is _UNSUPPORTED_JSON_CONTENT_TYPE:
                         response = _api_error(
                             "Did not attempt to load JSON data because the request Content-Type was not 'application/json'.",
                             'bad_request', status=415,
@@ -251,14 +257,20 @@ def mount_member_game_state_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_payload(request):
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
         content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
         if content_type != 'application/json' and not (
             content_type.startswith('application/') and content_type.endswith('+json')
         ):
             return _UNSUPPORTED_JSON_CONTENT_TYPE
-        payload = await request.json()
-        return payload
+        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return _TOO_LARGE_JSON_PAYLOAD
+        import json
+
+        return json.loads(raw_body or b'{}')
     except Exception:  # noqa: BLE001 — malformed JSON must not clear saved state
         return _INVALID_JSON_PAYLOAD
 

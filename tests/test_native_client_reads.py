@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import client_reads
 from oneirodex.runtime_native.client_reads import create_client_reads_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -224,6 +225,21 @@ def test_lifecycle_scalar_body_preserves_root_validation_error():
     assert response.json()['detail'] == {
         '__root__': 'Input should be a valid dictionary or instance of ClientLifecycleBody'
     }
+    assert client.data.lifecycle_calls == []
+
+
+def test_lifecycle_write_caps_json_before_schema_validation(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_LIFECYCLE_BODY_BYTES', 8)
+    client = make_client(scopes=('read:library',))
+
+    response = client.post(
+        '/api/client/lifecycle',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}', 'Content-Type': 'application/json'},
+        content=b'{"records":[]}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert client.data.lifecycle_calls == []
 
 

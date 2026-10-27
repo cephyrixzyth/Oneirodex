@@ -13,6 +13,8 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class WishlistData:
     def list(self, user, *, include_all: bool):
@@ -272,8 +274,13 @@ async def _validated(request, operation):
     from oneirodex.utils.validation import format_validation_errors
 
     model = CreateWishlistRequestBody if operation == 'create' else ResolveWishlistRequestBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error(413, 'payload_too_large', 'Request body is too large.')
     try:
-        raw = json.loads(await request.body() or b'{}')
+        raw = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         raw = {}
     try:

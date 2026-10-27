@@ -155,15 +155,39 @@ def create_integration_settings_router(
             and content_type in {'application/x-www-form-urlencoded', 'multipart/form-data'}
         )
         community_form = None
+        legacy_form_error = None
         if legacy_community_form:
-            try:
-                community_form = await request.form()
-            except Exception:
-                community_form = None
+            from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+            raw_body = await read_bounded_body(request, _MAX_BODY)
+            if raw_body is BODY_TOO_LARGE:
+                legacy_form_error = 'too_large'
+            else:
+                replay = Request(request.scope, receive=_body_receive(raw_body))
+                try:
+                    community_form = await replay.form(
+                        max_files=0, max_fields=8, max_part_size=_MAX_BODY,
+                    )
+                except Exception:
+                    legacy_form_error = 'invalid'
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
-            if request.method in ('PUT', 'POST'):
+            if legacy_form_error == 'too_large':
+                from oneirodex.utils.api_contract import api_error_payload
+
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large', status=413,
+                )
+                csrf_response = JSONResponse(payload, status_code=status)
+            elif legacy_form_error is not None:
+                from oneirodex.utils.api_contract import api_error_payload
+
+                payload, status = api_error_payload(
+                    'Invalid community settings form.', code='bad_request',
+                )
+                csrf_response = JSONResponse(payload, status_code=status)
+            elif request.method in ('PUT', 'POST'):
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
@@ -322,3 +346,16 @@ def _save_community(data, payload):
 def mount_integration_settings_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_integration_settings_router(flask_app, **kwargs))
     return app
+
+
+def _body_receive(body: bytes):
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if sent:
+            return {'type': 'http.request', 'body': b'', 'more_body': False}
+        sent = True
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    return receive

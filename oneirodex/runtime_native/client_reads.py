@@ -13,6 +13,8 @@ from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
 
+_MAX_LIFECYCLE_BODY_BYTES = 1024 * 1024
+
 
 def api_error(message, *, code='bad_request', status=None, detail=None, **extra):
     from oneirodex.utils.api_contract import api_error_payload
@@ -513,11 +515,18 @@ async def _lifecycle_body(request: Request):
     import json
 
     from oneirodex.schemas.client import ClientLifecycleBody
+    from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     from oneirodex.utils.validation import format_validation_errors
 
+    raw_body = await read_bounded_body(request, _MAX_LIFECYCLE_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        flask_response, status = api_error(
+            'Request body is too large.', code='payload_too_large',
+        )
+        return None, _from_flask_response(flask_response, status)
     try:
-        value = json.loads(await request.body() or b'{}')
+        value = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         value = {}
     try:

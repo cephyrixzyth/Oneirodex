@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from flask import Flask
 from types import SimpleNamespace
 
+from oneirodex.runtime_native import account_preferences
 from oneirodex.runtime_native.account_preferences import create_account_preferences_router
 from oneirodex.forms_native import (
     preference_update_formdata,
@@ -157,6 +158,24 @@ def test_preferences_put_matches_pydantic_body_error_envelope():
     assert response.status_code == 422
     assert response.json()['error_code'] == 'unprocessable'
     assert response.json()['detail'] == {'unrecognized': 'Extra inputs are not permitted'}
+    assert data.updates == []
+
+
+def test_preferences_put_caps_json_before_validation(monkeypatch):
+    data = FakePreferencesData()
+    client, _actor = make_client(data)
+    cookie, csrf = signed_session(csrf=True)
+    client.cookies.set('session', cookie)
+    monkeypatch.setattr(account_preferences, '_MAX_JSON_BODY_BYTES', 32)
+
+    response = client.put(
+        '/api/account/preferences',
+        content=b'{"theme":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert data.updates == []
 
 

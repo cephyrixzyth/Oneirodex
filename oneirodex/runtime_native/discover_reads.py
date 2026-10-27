@@ -11,6 +11,8 @@ from werkzeug.datastructures import MultiDict
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class DiscoverReadsData:
     """Adapter around the existing Discover feed and row builders."""
@@ -303,21 +305,31 @@ def create_discover_reads_router(
                     payload, config=flask_app.config, status=status,
                 )
             elif request.method == 'PUT':
-                try:
-                    payload = await request.json()
-                except Exception:
-                    payload = {}
-                if not isinstance(payload, dict):
-                    payload = {}
-                result = data.save_pins(auth.user, payload)
-                error = result.get('error')
-                if error:
+                from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                if raw_body is BODY_TOO_LARGE:
                     response = _api_error_response(
-                        flask_app, error[0], error[1],
-                        **({'detail': error[2]} if len(error) > 2 else {}),
+                        flask_app, 'Request body is too large.', 'payload_too_large',
                     )
                 else:
-                    response = _api_ok_response(flask_app, result)
+                    try:
+                        import json
+
+                        payload = json.loads(raw_body or b'{}')
+                    except Exception:
+                        payload = {}
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    result = data.save_pins(auth.user, payload)
+                    error = result.get('error')
+                    if error:
+                        response = _api_error_response(
+                            flask_app, error[0], error[1],
+                            **({'detail': error[2]} if len(error) > 2 else {}),
+                        )
+                    else:
+                        response = _api_ok_response(flask_app, result)
             else:
                 response = _api_ok_response(flask_app, data.pins(auth.user))
             return secure(response, request, auth)

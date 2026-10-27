@@ -12,6 +12,8 @@ from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class PlaytimeData:
     uses_explicit_app = True
@@ -174,10 +176,23 @@ def create_playtime_router(
                     is_json = content_type == 'application/json' or (
                         content_type.startswith('application/') and content_type.endswith('+json')
                     )
-                    payload = await request.json() if is_json else {}
-                    if not isinstance(payload, dict):
+                    if is_json:
+                        from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                        if raw_body is BODY_TOO_LARGE:
+                            response = _api_error('Request body is too large.', 'payload_too_large')
+                            payload = None
+                        else:
+                            import json
+
+                            payload = json.loads(raw_body or b'{}')
+                    else:
                         payload = {}
-                    body = StartPlaytimeSessionBody.model_validate(payload)
+                    if response is None:
+                        if not isinstance(payload, dict):
+                            payload = {}
+                        body = StartPlaytimeSessionBody.model_validate(payload)
                 except ValidationError as exc:
                     response = _api_error(
                         'Invalid request.', 'unprocessable',

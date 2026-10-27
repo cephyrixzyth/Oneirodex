@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import integration_settings
 from oneirodex.runtime_native.integration_settings import create_integration_settings_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -194,6 +195,38 @@ def test_legacy_community_form_accepts_hidden_csrf_and_preserves_redirect(monkey
     assert response.headers['content-type'] == expected.headers['Content-Type']
     assert response.content == expected.get_data()
     assert data.community_saved == ('', 'Household chat')
+
+
+def test_legacy_community_form_caps_body_before_auth_and_parsing(monkeypatch):
+    monkeypatch.setattr(integration_settings, '_MAX_BODY', 128)
+    client = make_client(csrf_enabled=True)
+    client.cookies.clear()
+
+    response = client.post(
+        '/admin/integrations/community',
+        files={'file': ('large.bin', b'x' * 512, 'application/octet-stream')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
+def test_legacy_community_form_rejects_files_with_bounded_parser(monkeypatch):
+    monkeypatch.setattr(integration_settings, '_MAX_BODY', 2048)
+    data = FakeSettings()
+    client = make_client(data=data, csrf_enabled=True)
+
+    response = client.post(
+        '/admin/integrations/community',
+        data={'csrf_token': client.csrf_token},
+        files={'file': ('tiny.txt', b'x', 'text/plain')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Invalid community settings form.'
+    assert data.community_saved is None
 
 
 def test_legacy_integration_post_aliases_validate_csrf_before_body():

@@ -3849,6 +3849,28 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
     assert 'game-a' not in runtime._fake_member_game_state.statuses
 
 
+def test_native_single_game_status_body_is_bounded_before_json_parse(monkeypatch):
+    runtime, _read_only = _bearer_runtime(
+        monkeypatch, ['read:library', 'write:library'],
+    )
+    monkeypatch.setattr(member_game_state, '_MAX_JSON_BODY_BYTES', 16)
+
+    async def send_large_status():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/set_game_status/game-a',
+                content=b'{"status":"' + b'x' * 64 + b'"}',
+                headers={'Authorization': _read_only, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send_large_status())
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] in {'status', 'commit'} for call in runtime._fake_member_game_state.calls)
+
+
 def test_native_library_writes_require_write_scope_for_bearer_tokens(monkeypatch):
     paths = [
         ('/api/toggle_favorite/game-a', None),

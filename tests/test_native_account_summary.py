@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import account_summary
 from oneirodex.runtime_native.account_summary import (
     AccountInvitesData,
     create_account_summary_router,
@@ -425,6 +426,24 @@ def test_create_invite_rejects_missing_csrf_before_mutating():
 
     assert response.status_code == 400
     assert response.json()['error'] == 'The CSRF token is missing.'
+    assert mutations.created == []
+
+
+def test_create_invite_caps_json_before_email_validation(monkeypatch):
+    monkeypatch.setattr(account_summary, '_MAX_INVITE_BODY_BYTES', 8)
+    mutations = FakeAccountInviteMutations()
+    client = make_client(invites_data=mutations, mutations_data=mutations)
+    cookie, csrf = csrf_session()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/invites',
+        content=b'{"email":"friend@example.test"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert mutations.created == []
 
 

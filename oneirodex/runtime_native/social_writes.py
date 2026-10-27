@@ -13,6 +13,8 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _from_flask_response, _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class SocialWriteData:
     def request(self, user, payload: dict):
@@ -150,15 +152,21 @@ def create_social_writes_router(
             elif response is None:
                 response = _scope_error(auth, 'write:social')
                 if response is None:
-                    payload = _json_object(await request.body())
-                    if payload is None:
-                        response = _error(
-                            500, 'internal',
-                            'Something went wrong on our end. The error has been logged.',
-                        )
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
+                        response = _error(413, 'payload_too_large', 'Request body is too large.')
                     else:
-                        result, status, refusal = data.request(auth.user, payload)
-                        response = _error(*refusal) if refusal else _success(result, status=status)
+                        payload = _json_object(raw_body)
+                        if payload is None:
+                            response = _error(
+                                500, 'internal',
+                                'Something went wrong on our end. The error has been logged.',
+                            )
+                        else:
+                            result, status, refusal = data.request(auth.user, payload)
+                            response = _error(*refusal) if refusal else _success(result, status=status)
             _finish(response, flask_app, request, auth)
             return response
 

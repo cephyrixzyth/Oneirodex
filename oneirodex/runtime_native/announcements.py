@@ -14,6 +14,10 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+
+ANNOUNCEMENT_BODY_MAX_BYTES = 128 * 1024
 
 
 class AnnouncementData:
@@ -157,8 +161,14 @@ async def _validated_body(request: Request):
     from oneirodex.utils.validation import format_validation_errors
     from starlette.responses import JSONResponse
 
+    raw_body = await read_bounded_body(request, ANNOUNCEMENT_BODY_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        payload, status = api_error_payload(
+            'Request body is too large.', code='payload_too_large',
+        )
+        return None, JSONResponse(payload, status_code=status)
     try:
-        raw = json.loads(await request.body() or b'{}')
+        raw = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         raw = {}
     try:

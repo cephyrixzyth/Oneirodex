@@ -10,6 +10,10 @@ from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+
+GAME_MODS_BODY_MAX_BYTES = 512 * 1024
 
 
 _SCHEMAS = {
@@ -484,8 +488,15 @@ async def _validate_body(request, schema_key):
     if content_type == 'application/json' or (
         content_type.startswith('application/') and content_type.endswith('+json')
     ):
+        raw_body = await read_bounded_body(request, GAME_MODS_BODY_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error(
+                413, 'payload_too_large', 'Request body is too large',
+            )
         try:
-            value = await request.json()
+            import json
+
+            value = json.loads(raw_body or b'{}')
             payload = value if isinstance(value, dict) else {}
         except Exception:
             payload = {}

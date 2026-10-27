@@ -398,3 +398,31 @@ def test_bearer_librarian_requires_admin_scope_and_errors_hide_paths(runtime):
     broken = _request(app, '/api/games/io-error/mods', cookie=_cookies['member'])
     assert broken.status_code == 500
     assert 'C:/private' not in broken.text
+
+
+def test_oversized_write_body_is_rejected_before_schema_or_adapter(runtime):
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+    response = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['librarian'], method='POST',
+        json={'extra': 'x' * (512 * 1024)},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] == 'create_mod' for call in data.calls)
+
+
+def test_mod_role_denial_still_follows_schema_validation(runtime):
+    app, _flask_app, _data, _users, _tokens, cookies = runtime
+
+    invalid = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['member'], method='POST',
+        json={'unknown': True},
+    )
+    denied = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['member'], method='POST',
+        json={'name': 'valid but unauthorized'},
+    )
+
+    assert invalid.status_code == 422
+    assert denied.status_code == 403

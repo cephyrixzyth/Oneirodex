@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from oneirodex.runtime_native import account_tokens
 from oneirodex.runtime_native.account_tokens import mount_account_tokens_routes
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie,
@@ -232,6 +233,22 @@ def test_create_requires_csrf_before_body_validation():
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
     assert response.json()['error'] == 'The CSRF token is missing.'
+    assert data.created == []
+
+
+def test_create_caps_json_before_schema_validation(monkeypatch):
+    monkeypatch.setattr(account_tokens, '_MAX_JSON_BODY_BYTES', 8)
+    user = FakeUser()
+    client, data, _ = make_client(user=user)
+
+    response = client.post(
+        '/api/tokens',
+        headers={**browser_credentials(user), 'Content-Type': 'application/json'},
+        content=b'{"name":"large"}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert data.created == []
 
 

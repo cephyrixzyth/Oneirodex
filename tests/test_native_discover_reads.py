@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import discover_reads
 from oneirodex.runtime_native.discover_reads import create_discover_reads_router
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token, load_session_cookie,
@@ -321,6 +322,25 @@ def test_pins_put_preserves_member_csrf_and_response_contract():
         'ok': True, 'error': None, 'error_code': None, 'success': True,
     }
     assert data.save_pins_calls == [(151, {'pins': ['recent'], 'hidden': ['played']})]
+
+
+def test_pins_put_rejects_oversized_json_before_save(monkeypatch):
+    monkeypatch.setattr(discover_reads, '_MAX_JSON_BODY_BYTES', 8)
+    data = FakeDiscoverData()
+    client = make_client(data=data)
+    session_data = {'_user_id': '151:fp'}
+    csrf = generate_csrf_token(session_data, 'native-discover-reads-secret')
+    client.cookies.set('session', dump_session_cookie(session_data, 'native-discover-reads-secret'))
+
+    response = client.put(
+        '/api/discover/pins',
+        content=b'{"pins":"' + b'x' * 32 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.save_pins_calls == []
 
 
 def test_pins_put_maps_validation_errors_to_legacy_api_codes():

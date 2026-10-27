@@ -10,6 +10,8 @@ from .acquire_status import _login_redirect
 from .batch_favorite import _finish
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class MemberMetaData:
     def username_exists(self, username):
@@ -104,28 +106,40 @@ def create_member_meta_router(
                 if csrf_response is not None:
                     response = csrf_response
             if response is None:
+                from .bounded_request_body import BODY_TOO_LARGE
+
                 from pydantic import ValidationError
 
                 from oneirodex.schemas.user import CheckUsernameBody
                 from oneirodex.utils.validation import format_validation_errors
 
-                try:
-                    body = CheckUsernameBody.model_validate(await _json_object(request))
-                except ValidationError as exc:
+                payload = await _json_object(request)
+                if payload is BODY_TOO_LARGE:
                     from oneirodex.utils.api_contract import api_error_payload
                     from starlette.responses import JSONResponse
 
                     payload, status = api_error_payload(
-                        'Invalid request.', code='unprocessable',
-                        detail=format_validation_errors(exc),
+                        'Request body is too large.', code='payload_too_large',
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    from starlette.responses import JSONResponse
+                    try:
+                        body = CheckUsernameBody.model_validate(payload)
+                    except ValidationError as exc:
+                        from oneirodex.utils.api_contract import api_error_payload
+                        from starlette.responses import JSONResponse
 
-                    response = JSONResponse({
-                        'exists': data.username_exists(body.username),
-                    })
+                        payload, status = api_error_payload(
+                            'Invalid request.', code='unprocessable',
+                            detail=format_validation_errors(exc),
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                    else:
+                        from starlette.responses import JSONResponse
+
+                        response = JSONResponse({
+                            'exists': data.username_exists(body.username),
+                        })
             _finish(response, flask_app, auth)
             return response
 
@@ -138,13 +152,20 @@ def mount_member_meta_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
         content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
         if content_type != 'application/json' and not (
             content_type.startswith('application/') and content_type.endswith('+json')
         ):
             return {}
-        payload = await request.json()
+        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return BODY_TOO_LARGE
+        import json
+
+        payload = json.loads(raw_body or b'{}')
         return payload if isinstance(payload, dict) else {}
     except Exception:  # noqa: BLE001 — match Flask silent JSON handling
         return {}

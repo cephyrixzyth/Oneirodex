@@ -13,12 +13,14 @@ from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
 _logger = logging.getLogger(__name__)
 
 UPDATES_SCAN_DEFAULT = 25
 UPDATES_SCAN_MAX = 50
 UPDATES_SCAN_STALE_SECONDS = 86400
+UPDATES_SCAN_BODY_MAX_BYTES = 16 * 1024
 
 
 class UpdateScanData:
@@ -131,7 +133,12 @@ def create_update_scan_router(
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
-                body = _json_object(await request.body())
+                raw_body = await read_bounded_body(request, UPDATES_SCAN_BODY_MAX_BYTES)
+                if raw_body is BODY_TOO_LARGE:
+                    response = _error('Request body is too large', 'payload_too_large', status=413)
+                    _finish(response, flask_app, request, auth)
+                    return response
+                body = _json_object(raw_body)
                 try:
                     limit = int(body.get('limit') or UPDATES_SCAN_DEFAULT)
                 except (TypeError, ValueError):
@@ -175,12 +182,12 @@ def _json_response(payload):
     return JSONResponse(api_ok_payload(payload))
 
 
-def _error(message, code):
+def _error(message, code, *, status=None):
     from oneirodex.utils.api_contract import api_error_payload
     from starlette.responses import JSONResponse
 
-    payload, status = api_error_payload(message, code=code)
-    return JSONResponse(payload, status_code=status)
+    payload, resolved_status = api_error_payload(message, code=code, status=status)
+    return JSONResponse(payload, status_code=resolved_status)
 
 
 def _finish(response, flask_app, request, auth):

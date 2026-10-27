@@ -13,6 +13,8 @@ from .csrf_compat import csrf_error_response as _csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 16 * 1024
+
 
 class StockAvatarData:
     """Adapter for the existing stock-avatar setter and transaction."""
@@ -76,49 +78,59 @@ def create_account_stock_avatar_router(
                 from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
                 from oneirodex.utils.validation import format_validation_errors
                 from oneirodex.schemas.account import StockAvatarBody
+                from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-                body = _json_mapping(await request.body())
-                try:
-                    parsed = StockAvatarBody.model_validate(body)
-                except ValidationError as exc:
+                raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                if raw_body is BODY_TOO_LARGE:
                     payload, status = api_error_payload(
-                        'Invalid request.',
-                        code='unprocessable',
-                        detail=format_validation_errors(exc),
+                        'Request body is too large.',
+                        code='payload_too_large',
+                        status=413,
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    previous_path = getattr(auth.user, 'avatarpath', None)
-                    path, error = data.set_stock(parsed.id, auth.user, flask_app)
-                    if error:
-                        payload, status = api_error_payload(error, code='bad_request')
+                    body = _json_mapping(raw_body)
+                    try:
+                        parsed = StockAvatarBody.model_validate(body)
+                    except ValidationError as exc:
+                        payload, status = api_error_payload(
+                            'Invalid request.',
+                            code='unprocessable',
+                            detail=format_validation_errors(exc),
+                        )
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        try:
-                            data.commit()
-                        except Exception as exc:
-                            data.rollback()
-                            from oneirodex.utils.avatar import finalize_avatar_change
-
-                            finalize_avatar_change(
-                                flask_app, previous_path, path, committed=False,
-                            )
-                            flask_app.logger.warning('stock avatar commit failed: %s', exc)
-                            payload, status = api_error_payload(
-                                "Couldn't save that avatar. Try a different image.",
-                                code='internal',
-                            )
+                        previous_path = getattr(auth.user, 'avatarpath', None)
+                        path, error = data.set_stock(parsed.id, auth.user, flask_app)
+                        if error:
+                            payload, status = api_error_payload(error, code='bad_request')
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            from oneirodex.utils.avatar import finalize_avatar_change
+                            try:
+                                data.commit()
+                            except Exception as exc:
+                                data.rollback()
+                                from oneirodex.utils.avatar import finalize_avatar_change
 
-                            finalize_avatar_change(
-                                flask_app, previous_path, path, committed=True,
-                            )
-                            response = JSONResponse(api_ok_payload({
-                                'avatar_path': path,
-                                'avatar_url': data.avatar_url(path),
-                            }))
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=False,
+                                )
+                                flask_app.logger.warning('stock avatar commit failed: %s', exc)
+                                payload, status = api_error_payload(
+                                    "Couldn't save that avatar. Try a different image.",
+                                    code='internal',
+                                )
+                                response = JSONResponse(payload, status_code=status)
+                            else:
+                                from oneirodex.utils.avatar import finalize_avatar_change
+
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=True,
+                                )
+                                response = JSONResponse(api_ok_payload({
+                                    'avatar_path': path,
+                                    'avatar_url': data.avatar_url(path),
+                                }))
 
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)

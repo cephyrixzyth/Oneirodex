@@ -14,6 +14,8 @@ from .csrf_compat import csrf_error_response as _csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_INVITE_BODY_BYTES = 16 * 1024
+
 
 class AccountSummaryData:
     """Adapter for the existing account summary projection and counts."""
@@ -253,42 +255,51 @@ def create_account_summary_router(
                         config=flask_app.config,
                     )
                 else:
-                    body = _json_mapping(await request.body())
-                    raw_email = body.get('email')
-                    email = None
-                    invalid_email = False
-                    if raw_email is not None:
-                        if not isinstance(raw_email, str):
-                            invalid_email = True
-                        else:
-                            email = raw_email.strip() or None
-                            if email:
-                                from email_validator import EmailNotValidError, validate_email
+                    from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-                                try:
-                                    validate_email(email, check_deliverability=False)
-                                except EmailNotValidError:
-                                    invalid_email = True
-
-                    if invalid_email:
+                    raw_body = await read_bounded_body(request, _MAX_INVITE_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
                         response = _native_error(
-                            'Invalid email.', 'bad_request', config=flask_app.config,
+                            'Request body is too large.', 'payload_too_large',
+                            config=flask_app.config,
                         )
                     else:
-                        from oneirodex.utils.public_origin import public_origin_for_request
+                        body = _json_mapping(raw_body)
+                        raw_email = body.get('email')
+                        email = None
+                        invalid_email = False
+                        if raw_email is not None:
+                            if not isinstance(raw_email, str):
+                                invalid_email = True
+                            else:
+                                email = raw_email.strip() or None
+                                if email:
+                                    from email_validator import EmailNotValidError, validate_email
 
-                        result = mutations.create(
-                            auth.user, email,
-                            origin=public_origin_for_request(request, flask_app.config),
-                        )
-                        if 'error' in result:
+                                    try:
+                                        validate_email(email, check_deliverability=False)
+                                    except EmailNotValidError:
+                                        invalid_email = True
+
+                        if invalid_email:
                             response = _native_error(
-                                result['error'], result['code'], config=flask_app.config,
+                                'Invalid email.', 'bad_request', config=flask_app.config,
                             )
                         else:
-                            response = _native_success(
-                                result, status=201, config=flask_app.config,
+                            from oneirodex.utils.public_origin import public_origin_for_request
+
+                            result = mutations.create(
+                                auth.user, email,
+                                origin=public_origin_for_request(request, flask_app.config),
                             )
+                            if 'error' in result:
+                                response = _native_error(
+                                    result['error'], result['code'], config=flask_app.config,
+                                )
+                            else:
+                                response = _native_success(
+                                    result, status=201, config=flask_app.config,
+                                )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:
