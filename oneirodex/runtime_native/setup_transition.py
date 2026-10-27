@@ -17,6 +17,19 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from .request_auth import request_auth_context
 from .response_compat import flask_redirect_response
 
+_SETUP_FORM_MAX_FIELDS = 64
+_SETUP_FORM_MAX_FIELD_BYTES = 16 * 1024
+_SETUP_JSON_MAX_BYTES = 64 * 1024
+
+
+async def _parse_setup_form(request):
+    """Parse bounded text-only setup forms; the wizard has no file inputs."""
+    return await request.form(
+        max_files=0,
+        max_fields=_SETUP_FORM_MAX_FIELDS,
+        max_part_size=_SETUP_FORM_MAX_FIELD_BYTES,
+    )
+
 
 class SetupTransitionData:
     def current_step(self):
@@ -292,7 +305,7 @@ def create_setup_transition_router(
         with scope:
             session_data = _session_data(request, flask_app.config)
             try:
-                form = await request.form()
+                form = await _parse_setup_form(request)
             except Exception:  # noqa: BLE001 — malformed forms are safe client errors
                 response = PlainTextResponse('Invalid setup form.', status_code=400)
                 _setup_form_headers(response, flask_app)
@@ -689,9 +702,13 @@ def _igdb_setup_errors(body):
 
 async def _validated_body(request):
     from oneirodex.schemas.setup import SetupTransitionBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        body = SetupTransitionBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, _SETUP_JSON_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = SetupTransitionBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors
