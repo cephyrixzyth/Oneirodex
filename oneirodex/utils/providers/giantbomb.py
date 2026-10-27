@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from urllib.parse import quote
 
-import requests
 from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -17,6 +16,8 @@ from oneirodex.utils.providers.base import (
     fetch_outbound_image,
     mask_api_key,
 )
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
 
 DEFAULT_TIMEOUT = 20
 
@@ -54,8 +55,10 @@ class GiantBombProvider(MetadataImageProvider):
         if not q:
             return []
         limit = max(1, min(int(limit or 20), 50))
-        resp = requests.get(
+        resp = safe_request(
+            'GET',
             'https://www.giantbomb.com/api/search/',
+            validator=validate_user_outbound_http_url,
             params={
                 'api_key': key,
                 'format': 'json',
@@ -103,8 +106,10 @@ def pcgamingwiki_enrichment(game_name: str) -> dict:
         return {'provider': 'pcgamingwiki', 'results': []}
 
     wiki_search = f'https://www.pcgamingwiki.com/w/api.php'
-    resp = requests.get(
+    resp = safe_request(
+        'GET',
         wiki_search,
+        validator=validate_user_outbound_http_url,
         params={
             'action': 'opensearch',
             'search': name,

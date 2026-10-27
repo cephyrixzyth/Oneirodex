@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from urllib.parse import quote
 
-import requests
 from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -16,6 +15,8 @@ from oneirodex.utils.providers.base import (
     ProviderDisabledError,
     fetch_outbound_image,
 )
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
 
 STEAMGRIDDB_API_BASE = 'https://www.steamgriddb.com/api/v2'
 DEFAULT_TIMEOUT = 10
@@ -60,8 +61,10 @@ class SteamGridDBProvider(MetadataImageProvider):
     def _get_json(self, path: str, *, params: dict | None = None) -> dict:
         api_key = self._require_enabled()
         url = f'{STEAMGRIDDB_API_BASE}{path}'
-        response = requests.get(
+        response = safe_request(
+            'GET',
             url,
+            validator=validate_user_outbound_http_url,
             headers=self._headers(api_key),
             params=params,
             timeout=DEFAULT_TIMEOUT,

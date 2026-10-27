@@ -12,6 +12,7 @@ from starlette.requests import Request
 from oneirodex.runtime_native.launcher_import_mutations import create_launcher_import_mutation_router
 from oneirodex.runtime_native import launcher_import_mutations
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.utils.store_sync_errors import StoreSyncError
 
 
 class Result:
@@ -137,6 +138,23 @@ def test_launcher_import_keeps_safe_parse_errors_and_hides_untrusted_details():
         assert response.json()['error'] == expected
         if parser_error.startswith('Unknown launcher:'):
             assert 'untrusted-user-input' not in response.text
+
+
+def test_launcher_import_limit_returns_safe_conflict():
+    data = FakeImports()
+
+    def fail_import(*_args, **_kwargs):
+        raise StoreSyncError('Ownership cap internal detail', 'ownership_limit')
+
+    data.launcher = fail_import
+    response = make_client(data=data).post(
+        '/api/imports/launcher', json={'games': [{'Name': 'Fixture'}]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()['error_code'] == 'conflict'
+    assert 'safety limit' in response.json()['error'].lower()
+    assert 'internal detail' not in response.text
 
 
 def test_import_request_total_cap_rejects_multipart_before_parser(monkeypatch):

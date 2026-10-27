@@ -33,6 +33,9 @@ from typing import Any
 import requests
 from sqlalchemy import func, select
 
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
+
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry
 from oneirodex.utils.global_settings import global_settings_row
@@ -339,8 +342,10 @@ def _api_get(endpoint: str, params: dict[str, Any]) -> Any:
     if not (user and key):
         raise RuntimeError('RetroAchievements is not configured')
     query = {'z': user, 'y': key, **params}
-    response = requests.get(
+    response = safe_request(
+        'GET',
         f'{API_BASE}/{endpoint}',
+        validator=validate_user_outbound_http_url,
         params=query,
         timeout=HTTP_TIMEOUT,
         headers={'User-Agent': 'Oneirodex (household game library)'},

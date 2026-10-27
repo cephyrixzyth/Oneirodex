@@ -8,7 +8,7 @@ import pytest
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- Steam lookup adapter.
 
 
-@patch('oneirodex.utils.steam_lookup.requests.get')
+@patch('oneirodex.utils.steam_lookup.safe_request')
 def test_fetch_steam_title_success(mock_get):
     mock_get.return_value = MagicMock(
         status_code=200,
@@ -17,7 +17,7 @@ def test_fetch_steam_title_success(mock_get):
     assert fetch_steam_title_by_app_id(89881) == 'Barony'
 
 
-@patch('oneirodex.utils.steam_lookup.requests.get')
+@patch('oneirodex.utils.steam_lookup.safe_request')
 def test_fetch_steam_title_missing_app(mock_get):
     mock_get.return_value = MagicMock(
         status_code=200,
@@ -26,7 +26,7 @@ def test_fetch_steam_title_missing_app(mock_get):
     assert fetch_steam_title_by_app_id(1) is None
 
 
-@patch('oneirodex.utils.steam_lookup.requests.get')
+@patch('oneirodex.utils.steam_lookup.safe_request')
 def test_fetch_steam_title_network_error(mock_get):
     import requests
     mock_get.side_effect = requests.RequestException('boom')

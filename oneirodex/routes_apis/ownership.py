@@ -46,7 +46,7 @@ from . import apis_bp
 from oneirodex.utils.store_capabilities import provider_capabilities
 from oneirodex.utils.store_connection_status import member_connections
 from oneirodex.utils.store_ownership_common import unofficial_store_opt_in
-from oneirodex.utils.store_sync_errors import REASONS, SyncOutcomeError, reason_payload
+from oneirodex.utils.store_sync_errors import REASONS, StoreSyncError, SyncOutcomeError, reason_payload
 from oneirodex.utils.store_sync_all import sync_all_stores
 from oneirodex.utils.store_sync_jobs import (
     LIVE_SYNC_ADAPTERS,
@@ -299,6 +299,14 @@ def _csv_response(import_csv, **extra):
         result = import_csv(current_user.id, csv_text)
     except PermissionError as exc:
         return api_error(str(exc), code='forbidden')
+    except StoreSyncError as exc:
+        if exc.reason == 'ownership_limit':
+            return api_error(
+                REASONS[exc.reason].message,
+                code=REASONS[exc.reason].envelope_code,
+                status=REASONS[exc.reason].http_status,
+            )
+        return api_error(str(exc), code='bad_request')
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     return api_ok({**result, 'summary': get_ownership_summary(current_user.id), **extra})

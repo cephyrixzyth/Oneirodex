@@ -9,6 +9,18 @@ from oneirodex.models import GlobalSettings
 from oneirodex.utils.global_settings import global_settings_row
 from sqlalchemy import select
 
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_outbound_http_url
+
+
+def _validate_igdb_url(url):
+    """Keep the configurable endpoint on Twitch's documented IGDB API host."""
+    return validate_outbound_http_url(url, allowed_hostnames={'api.igdb.com'})
+
+
+def _validate_twitch_url(url):
+    return validate_outbound_http_url(url, allowed_hostnames={'id.twitch.tv'})
+
 
 
 def make_igdb_api_request(endpoint_url, query_params):
@@ -29,7 +41,10 @@ def make_igdb_api_request(endpoint_url, query_params):
 
     try:
         # print(f"make_igdb_api_request Attempting to make a request to {endpoint_url} with headers: {headers} and query: {query_params}")
-        response = requests.post(endpoint_url, headers=headers, data=query_params, timeout=20)
+        response = safe_request(
+            'POST', endpoint_url, validator=_validate_igdb_url,
+            headers=headers, data=query_params, timeout=20,
+        )
         response.raise_for_status()
         # print(f"make_igdb_api_request Response from IGDB API: {data}")
         return response.json()
@@ -69,7 +84,15 @@ def get_access_token(client_id, client_secret):
         'client_secret': client_secret,
         'grant_type': 'client_credentials'
     }
-    response = requests.post(url, params=params, timeout=15)
+    try:
+        response = safe_request(
+            'POST', url, validator=_validate_twitch_url,
+            data=params, timeout=15,
+        )
+    except requests.RequestException:
+        # Keep transport exception text out of the request-level traceback log.
+        print('Failed to obtain access token')
+        return None
     if response.status_code == 200:
         payload = response.json()
         token = payload.get('access_token')

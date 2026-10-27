@@ -60,6 +60,17 @@ def test_a_dead_endpoint_is_counted_zero_and_never_raises(monkeypatch):
         assert bus.emit(kind='info', title='x') == {'apprise': 0, 'ntfy': 0}
 
 
+def test_apprise_failure_log_omits_endpoint_userinfo_and_path(monkeypatch, caplog):
+    secret = 'notify-secret-should-not-log'
+    endpoint = f'https://operator:{secret}@apprise.example/notify/private-topic'
+    monkeypatch.setenv('NOTIFY_APPRISE_URLS', endpoint)
+    with patch.object(bus, 'safe_request', side_effect=OSError('connection refused')):
+        bus.emit(kind='info', title='x')
+    assert secret not in caplog.text
+    assert 'private-topic' not in caplog.text
+    assert 'https://apprise.example' in caplog.text
+
+
 def test_social_kinds_need_the_operator_opt_in(monkeypatch):
     monkeypatch.setenv('NOTIFY_NTFY_URL', 'https://ntfy.example/household')
     monkeypatch.delenv('NOTIFY_SOCIAL_TO_BUS', raising=False)

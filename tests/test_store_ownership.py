@@ -11,6 +11,7 @@ from sqlalchemy import select
 from oneirodex.models import Game, GlobalSettings, Library, StoreAccount, User, UserOwnedTitle
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import store_ownership
+from oneirodex.utils import store_ownership_common
 from oneirodex.utils.store_ownership import (
     connect_gog_account,
     disconnect_epic_account,
@@ -23,6 +24,7 @@ from oneirodex.utils.store_ownership import (
     ownership_flags,
     upsert_owned_title,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError
 
 
 @pytest.fixture
@@ -167,10 +169,32 @@ def test_upsert_owned_title_matches_library(db_session, lib, user):
     )
     db_session.add(game)
     db_session.commit()
-
     row = upsert_owned_title(user.id, 'steam', str(app_id), 'Half-Life 2')
     db_session.commit()
     assert row.matched_game_uuid == game_uuid
+
+
+def test_owned_title_safety_cap_is_atomic_and_allows_existing_updates(db_session, user, monkeypatch):
+    monkeypatch.setattr(store_ownership_common, 'MAX_OWNED_TITLES_PER_USER', 2)
+    upsert_owned_title(user.id, 'gog', 'quota-a', 'First')
+    upsert_owned_title(user.id, 'gog', 'quota-b', 'Second')
+    db_session.commit()
+
+    with pytest.raises(StoreSyncError) as caught:
+        upsert_owned_title(user.id, 'gog', 'quota-c', 'Third')
+    assert caught.value.reason == 'ownership_limit'
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='gog')
+    ).scalars().all()
+    assert len(rows) == 2
+
+    existing = upsert_owned_title(user.id, 'gog', 'quota-a', 'Renamed')
+    db_session.commit()
+    assert existing.name == 'Renamed'
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='gog')
+    ).scalars().all()
+    assert len(rows) == 2
 
 
 def test_import_steam_csv(db_session, lib, user):
@@ -195,6 +219,27 @@ def test_import_steam_csv(db_session, lib, user):
         select(UserOwnedTitle).filter_by(user_id=user.id, store='steam')
     ).scalars().all()
     assert len(rows) == 2
+
+
+def test_ownership_csv_route_returns_safe_conflict_at_cumulative_cap(
+    client, app, db_session, user, monkeypatch,
+):
+    _ensure_global_settings(db_session, enable_store_ownership_sync=True)
+    monkeypatch.setattr(store_ownership_common, 'MAX_OWNED_TITLES_PER_USER', 1)
+    _login(client, app, user)
+    first_id, second_id = str(_unique_steam_app_id()), str(_unique_steam_app_id())
+
+    first = client.post('/api/ownership/steam/csv', json={'csv': f'appid\n{first_id}\n'})
+    assert first.status_code == 200
+    blocked = client.post('/api/ownership/steam/csv', json={'csv': f'appid\n{second_id}\n'})
+
+    assert blocked.status_code == 409
+    assert blocked.get_json()['error_code'] == 'conflict'
+    assert 'safety limit' in blocked.get_json()['error'].lower()
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='steam')
+    ).scalars().all()
+    assert [row.external_app_id for row in rows] == [first_id]
 
 
 def test_import_gog_csv_matches_by_name(db_session, lib, user):

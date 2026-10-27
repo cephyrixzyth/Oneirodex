@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+from oneirodex.utils.store_sync_errors import REASONS, StoreSyncError
 
 _MAX_UPLOAD = 8 * 1024 * 1024
 _MAX_MULTIPART_OVERHEAD = 64 * 1024
@@ -162,6 +163,22 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                     'Request body is too large.', code='payload_too_large', status=413,
                 )
                 response = JSONResponse(payload, status_code=status)
+            except StoreSyncError as exc:
+                if exc.reason == 'ownership_limit':
+                    reason = REASONS[exc.reason]
+                    payload, status = api_error_payload(
+                        reason.message, code=reason.envelope_code, status=reason.http_status,
+                    )
+                    response = JSONResponse(payload, status_code=status)
+                else:
+                    candidate = str(exc)
+                    message = (
+                        'The Playnite export could not be read' if kind == 'playnite'
+                        else candidate if candidate in _SAFE_LAUNCHER_IMPORT_ERRORS
+                        else 'The launcher export could not be read'
+                    )
+                    payload, status = api_error_payload(message, code='bad_request')
+                    response = JSONResponse(payload, status_code=status)
             except ValueError as exc:
                 candidate = str(exc)
                 if kind == 'playnite':

@@ -83,6 +83,8 @@ REASONS: dict[str, Reason] = {
                          'Another change to your {provider} link is in progress. Try again in a moment.'),
     'not_cancellable': Reason('conflict', 409, 'none', False, 'member',
                               '{provider} sync is a single request and cannot be stopped once it starts'),
+    'ownership_limit': Reason('conflict', 409, 'contact_admin', False, 'member',
+                              'Your ownership register has reached its safety limit. Remove old entries before importing more.'),
     'nothing_to_cancel': Reason('conflict', 409, 'none', False, 'member',
                                 'No {provider} sync is running'),
     'cancelled': Reason('conflict', 409, 'retry', True, 'member',
