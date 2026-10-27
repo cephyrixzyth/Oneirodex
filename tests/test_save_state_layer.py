@@ -175,6 +175,70 @@ def test_uploading_a_state_updates_the_resume_summary(client, db_session, config
     assert latest[game.uuid]['slot_name'] == AUTO_STATE_SLOT
 
 
+def test_save_quota_counts_all_games_for_the_member(client, db_session, configured_install, tmp_path, app):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
+    user = _user(db_session)
+    library = _library(db_session)
+    existing_game = _game(db_session, library)
+    target_game = _game(db_session, library)
+    db_session.add(EmulatorSave(
+        user_id=user.id,
+        game_uuid=existing_game.uuid,
+        slot_name='existing',
+        filename='existing.state',
+        size_bytes=1024 * 1024,
+        storage_path=str(tmp_path / 'existing.state'),
+        encrypted=False,
+    ))
+    db_session.commit()
+    _login(client, user)
+
+    response = client.post(
+        f'/api/games/{target_game.uuid}/saves',
+        data={'slot': 'new-slot', 'file': (BytesIO(b'new-state'), 'new.state')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 413
+    assert response.get_json()['error_code'] == 'payload_too_large'
+    assert not (tmp_path / str(user.id) / target_game.uuid).exists()
+
+
+def test_save_quota_charges_only_replacement_growth(client, db_session, configured_install, tmp_path, app):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    old_path = tmp_path / 'old.state'
+    old_path.write_bytes(b'old')
+    db_session.add(EmulatorSave(
+        user_id=user.id,
+        game_uuid=game.uuid,
+        slot_name='replace-me',
+        filename='old.state',
+        size_bytes=1024 * 1024,
+        storage_path=str(old_path),
+        encrypted=False,
+    ))
+    db_session.commit()
+    _login(client, user)
+
+    response = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'replace-me', 'file': (BytesIO(b'new-state'), 'new.state')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 201, response.get_json()
+    saved = db_session.query(EmulatorSave).filter_by(
+        user_id=user.id, game_uuid=game.uuid, slot_name='replace-me',
+    ).one()
+    assert saved.size_bytes == len(b'new-state')
+    assert old_path.exists() is False
+
+
 # --- the shell ---------------------------------------------------------------
 
 
