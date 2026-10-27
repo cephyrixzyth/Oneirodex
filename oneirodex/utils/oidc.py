@@ -499,7 +499,9 @@ def provision_or_update_user(
             # Explicit: the column default only applies at INSERT, so the
             # disabled-account check below saw None and refused every new user.
             state=True,
-            is_email_verified=True,
+            is_email_verified=_email_verified(
+                claims, trust_provider_email=trust_provider_email,
+            ),
             created=datetime.now(timezone.utc),
         )
         user.set_password(secrets.token_urlsafe(32))

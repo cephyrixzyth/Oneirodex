@@ -74,6 +74,24 @@ def test_new_oidc_name_avoids_case_insensitive_password_login_collision(app, db_
     assert newcomer.name.lower() != existing.name.lower()
 
 
+def test_new_oidc_account_email_verification_requires_provider_or_operator_trust(app, db_session):
+    unverified = provision_or_update_user(db_session, {
+        'sub': 'unverified-email-subject',
+        'email': 'unverified-oidc@example.test',
+        'email_verified': False,
+        'preferred_username': 'unverified-email',
+    }, _config('https://trusted-idp.example'))
+    trusted = provision_or_update_user(db_session, {
+        'sub': 'operator-trusted-subject',
+        'email': 'operator-trusted@example.test',
+        'email_verified': False,
+        'preferred_username': 'operator-trusted',
+    }, _config('https://trusted-idp.example'), trust_provider_email=True)
+
+    assert unverified.is_email_verified is False
+    assert trusted.is_email_verified is True
+
+
 def test_legacy_subject_collision_without_email_fails_closed(app, db_session):
     legacy = _user(db_session, role='admin', subject='shared-subject')
     with pytest.raises(ValueError, match='older account link with no recorded issuer'):

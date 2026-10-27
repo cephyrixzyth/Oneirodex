@@ -29,6 +29,7 @@ Copy from `.env.example`:
 | `OIDC_SCOPES` | Default: `openid email profile` |
 | `OIDC_ROLE_CLAIM` | Claim used for role mapping (default: `groups`) |
 | `OIDC_ROLE_MAP` | JSON object mapping IdP claim values → Oneirodex roles |
+| `OIDC_TRUST_PROVIDER_EMAIL` | Treat provider email claims as verified when the provider does not supply `email_verified: true`. Keep `false` unless administrators of the IdP control how user email addresses are assigned. |
 | `OIDC_DISPLAY_NAME` | Login button label (default: `Sign in with SSO`) |
 | `TRUSTED_PROXIES` | Number of forwarded proxy hops (`0` = off, `1` = typical single nginx/Caddy/Traefik). Forwarded headers are used only when `TRUSTED_PROXY_CIDRS` also matches the immediate peer. |
 | `TRUSTED_PROXY_CIDRS` | Comma-separated IPs/CIDRs for the immediate proxy source as seen by the Oneirodex container. Use the narrowest stable range possible. |
@@ -117,7 +118,7 @@ Both `OIDC_ENABLED=true` **and** the admin toggle must be on before the SSO butt
 }
 ```
 
-Unmapped users JIT-provision with role `user`. Identity is bound to the pair **(issuer URL, `sub`)** so two identity providers that both issue `sub=123` cannot share an account. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows that issuer and subject. Usernames never link accounts, and the local email is never overwritten. Existing subject-only rows are migrated with a null issuer and can be claimed through the same verified-email check; do not manually copy an issuer value between providers.
+Unmapped users JIT-provision with role `user`. Identity is bound to the pair **(issuer URL, `sub`)** so two identity providers that both issue `sub=123` cannot share an account. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows that issuer and subject. A new account's email is treated as verified only when the provider supplies `email_verified: true` or the operator enables `OIDC_TRUST_PROVIDER_EMAIL` for a provider whose administrators control address assignment. Unverified addresses cannot receive account email notifications. Usernames never link accounts, and the local email is never overwritten. Existing subject-only rows are migrated with a null issuer and can be claimed through the same verified-email check; do not manually copy an issuer value between providers.
 
 ### 6. Reverse proxy and HTTPS
 
@@ -184,7 +185,7 @@ Default JSON role map (also configurable in admin):
 }
 ```
 
-JIT provisioning creates users with role `user` unless a mapped claim is present. Identity is bound to **(issuer URL, `sub`)**; a matching subject from a different issuer is a separate identity. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); the provider's issuer and subject are then stored together. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
+JIT provisioning creates users with role `user` unless a mapped claim is present. Identity is bound to **(issuer URL, `sub`)**; a matching subject from a different issuer is a separate identity. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); the provider's issuer and subject are then stored together. New account email verification follows the same claim or explicit operator trust rule. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
 
 ## Flow
 
