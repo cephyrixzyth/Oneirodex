@@ -51,6 +51,9 @@ class AuthRegistrationData:
             invite = None
 
         email = payload['email'].lower()
+        if invite is not None and invite.recipient_email:
+            if invite.recipient_email.strip().lower() != email:
+                return _registration_ack(account_created=False), None
         if db.session.execute(
             select(User).where(func.lower(User.email) == email)
         ).scalar_one_or_none():
@@ -278,6 +281,6 @@ def _registration_confirmation_email(confirm_url):
 <style>body{{background:#f3f4f6;color:#333;font-family:'Courier New',Courier,monospace;padding:20px}}.container{{background:#fff;border:1px solid #ddd;padding:20px;border-radius:10px;max-width:600px;margin:20px auto;box-shadow:0 2px 4px rgba(0,0,0,.1)}}h1{{color:#007bff}}a{{background:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold}}p{{margin-bottom:20px}}</style></head>
 <body><div class="container"><h2>Ready, Player One!</h2>
 <p>You're just one click away from joining the elite ranks at Oneirodex. Grab your controller and get ready to dive into an epic gaming adventure. But first, let's complete your character creation!</p>
-<p>Click the power-up below to confirm your email and activate your account. Quick, before the server resets!</p>
+<p>Open the link to confirm your email. You will choose the password that activates the account on the confirmation page.</p>
 <a href="{safe_url}">Confirm Your Email</a>
 <p>If you didn't try to create an account with us, just ignore this message and no action is needed. This email will despawn automatically.</p></div></body></html>'''

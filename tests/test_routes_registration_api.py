@@ -69,6 +69,25 @@ def test_allowlisted_email_can_register_without_invite(client, db_session, monke
     assert db_session.query(User).filter_by(name=payload['username']).one().email == payload['email'].lower()
 
 
+def test_email_addressed_invite_cannot_be_claimed_by_another_email(client, db_session):
+    owner = inviter(db_session)
+    recipient = f'{uuid4().hex[:8]}@example.com'
+    invite = InviteToken(
+        token=f'inv-{uuid4().hex}', creator_user_id=owner.user_id,
+        recipient_email=recipient,
+    )
+    db_session.add(invite)
+    db_session.commit()
+
+    payload = registration_payload(email=f'other-{uuid4().hex[:8]}@example.com')
+    response = client.post(f'/api/auth/register?token={invite.token}', json=payload)
+
+    assert response.status_code == 202
+    assert db_session.query(User).filter_by(name=payload['username']).one_or_none() is None
+    db_session.refresh(invite)
+    assert invite.used is False
+
+
 def test_registration_does_not_disclose_email_or_username_eligibility(client, db_session):
     suffix = uuid4().hex[:8]
     existing = User(

@@ -3,6 +3,7 @@ import {
   registerAccount,
   requestPasswordReset,
   resetPassword,
+  confirmEmail,
   signIn,
   setCsrfToken,
   Button,
@@ -19,7 +20,7 @@ interface RuntimeBootstrap {
 }
 
 type Page = 'login' | 'register' | 'reset-request' | 'reset-confirm' | 'confirm-email' | 'setup'
-type ConfirmationState = 'loading' | 'confirmed' | 'already' | 'expired' | 'invalid' | 'not-found' | 'error'
+type ConfirmationState = 'loading' | 'ready' | 'confirmed' | 'already' | 'expired' | 'invalid' | 'not-found' | 'error'
 const navigateWindow = (url: string) => window.location.assign(url)
 
 function pageForPath(path: string): Page {
@@ -100,12 +101,7 @@ export function AuthApp({
       .then(async (response) => {
         if (!response.ok) throw await errorFromResponse(response, 'Confirm email')
         const result = (await response.json()) as { already_confirmed?: boolean }
-        setConfirmationState(result.already_confirmed ? 'already' : 'confirmed')
-        setNotice(
-          result.already_confirmed
-            ? 'This email is already confirmed.'
-            : 'Your email is confirmed. You can sign in now.',
-        )
+        setConfirmationState(result.already_confirmed ? 'already' : 'ready')
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return
@@ -232,8 +228,8 @@ export function AuthApp({
           <h1 className="auth-pilot__title">Create your account</h1>
           <p className="auth-pilot__lede">
             {inviteToken
-              ? "You were invited to join this Oneirodex library. Choose a username and password to create your own account — you will not share the inviter's login."
-              : 'Registration requires a whitelisted email or a valid invite link.'}
+              ? "You were invited to join this Oneirodex library. Choose a username and registration password; after confirming your email, you will set the password used to sign in. You will not share the inviter's login."
+              : 'Registration requires a whitelisted email or a valid invite link. After confirming your email, you will set the password used to sign in.'}
           </p>
           <form
             className="auth-pilot__form"
@@ -399,8 +395,52 @@ export function AuthApp({
                     ? 'The account for this confirmation link was not found.'
                     : confirmationState === 'error'
                       ? 'Please try again or return to sign in.'
-                      : 'We’re checking your confirmation link.'}
+                      : confirmationState === 'ready'
+                        ? 'To protect your account, choose the password that will be used to sign in. This confirms that you control this email address.'
+                        : 'We’re checking your confirmation link.'}
         </p>
+        {confirmationState === 'ready' ? (
+          <form
+            className="auth-pilot__form"
+            noValidate
+            onSubmit={(event) => {
+              const form = event.currentTarget
+              const data = new FormData(form)
+              const password = String(data.get('password') || '')
+              const confirmPassword = String(data.get('confirm_password') || '')
+              if (password.length < 8) {
+                event.preventDefault()
+                setError('Password must be at least 8 characters.')
+                return
+              }
+              if (password !== confirmPassword) {
+                event.preventDefault()
+                setError('Passwords do not match.')
+                return
+              }
+              void submit(event, async (formData) => {
+                await confirmEmail(token, {
+                  password: String(formData.get('password') || ''),
+                  confirm_password: String(formData.get('confirm_password') || ''),
+                })
+                setConfirmationState('confirmed')
+                setNotice('Your email is confirmed. Sign in to open your household library.')
+              })
+            }}
+          >
+            <label className="auth-pilot__field">
+              <span>Choose a password</span>
+              <input autoComplete="new-password" minLength={8} name="password" type="password" required />
+            </label>
+            <label className="auth-pilot__field">
+              <span>Confirm password</span>
+              <input autoComplete="new-password" minLength={8} name="confirm_password" type="password" required />
+            </label>
+            <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+              {busy ? 'Confirming…' : 'Confirm email and activate account'}
+            </Button>
+          </form>
+        ) : null}
         <nav className="auth-pilot__links" aria-label="Account actions">
           <a href="/login">Back to sign in</a>
           <a href="/register">Create account</a>

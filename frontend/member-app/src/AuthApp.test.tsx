@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   registerAccount: vi.fn(),
   requestPasswordReset: vi.fn(),
   resetPassword: vi.fn(),
+  confirmEmail: vi.fn(),
   setCsrfToken: vi.fn(),
   loadSetupState: vi.fn(),
   submitSetupStep: vi.fn(),
@@ -130,7 +131,7 @@ test('registration preserves invite token and shows the generic account request 
   )
   expect(
     screen.getByText(
-      "You were invited to join this Oneirodex library. Choose a username and password to create your own account — you will not share the inviter's login.",
+      "You were invited to join this Oneirodex library. Choose a username and registration password; after confirming your email, you will set the password used to sign in. You will not share the inviter's login.",
     ),
   ).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
@@ -232,6 +233,41 @@ test('expired or invalid confirmation links surface an alert and keep the back l
   ).toBeInTheDocument()
   expect(await screen.findByRole('alert')).toHaveTextContent('Request a new activation from an admin')
   expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
+})
+
+test('email confirmation inspection is read-only until the mailbox owner sets a password', async () => {
+  window.history.replaceState({}, '', '/confirm/signed-token')
+  api.confirmEmail.mockResolvedValue({ confirmed: true, already_confirmed: false })
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).startsWith('/api/auth/confirm/')) {
+      return { ok: true, json: async () => ({ confirmed: false, already_confirmed: false }) } as Response
+    }
+    return {
+      ok: true,
+      json: async () => ({ csrf_token: 'csrf-test', oidc_enabled: false }),
+    } as Response
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Confirm your email' })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Confirm email and activate account' })).toBeInTheDocument()
+  expect(api.confirmEmail).not.toHaveBeenCalled()
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+
+  fireEvent.change(screen.getByLabelText('Choose a password'), {
+    target: { value: 'mailbox-owner-password' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm password'), {
+    target: { value: 'mailbox-owner-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email and activate account' }))
+
+  await waitFor(() => expect(api.confirmEmail).toHaveBeenCalledWith('signed-token', {
+    password: 'mailbox-owner-password',
+    confirm_password: 'mailbox-owner-password',
+  }))
+  expect(await screen.findByRole('heading', { name: 'Account activated' })).toBeInTheDocument()
 })
 
 test('first-run direct entry loads the active step and submits it to the transition API', async () => {

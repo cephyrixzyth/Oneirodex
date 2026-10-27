@@ -63,7 +63,7 @@ bug worth reporting.
 
 ### Inviting someone
 
-Account menu → **Profile → Invites**. Enter an email address to have the server send the invite, or **leave it blank** to get a link you can pass on however you like — a chat message, a note, reading it out. The link is the invite either way; email is only one way of delivering it, so a household with no mail server can still add members. Links last 48 hours and count against your invite quota until used or revoked.
+Account menu → **Profile → Invites**. Enter an email address to send an invite bound to that recipient, or **leave it blank** to get a shareable link you can pass on however you like — a chat message, a note, reading it out. Links last 48 hours and count against your invite quota until used or revoked. Registration sends a confirmation link; opening it only checks the link. The mailbox owner must choose the password that activates the account, so link previews cannot activate it and an inviter cannot choose the recipient's working password.
 
 If you are an admin and the new member has no email at all — a child's console login, the living-room account — **Admin → Invites → Add member without email** creates the account directly with a username and password you choose.
 

@@ -8655,8 +8655,8 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
 def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeypatch):
     calls = []
     data = SimpleNamespace(
-        confirm=lambda token, secret: calls.append(
-            ('confirm', token, bool(secret))
+        confirm=lambda token, secret, password: calls.append(
+            ('confirm', token, bool(secret), password)
         ) or 'confirmed',
         inspect=lambda token, secret: calls.append(
             ('inspect', token, bool(secret))
@@ -8667,14 +8667,29 @@ def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeyp
 
     response = _run(runtime, '/api/auth/confirm/signed-token')
     head = _run(runtime, '/api/auth/confirm/signed-token', method='HEAD')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+    missing_csrf = _run(
+        runtime, '/api/auth/confirm/signed-token', method='POST', cookie=cookie,
+        json_body={'password': 'mailbox-owner-password', 'confirm_password': 'mailbox-owner-password'},
+    )
+    activated = _run(
+        runtime, '/api/auth/confirm/signed-token', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf},
+        json_body={'password': 'mailbox-owner-password', 'confirm_password': 'mailbox-owner-password'},
+    )
 
     assert response.status_code == 200
-    assert response.json()['confirmed'] is True
+    assert response.json()['confirmed'] is False
     assert response.json()['already_confirmed'] is False
     assert head.status_code == 200 and head.content == b''
+    assert missing_csrf.status_code == 400
+    assert activated.status_code == 200 and activated.json()['confirmed'] is True
     assert calls == [
-        ('confirm', 'signed-token', True),
         ('inspect', 'signed-token', True),
+        ('inspect', 'signed-token', True),
+        ('confirm', 'signed-token', True, 'mailbox-owner-password'),
     ]
 
 

@@ -79,7 +79,7 @@ def _registration_confirmation_email(confirm_url: str) -> str:
 <style>body{{background:#f3f4f6;color:#333;font-family:'Courier New',Courier,monospace;padding:20px}}.container{{background:#fff;border:1px solid #ddd;padding:20px;border-radius:10px;max-width:600px;margin:20px auto;box-shadow:0 2px 4px rgba(0,0,0,.1)}}h1{{color:#007bff}}a{{background:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold}}p{{margin-bottom:20px}}</style></head>
 <body><div class="container"><h2>Ready, Player One!</h2>
 <p>You're just one click away from joining the elite ranks at Oneirodex. Grab your controller and get ready to dive into an epic gaming adventure. But first, let's complete your character creation!</p>
-<p>Click the power-up below to confirm your email and activate your account. Quick, before the server resets!</p>
+<p>Open the link to confirm your email. You will choose the password that activates the account on the confirmation page.</p>
 <a href="{safe_url}">Confirm Your Email</a>
 <p>If you didn't try to create an account with us, just ignore this message and no action is needed. This email will despawn automatically.</p></div></body></html>'''
 
@@ -280,6 +280,9 @@ def api_register(body: RegistrationBody):
 
     username = form.username.data
     email_address = form.email.data.lower()
+    if invite is not None and invite.recipient_email:
+        if invite.recipient_email.strip().lower() != email_address:
+            return _registration_ack()
     if db.session.execute(
         select(User).filter(func.lower(User.email) == email_address)
     ).scalar_one_or_none():
@@ -565,6 +568,10 @@ def register():
     if form.validate_on_submit():
         try:
             email_address = form.email.data.lower()
+            if invite is not None and invite.recipient_email:
+                if invite.recipient_email.strip().lower() != email_address:
+                    flash(_REGISTRATION_ACK, 'message')
+                    return redirect(url_for('site.index'))
             existing_user_email = db.session.execute(select(User).filter(func.lower(User.email) == email_address)).scalar_one_or_none()
             if existing_user_email:
                 flash(_REGISTRATION_ACK, 'message')
@@ -646,8 +653,8 @@ def register():
     return render_member_auth_spa()
 
 
-def _confirm_email_token(token: str):
-    """Verify a confirmation link and return a stable transition outcome."""
+def _confirm_email_token(token: str, *, password: str | None = None):
+    """Inspect or complete a confirmation link with mailbox-owner credentials."""
     try:
         email = get_serializer().loads(token, salt='email-confirm', max_age=900)  # 15 minutes
     except SignatureExpired:
@@ -662,6 +669,9 @@ def _confirm_email_token(token: str):
         return None, 'not_found'
     if user.is_email_verified:
         return user, 'already_confirmed'
+    if password is None:
+        return user, 'pending'
+    user.set_password(password)
     user.is_email_verified = True
     db.session.add(user)
     db.session.commit()
@@ -675,17 +685,39 @@ def confirm_email(token):
     return render_member_auth_spa()
 
 
-@login_bp.route('/api/auth/confirm/<token>')
+@login_bp.route('/api/auth/confirm/<token>', methods=['GET', 'POST'])
 def api_confirm_email(token: str):
-    """JSON confirmation state for the static authentication shell."""
-    _user, outcome = _confirm_email_token(token)
+    """Inspect on GET; activate and set mailbox-owner credentials on POST."""
+    password = None
+    if request.method == 'POST':
+        payload = request.get_json(silent=True)
+        password = payload.get('password') if isinstance(payload, dict) else None
+        confirm_password = payload.get('confirm_password') if isinstance(payload, dict) else None
+        try:
+            password_bytes = len(password.encode('utf-8')) if isinstance(password, str) else 0
+        except UnicodeEncodeError:
+            password_bytes = 0
+        if (
+            not isinstance(password, str) or not password.strip()
+            or len(password) < 8 or password_bytes > 1024 or not password_bytes
+        ):
+            return api_error('Password must be at least 8 characters.', code='unprocessable')
+        if password != confirm_password:
+            return api_error('Passwords do not match.', code='unprocessable')
+    _user, outcome = _confirm_email_token(token, password=password)
     if outcome == 'expired':
         return api_error('The confirmation link has expired.', code='bad_request')
     if outcome == 'invalid':
         return api_error('The confirmation link is invalid.', code='bad_request')
     if outcome == 'not_found':
         return api_error('The account for this confirmation link was not found.', code='not_found')
-    return api_ok({'confirmed': True, 'already_confirmed': outcome == 'already_confirmed'})
+    return api_ok({
+        'confirmed': (
+            (request.method == 'POST' and outcome == 'confirmed')
+            or outcome == 'already_confirmed'
+        ),
+        'already_confirmed': outcome == 'already_confirmed',
+    })
 
 
 @login_bp.route('/reset_password_request', methods=['GET', 'POST'])

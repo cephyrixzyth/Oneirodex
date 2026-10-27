@@ -273,10 +273,21 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
 
     # /confirm/<token> now serves the static React shell. The API owns the
     # one-time state transition; Flask's test client does not execute the SPA.
-    confirmed = app.test_client().get(f'/api/auth/confirm/{user.email_verification_token}')
+    client = app.test_client()
+    inspected = client.get(f'/api/auth/confirm/{user.email_verification_token}')
+    assert inspected.status_code == 200
+    assert inspected.get_json()['confirmed'] is False
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is False
+    confirmed = client.post(f'/api/auth/confirm/{user.email_verification_token}', json={
+        'password': 'mailbox-owner-password',
+        'confirm_password': 'mailbox-owner-password',
+    })
     assert confirmed.status_code == 200
     db_session.expire_all()
-    assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is True
+    active_user = db_session.query(User).filter_by(id=user.id).one()
+    assert active_user.is_email_verified is True
+    assert active_user.check_password('mailbox-owner-password')
 
 
 def test_registration_confirmation_link_ignores_host_header(app, db_session, monkeypatch):
