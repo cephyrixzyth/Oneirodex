@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -221,6 +222,21 @@ def test_admin_match_non_object_body_uses_legacy_root_validation():
     assert response.json()['detail'] == {
         '__root__': 'Input should be a valid dictionary or instance of MatchBody'
     }
+
+
+def test_admin_match_oversize_json_is_stopped_during_stream_read():
+    from oneirodex.runtime_native.retroachievements_settings import _read_match_json
+
+    class ChunkedRequest:
+        headers = {}
+
+        async def stream(self):
+            yield b'{"platform":"SNES","padding":"' + b'x' * (8 * 1024) + b'"}'
+
+        async def body(self):
+            raise AssertionError('whole request body must not be buffered')
+
+    assert asyncio.run(_read_match_json(ChunkedRequest())) is None
 
 
 def test_admin_match_malformed_json_uses_legacy_root_validation():

@@ -358,9 +358,11 @@ async def _read_json(request, *, object_only=True):
 async def _read_match_json(request):
     """Preserve Flask's distinction between JSON null and parse failures."""
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
-        raw = await request.body()
-        if len(raw) > 8 * 1024:
+        raw = await read_bounded_body(request, 8 * 1024)
+        if raw is BODY_TOO_LARGE:
             return None
         return json.loads(raw)
     except (ValueError, UnicodeDecodeError):
