@@ -91,3 +91,15 @@ def test_single_cover_search_errors_and_batch_search_bounds():
     assert kwargs['limit_per_provider'] == 15
     assert kwargs['platform'] == 'nes'
     assert kwargs['config']['IMAGE_SAVE_PATH'] == '/library/images'
+
+
+def test_cover_search_routes_reject_oversized_body_before_lookup_or_search():
+    client, service = _client()
+    for path in ('/admin/api/covers/search', '/admin/api/covers/batch/search'):
+        response = client.post(
+            path, content=b' ' * (64 * 1024 + 1),
+            headers={'Content-Type': 'application/json'},
+        )
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+    assert service.calls == []

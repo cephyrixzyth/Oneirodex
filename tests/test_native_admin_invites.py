@@ -97,6 +97,17 @@ def test_quota_adjustment_keeps_csrf_validation_and_unknown_user_results():
     assert missing.status_code == 404 and missing.json()['error_code'] == 'not_found'
 
 
+def test_quota_adjustment_rejects_oversized_json_before_mutation():
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/api/invites/quota', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
 def test_admin_invites_reject_members():
     client, data, _csrf = _client(role='user')
     response = client.get('/admin/api/invites', follow_redirects=False)

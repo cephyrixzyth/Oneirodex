@@ -140,7 +140,10 @@ def create_admin_user_create_router(
                 response = _error('This token does not have the admin scope', 'forbidden')
             else:
                 body = await _json_object(request)
-                if body is None:
+                from .bounded_request_body import BODY_TOO_LARGE
+                if body is BODY_TOO_LARGE:
+                    response = _error('Request body is too large.', 'payload_too_large', 413)
+                elif body is None:
                     response = _error('No data provided', 'bad_request')
                 else:
                     try:
@@ -160,9 +163,13 @@ def create_admin_user_create_router(
 
 async def _json_object(request):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
     try:
-        body = json.loads(await request.body() or b'null')
-    except (TypeError, ValueError, UnicodeDecodeError):
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return BODY_TOO_LARGE
+        body = json.loads(raw_body or b'null')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     return body if isinstance(body, dict) else None
 

@@ -75,3 +75,14 @@ def test_cover_apply_requires_body_validation_and_csrf():
     assert invalid.status_code == 422
     assert no_csrf.status_code == 400
     assert service.calls == []
+
+
+def test_cover_apply_rejects_oversized_body_before_path_or_provider_work():
+    client, service = _client()
+    response = client.post(
+        '/admin/api/covers/apply', content=b' ' * (64 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert service.calls == []

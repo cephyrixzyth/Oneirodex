@@ -71,3 +71,14 @@ def test_batch_artwork_generation_uses_fake_provider_adapter_when_enabled():
     assert response.status_code == 200 and response.json()['ok'] is True
     assert response.json()['generated'] == 1
     assert data.calls == [{'limit': 5, 'library_uuid': 'lib-1'}]
+
+
+def test_batch_artwork_rejects_oversized_body_before_generation():
+    client, data = _client(enabled=True)
+    response = client.post(
+        '/admin/api/artwork/generate/batch', content=b' ' * (64 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []

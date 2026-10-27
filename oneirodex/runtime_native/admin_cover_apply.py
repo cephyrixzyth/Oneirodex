@@ -14,6 +14,10 @@ from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
 
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
 class CoverApplyData:
     def path_status(self, config):
         from oneirodex.utils.cover_selection import image_save_path_status
@@ -61,10 +65,20 @@ def create_admin_cover_apply_router(
                     response = csrf
                 else:
                     try:
+                        import json
                         from oneirodex.schemas.admin_images import ApplyCoverBody
                         from oneirodex.utils.validation import format_validation_errors
-                        body = await request.json()
+                        from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+                        raw_body = await read_bounded_body(request, 64 * 1024)
+                        if raw_body is BODY_TOO_LARGE:
+                            raise _RequestBodyTooLarge
+                        body = json.loads(raw_body or b'null')
                         model = ApplyCoverBody.model_validate(body)
+                    except _RequestBodyTooLarge:
+                        payload, status = api_error_payload(
+                            'Request body is too large.', code='payload_too_large',
+                        )
+                        response = JSONResponse(payload, status_code=status)
                     except ValidationError as exc:
                         payload, status = api_error_payload(
                             'Invalid request.', code='unprocessable',

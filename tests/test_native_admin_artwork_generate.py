@@ -76,3 +76,14 @@ def test_artwork_generation_uses_fake_adapter_when_enabled():
     assert response.status_code == 200
     assert response.json()['image_type'] == 'fanart'
     assert service.calls == [('game-2', 'fanart')]
+
+
+def test_artwork_generation_rejects_oversized_body_before_validation_or_generation():
+    client, service = _client(enabled=True)
+    response = client.post(
+        '/admin/api/artwork/generate', content=b' ' * (64 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert service.calls == []

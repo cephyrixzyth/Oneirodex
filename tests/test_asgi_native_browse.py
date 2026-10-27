@@ -9957,8 +9957,14 @@ def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projectio
         runtime, '/api/admin/server-settings', method='PUT', cookie=cookie,
         headers={'X-CSRFToken': csrf}, json_body={'showHelpButton': False},
     )
+    oversized = _run(
+        runtime, '/api/admin/server-settings', method='PUT', cookie=cookie,
+        headers={'X-CSRFToken': csrf}, content=b' ' * (64 * 1024 + 1),
+    )
 
     assert response.status_code == saved.status_code == 200
+    assert oversized.status_code == 413
+    assert oversized.json()['error_code'] == 'payload_too_large'
     assert response.json()['settings'] == state['settings']
     assert 'text_limits' in response.json() and 'bounds' in response.json()
     assert head.status_code == 200 and head.content == b''

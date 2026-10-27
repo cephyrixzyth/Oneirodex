@@ -88,6 +88,28 @@ def test_shelf_post_and_put_reject_duplicate_heavy_arrays_before_data_access():
         getattr(data, action).assert_not_called()
 
 
+def test_all_other_discovery_mutations_reject_oversized_bodies_before_data_access():
+    data = Mock()
+    user = SimpleNamespace(id=9)
+    body = b' ' * (_SHELF_JSON_BODY_MAX_BYTES + 1)
+    cases = (
+        ('PUT', '/admin/api/discovery_sections/2/schedule', 2),
+        ('PUT', '/admin/api/discovery_sections/2/pin', 2),
+        ('POST', '/admin/api/discovery_sections/order', None),
+        ('POST', '/admin/api/discovery_sections/visibility', None),
+    )
+
+    for method, path, section_id in cases:
+        request = _request(body, method=method, path=path)
+        result = asyncio.run(_dispatch_action(request, data, user, section_id))
+        assert result.status_code == 413
+
+    data.schedule.assert_not_called()
+    data.pin.assert_not_called()
+    data.reorder.assert_not_called()
+    data.visibility.assert_not_called()
+
+
 def test_shelf_body_keeps_valid_unique_ids_and_duplicate_cleanup():
     uuids = [f'game-{index}' for index in range(60)]
     payload = {

@@ -144,14 +144,18 @@ def create_admin_invites_router(
 
 async def _adjust(request, data):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
     from pydantic import ValidationError
     from oneirodex.schemas.invites import AdjustInviteQuotaBody
     from oneirodex.utils.validation import format_validation_errors
 
     try:
-        payload = json.loads(await request.body() or b'{}')
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return _error('Request body is too large.', 'payload_too_large', 413)
+        payload = json.loads(raw_body or b'{}')
         body = AdjustInviteQuotaBody.model_validate(payload)
-    except (TypeError, ValueError, UnicodeDecodeError, ValidationError) as exc:
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError, ValidationError) as exc:
         detail = format_validation_errors(exc) if isinstance(exc, ValidationError) else 'Invalid JSON body.'
         return _error('Invalid request.', 'unprocessable', 422, detail=detail)
     result = data.adjust_quota(body)

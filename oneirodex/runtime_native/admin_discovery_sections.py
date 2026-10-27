@@ -339,10 +339,16 @@ async def _dispatch_action(request, data, user, section_id):
         payload, error = data.create(body, user.id)
         return _result(payload, error, create=True)
     if section_id is not None and method == 'PUT' and path.endswith('/schedule'):
-        payload, error = data.schedule(section_id, await _json_body(request), user.id)
+        body = await _json_body(request)
+        if isinstance(body, Response):
+            return body
+        payload, error = data.schedule(section_id, body, user.id)
         return _result(payload, error)
     if section_id is not None and method == 'PUT' and path.endswith('/pin'):
-        payload, error = data.pin(section_id, await _json_body(request), user.id)
+        body = await _json_body(request)
+        if isinstance(body, Response):
+            return body
+        payload, error = data.pin(section_id, body, user.id)
         return _result(payload, error)
     if section_id is not None and method == 'PUT':
         body = await _shelf_model_body(request, DiscoveryShelfBody)
@@ -408,35 +414,29 @@ async def _shelf_model_body(request, model_type):
 
 async def _bounded_shelf_body(request):
     """Read at most the shelf JSON byte limit, including chunked requests."""
-    content_length = request.headers.get('content-length')
-    if content_length:
-        try:
-            if int(content_length) > _SHELF_JSON_BODY_MAX_BYTES:
-                return _error('Request body is too large.', 'payload_too_large', 413)
-        except ValueError:
-            # An invalid Content-Length is not trusted; the streamed limit below
-            # still guarantees that the application never buffers an unbounded
-            # body.
-            pass
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > _SHELF_JSON_BODY_MAX_BYTES:
-            return _error('Request body is too large.', 'payload_too_large', 413)
-        body.extend(chunk)
-    return bytes(body)
+    body = await read_bounded_body(request, _SHELF_JSON_BODY_MAX_BYTES)
+    if body is BODY_TOO_LARGE:
+        return _error('Request body is too large.', 'payload_too_large', 413)
+    return body
 
 
 async def _model_body(request, model_type):
+    import json
+
     from pydantic import ValidationError
     from oneirodex.utils.validation import format_validation_errors
 
     # Match the legacy @validate_body contract: missing, malformed, or JSON
     # null bodies validate as an empty object, while non-object JSON values
     # retain their root-level model error.
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
     try:
-        payload = await request.json()
-    except Exception:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         payload = {}
     if payload is None:
         payload = {}
@@ -452,9 +452,12 @@ async def _model_body(request, model_type):
 async def _json_body(request):
     import json
 
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
     try:
-        payload = json.loads(await request.body() or b'{}')
-    except (TypeError, ValueError, UnicodeDecodeError):
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     return payload if isinstance(payload, dict) else None
 

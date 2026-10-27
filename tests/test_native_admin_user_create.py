@@ -96,6 +96,17 @@ def test_create_user_validation_and_admin_gate_do_not_create():
     assert denied.status_code == 302 and member_data.calls == []
 
 
+def test_create_user_rejects_oversized_json_before_create():
+    client, data, csrf = _client()
+    response = client.put(
+        '/admin/api/user/0', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
 def test_user_create_adapter_enforces_emailless_rules_and_database_uniqueness(monkeypatch):
     import oneirodex
     from oneirodex.models import User

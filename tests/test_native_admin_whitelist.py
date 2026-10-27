@@ -125,6 +125,17 @@ def test_whitelist_conflict_and_missing_delete_use_error_contracts():
     assert missing.json()['message'] == NotFound().description
 
 
+def test_whitelist_create_rejects_oversized_json_before_mutation():
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/api/whitelist', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
 def test_missing_whitelist_delete_keeps_legacy_html_for_browser_requests():
     client, data, csrf = _client()
     data.delete_error = ('Not found', 'not_found', 404)
