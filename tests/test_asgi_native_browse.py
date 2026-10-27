@@ -2153,6 +2153,9 @@ def test_lazy_asgi_browse_preserves_login_redirect_and_flash(monkeypatch):
 
 def test_lazy_asgi_restricted_matches_flask_login_redirect_body(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     response = _run(runtime, '/restricted')
 
     assert response.status_code == 302
@@ -10787,6 +10790,7 @@ def test_lazy_asgi_dispatches_download_request_and_cleanup_natively(monkeypatch)
         create_request=lambda _game, user, **_kwargs: (
             calls.append(('create', user.id)) or SimpleNamespace(id=87, status='available')
         ),
+        log_download_started=lambda *_args, **_kwargs: None,
         cleanup_orphans=lambda _game: calls.append(('cleanup',)) or {'removed': [], 'kept': []},
         log_cleanup=lambda *_args, **_kwargs: None,
     )
