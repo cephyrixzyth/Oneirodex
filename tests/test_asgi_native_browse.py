@@ -8854,6 +8854,94 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     assert len([call for call in fake.calls if call[0] == 'mint']) == 1
 
 
+def test_native_rtc_token_enforces_social_scopes_and_publish_scope(monkeypatch):
+    class FakeRtcData:
+        def __init__(self):
+            self.calls = []
+
+        def token_config(self):
+            return {'url': 'wss://rtc.example.test', 'api_key': 'key', 'api_secret': 'secret'}
+
+        def normalize_room(self, room):
+            return room
+
+        def may_join(self, _user, room):
+            self.calls.append(('authorize', room))
+            return room == 'household:lobby'
+
+        def mint(self, **kwargs):
+            self.calls.append(('mint', kwargs))
+            return 'fake-token'
+
+    fake = FakeRtcData()
+
+    def bearer_runtime(scopes):
+        runtime, authorization = _bearer_runtime(monkeypatch, scopes)
+        monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+        return runtime, authorization
+
+    runtime, read_library = bearer_runtime(['read:library'])
+    no_social_scope = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': read_library},
+    )
+    assert no_social_scope.status_code == 403
+    assert no_social_scope.json()['detail'] == {'required_scope': 'read:social'}
+    assert fake.calls == []
+
+    runtime, read_social = bearer_runtime(['read:social'])
+    spectator = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={'spectator': True},
+        headers={'Authorization': read_social},
+    )
+    publish_denied = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': read_social},
+    )
+    assert spectator.status_code == 200
+    assert spectator.json()['can_publish'] is False
+    assert publish_denied.status_code == 403
+    assert publish_denied.json()['detail'] == {'required_scope': 'write:social'}
+    assert len([call for call in fake.calls if call[0] == 'mint']) == 1
+
+    runtime, write_social = bearer_runtime(['read:social', 'write:social'])
+    publisher = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': write_social},
+    )
+    assert publisher.status_code == 200
+    assert publisher.json()['can_publish'] is True
+    assert len([call for call in fake.calls if call[0] == 'mint']) == 2
+
+
+def test_native_rtc_token_rejects_chunked_oversize_before_room_authorization(monkeypatch):
+    class FakeRtcData:
+        def __init__(self):
+            self.calls = []
+
+        def token_config(self):
+            return {'url': 'wss://rtc.example.test', 'api_key': 'key', 'api_secret': 'secret'}
+
+        def may_join(self, _user, room):
+            self.calls.append(('authorize', room))
+            return True
+
+    fake = FakeRtcData()
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social', 'write:social'],
+    )
+    monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+    response = _run_chunked(
+        runtime, '/api/rtc/token', cookie=_signed_session(), method='POST',
+        body=b'{"padding":"' + b'x' * (8 * 1024) + b'"}',
+        headers={'Authorization': authorization, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert fake.calls == []
+
+
 def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeypatch):
     calls = []
     data = SimpleNamespace(

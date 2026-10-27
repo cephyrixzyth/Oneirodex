@@ -65,6 +65,9 @@ listing and downloads require `read:library`; uploads and deletion require
 `write:library`. RetroArch cheat files follow the same boundary: list/download
 requires `read:library`, while upload/delete requires `write:library`. PC cheat
 notes are readable with `read:library`; authoring/deletion stays librarian-only.
+LiveKit token requests require `read:social`; bearer tokens need `write:social` to
+mint a publish-enabled token, while read-only social tokens can request spectator
+access.
 Favorite and play-status changes, Discover pins and saved filters, wishlist
 requests, wanted-update entries, member preferences and detail layouts,
 personal collections, playtime sessions, and on-demand freshness checks also
