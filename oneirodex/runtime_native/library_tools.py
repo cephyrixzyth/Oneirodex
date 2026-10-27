@@ -6,6 +6,7 @@ can use in-memory fakes and never touch the user's library.
 from __future__ import annotations
 
 from .form_compat import first_form_upload, first_form_value
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -14,6 +15,8 @@ from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
 from .query_compat import first_query_value
+
+LIBRARY_TOOLS_JSON_MAX_BYTES = 64 * 1024
 
 
 class LibraryToolsData:
@@ -242,8 +245,12 @@ async def _propose_leaf(request, app, data):
     import os
     body = {}
     if request.method == 'POST':
+        raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return _error(413, 'payload_too_large', 'Request body is too large')
         try:
-            body = await request.json()
+            import json
+            body = json.loads(raw_body or b'{}')
         except Exception:
             body = {}
     root = str(body.get('root') or body.get('path') or first_query_value(request.query_params, 'root')
@@ -265,14 +272,28 @@ async def _import_preview(request, app, data):
     bases = data.allowed_bases(app)
     content_type = request.headers.get('content-type', '')
     if 'multipart/form-data' in content_type:
-        form = await request.form()
+        from .bounded_multipart import (
+            InvalidContentLength, RequestBodyTooLarge, bounded_multipart_form,
+        )
+
+        max_upload = int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024)
+        try:
+            form = await bounded_multipart_form(
+                request,
+                max_body_bytes=max_upload + 64 * 1024,
+                max_files=1,
+                max_fields=8,
+                max_part_size=max_upload,
+            )
+        except (InvalidContentLength, RequestBodyTooLarge):
+            return _error(413, 'payload_too_large', 'Upload is too large', auto_create=False)
         upload = first_form_upload(form, 'file')
         if isinstance(upload, UploadFile) and upload.filename:
             filename = upload.filename.lower()
-            raw = await upload.read()
-            if len(raw) > int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024):
+            raw = await upload.read(max_upload + 1)
+            if len(raw) > max_upload:
                 await form.close()
-                return _error(413, 'bad_request', 'Upload is too large', auto_create=False)
+                return _error(413, 'payload_too_large', 'Upload is too large', auto_create=False)
             try:
                 text = raw.decode('utf-8-sig')
             except UnicodeDecodeError:
@@ -295,8 +316,13 @@ async def _import_preview(request, app, data):
             return JSONResponse(result)
         await form.close()
         return _error(400, 'bad_request', 'JSON body or file upload required', auto_create=False)
+    max_json = int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024)
+    raw_body = await read_bounded_body(request, max_json)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large', auto_create=False)
     try:
-        payload = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
         return _error(400, 'bad_request', 'JSON body or file upload required', auto_create=False)
     return JSONResponse(data.import_preview(payload, csv_format=False, allowed_bases=bases))
@@ -321,8 +347,12 @@ async def _proposals(_request, app, data):
 
 
 async def _scan_proposals(request, app, data):
+    raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large')
     try:
-        payload = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
         payload = None
     from pydantic import ValidationError
@@ -350,8 +380,12 @@ async def _scan_proposals(request, app, data):
 
 
 async def _doctor_dry_run(request, app, data):
+    raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large')
     try:
-        payload = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
         payload = None
     from pydantic import ValidationError

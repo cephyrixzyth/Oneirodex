@@ -438,6 +438,30 @@ def test_import_preview_json_and_multipart_use_injected_parser(runtime):
     assert ('import', 'path,name\r\n/safe,Library', True, ('/safe',)) in data.calls
 
 
+def test_library_tools_rejects_oversized_json_and_multipart_before_processing(runtime):
+    app, data, cookies = runtime
+    app.state.legacy_flask_app.config['MAX_CONTENT_LENGTH'] = 128
+
+    oversized_multipart = _request(
+        app, '/api/library_tools/import_leaf_libraries/preview',
+        cookie=cookies['admin'], method='POST',
+        content=(b'--x\r\nContent-Disposition: form-data; name="file"; filename="items.csv"\r\n'
+                 b'Content-Type: text/csv\r\n\r\n' + b'x' * 256 + b'\r\n--x--\r\n'),
+        headers={'Content-Type': 'multipart/form-data; boundary=x'},
+    )
+    oversized_json = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', content=b'{"roots":[],"padding":"' + b'x' * (64 * 1024) + b'"}',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert oversized_multipart.status_code == oversized_json.status_code == 413
+    assert oversized_multipart.json()['error_code'] == 'payload_too_large'
+    assert oversized_json.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] == 'import' for call in data.calls)
+    assert not any(call[0] == 'walk' for call in data.calls)
+
+
 def test_native_library_helpers_use_explicit_config_without_app_context(tmp_path, monkeypatch):
     from oneirodex.utils import functions, gamenames
 
