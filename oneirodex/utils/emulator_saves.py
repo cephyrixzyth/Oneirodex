@@ -7,16 +7,38 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 from oneirodex.utils.runtime_config import get_runtime_config
-from sqlalchemy import select
+from sqlalchemy import func, select
 from werkzeug.utils import secure_filename
 
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import EmulatorSave, GlobalSettings
+from oneirodex.models import EmulatorSave, GlobalSettings, User
 from oneirodex.utils.save_crypto import maybe_decrypt, maybe_encrypt
 from oneirodex.utils.library_paths import library_dir
 
 MAX_SAVE_BYTES = 2 * 1024 * 1024  # 2 MiB
 MAX_SLOTS_PER_GAME = 10
+DEFAULT_USER_SAVE_QUOTA_MB = 1024
+
+
+class SaveQuotaExceeded(ValueError):
+    """An upload would exceed the member's aggregate save-storage quota."""
+
+    code = 'payload_too_large'
+
+
+def save_quota_would_be_exceeded(
+    total_bytes: int,
+    replacement_bytes: int,
+    upload_bytes: int,
+    quota_bytes: int,
+) -> bool:
+    """Check a write against the member total, excluding the replaced slot."""
+    return (
+        max(0, int(total_bytes))
+        - max(0, int(replacement_bytes))
+        + max(0, int(upload_bytes))
+        > max(0, int(quota_bytes))
+    )
 
 # Slot vocabulary the WebRetro shell writes. `auto` is the state taken when
 # the member leaves the room (Back / Power / tab hidden); `cloud-state` is the
@@ -118,6 +140,12 @@ def store_save(
     if not save_sync_enabled():
         raise RuntimeError('Emulator save sync is disabled')
 
+    # Serialize this member's uploads so concurrent requests cannot both pass
+    # the aggregate quota check. The lock is held until the save row commits.
+    db.session.execute(
+        select(User.id).where(User.id == user_id).with_for_update(),
+    ).first()
+
     slot = (slot_name or 'slot1').strip()[:64] or 'slot1'
     existing = list_saves(user_id, game_uuid)
     current = next((row for row in existing if row.slot_name == slot), None)
@@ -129,6 +157,24 @@ def store_save(
         raise ValueError('Save file was empty')
     if len(raw) > MAX_SAVE_BYTES:
         raise ValueError(f'Save exceeds {MAX_SAVE_BYTES} byte limit')
+
+    config = get_runtime_config() or {}
+    try:
+        quota_mb = max(1, int(config.get('EMULATOR_SAVES_USER_QUOTA_MB', DEFAULT_USER_SAVE_QUOTA_MB)))
+    except (TypeError, ValueError):
+        quota_mb = DEFAULT_USER_SAVE_QUOTA_MB
+    quota_bytes = quota_mb * 1024 * 1024
+    total_bytes = db.session.execute(
+        select(func.coalesce(func.sum(EmulatorSave.size_bytes), 0))
+        .where(EmulatorSave.user_id == user_id),
+    ).scalar_one()
+    replacement_bytes = int(getattr(current, 'size_bytes', 0) or 0) if current else 0
+    if save_quota_would_be_exceeded(
+        total_bytes or 0, replacement_bytes, len(raw), quota_bytes,
+    ):
+        raise SaveQuotaExceeded(
+            f'Member save-storage quota exceeded ({quota_mb} MiB total)',
+        )
 
     original = secure_filename(getattr(file_storage, 'filename', None) or 'save.state')
     if not original:

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game
 from oneirodex.utils.emulator_saves import (
+    SaveQuotaExceeded,
     delete_save,
     is_state_slot,
     list_saves,
@@ -78,6 +79,8 @@ def upload_game_save(game_uuid):
             slot_name=slot,
             file_storage=upload,
         )
+    except SaveQuotaExceeded as exc:
+        return api_error(str(exc), code=exc.code)
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     except RuntimeError as exc:

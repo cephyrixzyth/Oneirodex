@@ -403,6 +403,25 @@ def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes') in data.calls
 
 
+def test_save_aggregate_quota_returns_payload_too_large(native, monkeypatch):
+    from oneirodex.utils.emulator_saves import SaveQuotaExceeded
+
+    app, api, data, _user = native
+    cookie, csrf = _cookie(app, csrf=True)
+
+    def reject_quota(*_args, **_kwargs):
+        raise SaveQuotaExceeded('Member save-storage quota exceeded (1 MiB total)')
+
+    monkeypatch.setattr(data, 'store_save', reject_quota)
+    response = _request(
+        api, 'POST', '/api/games/game-1/saves', cookie=cookie, csrf=csrf,
+        files={'file': ('save.state', b'bytes')},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
 def test_game_acl_and_platform_rules_are_enforced(native):
     app, api, data, user = native
     cookie, csrf = _cookie(app, csrf=True)

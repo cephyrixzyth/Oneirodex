@@ -503,7 +503,8 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                     payload = await upload.read()
                     row = data.store_save(user.id, game_uuid, slot, getattr(upload, 'filename', None), payload)
                 except ValueError as exc:
-                    return _error(400, 'bad_request', str(exc))
+                    code = getattr(exc, 'code', 'bad_request')
+                    return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
                 except RuntimeError as exc:
                     return _error(403, 'forbidden', str(exc))
                 return JSONResponse(row.to_dict(), status_code=201)

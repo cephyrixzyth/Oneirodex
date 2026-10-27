@@ -114,7 +114,7 @@ Your place is kept for you. States live on the server, per member and per game, 
 
 - **Resume.** A tile whose game has a state reads **Resume** instead of Play (the details page lists every state under **Saved states**, each with its own Resume). Opening the room shows a bar — *Where you left off · 5 min ago — resume?* — with **Resume** and **Start fresh**. Nothing is loaded until you choose. Battery saves (the game's own SRAM) are put back silently, as they would be on a real cartridge.
 - **Leaving.** **← Game Catalog** and **Power** take a state and push it before the page goes (a few seconds at most; a slow server never keeps you on the screen). Hiding the tab does the same, throttled. That state is the one Resume offers.
-- **Saves panel.** The **Saves** button on the play bar opens a panel: name a save (**Save as**), **Load** or **Delete** any state, and **Sync now** for an explicit push. Up to 10 slots per game, 2 MiB each.
+- **Saves panel.** The **Saves** button on the play bar opens a panel: name a save (**Save as**), **Load** or **Delete** any state, and **Sync now** for an explicit push. Up to 10 slots per game, 2 MiB each, and 1 GiB total per member by default. Operators can change the member total with `EMULATOR_SAVES_USER_QUOTA_MB`.
 - Under the hood this is `od-bridge.js` postMessage (`od-export-saves` / `od-import-saves`, the latter with `autoLoad:false` on boot). Export retries briefly so slow cores can flush `.state` / SRAM; the SRAM pick prefers `.srm`, then `.mcr`, then `.sav`. CSRF for upload comes from the `csrf_token` cookie.
 - If a deferred core is still warming, status may say to open **Saves** again after **Start**.
 

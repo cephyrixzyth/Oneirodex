@@ -214,6 +214,12 @@ class Config(object):
     # Emulator save-state sync (WebRetro / companion)
     ENABLE_EMULATOR_SAVE_SYNC = _env_bool('ENABLE_EMULATOR_SAVE_SYNC', True)
     ENCRYPT_EMULATOR_SAVES = _env_bool('ENCRYPT_EMULATOR_SAVES', False)
+    try:
+        EMULATOR_SAVES_USER_QUOTA_MB = max(
+            1, int(os.getenv('EMULATOR_SAVES_USER_QUOTA_MB', '1024')),
+        )
+    except (TypeError, ValueError):
+        EMULATOR_SAVES_USER_QUOTA_MB = 1024
     # Optional private BIOS/firmware dir (operator upload or host volume). Never vendor blobs.
     # When unset, bios_root() falls back to static/library/bios.
     EMULATOR_BIOS_PATH = os.getenv('EMULATOR_BIOS_PATH') or None
