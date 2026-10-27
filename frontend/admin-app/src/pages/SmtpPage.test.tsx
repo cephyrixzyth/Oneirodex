@@ -145,7 +145,7 @@ test('SMTP heading help opens accessible guidance and traps focus until closed',
   expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
 
   fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
-  expect(screen.getByRole('button', { name: 'Close', exact: true })).toHaveFocus()
+  expect(screen.getByRole('button', { name: /^Close$/ })).toHaveFocus()
   fireEvent.keyDown(document, { key: 'Tab' })
   expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
 
@@ -156,7 +156,7 @@ test('SMTP heading help opens accessible guidance and traps focus until closed',
 
   fireEvent.click(trigger)
   await screen.findByRole('dialog', { name: 'How to Get SMTP Server Information' })
-  fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: /^Close$/ }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   expect(trigger).toHaveFocus()
 })

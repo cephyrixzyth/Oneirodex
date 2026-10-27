@@ -378,47 +378,6 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
 
   return (
     <div className="od-libraries-react">
-      <CreateLibraryForm onCreated={() => void reload()} />
-      <section
-        className="od-admin-panel od-libraries-add-many"
-        aria-labelledby="od-libraries-add-many-title"
-      >
-        <div className="od-libraries-add-many__header">
-          <div>
-            <h2 id="od-libraries-add-many-title" className="od-admin-panel-title">
-              Add many libraries
-            </h2>
-            <p className="od-admin-lede">
-              Preview and review candidates first. Libraries are created only after explicit
-              confirmation.
-            </p>
-          </div>
-          <div
-            className="od-libraries-add-many__actions"
-            role="group"
-            aria-label="Add many workflows"
-          >
-            <Button
-              type="button"
-              className={addManyMode === 'propose' ? 'od-btn--accent' : 'od-btn--secondary'}
-              aria-pressed={addManyMode === 'propose'}
-              onClick={() => setAddManyMode((mode) => (mode === 'propose' ? null : 'propose'))}
-            >
-              Propose from folder
-            </Button>
-            <Button
-              type="button"
-              className={addManyMode === 'import' ? 'od-btn--accent' : 'od-btn--secondary'}
-              aria-pressed={addManyMode === 'import'}
-              onClick={() => setAddManyMode((mode) => (mode === 'import' ? null : 'import'))}
-            >
-              Import CSV/JSON
-            </Button>
-          </div>
-        </div>
-        {addManyMode === 'propose' ? <ProposeLeafLibraries /> : null}
-        {addManyMode === 'import' ? <ImportLeafLibraries /> : null}
-      </section>
       <LibrariesTrailSummary
         libraryCount={libraryCount}
         totalGames={totalGames}
@@ -472,9 +431,51 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         columnFilters
         showCount={false}
         dense
-        emptyMessage="No libraries yet. Create one above to start scanning."
+        emptyMessage="No libraries yet. Create one below to start scanning."
         initialSort={{ key: 'name', dir: 'asc' }}
       />
+
+      <CreateLibraryForm onCreated={() => void reload()} />
+      <section
+        className="od-admin-panel od-libraries-add-many"
+        aria-labelledby="od-libraries-add-many-title"
+      >
+        <div className="od-libraries-add-many__header">
+          <div>
+            <h2 id="od-libraries-add-many-title" className="od-admin-panel-title">
+              Add many libraries
+            </h2>
+            <p className="od-admin-lede">
+              Preview and review candidates first. Libraries are created only after explicit
+              confirmation.
+            </p>
+          </div>
+          <div
+            className="od-libraries-add-many__actions"
+            role="group"
+            aria-label="Add many workflows"
+          >
+            <Button
+              type="button"
+              className={addManyMode === 'propose' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'propose'}
+              onClick={() => setAddManyMode((mode) => (mode === 'propose' ? null : 'propose'))}
+            >
+              Propose from folder
+            </Button>
+            <Button
+              type="button"
+              className={addManyMode === 'import' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'import'}
+              onClick={() => setAddManyMode((mode) => (mode === 'import' ? null : 'import'))}
+            >
+              Import CSV/JSON
+            </Button>
+          </div>
+        </div>
+        {addManyMode === 'propose' ? <ProposeLeafLibraries /> : null}
+        {addManyMode === 'import' ? <ImportLeafLibraries /> : null}
+      </section>
 
       <ScanConflictModal
         open={conflictOpen}

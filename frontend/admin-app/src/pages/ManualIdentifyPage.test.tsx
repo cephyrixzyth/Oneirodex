@@ -98,7 +98,7 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
     'od-btn--primary',
     'od-btn--lg',
   )
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toHaveClass('od-btn--lg')
+  expect(screen.getByRole('button', { name: /^Save$/ })).toHaveClass('od-btn--lg')
   for (const provider of ['Steam', 'GOG', 'RAWG', 'MobyGames', 'TheGamesDB']) {
     expect(screen.getByRole('button', { name: `Search ${provider}` })).toHaveClass(
       'od-btn--primary',
@@ -110,7 +110,7 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   expect(screen.getByLabelText('Status')).toHaveValue('RELEASED')
   expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeEnabled()
   expect(screen.getByText('Enter the IGDB ID of the game.')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Save$/ })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Search IGDB by ID' }))
   expect(fetchMock).not.toHaveBeenCalledWith(
     expect.stringContaining('/api/search_igdb_by_id'),
@@ -121,8 +121,8 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   expect(screen.getByLabelText('Name')).toHaveValue('Sample')
   fireEvent.click(screen.getByRole('tab', { name: 'Taxonomy' }))
   expect(screen.getByLabelText('Adventure')).toBeChecked()
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }))
+  expect(screen.getByRole('button', { name: /^Save$/ })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: /^Save$/ }))
 
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(
@@ -497,7 +497,7 @@ test('explains that a game name is required before searching IGDB', async () => 
     </MemoryRouter>,
   )
 
-  const searchButton = await screen.findByRole('button', { name: 'Search IGDB', exact: true })
+  const searchButton = await screen.findByRole('button', { name: /^Search IGDB$/ })
   expect(searchButton).toBeEnabled()
   fireEvent.click(searchButton)
 
@@ -537,7 +537,7 @@ test('keeps an empty IGDB result as inline guidance instead of an error alert', 
     </MemoryRouter>,
   )
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Search IGDB', exact: true }))
+  fireEvent.click(await screen.findByRole('button', { name: /^Search IGDB$/ }))
 
   expect(await screen.findByRole('status')).toHaveTextContent(note)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -621,7 +621,7 @@ test('announces IGDB transport failures beside the search controls', async () =>
     </MemoryRouter>,
   )
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Search IGDB', exact: true }))
+  fireEvent.click(await screen.findByRole('button', { name: /^Search IGDB$/ }))
 
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Failed to fetch')
@@ -707,11 +707,11 @@ test('switches non-catalog entry to a generated, locked ID and focuses the empty
     expect(name).toHaveFocus()
   })
   expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Search IGDB$/ })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Save$/ })).toBeDisabled()
   fireEvent.change(name, { target: { value: 'Custom game' } })
-  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+  expect(screen.getByRole('button', { name: /^Search IGDB$/ })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Save$/ })).toBeEnabled()
   expect(fetchMock).not.toHaveBeenCalledWith(
     expect.stringContaining('/api/search_igdb_by_id'),
     expect.anything(),
@@ -779,8 +779,8 @@ test('reports custom ID allocation failure without using the legacy fallback ID'
   expect(id).toHaveValue(null)
   expect(id).not.toHaveAttribute('readonly')
   expect(screen.getByRole('button', { name: 'Search IGDB by ID' })).toBeEnabled()
-  expect(screen.getByRole('button', { name: 'Search IGDB', exact: true })).toBeEnabled()
-  expect(screen.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Search IGDB$/ })).toBeEnabled()
+  expect(screen.getByRole('button', { name: /^Save$/ })).toBeDisabled()
   expect(
     fetchMock.mock.calls.some(([input]) => String(input) === '/api/admin/manual-identify'),
   ).toBe(false)

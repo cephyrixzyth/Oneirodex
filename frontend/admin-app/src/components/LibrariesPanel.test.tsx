@@ -116,6 +116,22 @@ test('the real Jinja libraries panel exposes the add-and-first-scan form', async
   expect(screen.getByRole('button', { name: 'Create library' })).toBeDisabled()
 })
 
+test('shows the library roster before the create and bulk-import tools', async () => {
+  render(<LibrariesPanel />)
+  const libraryName = await screen.findByText('_pc')
+  const libraryTable = libraryName.closest('table')
+  const createHeading = await screen.findByRole('heading', { name: 'Add one library' })
+  const bulkHeading = screen.getByRole('heading', { name: 'Add many libraries' })
+
+  expect(libraryTable).not.toBeNull()
+  expect(
+    libraryTable!.compareDocumentPosition(createHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    createHeading.compareDocumentPosition(bulkHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+})
+
 test('native libraries expose folder proposal and CSV/JSON import with previews before confirmation', async () => {
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
