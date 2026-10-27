@@ -110,12 +110,55 @@ test('disabled SMTP still tests the saved configuration, and help remains availa
   render(<SmtpPage />)
   await screen.findByLabelText(/SMTP Server/)
   expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
-  expect(screen.getByText('SMTP setup help')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'SMTP help' })).toHaveAttribute(
+    'aria-haspopup',
+    'dialog',
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
   expect(
     await screen.findByText('SMTP connection successful. No email was sent.'),
   ).toBeInTheDocument()
   expect(postJson).toHaveBeenCalledWith('/admin/smtp_test')
+})
+
+test('SMTP heading help opens accessible guidance and traps focus until closed', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  render(<SmtpPage />)
+  await screen.findByLabelText(/SMTP Server/)
+
+  const trigger = screen.getByRole('button', { name: 'SMTP help' })
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  fireEvent.click(trigger)
+
+  const dialog = await screen.findByRole('dialog', { name: 'How to Get SMTP Server Information' })
+  expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  expect(
+    screen.getByRole('heading', {
+      name: /Internet Service Provider’s SMTP Server \(Recommended\)/,
+    }),
+  ).toBeVisible()
+  expect(screen.getByText('Contact your ISP’s customer support')).toBeVisible()
+  expect(screen.getByText('smtp.gmail.com')).toBeVisible()
+  expect(screen.getByText('587')).toBeVisible()
+  expect(screen.getByText('SMTP2GO')).toBeVisible()
+  expect(dialog).toHaveTextContent('does not send email or confirm delivery')
+  expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
+
+  fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+  expect(screen.getByRole('button', { name: 'Close', exact: true })).toHaveFocus()
+  fireEvent.keyDown(document, { key: 'Tab' })
+  expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
+
+  fireEvent.keyDown(document, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  expect(trigger).toHaveFocus()
+
+  fireEvent.click(trigger)
+  await screen.findByRole('dialog', { name: 'How to Get SMTP Server Information' })
+  fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(trigger).toHaveFocus()
 })
 
 test('legacy save posts form values without the modern API field restrictions', async () => {
