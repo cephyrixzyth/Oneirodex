@@ -80,7 +80,6 @@ export function IgdbSettingsPage() {
         throw new Error(data.message || 'Could not save IGDB settings.')
       setSecretPresent(secretPresent || Boolean(secret))
       setMessage('IGDB settings saved successfully')
-      showToast('IGDB settings saved successfully', 'success')
     } catch (err) {
       const text = errorText(err) || 'Could not save IGDB settings.'
       setError(text)

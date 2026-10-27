@@ -57,7 +57,9 @@ test('saved secret is never populated; dirty drafts can test saved settings and 
   )
   expect(screen.getByRole('button', { name: 'Test Connection' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
-  expect((await screen.findAllByText('IGDB settings saved successfully')).length).toBeGreaterThan(0)
+  expect(await screen.findByText('IGDB settings saved successfully')).toBeInTheDocument()
+  expect(screen.getAllByText('IGDB settings saved successfully')).toHaveLength(1)
+  expect(showToast).not.toHaveBeenCalled()
   expect(postJson).toHaveBeenCalledWith('/admin/igdb_settings', {
     igdb_client_id: 'review-client-01234567',
     igdb_client_secret: 'new-test-secret-value',
@@ -177,7 +179,9 @@ test('legacy save preserves whitespace in an otherwise valid client ID', async (
   const submittedId = ` ${'x'.repeat(20)} `
   fireEvent.change(clientId, { target: { value: submittedId } })
   fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
-  expect((await screen.findAllByText('IGDB settings saved successfully')).length).toBeGreaterThan(0)
+  expect(await screen.findByText('IGDB settings saved successfully')).toBeInTheDocument()
+  expect(screen.getAllByText('IGDB settings saved successfully')).toHaveLength(1)
+  expect(showToast).not.toHaveBeenCalled()
   expect(postJson).toHaveBeenCalledWith('/admin/igdb_settings', {
     igdb_client_id: submittedId,
     igdb_client_secret: '',
