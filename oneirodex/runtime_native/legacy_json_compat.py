@@ -7,6 +7,11 @@ from html import escape
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+
+MAX_LEGACY_JSON_BODY_BYTES = 64 * 1024
+
 
 class LegacyJSONError(ValueError):
     def __init__(self, status_code: int, description: str):
@@ -26,9 +31,9 @@ async def parse_legacy_json(request: Request):
             "Did not attempt to load JSON data because the request Content-Type was not 'application/json'.",
         )
 
-    raw = bytearray()
-    async for chunk in request.stream():
-        raw.extend(chunk)
+    raw = await read_bounded_body(request, MAX_LEGACY_JSON_BODY_BYTES)
+    if raw is BODY_TOO_LARGE:
+        raise LegacyJSONError(413, 'Request body is too large.')
     try:
         return json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError):
