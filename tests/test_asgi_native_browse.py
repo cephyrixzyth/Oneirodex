@@ -3410,6 +3410,23 @@ def test_native_batch_actions_reject_oversized_json_before_processing(monkeypatc
     assert runtime._fake_batch_wishlist.calls == []
 
 
+def test_native_batch_freshness_rejects_chunked_oversize_before_data_access(monkeypatch):
+    from oneirodex.runtime_native.batch_refresh import BATCH_FRESHNESS_JSON_MAX_BYTES
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'
+
+    response = _run_chunked(
+        runtime, '/api/games/batch/freshness/check', cookie=cookie, method='POST',
+        body=body, headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_batch_refresh.calls == []
+
+
 def test_native_batch_favorite_validation_caps_and_commit_error_are_safe(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()

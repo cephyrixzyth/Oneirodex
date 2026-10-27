@@ -35,6 +35,7 @@ from . import apis_bp
 BATCH_FAVORITE_MAX = 100
 BATCH_STATUS_MAX = 100
 BATCH_FRESHNESS_MAX = 50
+BATCH_FRESHNESS_JSON_MAX_BYTES = 64 * 1024
 BATCH_WISHLIST_MAX = 50
 BATCH_REFRESH_IMAGES_MAX = 20
 FRESHNESS_STALE_SECONDS = 86400
@@ -496,7 +497,24 @@ def games_batch_freshness_check():
     """
     from oneirodex.utils.freshness import check_and_store_freshness
 
-    data = request.get_json(silent=True) or {}
+    if (
+        request.is_json
+        and request.content_length
+        and request.content_length > BATCH_FRESHNESS_JSON_MAX_BYTES
+    ):
+        return api_error('Request body is too large.', code='payload_too_large')
+    if request.is_json:
+        raw_data = request.stream.read(BATCH_FRESHNESS_JSON_MAX_BYTES + 1)
+        if len(raw_data) > BATCH_FRESHNESS_JSON_MAX_BYTES:
+            return api_error('Request body is too large.', code='payload_too_large')
+        try:
+            data = current_app.json.loads(raw_data) if raw_data else {}
+        except Exception:  # noqa: BLE001 — preserve silent JSON parsing
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+    else:
+        data = {}
     uuids, err, status = _normalize_batch_uuids(data.get('uuids'), max_size=BATCH_FRESHNESS_MAX)
     if err is not None:
         return jsonify(err), status

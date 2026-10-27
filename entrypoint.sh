@@ -92,15 +92,15 @@ wait_for_postgres() {
     echo "🔄 Waiting for PostgreSQL at ${DB_HOST}:${DB_PORT}..."
     echo "   DATABASE_URL host hint: $(echo "${DATABASE_URL}" | sed -E 's#://[^:]+:[^@]+@#://***:***@#')"
 
-    until python3 -c "
+    until DB_HOST="$DB_HOST" DB_USER="$DB_USER" DB_PORT="$DB_PORT" python3 -c "
 import os
 import sys
 import psycopg2
 from urllib.parse import urlparse
 
-host = os.environ.get('DATABASE_HOST', '${DB_HOST}')
-port = int(os.environ.get('DATABASE_PORT', '${DB_PORT}') or 5432)
-user = os.environ.get('POSTGRES_USER', '${DB_USER}')
+host = os.environ.get('DATABASE_HOST') or os.environ.get('DB_HOST') or 'db'
+port = int(os.environ.get('DATABASE_PORT') or os.environ.get('DB_PORT') or 5432)
+user = os.environ.get('POSTGRES_USER') or os.environ.get('DB_USER') or 'postgres'
 password = os.environ.get('POSTGRES_PASSWORD', 'postgres')
 database = os.environ.get('POSTGRES_DB', 'oneirodex')
 

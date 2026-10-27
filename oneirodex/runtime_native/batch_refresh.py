@@ -13,6 +13,7 @@ from .batch_favorite import _finish, _normalize_uuids
 from .request_auth import request_auth_context
 
 BATCH_FRESHNESS_MAX = 50
+BATCH_FRESHNESS_JSON_MAX_BYTES = 64 * 1024
 BATCH_REFRESH_IMAGES_MAX = 20
 FRESHNESS_STALE_SECONDS = 86400
 
@@ -114,14 +115,21 @@ def create_batch_refresh_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
                 payload = await _json_object(request)
-                uuids, refusal = _normalize_uuids(
-                    payload.get('uuids'), max_size=BATCH_FRESHNESS_MAX,
-                )
-                if refusal is not None:
-                    body, status = refusal
-                    response = JSONResponse(body, status_code=status)
+                from .batch_favorite import JSON_BODY_TOO_LARGE
+
+                if payload is JSON_BODY_TOO_LARGE:
+                    response = _api_error(
+                        'Request body is too large.', 'payload_too_large',
+                    )
                 else:
-                    only_stale = bool(payload.get('only_stale', True))
+                    uuids, refusal = _normalize_uuids(
+                        payload.get('uuids'), max_size=BATCH_FRESHNESS_MAX,
+                    )
+                    if refusal is not None:
+                        body, status = refusal
+                        response = JSONResponse(body, status_code=status)
+                    else:
+                        only_stale = bool(payload.get('only_stale', True))
             if response is None and not uuids:
                 from oneirodex.utils.api_contract import api_ok_payload
 
@@ -401,16 +409,11 @@ def mount_batch_refresh_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
-    try:
-        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-        if content_type != 'application/json' and not (
-            content_type.startswith('application/') and content_type.endswith('+json')
-        ):
-            return {}
-        payload = await request.json()
-        return payload if isinstance(payload, dict) else {}
-    except Exception:  # noqa: BLE001 — Flask's silent JSON parsing
-        return {}
+    from .batch_favorite import bounded_json_object
+
+    return await bounded_json_object(
+        request, max_bytes=BATCH_FRESHNESS_JSON_MAX_BYTES,
+    )
 
 
 def _api_error(message, code, **extra):

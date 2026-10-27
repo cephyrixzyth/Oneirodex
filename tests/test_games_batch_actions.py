@@ -270,6 +270,20 @@ def test_batch_freshness_rejects_over_limit(client, member_user):
     assert body['limit'] == 50
 
 
+def test_batch_freshness_rejects_oversized_json_before_processing(client, member_user):
+    from oneirodex.routes_apis.game_batch import BATCH_FRESHNESS_JSON_MAX_BYTES
+
+    _login(client, member_user)
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'
+    resp = client.post(
+        '/api/games/batch/freshness/check', data=body,
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 413
+    assert resp.get_json()['error_code'] == 'payload_too_large'
+
+
 def test_admin_freshness_refresh_still_works(client, db_session, admin_user, library, monkeypatch):
     """Regression: admin library-wide bulk must remain available."""
     game = _make_game(

@@ -65,3 +65,12 @@ def test_sigterm_reaches_server(tmp_path):
 
 def test_entrypoint_executes_startup():
     assert 'exec /app/startweb-docker.sh "$@"' in (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+
+def test_entrypoint_passes_database_settings_as_environment_not_python_source():
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+    assert 'DB_HOST="$DB_HOST" DB_USER="$DB_USER" DB_PORT="$DB_PORT" python3 -c' in entrypoint
+    assert "os.environ.get('DATABASE_HOST', '${DB_HOST}')" not in entrypoint
+    assert "os.environ.get('DATABASE_PORT', '${DB_PORT}')" not in entrypoint
+    assert "os.environ.get('POSTGRES_USER', '${DB_USER}')" not in entrypoint

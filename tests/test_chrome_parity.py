@@ -112,7 +112,7 @@ def test_library_and_scan_destinations_are_separate_react_routes():
     for path in ("path=\"/libraries\"", "path=\"/scan_management\"", "path=\"/admin/scan-jobs\""):
         assert path in routes
     assert 'function ScanManagementRoute()' in routes
-    assert "if (tab === 'jobs') return <ScansPage />" in routes
+    assert "if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />" in routes
     assert "if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />" in routes
     assert 'return <ScanControlsPage />' in routes
 
@@ -193,7 +193,8 @@ def test_image_queue_has_its_own_react_data_loader():
 def test_scan_management_legacy_urls_dispatch_to_react_pages():
     routes = _read(ADMIN_ROUTES)
     assert "const tab = new URLSearchParams(search).get('active_tab') || 'auto'" in routes
-    for tab in ('jobs', 'tools', 'unmatched', 'scan_filters', 'file_extensions', 'image_queue'):
+    assert "if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />" in routes
+    for tab in ('tools', 'libraries', 'unmatched', 'scan_filters', 'file_extensions', 'image_queue'):
         assert f"tab === '{tab}'" in routes
     assert 'return <ScanControlsPage />' in routes
 
