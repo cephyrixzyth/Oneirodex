@@ -109,3 +109,53 @@ it('shows and saves an uploaded operator font from the server-provided choices',
   expect(options.method).toBe('PUT')
   expect(JSON.parse(options.body)).toMatchObject({ font: uploadedFont.value })
 })
+
+it('saves a theme when its paired icon pack is not installed', async () => {
+  const withUninstalledThemeIcon = {
+    ...preferenceResponse,
+    choices: {
+      ...preferenceResponse.choices,
+      themes: [
+        {
+          id: 'cabinet',
+          label: 'Colour cabinets',
+          items: [
+            { slug: 'default', name: 'Default', era: '90s', icon_pack: 'outline' },
+            {
+              slug: 'deep-space',
+              name: 'Deep Space Media',
+              era: 'media_center_00s',
+              icon_pack: 'angular',
+            },
+          ],
+        },
+      ],
+    },
+  }
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(withUninstalledThemeIcon), { status: 200 }))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          preferences: {
+            ...preferenceResponse.preferences,
+            theme: 'deep-space',
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+  vi.stubGlobal('fetch', fetchMock)
+  render(<PreferencesModal open onClose={() => undefined} />)
+
+  fireEvent.click(await screen.findByRole('button', { name: /Deep Space Media/ }))
+  expect(screen.getByRole('button', { name: 'Outline' })).toHaveAttribute('aria-pressed', 'true')
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  expect(screen.getByRole('status')).toHaveTextContent('Preferences saved.')
+  const [, options] = fetchMock.mock.calls[1]
+  expect(JSON.parse(options.body)).toMatchObject({ theme: 'deep-space', icon_pack: 'outline' })
+})
