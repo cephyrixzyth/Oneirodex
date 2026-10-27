@@ -15,6 +15,7 @@ from .request_auth import request_auth_context
 from .query_compat import first_query_value
 
 _MAX_UPLOAD = 8 * 1024 * 1024
+_MAX_MULTIPART_OVERHEAD = 64 * 1024
 _SAFE_LAUNCHER_IMPORT_ERRORS = frozenset({
     'The file is empty',
     'CSV has no header row',
@@ -23,6 +24,10 @@ _SAFE_LAUNCHER_IMPORT_ERRORS = frozenset({
     'The file must be UTF-8 text',
     'No games found in that export',
 })
+
+
+class _RequestPayloadTooLarge(Exception):
+    """Raised before parsing when an import request exceeds its total byte cap."""
 
 
 class LauncherImportMutationData:
@@ -152,6 +157,11 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                             response = JSONResponse(payload, status_code=status)
                         else:
                             response = JSONResponse(api_ok_payload(result))
+            except _RequestPayloadTooLarge:
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large', status=413,
+                )
+                response = JSONResponse(payload, status_code=status)
             except ValueError as exc:
                 candidate = str(exc)
                 if kind == 'playnite':
@@ -190,10 +200,32 @@ def _playnite_result(result, error_builder, ok_builder):
 
 
 async def _request_payload(request):
+    content_type = request.headers.get('content-type', '').lower()
+    body_limit = _MAX_UPLOAD + (
+        _MAX_MULTIPART_OVERHEAD if content_type.startswith('multipart/form-data') else 0
+    )
+    content_length = request.headers.get('content-length')
+    try:
+        if content_length is not None and int(content_length) > body_limit:
+            raise _RequestPayloadTooLarge
+    except (TypeError, ValueError):
+        raise _RequestPayloadTooLarge
+
+    # Enforce the total request cap before Starlette's multipart parser runs.
+    # Its max_part_size limits ordinary fields, but uploaded files are spooled
+    # while the complete multipart body is parsed. Replaying this bounded body
+    # keeps both file and JSON requests within the same memory ceiling.
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > body_limit:
+            raise _RequestPayloadTooLarge
+        raw.extend(chunk)
+    replay = Request(request.scope, receive=_body_receive(bytes(raw)))
+
     form = None
     upload = None
-    if request.headers.get('content-type', '').lower().startswith('multipart/form-data'):
-        form = await request.form(max_files=1, max_fields=12, max_part_size=_MAX_UPLOAD)
+    if content_type.startswith('multipart/form-data'):
+        form = await replay.form(max_files=1, max_fields=12, max_part_size=_MAX_UPLOAD)
         candidate = first_form_upload(form, 'file')
         if isinstance(candidate, UploadFile):
             upload = candidate
@@ -201,9 +233,22 @@ async def _request_payload(request):
         else:
             content = b''
         if len(content) > _MAX_UPLOAD:
-            raise ValueError('Upload is too large')
+            raise _RequestPayloadTooLarge
         return form, upload, content
-    content = await request.body()
+    content = bytes(raw)
     if len(content) > _MAX_UPLOAD:
-        raise ValueError('Request body is too large')
+        raise _RequestPayloadTooLarge
     return form, upload, content
+
+
+def _body_receive(body):
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if sent:
+            return {'type': 'http.request', 'body': b'', 'more_body': False}
+        sent = True
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    return receive
