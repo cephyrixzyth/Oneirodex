@@ -225,6 +225,50 @@ def test_csv_import_accepts_multipart_and_enforces_configured_body_limit(native_
     assert len([call for call in data.calls if call[0] == 'csv']) == 1
 
 
+def test_csv_import_has_a_tighter_limit_than_the_global_request_limit(native_client, monkeypatch):
+    from oneirodex.runtime_native import ownership_actions
+
+    runtime, data = native_client
+    monkeypatch.setattr(ownership_actions, 'MAX_OWNERSHIP_CSV_REQUEST_BYTES', 256)
+
+    wrapped_json_at_csv_limit = _request(
+        runtime, 'POST', '/api/ownership/steam/csv', json={'csv': 'x' * 128},
+    )
+    oversized_multipart = _request(
+        runtime, 'POST', '/api/ownership/steam/csv',
+        files={'file': ('ownership.csv', b'x' * 512, 'text/csv')},
+    )
+
+    async def streamed_body():
+        yield b'{"csv":"' + b'x' * 150
+        yield b'x' * 150 + b'"}'
+
+    async def send_streamed():
+        session, csrf = _session_cookie()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.post(
+                '/api/ownership/steam/csv', content=streamed_body(),
+                headers={
+                    'Content-Type': 'application/json', 'Cookie': f'session={session}',
+                    'X-CSRFToken': csrf,
+                },
+            )
+
+    oversized_streamed = asyncio.run(send_streamed())
+
+    assert wrapped_json_at_csv_limit.status_code == 200
+    assert wrapped_json_at_csv_limit.json()['imported'] == 1
+    assert oversized_multipart.status_code == 413
+    assert oversized_multipart.json()['error_code'] == 'payload_too_large'
+    assert oversized_streamed.status_code == 413
+    assert oversized_streamed.json()['error_code'] == 'payload_too_large'
+    csv_calls = [call for call in data.calls if call[0] == 'csv']
+    assert len(csv_calls) == 1
+    assert csv_calls[0][3] == 'x' * 128
+
+
 def test_disconnect_and_feature_gate_preserve_response_contract(native_client):
     runtime, data = native_client
 

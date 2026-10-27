@@ -4,7 +4,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from flask_login import login_user
+from flask import Flask
+from flask_login import LoginManager, login_user
 from sqlalchemy import select
 
 from oneirodex.models import Game, GlobalSettings, Library, StoreAccount, User, UserOwnedTitle
@@ -374,6 +375,74 @@ def test_store_csv_title_limit_rejects_before_database_writes(app, monkeypatch):
 
     with app.app_context(), pytest.raises(ValueError, match='more than 50000 titles'):
         store_ownership.import_store_csv(1, 'gog', csv_text)
+
+
+def test_store_csv_byte_limit_rejects_utf8_input_before_parsing(monkeypatch):
+    monkeypatch.setattr(store_ownership, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(store_ownership, 'MAX_OWNERSHIP_CSV_BYTES', 8)
+    monkeypatch.setattr(
+        store_ownership.csv,
+        'reader',
+        lambda *_args, **_kwargs: pytest.fail('oversized CSV must be rejected before parsing'),
+    )
+
+    with pytest.raises(ValueError, match='16 MiB size limit'):
+        store_ownership.import_store_csv(1, 'gog', 'あ' * 3)
+
+
+def test_flask_ownership_csv_route_rejects_large_body_before_form_parse(monkeypatch):
+    from types import SimpleNamespace
+
+    from oneirodex.routes_apis import ownership as ownership_routes
+
+    monkeypatch.setattr(ownership_routes, 'MAX_OWNERSHIP_CSV_REQUEST_BYTES', 128)
+    monkeypatch.setattr(ownership_routes, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(ownership_routes, 'get_ownership_summary', lambda _user_id: {})
+    app = Flask('ownership-csv-limit-test')
+    app.config['SECRET_KEY'] = 'test-secret'
+    login_manager = LoginManager(app)
+    login_manager.user_loader(lambda _user_id: SimpleNamespace(id=7))
+
+    with app.test_request_context(
+        '/api/ownership/steam/csv', method='POST', data={'csv': 'x' * 256},
+    ):
+        login_user(SimpleNamespace(
+            id=7, get_id=lambda: '7', is_active=True,
+            is_authenticated=True, is_anonymous=False,
+        ))
+        response = ownership_routes._csv_response(
+            lambda *_args: pytest.fail('oversized CSV must not reach the importer'),
+        )
+
+    response, status = response if isinstance(response, tuple) else (response, response.status_code)
+    assert status == 413
+    assert response.get_json()['error_code'] == 'payload_too_large'
+
+    with app.test_request_context(
+        '/api/ownership/steam/csv', method='POST', data={'csv': 'appid,name\n1,Title'},
+    ):
+        login_user(SimpleNamespace(
+            id=7, get_id=lambda: '7', is_active=True,
+            is_authenticated=True, is_anonymous=False,
+        ))
+        response = ownership_routes._csv_response(
+            lambda user_id, csv_text: {'imported': int(user_id == 7 and csv_text == 'appid,name\n1,Title')},
+        )
+
+    response, status = response if isinstance(response, tuple) else (response, response.status_code)
+    assert status == 200
+    assert response.get_json()['imported'] == 1
+
+
+def test_flask_ownership_csv_json_matches_native_invalid_shape_handling():
+    from oneirodex.routes_apis import ownership as ownership_routes
+
+    app = Flask('ownership-csv-json-shape-test')
+    for payload in (['csv'], {'csv': ['not a string']}, {'csv': {'nested': 'value'}}):
+        with app.test_request_context(
+            '/api/ownership/steam/csv', method='POST', json=payload,
+        ):
+            assert ownership_routes._read_csv_payload() == ''
 
 
 def test_browse_includes_owned_when_matched(client, app, db_session, lib, user):

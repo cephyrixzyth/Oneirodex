@@ -37,6 +37,10 @@ from oneirodex.utils.store_ownership import (
     import_steam_csv,
     is_ownership_sync_enabled,
 )
+from oneirodex.utils.store_ownership_limits import (
+    MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    MAX_OWNERSHIP_CSV_REQUEST_MIB,
+)
 
 from . import apis_bp
 from oneirodex.utils.store_capabilities import provider_capabilities
@@ -252,7 +256,10 @@ def cancel_ownership_sync(store):
 def _read_csv_payload() -> str:
     if request.is_json:
         data = request.get_json(silent=True) or {}
-        return data.get('csv') or ''
+        if not isinstance(data, dict):
+            return ''
+        value = data.get('csv') or ''
+        return value if isinstance(value, str) else ''
     upload = request.files.get('file')
     if upload:
         return upload.read().decode('utf-8', errors='replace')
@@ -267,7 +274,25 @@ def _csv_response(import_csv, **extra):
         )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
-    csv_text = _read_csv_payload()
+    from werkzeug.exceptions import RequestEntityTooLarge
+
+    configured_limit = request.max_content_length
+    request.max_content_length = min(
+        configured_limit if configured_limit is not None else MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+        MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    )
+    if request.content_length is not None and request.content_length > MAX_OWNERSHIP_CSV_REQUEST_BYTES:
+        return api_error(
+            f'CSV import request exceeds the {MAX_OWNERSHIP_CSV_REQUEST_MIB} MiB request limit.',
+            code='payload_too_large', status=413,
+        )
+    try:
+        csv_text = _read_csv_payload()
+    except RequestEntityTooLarge:
+        return api_error(
+            f'CSV import request exceeds the {MAX_OWNERSHIP_CSV_REQUEST_MIB} MiB request limit.',
+            code='payload_too_large', status=413,
+        )
     if not csv_text.strip():
         return api_error('csv content required', code='bad_request')
     try:

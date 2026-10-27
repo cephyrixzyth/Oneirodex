@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from oneirodex.utils.store_ownership_limits import MAX_OWNERSHIP_CSV_REQUEST_BYTES
 
 
 _CONNECT_MODELS: dict[str, str] = {
@@ -310,10 +311,10 @@ def _connect_fields(store, body):
     return body.model_dump(exclude_none=True)
 
 
-async def _json_body(request, config):
+async def _json_body(request, config, *, max_bytes=None):
     if not _is_json_request(request):
         return {}, None
-    raw, error = await _bounded_body(request, config)
+    raw, error = await _bounded_body(request, config, max_bytes=max_bytes)
     if error is not None:
         return None, error
     try:
@@ -326,12 +327,16 @@ async def _json_body(request, config):
 async def _read_csv_payload(request, flask_app):
     content_type = request.headers.get('content-type', '').lower()
     if _is_json_request(request):
-        payload, error = await _json_body(request, flask_app.config)
+        payload, error = await _json_body(
+            request, flask_app.config, max_bytes=MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+        )
         if error is not None:
             return None, error
         value = payload.get('csv') or '' if isinstance(payload, dict) else ''
         return (value if isinstance(value, str) else ''), None
-    raw, error = await _bounded_body(request, flask_app.config)
+    raw, error = await _bounded_body(
+        request, flask_app.config, max_bytes=MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    )
     if error is not None:
         return None, error
     if content_type.startswith('multipart/form-data'):
@@ -367,12 +372,14 @@ def _is_json_request(request):
     )
 
 
-async def _bounded_body(request, config):
+async def _bounded_body(request, config, *, max_bytes=None):
     limit = _body_limit(config)
+    if max_bytes is not None:
+        limit = min(limit, max_bytes)
     content_length = request.headers.get('content-length')
     try:
         if content_length is not None and int(content_length) > limit:
-            return b'', _too_large(config)
+            return b'', _too_large(config, limit_bytes=limit)
     except ValueError:
         return b'', _error(400, 'bad_request', 'Invalid content length')
     chunks = []
@@ -380,7 +387,7 @@ async def _bounded_body(request, config):
     async for chunk in request.stream():
         size += len(chunk)
         if size > limit:
-            return b'', _too_large(config)
+            return b'', _too_large(config, limit_bytes=limit)
         chunks.append(chunk)
     return b''.join(chunks), None
 
@@ -406,8 +413,11 @@ def _body_limit(config):
     return max(0, value)
 
 
-def _too_large(config):
-    limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+def _too_large(config, *, limit_bytes=None):
+    if limit_bytes is None:
+        limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+    else:
+        limit_mb = max(1, (limit_bytes + 1024 * 1024 - 1) // (1024 * 1024))
     return _error(
         413, 'payload_too_large',
         f'The file you tried to upload is too large. Maximum size is {limit_mb}MB.',

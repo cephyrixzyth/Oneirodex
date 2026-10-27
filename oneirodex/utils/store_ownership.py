@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.utils.launcher_imports import MAX_TITLES
+from oneirodex.utils.store_ownership_limits import MAX_OWNERSHIP_CSV_BYTES
 from oneirodex.models import StoreAccount, UserOwnedTitle
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
 # re-exported here because callers and tests import them from this module.
@@ -200,6 +201,8 @@ def import_store_csv(user_id: int, store: str, csv_text: str) -> dict:
         raise ValueError(f'Unsupported store: {store}')
     if not is_ownership_sync_enabled():
         raise PermissionError('Store ownership sync is disabled by administrator')
+    if len(csv_text.encode('utf-8', errors='replace')) > MAX_OWNERSHIP_CSV_BYTES:
+        raise ValueError('CSV import exceeds the 16 MiB size limit')
 
     reader = csv.reader(io.StringIO(csv_text))
     pending: list[tuple[str, str | None]] = []
