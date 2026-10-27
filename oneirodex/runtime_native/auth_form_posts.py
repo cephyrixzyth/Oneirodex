@@ -12,6 +12,18 @@ from .request_auth import request_auth_context
 from .query_compat import first_query_value
 from .response_compat import flask_redirect_response
 
+_AUTH_FORM_MAX_FIELDS = 32
+_AUTH_FORM_MAX_FIELD_BYTES = 16 * 1024
+
+
+async def _parse_auth_form(request):
+    """Parse the small text-only login/registration forms within fixed bounds."""
+    return await request.form(
+        max_files=0,
+        max_fields=_AUTH_FORM_MAX_FIELDS,
+        max_part_size=_AUTH_FORM_MAX_FIELD_BYTES,
+    )
+
 
 def create_auth_form_post_router(
     flask_app: FastAPI,
@@ -52,7 +64,7 @@ def create_auth_form_post_router(
         return None
 
     async def prepare(request):
-        form = await request.form() if request.method == 'POST' else {}
+        form = await _parse_auth_form(request) if request.method == 'POST' else {}
         session_data = _session_data(request, flask_app.config)
         csrf_error = (
             _form_csrf_error(request, form, session_data, flask_app.config)
