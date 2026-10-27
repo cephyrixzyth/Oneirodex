@@ -17,6 +17,9 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
+_DOWNLOAD_IMAGES_BODY_MAX_BYTES = 64 * 1024
+_DOWNLOAD_IMAGES_MAX_IDS = 500
+
 
 class ImageMutationsData:
     def path_status(self, config):
@@ -499,35 +502,58 @@ def create_admin_image_mutation_router(
                 if csrf is not None:
                     response = csrf
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    body = body if isinstance(body, dict) else {}
-                    path_status = data.path_status(flask_app.config)
-                    if not path_status.get('writable') and (
-                        'image_ids' in body or body.get('retry_failed') or 'batch_size' in body
-                    ):
-                        message = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
+                    import json
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, _DOWNLOAD_IMAGES_BODY_MAX_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
                         payload, status = api_error_payload(
-                            message, code='unavailable', image_save_path=path_status,
-                            downloaded=0, failed=0, errors=[{'error': message}],
+                            'Request body is too large.', code='payload_too_large',
                         )
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
-                            result = data.download_images(flask_app, body, path_status)
-                            response = JSONResponse(api_ok_payload(result))
-                        except ValueError as exc:
-                            payload, status = api_error_payload(str(exc), code='bad_request')
-                            response = JSONResponse(payload, status_code=status)
+                            body = json.loads(raw_body or b'{}')
                         except Exception:
-                            data.rollback()
+                            body = {}
+                        body = body if isinstance(body, dict) else {}
+                        image_ids = body.get('image_ids')
+                        if isinstance(image_ids, list) and len(image_ids) > _DOWNLOAD_IMAGES_MAX_IDS:
                             payload, status = api_error_payload(
-                                'Could not download the images', code='internal',
-                                image_save_path=path_status,
+                                'Too many image IDs were supplied.', code='payload_too_large',
+                                limit=_DOWNLOAD_IMAGES_MAX_IDS,
                             )
                             response = JSONResponse(payload, status_code=status)
+                        elif 'image_ids' in body and not isinstance(image_ids, list):
+                            payload, status = api_error_payload(
+                                'image_ids must be a list.', code='bad_request',
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        else:
+                            path_status = data.path_status(flask_app.config)
+                            if not path_status.get('writable') and (
+                                'image_ids' in body or body.get('retry_failed') or 'batch_size' in body
+                            ):
+                                message = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
+                                payload, status = api_error_payload(
+                                    message, code='unavailable', image_save_path=path_status,
+                                    downloaded=0, failed=0, errors=[{'error': message}],
+                                )
+                                response = JSONResponse(payload, status_code=status)
+                            else:
+                                try:
+                                    result = data.download_images(flask_app, body, path_status)
+                                    response = JSONResponse(api_ok_payload(result))
+                                except ValueError as exc:
+                                    payload, status = api_error_payload(str(exc), code='bad_request')
+                                    response = JSONResponse(payload, status_code=status)
+                                except Exception:
+                                    data.rollback()
+                                    payload, status = api_error_payload(
+                                        'Could not download the images', code='internal',
+                                        image_save_path=path_status,
+                                    )
+                                    response = JSONResponse(payload, status_code=status)
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values

@@ -285,6 +285,23 @@ def test_download_and_batch_upload_use_authenticated_csrf_routes_and_fake_storag
     assert data.uploads == (['g1_cover.png'], 'cover', 'g1')
 
 
+def test_image_download_rejects_oversized_body_and_id_batches_before_data_work():
+    client, data = _client()
+    oversized = client.post(
+        '/admin/api/download_images', content=b' ' * (64 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    too_many = client.post(
+        '/admin/api/download_images', json={'image_ids': list(range(501))},
+    )
+
+    assert oversized.status_code == 413
+    assert oversized.json()['error_code'] == 'payload_too_large'
+    assert too_many.status_code == 413
+    assert too_many.json()['error_code'] == 'payload_too_large'
+    assert not hasattr(data, 'download_body')
+
+
 def test_batch_upload_ignores_text_fields_with_same_name_as_uploads():
     client, data = _client()
     response = client.post(
