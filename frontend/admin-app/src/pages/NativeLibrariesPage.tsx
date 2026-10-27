@@ -46,11 +46,11 @@ export function NativeLibrariesPage() {
           Scan jobs
         </a>
       </div>
+      <LibrariesPanel />
       <LibraryDoctorPanel />
       <RenameGamePanel />
       <LibraryFreshnessPanel />
       <LibraryProposalsPanel />
-      <LibrariesPanel />
       <ScanConflictModal
         open={conflictOpen}
         busy={refreshing}

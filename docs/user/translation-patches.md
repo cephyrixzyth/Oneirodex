@@ -39,6 +39,8 @@ When the operator sets `ENABLE_ROM_PATCH_APPLY=true` and configures `FLIPS_PATH`
 
 Companion stages files under `app_data/patches/{gameUuid}/` (ACL-safe like cheats) and invokes Flips CLI. Output is written beside the staged ROM — never overwrite the only copy of a base ROM without a backup.
 
+Companion patch downloads are limited to 256 MiB. Larger patches are rejected before staging; download them through the browser and apply them manually with Flips.
+
 ## Operator: catalog patches
 
 Place `.ips` / `.bps` / `.ups` under the game’s extras folder (same pattern as other extras). On scan, Oneirodex sets `extra_kind=translation_patch` and optional `target_language` from the filename. Optionally set `source_url` on the `GameExtra` row to a patch guide URL you host or trust.

@@ -11,6 +11,77 @@ import { checkDownloadRedirectUrl } from './transport-policy.js'
 
 const PATCH_EXTS = new Set(['.ips', '.bps', '.ups'])
 
+/** Keep patch staging bounded before the response is copied into a Tauri IPC array. */
+export const MAX_PATCH_DOWNLOAD_BYTES = 256 * 1024 * 1024
+
+function declaredContentLength(response: Response): number | null {
+  const value = response.headers?.get?.('content-length')?.trim()
+  if (!value || !/^\d+$/.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function patchSizeLimitLabel(maxBytes: number): string {
+  const mebibyte = 1024 * 1024
+  return maxBytes >= mebibyte && maxBytes % mebibyte === 0
+    ? `${maxBytes / mebibyte} MiB`
+    : `${maxBytes} byte${maxBytes === 1 ? '' : 's'}`
+}
+
+/** Buffer a patch only after enforcing a declared and cumulative byte ceiling. */
+export async function readBoundedPatchResponse(
+  response: Response,
+  maxBytes = MAX_PATCH_DOWNLOAD_BYTES,
+): Promise<Uint8Array> {
+  // Keep the exported helper from weakening production's ceiling if a caller
+  // supplies a non-finite or larger value; smaller limits remain useful to tests.
+  const byteLimit = Number.isFinite(maxBytes)
+    ? Math.min(MAX_PATCH_DOWNLOAD_BYTES, Math.max(0, Math.floor(maxBytes)))
+    : MAX_PATCH_DOWNLOAD_BYTES
+  const limitLabel = patchSizeLimitLabel(byteLimit)
+  const declared = declaredContentLength(response)
+  if (declared !== null && declared > byteLimit) {
+    try {
+      await response.body?.cancel()
+    } catch {
+      // A response stub or an already-closed stream may not be cancellable.
+    }
+    throw new Error(`Patch download exceeds the ${limitLabel} limit`)
+  }
+
+  const body = response.body
+  if (!body) return new Uint8Array(0)
+
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let bytesReceived = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value?.byteLength) continue
+      if (value.byteLength > byteLimit - bytesReceived) {
+        throw new Error(`Patch download exceeds the ${limitLabel} limit`)
+      }
+      bytesReceived += value.byteLength
+      chunks.push(value)
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined)
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(bytesReceived)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
 export function safePatchFilename(filename: string): string {
   const trimmed = (filename || '').trim().replace(/\\/g, '/')
   const base = trimmed.split('/').pop() || ''
@@ -120,14 +191,14 @@ export async function stagePatchFile(opts: {
     if (!response.ok) {
       return { ok: false, error: `patch download ${response.status}` }
     }
-    const buffer = await response.arrayBuffer()
+    const bytes = await readBoundedPatchResponse(response)
     const patchesDir = await getPatchesDir()
     const stageDir = resolvePatchStageDir(patchesDir, opts.gameUuid)
     const name = safePatchFilename(opts.filename || `${opts.patchUuid}.bps`)
     const path = `${stageDir}/${name}`
     await invoke('write_file_bytes', {
       path,
-      bytes: Array.from(new Uint8Array(buffer)),
+      bytes: Array.from(bytes),
     })
     return { ok: true, path }
   } catch (err) {
