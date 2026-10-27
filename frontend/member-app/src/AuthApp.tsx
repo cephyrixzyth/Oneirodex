@@ -160,7 +160,7 @@ export function AuthApp({
         <h1 className="auth-pilot__title">Sign in to Oneirodex</h1>
         <p className="auth-pilot__lede">Household library access for your gaming sphere.</p>
         <form
-          className="auth-pilot__form"
+          className="auth-pilot__form auth-pilot__form--login"
           noValidate
           onSubmit={(event) => {
             const form = event.currentTarget
@@ -205,7 +205,7 @@ export function AuthApp({
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
-        <nav className="auth-pilot__links" aria-label="Account actions">
+        <nav className="auth-pilot__links auth-pilot__links--login" aria-label="Account actions">
           <a href="/register">Create account</a>
           <a href="/reset_password_request">Forgot password?</a>
           {bootstrap?.oidc_enabled ? <a href="/login/oidc">{bootstrap.oidc_display_name}</a> : null}
@@ -453,7 +453,11 @@ export function AuthApp({
       <a className="auth-pilot__skip" href="#auth-content">
         Skip to account form
       </a>
-      <section className="auth-pilot__card" id="auth-content" aria-labelledby="auth-brand">
+      <section
+        className={page === 'login' ? 'auth-pilot__card auth-pilot__card--login' : 'auth-pilot__card'}
+        id="auth-content"
+        aria-labelledby="auth-brand"
+      >
         <a className="auth-pilot__brand" href="/" id="auth-brand" aria-label="Oneirodex">
           <img
             className="auth-pilot__brand-mark"

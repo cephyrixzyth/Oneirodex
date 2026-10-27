@@ -1,6 +1,11 @@
+body {
+  margin: 0;
+}
+
 .auth-pilot {
   min-height: 100vh;
   min-height: 100dvh;
+  box-sizing: border-box;
   display: grid;
   place-items: center;
   padding: var(--od-space-6);
@@ -34,6 +39,68 @@
   border-radius: var(--od-radius-xl);
   background: var(--od-surface);
   box-shadow: var(--od-shadow-lg);
+}
+
+.auth-pilot__card--login {
+  box-sizing: border-box;
+  width: min(100%, 28rem);
+  gap: calc(var(--od-space-5) + var(--od-space-3) / 2);
+  padding-block: calc(var(--od-space-6) + var(--od-space-3)) var(--od-space-6);
+  padding-inline: calc(var(--od-space-6) + var(--od-space-3));
+}
+
+.auth-pilot__card--login > .auth-pilot__brand + .auth-pilot__title {
+  margin-block-start: calc(0px - var(--od-space-3));
+}
+
+@media (min-width: 36.01rem) {
+  .auth-pilot__card--login {
+    padding-block-end: calc(var(--od-space-6) + var(--od-space-4));
+  }
+
+  .auth-pilot__card--login > .auth-pilot__lede {
+    margin-block-start: calc(0px - var(--od-space-1) / 2);
+  }
+
+  .auth-pilot__card--login > .auth-pilot__lede + .auth-pilot__form--login {
+    margin-block-start: calc(0px - var(--od-space-3) / 2);
+  }
+
+  .auth-pilot__card--login > .auth-pilot__form--login + .auth-pilot__links--login {
+    margin-block-start: calc(0px - var(--od-space-3) - var(--od-space-2) / 4);
+  }
+}
+
+.auth-pilot__card--login > .auth-pilot__brand {
+  justify-self: center;
+}
+
+.auth-pilot__card--login > .auth-pilot__title,
+.auth-pilot__card--login > .auth-pilot__lede {
+  text-align: center;
+}
+
+.auth-pilot__card--login > .auth-pilot__title {
+  font-size: var(--od-font-2xl);
+}
+
+.auth-pilot__card--login .auth-pilot__form--login {
+  gap: calc(var(--od-space-5) + var(--od-space-3) / 2);
+}
+
+.auth-pilot__form--login .auth-pilot__field {
+  gap: var(--od-space-3);
+  font-weight: 700;
+}
+
+.auth-pilot__form--login .auth-pilot__field input {
+  box-sizing: border-box;
+  height: calc(var(--od-control-h) + var(--od-space-1));
+  min-height: calc(var(--od-control-h) + var(--od-space-1));
+}
+
+.auth-pilot__form--login .auth-pilot__submit {
+  min-height: 3rem;
 }
 
 .auth-pilot__card:has(.auth-pilot__form--providers) {
@@ -233,6 +300,37 @@
   text-underline-offset: var(--od-space-1);
 }
 
+.auth-pilot__links--login {
+  display: grid;
+  gap: var(--od-space-4);
+  margin-block-start: calc(0px - var(--od-space-3));
+}
+
+.auth-pilot__links--login a {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.875rem;
+  padding: var(--od-space-3) var(--od-space-4);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface-2);
+  color: var(--od-text);
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.auth-pilot__links--login a:hover {
+  background: var(--od-surface);
+}
+
+.auth-pilot__links--login a:focus-visible {
+  outline: 2px solid var(--od-focus-ring);
+  outline-offset: 2px;
+}
+
 .auth-pilot__error,
 .auth-pilot__notice {
   margin: 0;
@@ -250,18 +348,26 @@
   color: var(--od-success);
 }
 
-.auth-pilot__server-notice {
+.auth-pilot:has(.auth-pilot__card--login) .auth-pilot__server-notice {
+  position: fixed;
+  inset-block-start: var(--od-space-5);
+  inset-inline-end: var(--od-space-5);
+  z-index: 10;
+  box-sizing: border-box;
+  width: min(16.25rem, calc(100vw - var(--od-space-4) - var(--od-space-4)));
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--od-space-3);
   margin: 0;
-  padding: var(--od-space-3);
-  border: 1px solid color-mix(in srgb, var(--od-info) 45%, transparent);
+  padding: var(--od-space-4) var(--od-space-5);
+  border: 1px solid var(--od-border);
   border-radius: var(--od-radius-sm);
-  background: color-mix(in srgb, var(--od-info) 10%, var(--od-surface));
+  background: var(--od-surface-2);
   color: var(--od-text);
+  font-size: var(--od-font-sm);
   line-height: var(--od-line-base);
+  box-shadow: var(--od-shadow-lg);
 }
 
 .auth-pilot__server-notice-dismiss {
@@ -277,10 +383,20 @@
 
 @media (max-width: 36rem) {
   .auth-pilot {
-    padding: var(--od-space-3);
+    padding: calc(var(--od-space-5) + var(--od-space-1));
   }
   .auth-pilot__card {
     padding: var(--od-space-4);
+  }
+
+  .auth-pilot__card--login {
+    gap: calc(var(--od-space-5) + var(--od-space-3) / 4);
+    padding-block: calc(var(--od-space-5) + var(--od-space-1)) var(--od-space-6);
+    padding-inline: calc(var(--od-space-5) + var(--od-space-1));
+  }
+
+  .auth-pilot__card--login > .auth-pilot__title {
+    font-size: var(--od-font-xl);
   }
 }
 

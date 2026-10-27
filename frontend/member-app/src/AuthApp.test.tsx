@@ -57,6 +57,22 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   expect(navigate).toHaveBeenCalledWith('/library')
 })
 
+test('login uses the legacy centered card and stacked account actions', async () => {
+  const { container } = render(<AuthApp />)
+
+  await screen.findByRole('heading', { name: 'Sign in to Oneirodex' })
+
+  const card = container.querySelector('.auth-pilot__card')
+  expect(card).toHaveClass('auth-pilot__card--login')
+  expect(card?.querySelector('.auth-pilot__brand')).toBeInTheDocument()
+  expect(card?.querySelector('.auth-pilot__form')).toHaveClass('auth-pilot__form--login')
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--login',
+  )
+  expect(screen.getByRole('navigation', { name: 'Account actions' }).querySelectorAll('a'))
+    .toHaveLength(3)
+})
+
 test('server login notices follow account actions and can be dismissed', async () => {
   const mount = document.createElement('div')
   mount.id = 'member-auth-root'
