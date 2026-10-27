@@ -66,9 +66,11 @@ beforeEach(() => {
   vi.mocked(getJson).mockReset()
   vi.mocked(postJsonResult).mockReset()
   vi.mocked(getJson).mockImplementation(async (url) =>
-    String(url).includes('/api/admin/library_platforms')
-      ? { platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] }
-      : ROWS,
+    String(url).includes('/api/admin/igdb/settings')
+      ? { settings: { igdb_client_id: 'client-id-at-least-20chars', secret_present: true } }
+      : String(url).includes('/api/admin/library_platforms')
+        ? { platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] }
+        : ROWS,
   )
   vi.mocked(postJsonResult).mockResolvedValue({ ok: true, status: 200, data: { ok: true } })
   document.getElementById('od-admin-topbar-trail')?.remove()
@@ -86,6 +88,34 @@ test('hides selected copy until a row is checked', async () => {
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
   expect(screen.queryByText('0 selected')).toBeNull()
+})
+
+test('skips the automatic licensed-catalog refresh when IGDB credentials are not configured', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    String(url).includes('/api/admin/igdb/settings')
+      ? { settings: { igdb_client_id: '', secret_present: false } }
+      : ROWS,
+  )
+  render(<LibrariesPanel />)
+  await screen.findByText('_pc')
+  await waitFor(() => {
+    expect(getJson).toHaveBeenCalledWith('/api/admin/igdb/settings')
+  })
+  expect(postJsonResult).not.toHaveBeenCalledWith(
+    '/api/licensed-catalog/refresh',
+    expect.anything(),
+  )
+  expect(window.sessionStorage.getItem('od-libraries-catalog-refresh-v1')).toBeNull()
+})
+
+test('refreshes licensed-catalog estimates when saved IGDB credentials are present', async () => {
+  render(<LibrariesPanel />)
+  await waitFor(() => {
+    expect(postJsonResult).toHaveBeenCalledWith(
+      '/api/licensed-catalog/refresh',
+      { library_platform: 'NES' },
+    )
+  })
 })
 
 test('keeps the native library error visible and retries the roster request', async () => {

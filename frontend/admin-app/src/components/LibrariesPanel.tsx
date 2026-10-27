@@ -52,7 +52,8 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
 
   useEffect(() => {
     if (!rows?.length) return undefined
-    void kickCatalogRefresh(rows).then(() => {
+    void kickCatalogRefresh(rows).then((refreshed) => {
+      if (!refreshed) return
       /* After a first-wave IGDB refresh, reload once so DAT/IGDB totals replace estimates. */
       const flagged = (() => {
         try {
