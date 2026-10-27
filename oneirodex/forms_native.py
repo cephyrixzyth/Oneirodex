@@ -39,6 +39,24 @@ def stored_preference_formdata(prefs) -> dict:
     }
 
 
+def preference_update_formdata(prefs, payload) -> dict:
+    """Merge a partial preferences update using the legacy POST fallback.
+
+    The visible form defaults its first page-size choice to 20, but legacy
+    partial POSTs filled omitted fields from the persisted-preference helper,
+    whose no-row page-size fallback is 50. Keep that write behavior while
+    leaving the read projection's first-run default unchanged.
+    """
+    values = stored_preference_formdata(prefs)
+    if prefs is None and 'items_per_page' not in payload:
+        values['items_per_page'] = '50'
+    for key in values:
+        if key in payload:
+            raw = payload[key]
+            values[key] = 'true' if raw is True else 'false' if raw is False else str(raw)
+    return values
+
+
 class UserPreferencesForm(Form):
     items_per_page_choices = [
         ('20', '20'), ('50', '50'), ('100', '100'), ('200', '200'),
@@ -122,4 +140,5 @@ class UserPreferencesForm(Form):
 
 __all__ = [
     'UserPreferencesForm', 'normalize_tile_percent', 'stored_preference_formdata',
+    'preference_update_formdata',
 ]

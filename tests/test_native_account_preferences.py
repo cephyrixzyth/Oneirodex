@@ -6,7 +6,10 @@ from flask import Flask
 from types import SimpleNamespace
 
 from oneirodex.runtime_native.account_preferences import create_account_preferences_router
-from oneirodex.forms_native import stored_preference_formdata
+from oneirodex.forms_native import (
+    preference_update_formdata,
+    stored_preference_formdata,
+)
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
@@ -66,6 +69,21 @@ def signed_session(*, csrf=False):
 
 def test_unpersisted_preferences_use_legacy_page_size_default():
     assert stored_preference_formdata(None)['items_per_page'] == '20'
+
+
+def test_partial_update_without_preference_row_uses_legacy_save_fallback():
+    values = preference_update_formdata(None, {'tile_size': '72'})
+
+    assert values['items_per_page'] == '50'
+    assert values['tile_size'] == '72'
+
+
+def test_full_update_keeps_explicit_page_size_without_preference_row():
+    values = preference_update_formdata(
+        None, {'items_per_page': 100, 'tile_size': '72'},
+    )
+
+    assert values['items_per_page'] == '100'
 
 
 def test_preferences_get_preserves_payload_and_signed_session_access():

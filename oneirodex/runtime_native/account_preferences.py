@@ -71,16 +71,13 @@ class AccountPreferencesData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.forms_native import (
-            UserPreferencesForm, normalize_tile_percent, stored_preference_formdata,
+            UserPreferencesForm, normalize_tile_percent,
+            preference_update_formdata, stored_preference_formdata,
         )
         from oneirodex.models import UserPreference
 
         prefs = user.preferences
-        values = stored_preference_formdata(prefs)
-        for key in values:
-            if key in payload:
-                raw = payload[key]
-                values[key] = 'true' if raw is True else 'false' if raw is False else str(raw)
+        values = preference_update_formdata(prefs, payload)
         form = UserPreferencesForm(formdata=MultiDict(values), app=self.app)
         if not form.validate():
             return {'error': 'Preferences validation failed', 'errors': form.errors}, 400
