@@ -112,3 +112,22 @@ test('integrations setup skip action advances without saving the entered credent
   )
   expect(navigate).toHaveBeenCalledWith('/setup/library')
 })
+
+test('first library setup matches the create-and-scan action with a responsive field grid', async () => {
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 6,
+    platforms: [{ key: 'PC_WINDOWS', label: 'PC Windows' }],
+    settings: {},
+  })
+  const navigate = vi.fn()
+  render(<SetupWizard navigate={navigate} />)
+
+  expect(await screen.findByRole('heading', { name: 'Create your first library' })).toBeInTheDocument()
+  expect(screen.getByText(/start its first scan/)).toBeInTheDocument()
+  expect(screen.getByText(/Game files remain read-only/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Finish without a library' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__form--library')).toBeInTheDocument()
+})

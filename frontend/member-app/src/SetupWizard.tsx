@@ -16,7 +16,7 @@ const STEP_TITLES: Record<number, string> = {
   3: 'Features',
   4: 'Connect game metadata',
   5: 'Choose API connections',
-  6: 'First library',
+  6: 'Create your first library',
 }
 const navigateWindow = (url: string) => window.location.assign(url)
 
@@ -170,10 +170,14 @@ export function SetupWizard({
             ? 'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.'
             : step === 5
               ? 'Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.'
-              : `Step ${step} of 6. You can change these choices later in settings.`}
+              : step === 6
+                ? 'Optional. Add a library now and start its first scan, or finish setup and add it later. Use a path visible inside the server, such as /storage/nes, under an allowed library location. Game files remain read-only.'
+                : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       <form
-        className={`auth-pilot__form${step === 5 ? ' auth-pilot__form--providers' : ''}`}
+        className={`auth-pilot__form${step === 5 ? ' auth-pilot__form--providers' : ''}${
+          step === 6 ? ' auth-pilot__form--library' : ''
+        }`}
         onSubmit={(event) => void submit(event)}
       >
         {step === 1 ? (
@@ -408,10 +412,6 @@ export function SetupWizard({
         ) : null}
         {step === 6 ? (
           <>
-            <p className="auth-pilot__message">
-              Add the first library now or finish setup and add it later. The server path must exist
-              inside an allowed library location.
-            </p>
             {input('library_name', 'Library name')}
             <label className="auth-pilot__field">
               <span>Platform</span>
@@ -463,7 +463,7 @@ export function SetupWizard({
               : step === 5
                 ? 'Save choices and continue'
                 : step === 6
-                  ? 'Finish setup'
+                  ? 'Create library and start scan'
                   : 'Continue'}
         </Button>
         {[2, 4, 5, 6].includes(step) ? (
