@@ -2937,6 +2937,29 @@ def test_native_related_media_create_validates_and_requires_librarian_csrf(
     assert runtime._fake_related_media.calls == [('game', 'game-1')]
 
 
+def test_native_related_media_create_rejects_oversized_json_before_parsing(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app._fake_user.role = 'librarian'
+    cookie, csrf = _signed_session_with_csrf()
+    payload = json.dumps({'title': 'x' * related_media._MAX_CREATE_BODY_BYTES}).encode()
+
+    async def create():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/games/game-1/related_media',
+                content=payload,
+                headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(create())
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_related_media.calls == []
+
+
 def test_native_related_media_create_and_delete_require_librarian_role(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     flask_app._fake_user.role = 'librarian'

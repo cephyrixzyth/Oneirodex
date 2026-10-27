@@ -117,6 +117,8 @@ point at a store or streaming page; anything download-shaped is refused outright
 
 API: `GET`/`POST /api/games/<uuid>/related_media` ·
 `DELETE /api/games/<uuid>/related_media/<id>`.
+Related-media create requests are limited to 1 MiB; larger JSON bodies return
+HTTP 413.
 
 Related: [getting-started.md](getting-started.md) · [downloads.md](downloads.md) · [translation-patches.md](translation-patches.md) · [preferences-themes.md](preferences-themes.md)
 
