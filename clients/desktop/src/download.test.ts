@@ -74,6 +74,7 @@ describe('download kickoff helper', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://example.com/download_zip/7',
       expect.objectContaining({
+        redirect: 'error',
         headers: expect.objectContaining({
           Authorization: 'Bearer gt_prefix_secret',
         }),
@@ -366,17 +367,23 @@ describe('archive download redirects', () => {
     expect(text).not.toHaveBeenCalled()
   })
 
-  it.each([
-    'https://cdn.example.com/game.zip',
-    'https://example.com/download_zip/7',
-    'http://tower.lan:5006/download_zip/7',
-    'http://192.168.1.5/game.zip',
-    'http://100.100.100.100/game.zip',
-  ])('accepts a download that landed on %s', async (landedOn) => {
-    const { auth, api, fetchImpl } = setup(landedOn)
+  it('accepts direct same-origin HTTPS and configured local-server archive responses', async () => {
+    const { auth, api, fetchImpl } = setup('https://example.com/download_zip/7')
     const registry = createLifecycleRegistry()
     await expect(
       kickoffDownload(api as never, auth, registry, 'game-7', { fetchImpl }),
+    ).resolves.toBe('downloaded')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
+
+    const local = setup('http://tower.lan:5006/download_zip/7')
+    local.auth.setBaseUrl('http://tower.lan:5006')
+    await expect(
+      kickoffDownload(local.api as never, local.auth, createLifecycleRegistry(), 'game-8', {
+        fetchImpl: local.fetchImpl,
+      }),
     ).resolves.toBe('downloaded')
   })
 
@@ -385,6 +392,10 @@ describe('archive download redirects', () => {
     await expect(
       kickoffDownload(api as never, auth, createLifecycleRegistry(), 'game-7', { fetchImpl }),
     ).resolves.toBe('downloaded')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
     const empty = setup('')
     await expect(
       kickoffDownload(empty.api as never, empty.auth, createLifecycleRegistry(), 'game-8', {
@@ -398,10 +409,14 @@ describe('archive download redirects', () => {
     await expect(fetchDownloadStream(auth, '/download_zip/7', { fetchImpl })).rejects.toThrow(
       /Refusing http:\/\/ download redirect/,
     )
-    const ok = setup('https://cdn.example.com/game.zip')
+    const ok = setup('https://example.com/download_zip/7')
     await expect(
       fetchDownloadStream(ok.auth, '/download_zip/7', { fetchImpl: ok.fetchImpl }),
     ).resolves.toBeInstanceOf(ArrayBuffer)
+    expect(ok.fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
   })
 
   it('still refuses when the stub response has no body to cancel', async () => {

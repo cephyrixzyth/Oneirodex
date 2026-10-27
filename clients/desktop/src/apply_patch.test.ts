@@ -97,7 +97,7 @@ describe('apply_patch helpers', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://gt.example/download_zip/80',
-      expect.objectContaining({ credentials: 'omit' }),
+      expect.objectContaining({ credentials: 'omit', redirect: 'error' }),
     )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/patches/game-42/en.bps',

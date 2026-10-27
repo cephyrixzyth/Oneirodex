@@ -110,6 +110,7 @@ export async function stagePatchFile(opts: {
     }
     const response = await fetchFn(joinUrl(base, streamPath), {
       credentials: 'omit',
+      redirect: 'error',
       headers,
     })
     if (response.url) {

@@ -157,16 +157,11 @@ export async function initiateDownloadRequest(
 }
 
 /**
- * An https server may answer with a redirect, and `fetch` follows it on its own.
- * What is checked is the URL it ended on (`response.url`), against the same
- * http://-only-on-your-own-network rule as the server URL. A plain `http://` leg
- * in the middle of a redirect chain is invisible here (`fetch` reports only the
- * last URL, and `redirect: 'manual'` hides the Location header), so the server is
- * expected to stream `/download_zip/<id>` itself or redirect straight to https:
- * an archive rewritten in transit is extracted into `installs/` and launched.
- * (`fetch` drops the Authorization header on a cross-origin hop, so the token is
- * safe either way.) Mocks and some runtimes leave `url` empty — nothing to check
- * then.
+ * Game archives are served by the authenticated same-origin `/download_zip/<id>`
+ * endpoint. Reject redirects at Fetch so no intermediate hop can downgrade or
+ * replace the archive before it is extracted and launched. Keep the final URL
+ * check as defense in depth for custom fetch implementations; some test stubs
+ * and runtimes report an empty `url`.
  */
 function assertDownloadFinalUrlAllowed(response: Response): void {
   if (!response.url) {
@@ -201,6 +196,7 @@ export async function fetchDownloadStream(
   const fetchImpl = options.fetchImpl ?? fetch
   const response = await fetchImpl(joinUrl(auth.getBaseUrl(), streamPath), {
     method: 'GET',
+    redirect: 'error',
     headers: {
       Authorization: authHeader,
     },
@@ -255,6 +251,7 @@ export async function streamDownloadToFile(
   const fetchImpl = options.fetchImpl ?? fetch
   const response = await fetchImpl(joinUrl(auth.getBaseUrl(), streamPath), {
     method: 'GET',
+    redirect: 'error',
     headers: {
       Authorization: authHeader,
     },
