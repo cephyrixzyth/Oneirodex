@@ -773,7 +773,7 @@ Legacy GET download links no longer create queue requests. The native compatibil
 
 `/game_details/<game_uuid>` now uses the native authenticated member shell. It validates the UUID, checks game existence and the user’s library/content ACL before serving the React shell, preserving the legacy 404 and 403 outcomes.
 
-The GET/HEAD compatibility redirects for `/settings_profile_view`, `/settings_password`, and `/settings_panel` now run in FastAPI and retain their existing account/preferences destinations. Their mutation methods remain on the compatibility path while those flows are migrated.
+The GET/HEAD compatibility redirects for `/settings_profile_view`, `/settings_password`, and `/settings_panel` now run in FastAPI and retain their existing account/preferences destinations. They apply the legacy first-run setup gate before authentication so a clean install reaches setup rather than login. Their mutation methods remain on the compatibility path while those flows are migrated.
 
 The main `/library` page now builds its React shell in the native member router. It retains default preference creation, URL-over-cookie filter precedence, library-name resolution and flash redirect, user sort/page preferences, and the catalog/scan/unmatched counts used by empty states.
 

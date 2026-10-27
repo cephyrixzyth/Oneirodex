@@ -74,30 +74,38 @@ def create_site_redirect_router(
     def restricted(request: Request):
         from .acquire_status import _login_redirect, _set_session_cookie
         from oneirodex.utils.security_headers import security_header_values
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
 
         scope = database_scope(runtime_app) if database_scope else nullcontext()
         with scope:
-            auth = request_auth_context(
-                request,
-                runtime_app.config,
-                find_user=find_user,
-                find_token=find_token,
-                commit_token_touch=commit_token_touch,
-                allow_bearer=False,
-                login_manager=getattr(runtime_app, 'login_manager', None),
-            )
-            if auth.user is None:
-                response = _login_redirect(
-                    runtime_app, request, getattr(runtime_app, 'login_manager', None), auth,
+            if should_redirect_to_setup():
+                from .response_compat import flask_redirect_response
+
+                response = flask_redirect_response(
+                    get_setup_redirect_url(), status_code=302,
                 )
             else:
-                # The legacy route is the authenticated app entry page. `/welcome`
-                # now means first-run store setup, so sending every legacy visit
-                # there changes the route's purpose. Discover is the current
-                # member landing page and preserves the original entry intent.
-                response = RedirectResponse('/discover', status_code=302)
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, runtime_app, auth)
+                auth = request_auth_context(
+                    request,
+                    runtime_app.config,
+                    find_user=find_user,
+                    find_token=find_token,
+                    commit_token_touch=commit_token_touch,
+                    allow_bearer=False,
+                    login_manager=getattr(runtime_app, 'login_manager', None),
+                )
+                if auth.user is None:
+                    response = _login_redirect(
+                        runtime_app, request, getattr(runtime_app, 'login_manager', None), auth,
+                    )
+                else:
+                    # The legacy route is the authenticated app entry page. `/welcome`
+                    # now means first-run store setup, so sending every legacy visit
+                    # there changes the route's purpose. Discover is the current
+                    # member landing page and preserves the original entry intent.
+                    response = RedirectResponse('/discover', status_code=302)
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, runtime_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'
@@ -110,25 +118,33 @@ def create_site_redirect_router(
     def compatibility_redirect(request: Request, target: str):
         from .acquire_status import _login_redirect, _set_session_cookie
         from oneirodex.utils.security_headers import security_header_values
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
 
         scope = database_scope(runtime_app) if database_scope else nullcontext()
         with scope:
-            manager = getattr(runtime_app, 'login_manager', None)
-            auth = request_auth_context(
-                request,
-                runtime_app.config,
-                find_user=find_user,
-                find_token=find_token,
-                commit_token_touch=commit_token_touch,
-                allow_bearer=False,
-                login_manager=manager,
-            )
-            if auth.user is None:
-                response = _login_redirect(runtime_app, request, manager, auth)
+            if should_redirect_to_setup():
+                from .response_compat import flask_redirect_response
+
+                response = flask_redirect_response(
+                    get_setup_redirect_url(), status_code=302,
+                )
             else:
-                response = RedirectResponse(target, status_code=302)
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, runtime_app, auth)
+                manager = getattr(runtime_app, 'login_manager', None)
+                auth = request_auth_context(
+                    request,
+                    runtime_app.config,
+                    find_user=find_user,
+                    find_token=find_token,
+                    commit_token_touch=commit_token_touch,
+                    allow_bearer=False,
+                    login_manager=manager,
+                )
+                if auth.user is None:
+                    response = _login_redirect(runtime_app, request, manager, auth)
+                else:
+                    response = RedirectResponse(target, status_code=302)
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, runtime_app, auth)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'
         for key, value in security_header_values(runtime_app.config).items():

@@ -166,6 +166,43 @@ def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monk
     assert response.headers['location'] == '/discover'
 
 
+@pytest.mark.parametrize(
+    ('user', 'setup_required', 'setup_in_progress'),
+    [
+        (None, True, False),
+        (User(), False, True),
+    ],
+)
+def test_restricted_and_account_compat_routes_redirect_to_setup_before_auth(
+    monkeypatch, user, setup_required, setup_in_progress,
+):
+    app, cookie = _client(
+        monkeypatch, user=user, setup_required=setup_required,
+        setup_in_progress=setup_in_progress,
+    )
+
+    for path in (
+        '/restricted',
+        '/settings_profile_view',
+        '/settings_password',
+        '/settings_panel',
+    ):
+        response = _request(app, 'GET', path, cookie)
+        assert response.status_code == 302
+        assert response.headers['location'] == '/setup/features'
+        legacy = werkzeug_redirect('/setup/features')
+        assert response.headers['content-type'] == legacy.headers['Content-Type']
+        assert response.headers['content-length'] == legacy.headers['Content-Length']
+        assert response.content == legacy.get_data()
+
+        head = _request(app, 'HEAD', path, cookie)
+        assert head.status_code == 302
+        assert head.headers['location'] == '/setup/features'
+        assert head.content == b''
+        assert head.headers['content-type'] == legacy.headers['Content-Type']
+        assert head.headers['content-length'] == legacy.headers['Content-Length']
+
+
 def test_settings_page_get_redirects_keep_legacy_account_destinations(monkeypatch):
     user = User()
     app, cookie = _client(monkeypatch, user=user)
