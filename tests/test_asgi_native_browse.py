@@ -4145,9 +4145,12 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
     assert packs.json()['packs'][0]['id'] == 'outline'
     assert packs.json()['packs'][0]['css_url'].startswith('/static/library/icon-themes/')
 
-    existing = asyncio.run(send('POST', '/api/check_username', {'username': 'Taken'}))
+    existing = asyncio.run(send('POST', '/api/check_username', {'username': 'tAkEn'}))
     assert existing.status_code == 200
     assert existing.json() == {'exists': True}
+    absent = asyncio.run(send('POST', '/api/check_username', {'username': 'NotTaken'}))
+    assert absent.status_code == 200
+    assert absent.json() == {'exists': False}
     missing = asyncio.run(send('POST', '/api/check_username', {}))
     assert missing.status_code == 422
     assert missing.json()['error'] == 'Invalid request.'
