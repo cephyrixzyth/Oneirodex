@@ -27,6 +27,7 @@ from oneirodex.utils.image_kinds import (
     image_kinds_error_message,
     parse_image_kind,
 )
+from oneirodex.utils.image_paths import image_path_under_save_dir
 from oneirodex.utils.validation import validate_body
 from . import admin2_bp
 
@@ -247,8 +248,10 @@ def delete_image(image_id):
             return api_error('Image not found', code='not_found')
 
         if image.is_downloaded and image.url:
-            file_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], image.url)
-            if os.path.exists(file_path):
+            file_path = image_path_under_save_dir(
+                image.url, current_app.config['IMAGE_SAVE_PATH'],
+            )
+            if file_path is not None and os.path.exists(file_path):
                 os.remove(file_path)
 
         db.session.delete(image)

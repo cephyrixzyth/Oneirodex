@@ -23,6 +23,7 @@ from oneirodex.utils.pc_extras import (
     iter_pc_extra_roots,
 )
 from oneirodex.utils.rom_language import classify_patch_file
+from oneirodex.utils.image_paths import image_path_under_save_dir
 
 
 def bump_scan_job_progress(
@@ -626,11 +627,12 @@ def delete_game_images(game_uuid, *, config=None):
 
         for image in images_to_delete:
             try:
-                relative_image_path = image.url.replace('/static/library/images/', '').strip("/")
-                image_file_path = os.path.join(config['IMAGE_SAVE_PATH'], relative_image_path)
-                image_file_path = os.path.normpath(image_file_path)
-
-                if os.path.exists(image_file_path):
+                image_file_path = image_path_under_save_dir(
+                    image.url, config['IMAGE_SAVE_PATH'],
+                )
+                if image_file_path is None:
+                    print(f"Skipping image outside IMAGE_SAVE_PATH for game {game_uuid}.")
+                elif os.path.exists(image_file_path):
                     os.remove(image_file_path)
                     if not os.path.exists(image_file_path):
                         print(f"Deleted image file: {image_file_path}")

@@ -38,9 +38,10 @@ class ImageMutationsData:
         if image.is_downloaded and image.url:
             root = config.get('IMAGE_SAVE_PATH')
             if root:
-                base = Path(root).resolve()
-                image_path = (base / image.url).resolve()
-                if image_path == base or base not in image_path.parents:
+                from oneirodex.utils.image_paths import image_path_under_save_dir
+
+                image_path = image_path_under_save_dir(image.url, root)
+                if image_path is None:
                     raise ValueError('Stored image path is invalid')
                 if image_path.exists():
                     if not image_path.is_file():

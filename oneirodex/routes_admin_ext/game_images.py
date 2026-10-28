@@ -49,6 +49,7 @@ from oneirodex.utils.image_kinds import (
     image_kinds_error_message,
     parse_image_kind,
 )
+from oneirodex.utils.image_paths import image_path_under_save_dir
 from oneirodex.utils.scanning import refresh_images_in_background, is_scan_job_running
 from oneirodex.utils.validation import validate_body
 
@@ -159,8 +160,10 @@ def upload_image(game_uuid):
             select(Image).filter_by(game_uuid=game_uuid, image_type=image_type)
         ).scalars().all()
         for existing in existing_rows:
-            old_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], existing.url)
-            if os.path.exists(old_path):
+            old_path = image_path_under_save_dir(
+                existing.url, current_app.config['IMAGE_SAVE_PATH'],
+            )
+            if old_path is not None and os.path.exists(old_path):
                 os.remove(old_path)
             db.session.delete(existing)
         db.session.commit()
@@ -211,8 +214,10 @@ def delete_game_image(body: DeleteGameImageBody):
             return api_error('Image not found', code='not_found')
 
         # Delete image file from disk
-        image_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], image.url)
-        if os.path.exists(image_path):
+        image_path = image_path_under_save_dir(
+            image.url, current_app.config['IMAGE_SAVE_PATH'],
+        )
+        if image_path is not None and os.path.exists(image_path):
             logger.info(f"Deleting image file: {image_path}")
             os.remove(image_path)
 
