@@ -44,6 +44,7 @@ export * from './preferencesModalHost.js'
 export * from './PreferencesModal.js'
 export * from './preferencesApi.js'
 export * from './AccountModal.js'
+export { InvitesPanel } from './account/InvitesPanel.js'
 export { sharedIconAliases } from './generatedIconPaths.js'
 
 export * from './useTopBarReserve.js'

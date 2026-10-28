@@ -309,7 +309,7 @@ def create_auth_form_post_router(
                 target = '/login'
             return _finish(flask_redirect_response(target, status_code=302), flask_app, auth)
 
-    @router.api_route('/user/invites', methods=['GET', 'HEAD', 'POST'], include_in_schema=False)
+    @router.post('/user/invites', include_in_schema=False)
     async def invites_form(request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:

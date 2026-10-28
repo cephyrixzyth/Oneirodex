@@ -40,6 +40,7 @@ STATIC_MEMBER_TITLES = {
     '/chat': 'Chat',
     '/notifications': 'Notifications',
     '/tokens': 'Tokens',
+    '/user/invites': 'Invites',
     '/report': 'Report issue',
     '/big-picture': 'Big Picture',
     '/ownership': 'Store Ownership',
@@ -60,6 +61,7 @@ def member_shell_route(path: str) -> bool:
         or re.fullmatch(r'/discover/(?:zone/[^/]+|hub/genre/.+|[^/]+)', path) is not None
         or re.fullmatch(r'/collections/[^/]+', path) is not None
         or re.fullmatch(r'/members/[0-9]+', path) is not None
+        or path == '/user/invites'
     )
 
 
@@ -326,6 +328,24 @@ def create_member_shell_router(flask_app, *, database_scope):
 
                 response = _login_redirect(flask_app, request, login_manager, auth)
                 return response
+            if path == '/user/invites' and auth.token is not None:
+                from starlette.responses import PlainTextResponse
+
+                return PlainTextResponse('A browser session is required.', status_code=403)
+            if path == '/user/invites':
+                from oneirodex.utils.public_origin import site_url_is_configured
+                from oneirodex.utils.role_catalog import normalize_role
+
+                if (
+                    not site_url_is_configured()
+                    and normalize_role(getattr(auth.user, 'role', None)) == 'admin'
+                ):
+                    flashes = list(auth.session_data.get('_flashes') or [])
+                    flashes.append((
+                        'warning',
+                        'Set a public Site URL in admin settings so invite links are not tied to localhost. Until then, links use the address you are browsing from.',
+                    ))
+                    auth.session_data['_flashes'] = flashes
             game_details = re.fullmatch(r'/game_details/([^/]+)', path)
             if game_details:
                 from oneirodex.runtime_native.response_compat import flask_http_error_response

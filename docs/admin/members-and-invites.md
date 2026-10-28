@@ -9,6 +9,8 @@ person nor the server has an email address.
 
 Any member with quota left can create an invite from **Account → Profile →
 Invites**. Admins see the household's quota allocation at **Admin → Invites**.
+The member invite view is also available as a full page at `/user/invites`; revoking
+a link asks for confirmation.
 
 An invite is a **link**. Email is one way of delivering it, not what it is:
 

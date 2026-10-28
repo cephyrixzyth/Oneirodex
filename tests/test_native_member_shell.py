@@ -144,11 +144,28 @@ def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
         '/discover', '/discover/row', '/discover/zone/popular',
         '/discover/hub/genre/role-playing', '/collections/collection-1',
         '/members/12', '/systems/completion', '/trailers', '/downloads',
-        '/playromtest',
+        '/playromtest', '/user/invites',
     ):
         assert member_shell.member_shell_route(path)
     assert member_shell.member_shell_route('/game_details/not-a-uuid')
     assert not member_shell.member_shell_route('/api/auth/runtime-bootstrap')
+
+
+def test_invites_route_renders_member_shell_and_retains_site_url_warning(monkeypatch):
+    from oneirodex.utils import public_origin
+
+    client, session_data = _native_client(monkeypatch, user=SimpleNamespace(
+        id=14, name='Home <Player>', role='admin', avatarpath=None,
+        preferences=SimpleNamespace(theme='default', icon_pack='outline'),
+    ))
+    monkeypatch.setattr(public_origin, 'site_url_is_configured', lambda: False)
+
+    response = client.get('/user/invites')
+
+    assert response.status_code == 200
+    assert 'data-user-id="14"' in response.text
+    assert 'public Site URL' in response.text
+    assert not session_data.get('_flashes')
 
 
 def test_member_shell_redirects_to_active_setup_step_while_setup_is_incomplete(monkeypatch):

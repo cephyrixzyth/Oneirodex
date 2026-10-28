@@ -10115,7 +10115,6 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
     monkeypatch.setattr(account_summary, 'AccountInvitesData', lambda: FakeInviteData())
     cookie, csrf = _signed_session_with_csrf()
 
-    page = _run(runtime, '/user/invites', cookie=cookie)
     created = _run(
         runtime, '/user/invites', method='POST', cookie=cookie,
         form_body={'csrf_token': csrf, 'email': 'friend@example.com'},
@@ -10125,7 +10124,6 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
         form_body={'csrf_token': csrf},
     )
 
-    assert page.status_code == 302 and page.headers['location'] == '/library?account=invites'
     assert created.status_code == 302 and created.headers['location'] == '/library?account=invites'
     assert deleted.status_code == 200 and deleted.json()['error_code'] == 'not_found'
     assert calls == [

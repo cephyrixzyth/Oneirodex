@@ -2,12 +2,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { createInvite, listInvites, revokeInvite } from '../accountApi.js'
+import { confirmAction } from '../confirmDialog.js'
 import { InvitesPanel } from './InvitesPanel'
 
 vi.mock('../accountApi.js', () => ({
   createInvite: vi.fn(),
   listInvites: vi.fn(),
   revokeInvite: vi.fn(),
+}))
+
+vi.mock('../confirmDialog.js', () => ({
+  confirmAction: vi.fn(),
 }))
 
 const invite = {
@@ -43,6 +48,7 @@ test('creates a link without email, then refreshes and exposes it for copying', 
   expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeEnabled()
   expect(screen.getByText(/Email is not configured on this server/)).toBeInTheDocument()
   expect(screen.getByText(/Links use the address you are browsing from/)).toBeInTheDocument()
+  expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }))
 
   await waitFor(() => expect(createInvite).toHaveBeenCalledWith({}))
@@ -74,6 +80,7 @@ test('revokes an outstanding invite and refreshes the empty state', async () => 
     .mockResolvedValueOnce({ ...emptyState, invites: [invite], remaining: 4 })
     .mockResolvedValueOnce(emptyState)
   vi.mocked(revokeInvite).mockResolvedValue({ ok: true })
+  vi.mocked(confirmAction).mockResolvedValue(true)
 
   render(<InvitesPanel />)
   expect(await screen.findByText(invite.url)).toBeInTheDocument()
@@ -81,8 +88,20 @@ test('revokes an outstanding invite and refreshes the empty state', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
 
   await waitFor(() => expect(revokeInvite).toHaveBeenCalledWith(invite.token))
-  expect(await screen.findByText('No open invites.')).toBeInTheDocument()
+  expect(await screen.findByText('No active invites yet.')).toBeInTheDocument()
   expect(listInvites).toHaveBeenCalledTimes(2)
+})
+
+test('keeps an invite when the confirmation is cancelled', async () => {
+  vi.mocked(listInvites).mockResolvedValue({ ...emptyState, invites: [invite], remaining: 4 })
+  vi.mocked(confirmAction).mockResolvedValue(false)
+
+  render(<InvitesPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+
+  await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+  expect(revokeInvite).not.toHaveBeenCalled()
+  expect(screen.getByText(invite.url)).toBeInTheDocument()
 })
 
 test('reports when the email server accepted the invite', async () => {

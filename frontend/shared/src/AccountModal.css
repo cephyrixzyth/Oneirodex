@@ -207,6 +207,12 @@
   background: color-mix(in srgb, var(--od-success) 12%, transparent);
 }
 
+.od-acct__note--warning {
+  color: var(--od-text);
+  border-color: color-mix(in srgb, var(--od-warning) 48%, transparent);
+  background: color-mix(in srgb, var(--od-warning) 10%, transparent);
+}
+
 /* ---------- avatar ------------------------------------------------------ */
 
 .od-acct__avatar-row {

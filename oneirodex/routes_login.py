@@ -54,6 +54,7 @@ from werkzeug.datastructures import MultiDict
 from oneirodex.utils.tokens import get_serializer
 from oneirodex.utils.rbac import is_admin
 from oneirodex.utils.member_auth_spa import render_member_auth_spa
+from oneirodex.utils.member_spa import render_member_spa
 
 
 login_bp = Blueprint('login', __name__)
@@ -793,7 +794,7 @@ def invites():
             'warning',
         )
     if request.method == 'GET':
-        return redirect(url_for('library.library', account='invites'))
+        return render_member_spa(title='Invites')
 
     form = InviteForm()
     if form.validate_on_submit():
