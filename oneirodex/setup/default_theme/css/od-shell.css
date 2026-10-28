@@ -849,8 +849,9 @@ html[data-era='desk'] .od-rail__link.is-active[data-rail-item] .od-icon { animat
    row (same `.od-rail__group-caret`). A spacer keeps icon columns aligned for
    rows that do not fold (Dashboard, Library, Log out). */
 button.od-rail__link {
-  width: 100%;
-  font: inherit;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
   text-align: left;
   cursor: pointer;
 }

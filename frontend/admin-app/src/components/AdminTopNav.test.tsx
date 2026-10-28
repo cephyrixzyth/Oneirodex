@@ -287,7 +287,7 @@ test('rail sub-links carry an icon like the member rail', () => {
 test('the ways out of admin survive, and live in exactly one place', () => {
   const rail = renderRail()
   expect(screen.getByRole('link', { name: 'Library' })).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'Log out' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
   rail.unmount()
 
   // They were briefly in both the rail and the bar during the migration.

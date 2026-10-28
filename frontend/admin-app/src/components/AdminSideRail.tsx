@@ -10,6 +10,7 @@ import {
   resolveNavSection,
 } from './navConfig'
 import { RailIcon } from './railIcons'
+import { showToast, signOut } from '@oneirodex/ui'
 
 const COLLAPSED_SECTIONS_KEY = 'od.admin.rail.collapsedSections'
 
@@ -279,17 +280,23 @@ export function AdminSideRail({
             </a>
           </li>
           <li>
-            <a
+            <button
+              type="button"
               className="od-rail__link"
               data-rail-item="logout"
-              href="/logout"
+              data-action="logout"
               title={iconOnly ? 'Log out' : undefined}
+              onClick={() => {
+                void signOut()
+                  .then(() => window.location.assign('/login'))
+                  .catch(() => showToast('Could not log out. Please try again.', 'error'))
+              }}
             >
               <span className="od-rail__icon" aria-hidden="true">
                 <RailIcon name="logout" />
               </span>
               <span className="od-rail__label">Log out</span>
-            </a>
+            </button>
           </li>
         </ul>
       </nav>

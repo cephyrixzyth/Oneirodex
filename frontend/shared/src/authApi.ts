@@ -5,6 +5,16 @@ export interface LoginResult {
   next_url: string
 }
 
+/** End the current browser session using the server's CSRF-protected logout route. */
+export async function signOut(): Promise<void> {
+  const response = await fetch('/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfHeaders(),
+  })
+  if (!response.ok) throw await errorFromResponse(response, 'Sign out')
+}
+
 export interface RegistrationResult {
   requested: true
   message: string

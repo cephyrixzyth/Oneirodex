@@ -9136,16 +9136,31 @@ def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monk
 
 def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
-    cookie = dump_session_cookie({
+    session = {
         '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember_seconds': 3600,
-    }, 'native-asgi-browse-secret')
+    }
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
 
     remember = {'remember_token': 'remember-cookie'}
-    response = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember)
+    response = _run(
+        runtime, '/logout', cookie=cookie, extra_cookies=remember, method='POST',
+        headers={'X-CSRFToken': csrf},
+    )
+    get = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember)
     head = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember, method='HEAD')
-    guest = _run(runtime, '/logout')
+    missing_csrf = _run(
+        runtime, '/logout', cookie=cookie, extra_cookies=remember, method='POST',
+    )
+    guest = _run(runtime, '/logout', method='POST')
 
     assert response.status_code == 302 and response.headers['location'] == '/login'
+    assert get.status_code == head.status_code == 405
+    assert get.headers.get_list('set-cookie') == head.headers.get_list('set-cookie') == []
+    assert missing_csrf.status_code == 400
+    assert missing_csrf.headers.get_list('set-cookie') == []
+    assert guest.status_code == 400
+    assert guest.headers.get_list('set-cookie') == []
     assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert response.text == (
         '<!doctype html>\n'
@@ -9155,7 +9170,7 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
         '<p>You should be redirected automatically to the target URL: '
         '<a href="/login">/login</a>. If not, click the link.\n'
     )
-    assert head.status_code == 302 and head.content == b''
+    assert head.status_code == 405 and head.content == b''
     cookies = response.headers.get_list('set-cookie')
     assert any(
         value.startswith('remember_token=') and 'max-age=0' in value.lower()
@@ -9167,7 +9182,7 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
         jar.load(value)
     assert jar['session'].value == ''
     assert jar['session']['max-age'] == '0'
-    assert guest.status_code == 302 and guest.headers['location'] == '/login'
+    assert guest.status_code == 400
     assert guest.headers.get_list('set-cookie') == []
 
 
@@ -9223,14 +9238,18 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
     manager.user_loader(lambda _user_id: None)
     legacy_app.add_url_rule('/login', endpoint='login', view_func=lambda: 'login')
 
-    @legacy_app.get('/logout')
+    @legacy_app.post('/logout')
     def legacy_logout():
+        from flask import session as flask_session
+
         logout_user()
+        flask_session.pop('csrf_token', None)
         return redirect('/login')
 
     with legacy_app.test_client() as client:
         with client.session_transaction() as session:
             session.update({'_user_id': '7:fp', '_fresh': True, '_id': 'session-id'})
+            csrf = generate_csrf_token(session, legacy_app.config['SECRET_KEY'])
             if has_remember_cookie:
                 session['_remember_seconds'] = 3600
             else:
@@ -9245,12 +9264,16 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
             domain=legacy_app.config.get('SESSION_COOKIE_DOMAIN') or 'localhost',
             path='/',
         ).value
-        legacy = client.get('/logout', follow_redirects=False, base_url=base_url)
+        legacy = client.post(
+            '/logout', headers={'X-CSRFToken': csrf},
+            follow_redirects=False, base_url=base_url,
+        )
 
     current = _run(
         runtime, '/logout', cookie=incoming_session,
         session_cookie_name=session_cookie_name,
         extra_cookies={remember_cookie_name: 'remember-cookie'} if has_remember_cookie else None,
+        method='POST', headers={'X-CSRFToken': csrf},
         base_url=base_url,
     )
     assert (current.status_code, current.headers['location'], current.content) == (

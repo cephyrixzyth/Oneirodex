@@ -96,6 +96,13 @@ def test_worker_never_caches_member_data():
     assert 'od-clear-caches' in SW
 
 
+def test_install_helper_clears_pwa_cache_for_link_or_button_logout():
+    install_helper = (STATIC / 'js' / 'od_pwa_install.js').read_text(encoding='utf-8')
+    assert 'a[href$="/logout"]' in install_helper
+    assert 'button[data-action="logout"]' in install_helper
+    assert "postMessage({ type: 'od-clear-caches' })" in install_helper
+
+
 def test_worker_only_caches_versioned_static_assets():
     assert "'/static/dist/'" in SW
     assert "'/static/vendor/'" in SW

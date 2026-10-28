@@ -11,7 +11,7 @@ from .response_compat import flask_redirect_response
 def create_auth_logout_router(flask_app: FastAPI):
     router = APIRouter()
 
-    @router.api_route('/logout', methods=['GET', 'HEAD'])
+    @router.post('/logout')
     def logout(request: Request):
         from oneirodex.runtime_native.request_auth import _lifetime_seconds
         from oneirodex.runtime_native.session_compat import load_session_cookie
@@ -25,6 +25,13 @@ def create_auth_logout_router(flask_app: FastAPI):
             max_age=_lifetime_seconds(config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
             fallback_secret_keys=config.get('SECRET_KEY_FALLBACKS') or (),
         )
+        from oneirodex.runtime_native.csrf_compat import csrf_error_response
+
+        csrf_response = csrf_error_response(request, session_data, config)
+        if csrf_response is not None:
+            return csrf_response
+
+        session_data.pop(str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
         original = dict(session_data)
         for key in ('_user_id', '_fresh', '_id'):
             session_data.pop(key, None)

@@ -60,8 +60,10 @@
     document.addEventListener(
       'click',
       function (event) {
-        var link = event.target.closest && event.target.closest('a[href$="/logout"], a[href*="/logout?"]');
-        if (!link) return;
+        var action = event.target.closest && event.target.closest(
+          'a[href$="/logout"], a[href*="/logout?"], button[data-action="logout"]',
+        );
+        if (!action) return;
         if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
         navigator.serviceWorker.controller.postMessage({ type: 'od-clear-caches' });
       },
