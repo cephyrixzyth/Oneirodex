@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { DiscoverySectionsPage } from './DiscoverySectionsPage'
 import { getJson, postJson, putJson, deleteJson } from '../api/adminApi'
@@ -80,6 +81,37 @@ test('keyboard order/visibility preserve builtin restrictions and Live refresh',
       { id: 1, order: 1 },
     ],
   })
+})
+
+test('shelf action controls follow the disclosure in a predictable keyboard order', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  const user = userEvent.setup()
+  render(<DiscoverySectionsPage />)
+
+  const checkbox = await screen.findByRole('checkbox', { name: 'Visible Review shelf' })
+  const row = checkbox.closest('li')!
+  const disclosure = within(row).getByText('Actions')
+  fireEvent.click(disclosure)
+  expect(row.querySelector('details')).toHaveAttribute('open')
+  disclosure.focus()
+  expect(disclosure).toHaveFocus()
+
+  const moveUp = within(row).getByRole('button', { name: 'Move Review shelf up' })
+  const moveDown = within(row).getByRole('button', { name: 'Move Review shelf down' })
+  expect(moveDown).toBeDisabled()
+  const orderedActions = [
+    moveUp,
+    within(row).getByRole('button', { name: 'Schedule and pin Review shelf' }),
+    within(row).getByRole('button', { name: 'Edit Review shelf' }),
+    within(row).getByRole('button', { name: 'Delete Review shelf' }),
+  ]
+  for (const action of orderedActions) {
+    await user.tab()
+    expect(action).toHaveFocus()
+  }
+
+  await user.tab({ shift: true })
+  expect(orderedActions.at(-2)).toHaveFocus()
 })
 
 test('pointer drag reorders shelves and persists the complete order', async () => {
