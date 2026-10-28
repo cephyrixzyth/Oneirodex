@@ -344,6 +344,35 @@ def test_multipart_preflight_over_limit_replays_unconsumed_body_tail():
     asyncio.run(run())
 
 
+def test_font_multipart_preflight_uses_font_request_budget():
+    async def run():
+        body = b'--boundary\r\nContent-Disposition: form-data; name="file"; filename="large.ttf"\r\n\r\n'
+        body += b'x' * (64 * 1024 + 32) + b'\r\n--boundary--\r\n'
+        messages = [
+            {'type': 'http.request', 'body': body, 'more_body': False},
+        ]
+
+        async def receive():
+            return messages.pop(0) if messages else {'type': 'http.disconnect'}
+
+        scope = _scope(
+            path='/admin/api/theme/fonts',
+            method='POST',
+            headers=[
+                (b'content-type', b'multipart/form-data; boundary=boundary'),
+                (b'transfer-encoding', b'chunked'),
+            ],
+        )
+        token, replay, inspected = await inspect_multipart_csrf_body(
+            scope, receive, {'FONT_MAX_BYTES': 16, 'MAX_CONTENT_LENGTH': 128 * 1024 * 1024},
+        )
+        assert token is None
+        assert not inspected
+        assert (await replay())['body'] == body
+
+    asyncio.run(run())
+
+
 def test_admin_error_format_matches_legacy_negotiation():
     assert not admin_request_wants_json(_scope(path='/admin/api/action'))
     assert admin_request_wants_json(_scope(path='/api/admin/action'))

@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 _UNSAFE_METHODS = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
 _URLENCODED_BODY_LIMIT = 1024 * 1024
 _MULTIPART_BODY_DEFAULT_LIMIT = 128 * 1024 * 1024
+_FONT_UPLOAD_BODY_OVERHEAD = 64 * 1024
 
 
 def is_admin_mutation_scope(scope: Mapping) -> bool:
@@ -135,10 +136,23 @@ async def inspect_multipart_csrf_body(scope: Mapping, receive, config: Mapping):
     content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
     if content_type != b'multipart/form-data':
         return None, receive, False
-    try:
-        body_limit = int(config.get('MAX_CONTENT_LENGTH') or _MULTIPART_BODY_DEFAULT_LIMIT)
-    except (TypeError, ValueError):
-        body_limit = _MULTIPART_BODY_DEFAULT_LIMIT
+    if (
+        str(scope.get('method') or '').upper() == 'POST'
+        and str(scope.get('path') or '') == '/admin/api/theme/fonts'
+    ):
+        from oneirodex.utils.theme_fonts import DEFAULT_FONT_MAX_BYTES
+
+        try:
+            font_limit = int(config.get('FONT_MAX_BYTES') or 0)
+        except (TypeError, ValueError):
+            font_limit = 0
+        body_limit = (font_limit if font_limit > 0 else DEFAULT_FONT_MAX_BYTES) \
+            + _FONT_UPLOAD_BODY_OVERHEAD
+    else:
+        try:
+            body_limit = int(config.get('MAX_CONTENT_LENGTH') or _MULTIPART_BODY_DEFAULT_LIMIT)
+        except (TypeError, ValueError):
+            body_limit = _MULTIPART_BODY_DEFAULT_LIMIT
     body_limit = max(0, body_limit)
     raw_length = headers.get(b'content-length')
     if raw_length:

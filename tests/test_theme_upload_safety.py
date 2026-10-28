@@ -87,6 +87,13 @@ def test_upload_rejects_traversal_before_extracting(manager, monkeypatch):
     assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
 
 
+def test_upload_rejects_invalid_theme_name_before_install(manager):
+    archive = _theme_zip('CON')
+    with manager.app.test_request_context():
+        assert manager.upload_theme(archive) is None
+    assert not list(Path(manager.theme_folder).iterdir())
+
+
 def test_overlapping_uploads_keep_their_own_theme_files(manager, monkeypatch):
     barrier = Barrier(2)
     original_extractall = zipfile.ZipFile.extractall

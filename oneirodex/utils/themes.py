@@ -120,6 +120,12 @@ class ThemeManager:
                 if field not in theme_data:
                     raise ValueError(f"Missing required field '{field}' in theme.json")
 
+            from oneirodex.utils.theme_validation import is_valid_theme_name
+
+            valid_name, name_error = is_valid_theme_name(theme_data.get('name'))
+            if not valid_name:
+                raise ValueError(name_error or 'Invalid theme name')
+
             css_folder = os.path.join(temp_dir, 'css')
             if not os.path.exists(css_folder):
                 raise ValueError("CSS folder not found in the uploaded theme")

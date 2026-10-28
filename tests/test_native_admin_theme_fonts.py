@@ -70,6 +70,17 @@ def test_font_upload_uses_csrf_admin_gate_and_shared_storage_contract():
     assert store.calls[0][0:3] == ('store', 'custom.ttf', b'font')
 
 
+def test_font_upload_rejects_oversized_body_before_storage():
+    client, store = _client()
+    response = client.post(
+        '/admin/api/theme/fonts',
+        files={'file': ('large.ttf', b'x' * (1024 + 64 * 1024))},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert store.calls == []
+
+
 def test_font_mutations_reject_missing_csrf_and_non_admin_user():
     client, store = _client()
     no_csrf = client.post(

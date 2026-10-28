@@ -91,6 +91,9 @@ every member's browser:
 
 - **Extension allowlist** — `.ttf`, `.otf`, `.woff`, `.woff2`
 - **Size cap** — `FONT_MAX_BYTES`, default 8MB
+- **Request cap** — the multipart body is limited to the font cap plus 64KiB
+  for boundaries and form fields. Oversized bodies return HTTP 413 before the
+  upload parser can spool an unbounded font file.
 - **Magic-byte check** — the leading bytes must match a real font container
   (`\x00\x01\x00\x00`, `true`, `ttcf`, `OTTO`, `wOFF`, `wOF2`). An extension on
   its own is not evidence.
