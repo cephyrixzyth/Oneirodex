@@ -159,11 +159,16 @@ def upload_image(game_uuid):
         existing_rows = db.session.execute(
             select(Image).filter_by(game_uuid=game_uuid, image_type=image_type)
         ).scalars().all()
+        existing_paths = []
         for existing in existing_rows:
             old_path = image_path_under_save_dir(
                 existing.url, current_app.config['IMAGE_SAVE_PATH'],
             )
-            if old_path is not None and os.path.exists(old_path):
+            if old_path is None:
+                return api_error('Stored image path is invalid', code='bad_request')
+            existing_paths.append((existing, old_path))
+        for existing, old_path in existing_paths:
+            if os.path.exists(old_path):
                 os.remove(old_path)
             db.session.delete(existing)
         db.session.commit()
@@ -217,7 +222,9 @@ def delete_game_image(body: DeleteGameImageBody):
         image_path = image_path_under_save_dir(
             image.url, current_app.config['IMAGE_SAVE_PATH'],
         )
-        if image_path is not None and os.path.exists(image_path):
+        if image_path is None:
+            raise ValueError('Invalid image path')
+        if os.path.exists(image_path):
             logger.info(f"Deleting image file: {image_path}")
             os.remove(image_path)
 

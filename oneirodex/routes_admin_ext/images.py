@@ -251,7 +251,9 @@ def delete_image(image_id):
             file_path = image_path_under_save_dir(
                 image.url, current_app.config['IMAGE_SAVE_PATH'],
             )
-            if file_path is not None and os.path.exists(file_path):
+            if file_path is None:
+                raise ValueError('Stored image path is invalid')
+            if os.path.exists(file_path):
                 os.remove(file_path)
 
         db.session.delete(image)
