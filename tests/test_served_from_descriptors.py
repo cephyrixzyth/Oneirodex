@@ -728,7 +728,7 @@ def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served,
     with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('game.nes', b'X' * 64)
     game = _make_game(served.db, archive_path)
-    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda: RomExpansionBudget(32))
+    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda *_args, **_kwargs: RomExpansionBudget(32))
 
     wire = _get_rom(served, game)
 
@@ -750,7 +750,7 @@ def test_rom_endpoint_shares_expansion_budget_with_cue_bundle(served, monkeypatc
         archive.writestr('disc.bin', disc_bytes)
     game = _make_game(served.db, archive_path)
     limit = len(cue_text.encode('utf-8')) + len(disc_bytes) + 8
-    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda: RomExpansionBudget(limit))
+    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda *_args, **_kwargs: RomExpansionBudget(limit))
 
     wire = _get_rom(served, game)
 
@@ -758,6 +758,61 @@ def test_rom_endpoint_shares_expansion_budget_with_cue_bundle(served, monkeypatc
     assert b'archive_too_large' in wire.body
     cache_root = served.tmp / 'runtime' / 'rom_cache'
     assert not list(cache_root.iterdir()), 'over-budget bundle must remove the request cache'
+
+
+def test_rom_archive_work_runs_outside_the_asgi_event_loop(served, monkeypatch):
+    archive_path = served.root / 'threaded.zip'
+    archive_path.write_bytes(b'archive-placeholder')
+    game = _make_game(served.db, archive_path)
+    event_loop_thread = threading.get_ident()
+    worker_threads = []
+
+    def resolve_in_worker(_source_path, **_kwargs):
+        worker_threads.append(threading.get_ident())
+        return str(archive_path), archive_path.name
+
+    monkeypatch.setattr(asgi_mod, 'resolve_playable_rom_path', resolve_in_worker)
+    monkeypatch.setattr(
+        asgi_mod,
+        'bundle_playable_rom_zip',
+        lambda path, *_args, **_kwargs: (path, archive_path.name),
+    )
+
+    wire = _get_rom(served, game)
+
+    assert _status(wire) == 200
+    assert worker_threads and all(thread_id != event_loop_thread for thread_id in worker_threads)
+
+
+def test_rom_archive_requests_fail_fast_when_worker_slot_is_busy(served):
+    archive_path = served.root / 'busy.zip'
+    archive_path.write_bytes(b'archive-placeholder')
+    game = _make_game(served.db, archive_path)
+    assert asgi_mod._ROM_EXTRACTION_LIMITER.acquire(blocking=False)
+    try:
+        wire = _get_rom(served, game)
+    finally:
+        asgi_mod._ROM_EXTRACTION_LIMITER.release()
+
+    assert _status(wire) == 503
+    assert b'rom_processing_busy' in wire.body
+    assert not list((served.tmp / 'runtime' / 'rom_cache').glob(f'{game.uuid}-*'))
+
+
+def test_rom_archive_budget_respects_configured_limit_and_free_space_reserve(served, monkeypatch):
+    archive_path = served.root / 'limited.zip'
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('game.nes', b'X' * 64)
+    game = _make_game(served.db, archive_path)
+    served.app.config.update(ROM_MAX_OUTPUT_BYTES=100, ROM_CACHE_RESERVE_BYTES=100)
+    monkeypatch.setattr(asgi_mod.shutil, 'disk_usage', lambda _path: types.SimpleNamespace(free=120))
+
+    wire = _get_rom(served, game)
+
+    assert _status(wire) == 413
+    assert b'archive_too_large' in wire.body
+    assert b'20 bytes limit' in wire.body
+    assert not list((served.tmp / 'runtime' / 'rom_cache').iterdir())
 
 
 def _get_zip(served, request_id, wire=None) -> _Wire:

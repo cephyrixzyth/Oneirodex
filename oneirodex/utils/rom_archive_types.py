@@ -168,11 +168,20 @@ class RomExpansionBudget:
         size = max(0, int(size))
         if size > self.remaining:
             raise ArchiveRomError(
-                'ROM processing output exceeds the 64 GiB limit',
+                self.limit_error_message(),
                 status_code=413,
                 code='archive_too_large',
             )
         self.remaining -= size
+
+    def limit_error_message(self) -> str:
+        if self.limit >= 1024**3:
+            limit = f'{self.limit / 1024**3:.1f} GiB'
+        elif self.limit >= 1024**2:
+            limit = f'{self.limit / 1024**2:.1f} MiB'
+        else:
+            limit = f'{self.limit} bytes'
+        return f'ROM processing output exceeds the {limit} limit'
 
     def copy_stream(self, src, dest, chunk_size: int = 1024 * 1024) -> int:
         total = 0

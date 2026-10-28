@@ -796,7 +796,7 @@ def extract_rom_from_7z(
             _drop_member_files(cache_dir, target_name)
         if 'exceeds limit of' in str(exc):
             raise ArchiveRomError(
-                'ROM processing output exceeds the 64 GiB limit',
+                budget.limit_error_message(),
                 status_code=413,
                 code='archive_too_large',
             ) from exc

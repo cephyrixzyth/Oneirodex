@@ -184,6 +184,12 @@ class Config(object):
     # Development mode - forces theme files to be recopied on startup (helpful for theme development)
     DEV_MODE = _env_bool('DEV_MODE', False)
 
+    # Browser Play archive expansion. Operators may lower the per-request
+    # ceiling for smaller hosts; a free-space reserve is kept on the writable
+    # library volume. A zero reserve is allowed when storage policy requires it.
+    ROM_MAX_OUTPUT_BYTES = _env_int('ONEIRODEX_ROM_MAX_OUTPUT_BYTES', 64 * 1024**3) or (64 * 1024**3)
+    ROM_CACHE_RESERVE_BYTES = _env_int('ONEIRODEX_ROM_CACHE_RESERVE_BYTES', 1024**3)
+
     # Reverse proxy / HTTPS termination — number of trusted proxy hops (0 = disabled).
     # Set to the forwarded hop count when behind a proxy; forwarded values are
     # honored only when that peer also matches TRUSTED_PROXY_CIDRS below.

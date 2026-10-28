@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 from importlib import import_module
@@ -91,6 +92,11 @@ bundle_playable_rom_zip = _lazy_callable(
 resolve_playable_rom_path = _lazy_callable(
     'oneirodex.utils.rom_archive', 'resolve_playable_rom_path'
 )
+
+# Archive expansion is disk-heavy and runs once per Uvicorn worker. Keep one
+# conversion active per worker; requests that need extraction fail quickly
+# instead of accumulating temporary outputs or blocking the ASGI event loop.
+_ROM_EXTRACTION_LIMITER = threading.BoundedSemaphore(1)
 get_allowed_base_directories = _lazy_callable(
     'oneirodex.utils.security', 'get_allowed_base_directories'
 )
@@ -5114,7 +5120,10 @@ class LazyASGIApp:
         """Handle ROM file downloads for emulator"""
         from oneirodex.models import Game, User
         from oneirodex.utils.rom_archive import ArchiveRomError
-        from oneirodex.utils.rom_archive_types import RomExpansionBudget
+        from oneirodex.utils.rom_archive_types import (
+            DEFAULT_MAX_ROM_OUTPUT_BYTES,
+            RomExpansionBudget,
+        )
 
         rom_match = re.match(r'/api/downloadrom/([a-f0-9-]+)', path)
         if not rom_match:
@@ -5194,31 +5203,82 @@ class LazyASGIApp:
             game_is_dir = os.path.isdir(real_game)
             cache_root = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache')
             os.makedirs(cache_root, exist_ok=True)
-            # Extraction output is request-scoped: retries and concurrent plays
-            # cannot reuse partial files or accumulate unbounded cache contents.
-            cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
-            rom_budget = RomExpansionBudget()
+            needs_expansion = game_is_dir or Path(real_game).suffix.lower() in {
+                '.zip', '.7z', '.rar', '.gz', '.cue',
+            }
+            if needs_expansion and not _ROM_EXTRACTION_LIMITER.acquire(blocking=False):
+                await self._send_error(
+                    send,
+                    503,
+                    'ROM conversion is busy. Try again shortly.',
+                    code='rom_processing_busy',
+                )
+                return
+
+            cache_dir = None
             try:
+                if needs_expansion:
+                    # Respect both the configured per-request ceiling and the
+                    # free-space reserve on the writable library volume. The
+                    # single-worker limiter makes this a useful aggregate bound
+                    # for the default one-worker deployment.
+                    configured_limit = int(
+                        self._flask_app.config.get('ROM_MAX_OUTPUT_BYTES')
+                        or DEFAULT_MAX_ROM_OUTPUT_BYTES
+                    )
+                    configured_limit = max(1, configured_limit)
+                    reserve = max(
+                        0,
+                        int(self._flask_app.config.get('ROM_CACHE_RESERVE_BYTES') or 0),
+                    )
+                    free_for_rom = max(0, shutil.disk_usage(cache_root).free - reserve)
+                    rom_budget = RomExpansionBudget(min(configured_limit, free_for_rom))
+                else:
+                    rom_budget = RomExpansionBudget()
+
+                # Extraction output is request-scoped and remains protected by
+                # the limiter until streaming ends and the directory is removed.
+                cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
                 platform_key = library_platform_key(game)
+                source_path = game.full_disk_path
                 try:
-                    rom_path, filename = resolve_playable_rom_path(
-                        game.full_disk_path,
-                        cache_dir=cache_dir,
-                        platform=platform_key,
-                        budget=rom_budget,
+                    def resolve_download_target():
+                        rom_path, resolved_filename = resolve_playable_rom_path(
+                            source_path,
+                            cache_dir=cache_dir,
+                            platform=platform_key,
+                            budget=rom_budget,
+                        )
+                        resolved_target, resolved_root, resolved_root_is_resolved = _rom_location(
+                            rom_path, cache_dir, real_game, game_is_dir
+                        )
+                        # Multi-track discs (.cue + .bin/.img/...) need every
+                        # file in one response; WebRetro cannot fetch companions later.
+                        bundled_path, bundled_name = bundle_playable_rom_zip(
+                            resolved_target,
+                            cache_dir,
+                            root=resolved_root if resolved_root_is_resolved else None,
+                            budget=rom_budget,
+                        )
+                        if bundled_path != resolved_target:
+                            resolved_target, resolved_root, resolved_root_is_resolved = (
+                                bundled_path, cache_dir, False
+                            )
+                            resolved_filename = bundled_name
+                        return (
+                            resolved_target,
+                            resolved_root,
+                            resolved_root_is_resolved,
+                            resolved_filename,
+                        )
+
+                    # Archive listing, extraction, CUE bundling, and their file
+                    # copies are synchronous; keep that work off the ASGI loop.
+                    from starlette.concurrency import run_in_threadpool
+
+                    target, root, root_is_resolved, filename = await run_in_threadpool(
+                        resolve_download_target
                     )
-                    target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
-                    # Multi-track discs (.cue + .bin/.img/...) need every file in one
-                    # response — WebRetro never gets a second chance to fetch companions.
-                    bundled_path, bundled_name = bundle_playable_rom_zip(
-                        target,
-                        cache_dir,
-                        root=root if root_is_resolved else None,
-                        budget=rom_budget,
-                    )
-                    if bundled_path != target:
-                        target, root, root_is_resolved = bundled_path, cache_dir, False
-                        filename = bundled_name
                 except ArchiveRomError as exc:
                     log_system_event(
                         f"ROM resolve failed for {game.name}: {exc.message}",
@@ -5260,7 +5320,10 @@ class LazyASGIApp:
                     raise
                 await self._stream_file(send, handle, filename)
             finally:
-                shutil.rmtree(cache_dir, ignore_errors=True)
+                if cache_dir:
+                    shutil.rmtree(cache_dir, ignore_errors=True)
+                if needs_expansion:
+                    _ROM_EXTRACTION_LIMITER.release()
 
     async def _get_user_id(self, scope):
         """Resolve user id from Bearer token (API clients) or Flask session cookie (web)."""
