@@ -87,7 +87,7 @@ body {
 }
 
 .auth-pilot__card--confirmation-error {
-  padding-block-end: clamp(1.25rem, 4vw, 2rem);
+  padding-block-end: calc(clamp(1.25rem, 4vw, 2rem) + 0.125rem);
 }
 
 .auth-pilot__card--register > .auth-pilot__brand {
@@ -132,6 +132,16 @@ body {
 
 .auth-pilot__card--account > .auth-pilot__title + .auth-pilot__lede {
   margin-block-start: calc(0px - var(--od-space-2));
+}
+
+.auth-pilot__card--confirmation-error > .auth-pilot__brand + .auth-pilot__title,
+.auth-pilot__card--confirmation-error > .auth-pilot__title + .auth-pilot__lede {
+  margin-block-start: calc(0px - var(--od-space-2) - 0.1rem);
+}
+
+.auth-pilot__card--confirmation-error > .auth-pilot__title {
+  width: fit-content;
+  justify-self: center;
 }
 
 .auth-pilot__form--register .auth-pilot__field {
@@ -777,7 +787,7 @@ body {
   }
 
   .auth-pilot__card--confirmation-error {
-    padding-block-end: clamp(1.25rem, 4vw, 2rem);
+    padding-block-end: calc(clamp(1.25rem, 4vw, 2rem) + 0.125rem);
   }
 
   .auth-pilot__card--login > .auth-pilot__title {
