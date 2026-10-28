@@ -5216,12 +5216,27 @@ class LazyASGIApp:
                 return
 
             cache_dir = None
+            rom_expansion_lock = None
             try:
                 if needs_expansion:
+                    from oneirodex.utils.rom_archive_lock import (
+                        try_acquire_rom_expansion_lock,
+                    )
+
+                    rom_expansion_lock = try_acquire_rom_expansion_lock(cache_root)
+                    if rom_expansion_lock is None:
+                        await self._send_error(
+                            send,
+                            503,
+                            'ROM conversion is busy. Try again shortly.',
+                            code='rom_processing_busy',
+                        )
+                        return
+
                     # Respect both the configured per-request ceiling and the
                     # free-space reserve on the writable library volume. The
-                    # single-worker limiter makes this a useful aggregate bound
-                    # for the default one-worker deployment.
+                    # process-shared lock makes this a volume-wide bound even
+                    # when Uvicorn uses multiple worker processes.
                     configured_limit = int(
                         self._flask_app.config.get('ROM_MAX_OUTPUT_BYTES')
                         or DEFAULT_MAX_ROM_OUTPUT_BYTES
@@ -5322,8 +5337,16 @@ class LazyASGIApp:
             finally:
                 if cache_dir:
                     shutil.rmtree(cache_dir, ignore_errors=True)
-                if needs_expansion:
-                    _ROM_EXTRACTION_LIMITER.release()
+                try:
+                    if rom_expansion_lock is not None:
+                        from oneirodex.utils.rom_archive_lock import (
+                            release_rom_expansion_lock,
+                        )
+
+                        release_rom_expansion_lock(rom_expansion_lock)
+                finally:
+                    if needs_expansion:
+                        _ROM_EXTRACTION_LIMITER.release()
 
     async def _get_user_id(self, scope):
         """Resolve user id from Bearer token (API clients) or Flask session cookie (web)."""

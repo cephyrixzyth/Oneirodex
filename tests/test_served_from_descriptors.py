@@ -717,7 +717,8 @@ def test_rom_endpoint_serves_a_cue_bundle_from_the_cache(served):
     with zipfile.ZipFile(io.BytesIO(wire.body)) as archive:
         assert sorted(archive.namelist()) == ['disc.bin', 'disc.cue']
         assert archive.read('disc.bin') == GAME
-    assert not list(served.tmp.glob('runtime/rom_cache/*')), 'successful play also removes request-scoped files'
+    cache_root = served.tmp / 'runtime' / 'rom_cache'
+    assert not list(cache_root.glob(f'{game.uuid}-*')), 'successful play removes request-scoped files'
 
 
 def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served, monkeypatch):
@@ -735,7 +736,7 @@ def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served,
     assert _status(wire) == 413
     assert b'archive_too_large' in wire.body
     cache_root = served.tmp / 'runtime' / 'rom_cache'
-    assert not list(cache_root.iterdir()), 'failed request must remove its temporary extraction directory'
+    assert not list(cache_root.glob(f'{game.uuid}-*')), 'failed request must remove its temporary extraction directory'
 
 
 def test_rom_endpoint_shares_expansion_budget_with_cue_bundle(served, monkeypatch):
@@ -757,7 +758,7 @@ def test_rom_endpoint_shares_expansion_budget_with_cue_bundle(served, monkeypatc
     assert _status(wire) == 413
     assert b'archive_too_large' in wire.body
     cache_root = served.tmp / 'runtime' / 'rom_cache'
-    assert not list(cache_root.iterdir()), 'over-budget bundle must remove the request cache'
+    assert not list(cache_root.glob(f'{game.uuid}-*')), 'over-budget bundle must remove the request cache'
 
 
 def test_rom_archive_work_runs_outside_the_asgi_event_loop(served, monkeypatch):
@@ -799,6 +800,29 @@ def test_rom_archive_requests_fail_fast_when_worker_slot_is_busy(served):
     assert not list((served.tmp / 'runtime' / 'rom_cache').glob(f'{game.uuid}-*'))
 
 
+def test_rom_archive_requests_fail_fast_when_shared_volume_slot_is_busy(served):
+    from oneirodex.utils.rom_archive_lock import (
+        release_rom_expansion_lock,
+        try_acquire_rom_expansion_lock,
+    )
+
+    archive_path = served.root / 'shared-busy.zip'
+    archive_path.write_bytes(b'archive-placeholder')
+    game = _make_game(served.db, archive_path)
+    cache_root = served.tmp / 'runtime' / 'rom_cache'
+    cache_root.mkdir(parents=True)
+    descriptor = try_acquire_rom_expansion_lock(cache_root)
+    assert descriptor is not None
+    try:
+        wire = _get_rom(served, game)
+    finally:
+        release_rom_expansion_lock(descriptor)
+
+    assert _status(wire) == 503
+    assert b'rom_processing_busy' in wire.body
+    assert not list(cache_root.glob(f'{game.uuid}-*'))
+
+
 def test_rom_archive_budget_respects_configured_limit_and_free_space_reserve(served, monkeypatch):
     archive_path = served.root / 'limited.zip'
     with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
@@ -812,7 +836,7 @@ def test_rom_archive_budget_respects_configured_limit_and_free_space_reserve(ser
     assert _status(wire) == 413
     assert b'archive_too_large' in wire.body
     assert b'20 bytes limit' in wire.body
-    assert not list((served.tmp / 'runtime' / 'rom_cache').iterdir())
+    assert not list((served.tmp / 'runtime' / 'rom_cache').glob(f'{game.uuid}-*'))
 
 
 def _get_zip(served, request_id, wire=None) -> _Wire:
