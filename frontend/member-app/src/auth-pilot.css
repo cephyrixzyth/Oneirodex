@@ -9,7 +9,9 @@ body {
   display: grid;
   place-items: center;
   padding: var(--od-space-6);
-  background: var(--od-bg);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--od-accent) 16%, transparent), transparent 55%),
+    var(--od-bg);
   color: var(--od-text);
   font-family: var(--font-ui);
 }
@@ -156,11 +158,16 @@ body {
 
 .auth-pilot__form--login .auth-pilot__field {
   gap: var(--od-space-3);
-  font-weight: 700;
+  font-size: var(--od-font-md);
+  font-weight: 500;
+  line-height: 1.5;
 }
 
-.auth-pilot__form--login .auth-pilot__field input {
+.auth-pilot__form--login .auth-pilot__field input:not([type='checkbox']) {
   box-sizing: border-box;
+  font-size: var(--od-font-base);
+  font-weight: 400;
+  line-height: 1.5;
   height: calc(var(--od-control-h) + var(--od-space-1));
   min-height: calc(var(--od-control-h) + var(--od-space-1));
 }
