@@ -11,6 +11,7 @@ from flask import Flask
 
 from oneirodex.runtime_native import account_summary
 from oneirodex.runtime_native.account_summary import (
+    AccountSummaryData,
     AccountInvitesData,
     create_account_summary_router,
 )
@@ -41,6 +42,44 @@ class FakeAccountSummaryData:
     def summary(self, user):
         self.calls.append(user.id)
         return self.payload
+
+
+def test_native_account_summary_uses_member_theme_for_stock_avatar_urls(monkeypatch):
+    from types import SimpleNamespace
+
+    from oneirodex.utils import account_invites, avatar
+
+    monkeypatch.setattr(account_invites, 'unused_invite_count', lambda _user: 0)
+    monkeypatch.setattr(account_invites, 'invites_unlimited', lambda _user: False)
+    monkeypatch.setattr(account_invites, 'smtp_ready', lambda: False)
+    monkeypatch.setattr(
+        avatar,
+        'STOCK_AVATARS',
+        [{'id': 'controller', 'path': 'newstyle/avatars/controller.svg', 'label': 'Controller'}],
+    )
+    avatar_calls = []
+
+    def themed_avatar(path, *, theme=None, static_url=None, package_root=None):
+        avatar_calls.append((path, theme))
+        return f'/static/library/themes/{theme}/avatars/{path.rsplit("/", 1)[-1]}'
+
+    monkeypatch.setattr(avatar, 'avatar_url', themed_avatar)
+    user = SimpleNamespace(
+        name='member-one', email='member@example.test', role='user',
+        avatarpath='newstyle/avatars/default.svg', invite_quota=4,
+        preferences=SimpleNamespace(theme='afterglow'),
+    )
+
+    payload = AccountSummaryData().summary(user)
+
+    assert payload['avatar_url'] == '/static/library/themes/afterglow/avatars/default.svg'
+    assert payload['stock_avatars'][0]['url'] == (
+        '/static/library/themes/afterglow/avatars/controller.svg'
+    )
+    assert avatar_calls == [
+        ('newstyle/avatars/default.svg', 'afterglow'),
+        ('newstyle/avatars/controller.svg', 'afterglow'),
+    ]
 
 
 class FakeAccountInvitesData:

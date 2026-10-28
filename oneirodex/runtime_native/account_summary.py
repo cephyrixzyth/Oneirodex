@@ -30,6 +30,7 @@ class AccountSummaryData:
 
         unused = unused_invite_count(user)
         unlimited = invites_unlimited(user)
+        active_theme = getattr(getattr(user, 'preferences', None), 'theme', None) or 'default'
         return {
             'username': user.name,
             'email': user.email,
@@ -37,13 +38,13 @@ class AccountSummaryData:
             'avatar_path': user.avatarpath,
             'avatar_url': avatar_url(
                 user.avatarpath,
-                theme=getattr(getattr(user, 'preferences', None), 'theme', None) or 'default',
+                theme=active_theme,
                 static_url=static_url,
                 package_root=package_root,
             ),
             'stock_avatars': [
                 {**entry, 'url': avatar_url(
-                    entry['path'], theme='default', static_url=static_url,
+                    entry['path'], theme=active_theme, static_url=static_url,
                     package_root=package_root,
                 )}
                 for entry in STOCK_AVATARS
