@@ -4163,6 +4163,7 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
     )
     assert anonymous_no_csrf.status_code == 400
     assert anonymous_no_csrf.json()['message'] == 'The CSRF token is missing.'
+    assert 'set-cookie' not in anonymous_no_csrf.headers
 
 
 def test_native_current_user_role_does_not_push_flask_context(monkeypatch):

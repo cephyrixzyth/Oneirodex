@@ -98,13 +98,24 @@ def create_member_meta_router(
     async def check_username(request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth, response = authenticate(request)
+            # Match Flask-WTF's before-request ordering: reject a browser write
+            # with invalid CSRF before login_required can flash a login message.
+            # Otherwise the CSRF 400 response accidentally persists that flash
+            # in a new session cookie, even though the legacy route does not.
+            auth = request_auth_context(
+                request, flask_app.config, find_user=find_user,
+                find_token=find_token, commit_token_touch=commit_token_touch,
+                load_user_id=load_user_id, login_manager=login_manager,
+            )
+            response = None
             if auth.token is None:
                 from .csrf_compat import csrf_error_response
 
                 csrf_response = csrf_error_response(request, auth.session_data, flask_app.config)
                 if csrf_response is not None:
                     response = csrf_response
+            if response is None and auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
                 from .bounded_request_body import BODY_TOO_LARGE
 
