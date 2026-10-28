@@ -174,11 +174,22 @@ export function SetupWizard({
                 ? 'Optional. Add a library now and start its first scan, or finish setup and add it later. Use a path visible inside the server, such as /storage/nes, under an allowed library location. Game files remain read-only.'
                 : step === 1
                   ? 'Oneirodex initial setup — one household admin to get started.'
-                : `Step ${step} of 6. You can change these choices later in settings.`}
+                  : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
+      {step === 3 ? (
+        <p className="auth-pilot__lede auth-pilot__lede--muted">
+          Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if needed.
+        </p>
+      ) : null}
       <form
-        className={`auth-pilot__form${step === 5 ? ' auth-pilot__form--providers' : ''}${
-          step === 6 ? ' auth-pilot__form--library' : ''
+        className={`auth-pilot__form${step === 4 ? ' auth-pilot__form--igdb' : ''}${
+          step === 5
+            ? ' auth-pilot__form--providers'
+            : step === 6
+              ? ' auth-pilot__form--library'
+              : step === 3
+                ? ' auth-pilot__form--features'
+                : ''
         }`}
         onSubmit={(event) => void submit(event)}
       >
@@ -227,33 +238,34 @@ export function SetupWizard({
         ) : null}
         {step === 3 ? (
           <>
-            <h2 className="auth-pilot__section-title">Library</h2>
-            <p className="auth-pilot__message">
-              Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if
-              needed.
-            </p>
-            {checkbox(
-              'enable_game_updates',
-              'Game updates',
-              features.enable_game_updates !== false,
-            )}
-            {checkbox('enable_game_extras', 'Game extras', features.enable_game_extras !== false)}
-            {checkbox(
-              'attract_mode_enabled',
-              'Attract mode',
-              features.attract_mode_enabled !== false,
-            )}
-            {checkbox(
-              'enable_arr_module',
-              'Modules Arr / indexers',
-              features.enable_arr_module !== false,
-            )}
-            {checkbox('enable_ai_assist', 'AI assist', features.enable_ai_assist !== false)}
-            {checkbox(
-              'enable_malware_scan',
-              'Malware scanner',
-              features.enable_malware_scan !== false,
-            )}
+            <fieldset className="auth-pilot__feature-group">
+              <legend>Library</legend>
+              {checkbox(
+                'enable_game_updates',
+                'Game updates',
+                features.enable_game_updates !== false,
+              )}
+              {checkbox('enable_game_extras', 'Game extras', features.enable_game_extras !== false)}
+              {checkbox(
+                'attract_mode_enabled',
+                'Attract mode',
+                features.attract_mode_enabled !== false,
+              )}
+            </fieldset>
+            <fieldset className="auth-pilot__feature-group">
+              <legend>Modules</legend>
+              {checkbox(
+                'enable_arr_module',
+                'Arr / indexers',
+                features.enable_arr_module !== false,
+              )}
+              {checkbox('enable_ai_assist', 'AI assist', features.enable_ai_assist !== false)}
+              {checkbox(
+                'enable_malware_scan',
+                'Malware scanner',
+                features.enable_malware_scan !== false,
+              )}
+            </fieldset>
             <p className="auth-pilot__message">
               Change anytime under Admin → Features. Compose/.env flags apply after restart.
             </p>
@@ -466,12 +478,12 @@ export function SetupWizard({
               : step === 2
                 ? 'Next step'
                 : step === 4
-              ? 'Save IGDB and continue'
-              : step === 5
-                ? 'Save choices and continue'
-                : step === 6
-                  ? 'Create library and start scan'
-                  : 'Continue'}
+                  ? 'Save IGDB and continue'
+                  : step === 5
+                    ? 'Save choices and continue'
+                    : step === 6
+                      ? 'Create library and start scan'
+                      : 'Continue'}
         </Button>
         {[2, 4, 5, 6].includes(step) ? (
           <Button

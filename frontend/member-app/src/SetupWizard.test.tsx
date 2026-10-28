@@ -28,9 +28,12 @@ test('admin setup keeps the v1.1.8 welcome and sign-in guidance', async () => {
   })
   render(<SetupWizard navigate={vi.fn()} />)
 
-  expect(await screen.findByRole('heading', { name: 'Create your admin account' })).toBeInTheDocument()
-  expect(screen.getByText('Oneirodex initial setup — one household admin to get started.'))
-    .toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Create your admin account' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText('Oneirodex initial setup — one household admin to get started.'),
+  ).toBeInTheDocument()
   expect(
     screen.getByText(
       'Local username and password is enough for home installs. Authentik / OIDC SSO is optional and can be enabled later under Admin → Integrations.',
@@ -39,6 +42,54 @@ test('admin setup keeps the v1.1.8 welcome and sign-in guidance', async () => {
   expect(screen.getByLabelText('Admin Username')).toBeRequired()
   expect(screen.getByLabelText('Admin Email')).toBeRequired()
   expect(screen.getByRole('button', { name: 'Next Step' })).toBeInTheDocument()
+})
+
+test('feature setup keeps the legacy Library and Modules groups', async () => {
+  window.history.replaceState({}, '', '/setup/features')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 3,
+    platforms: [],
+    settings: { features: {} },
+  })
+  render(<SetupWizard navigate={vi.fn()} />)
+
+  expect(await screen.findByRole('heading', { name: 'Features' })).toBeInTheDocument()
+  const library = screen.getByRole('group', { name: 'Library' })
+  const modules = screen.getByRole('group', { name: 'Modules' })
+  expect(within(library).getByLabelText('Game updates')).toBeInTheDocument()
+  expect(within(library).getByLabelText('Game extras')).toBeInTheDocument()
+  expect(within(library).getByLabelText('Attract mode')).toBeInTheDocument()
+  expect(within(modules).getByLabelText('Arr / indexers')).toBeInTheDocument()
+  expect(within(modules).getByLabelText('AI assist')).toBeInTheDocument()
+  expect(within(modules).getByLabelText('Malware scanner')).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if needed.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument()
+})
+
+test('metadata setup keeps the wide IGDB layout and full-width credential guide', async () => {
+  window.history.replaceState({}, '', '/setup/igdb')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 4,
+    platforms: [],
+    settings: {},
+  })
+  render(<SetupWizard navigate={vi.fn()} />)
+
+  expect(await screen.findByRole('heading', { name: 'Connect game metadata' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__form--igdb')).toBeInTheDocument()
+  expect(screen.getByLabelText('Client ID')).toBeInTheDocument()
+  expect(screen.getByLabelText('Client Secret')).toBeInTheDocument()
+  expect(screen.getByText('How do I get IGDB credentials?')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save IGDB and continue' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Skip and continue' })).toBeInTheDocument()
 })
 
 test('SMTP setup preserves v1.1.8 step labels and both actions', async () => {
@@ -165,7 +216,9 @@ test('first library setup matches the create-and-scan action with a responsive f
   const navigate = vi.fn()
   render(<SetupWizard navigate={navigate} />)
 
-  expect(await screen.findByRole('heading', { name: 'Create your first library' })).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Create your first library' }),
+  ).toBeInTheDocument()
   expect(screen.getByText(/start its first scan/)).toBeInTheDocument()
   expect(screen.getByText(/Game files remain read-only/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeInTheDocument()
