@@ -56,12 +56,21 @@ def invite_row(invite, *, origin: str | None = None) -> dict:
     expires = getattr(invite, 'expires_at', None)
     if expires and expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
+
+    def legacy_isoformat(value):
+        # The Flask route reads these timestamp-without-time-zone columns back
+        # from Postgres before serializing them, so its JSON contract is naive
+        # UTC. The native route may still hold the original aware Python value
+        # immediately after commit; normalize it to the same wire format.
+        if value and value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.isoformat() if value else None
+
     return {
         'token': invite.token,
         'email': invite.recipient_email or None,
         'url': invite_url(invite.token, origin=origin),
-        'created_at': created.isoformat() if created else None,
-        'expires_at': getattr(invite, 'expires_at', None).isoformat()
-        if getattr(invite, 'expires_at', None) else None,
+        'created_at': legacy_isoformat(created),
+        'expires_at': legacy_isoformat(getattr(invite, 'expires_at', None)),
         'expired': bool(expires and expires < datetime.now(timezone.utc)),
     }
