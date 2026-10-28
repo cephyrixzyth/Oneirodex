@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getJson, postJsonResult } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from './DataTable'
 import { gameCountHeat } from './gameCountHeat'
@@ -24,7 +25,13 @@ import { ProposeLeafLibraries } from './ProposeLeafLibraries'
 import { ImportLeafLibraries } from './ImportLeafLibraries'
 import './LibrariesPanel.css'
 
-export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element | null }) {
+export function LibrariesPanel({
+  panelEl: _panelEl = null,
+  managementActions,
+}: {
+  panelEl?: Element | null
+  managementActions?: ReactNode
+}) {
   const [rows, setRows] = useState<LibraryRow[] | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -379,6 +386,10 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
 
   return (
     <div className="od-libraries-react">
+      <CreateLibraryForm onCreated={() => void reload()} />
+      {managementActions ? (
+        <div className="od-admin-panel__toolbar">{managementActions}</div>
+      ) : null}
       <LibrariesTrailSummary
         libraryCount={libraryCount}
         totalGames={totalGames}
@@ -436,7 +447,6 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         initialSort={{ key: 'name', dir: 'asc' }}
       />
 
-      <CreateLibraryForm onCreated={() => void reload()} />
       <section
         className="od-admin-panel od-libraries-add-many"
         aria-labelledby="od-libraries-add-many-title"

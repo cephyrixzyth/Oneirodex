@@ -30,23 +30,26 @@ export function NativeLibrariesPage() {
 
   return (
     <Page title="Libraries" lede="Create, organize, scan and maintain game libraries.">
-      <div className="od-admin-panel__toolbar">
-        <a className="od-cbtn" href="/admin/scan-controls">
-          Start or schedule a scan
-        </a>
-        <Button
-          type="button"
-          className="od-btn--accent"
-          onClick={() => void startRefreshAll()}
-          disabled={refreshing}
-        >
-          {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
-        </Button>
-        <a className="od-cbtn" href="/admin/scan-jobs">
-          Scan jobs
-        </a>
-      </div>
-      <LibrariesPanel />
+      <LibrariesPanel
+        managementActions={
+          <>
+            <a className="od-cbtn" href="/admin/scan-controls">
+              Start or schedule a scan
+            </a>
+            <Button
+              type="button"
+              className="od-btn--accent"
+              onClick={() => void startRefreshAll()}
+              disabled={refreshing}
+            >
+              {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
+            </Button>
+            <a className="od-cbtn" href="/admin/scan-jobs">
+              Scan jobs
+            </a>
+          </>
+        }
+      />
       <LibraryDoctorPanel />
       <RenameGamePanel />
       <LibraryFreshnessPanel />

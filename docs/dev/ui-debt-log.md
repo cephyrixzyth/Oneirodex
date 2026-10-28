@@ -182,6 +182,7 @@ Status: `open` | `in_progress` | `done` | `deferred` | `wontfix`
 ---
 
 | UID-197 | Admin Libraries catalog refresh | Opening Libraries triggered IGDB catalog refreshes with missing credentials, producing HTTP 502 noise in an empty setup | **Local fix 2026-10-27:** the automatic refresh first reads the admin-safe IGDB settings projection and skips the refresh unless both Client ID and saved secret exist. Focused LibrariesPanel tests cover missing and present credentials. Exact-image R1304 confirms the missing-settings 502 occurs in both v1.1.8 and current and that this is a setup-state gap, not a current-only regression. | Bug scrub / parity | done |
+| UID-198 | Admin Libraries control order | The React Libraries page placed its roster before the create form, unlike the v1.1.8 page, where the add form leads the roster | **Source fix 2026-10-27:** the create form now leads the management actions and roster; focused LibrariesPanel and NativeLibrariesPage tests pass 16/16, and the admin production build passes. Exact-image visual recapture after rebuilding current is still required before closing this parity item. | Bug scrub / parity | in_progress |
 
 ## Root causes (process — why UI “doesn’t fix the same issues”)
 

@@ -146,19 +146,27 @@ test('the real Jinja libraries panel exposes the add-and-first-scan form', async
   expect(screen.getByRole('button', { name: 'Create library' })).toBeDisabled()
 })
 
-test('shows the library roster before the create and bulk-import tools', async () => {
-  render(<LibrariesPanel />)
+test('keeps the create form before management actions, roster, and bulk tools', async () => {
+  render(
+    <LibrariesPanel
+      managementActions={<button type="button">Refresh all libraries</button>}
+    />,
+  )
+  const createHeading = await screen.findByRole('heading', { name: 'Add one library' })
+  const managementAction = screen.getByRole('button', { name: 'Refresh all libraries' })
   const libraryName = await screen.findByText('_pc')
   const libraryTable = libraryName.closest('table')
-  const createHeading = await screen.findByRole('heading', { name: 'Add one library' })
   const bulkHeading = screen.getByRole('heading', { name: 'Add many libraries' })
 
   expect(libraryTable).not.toBeNull()
   expect(
-    libraryTable!.compareDocumentPosition(createHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    createHeading.compareDocumentPosition(managementAction) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy()
   expect(
-    createHeading.compareDocumentPosition(bulkHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    managementAction.compareDocumentPosition(libraryTable!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    libraryTable!.compareDocumentPosition(bulkHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy()
 })
 
