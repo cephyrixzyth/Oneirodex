@@ -9135,6 +9135,9 @@ def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monk
 
 
 def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
+    from oneirodex.utils import setup as setup_utils
+
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: False)
     _flask_app, runtime = _runtime(monkeypatch)
     session = {
         '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember_seconds': 3600,
@@ -9184,6 +9187,28 @@ def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
     assert jar['session']['max-age'] == '0'
     assert guest.status_code == 400
     assert guest.headers.get_list('set-cookie') == []
+
+
+def test_lazy_asgi_logout_safe_methods_redirect_only_during_setup(monkeypatch):
+    from oneirodex.utils import setup as setup_utils
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_utils, 'get_setup_redirect_url', lambda: '/setup')
+
+    get = _run(runtime, '/logout')
+    head = _run(runtime, '/logout', method='HEAD')
+
+    assert get.status_code == head.status_code == 302
+    assert get.headers['location'] == head.headers['location'] == '/setup'
+    assert get.headers.get_list('set-cookie') == head.headers.get_list('set-cookie') == []
+    assert head.content == b''
+
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: False)
+    installed = _run(runtime, '/logout')
+    assert installed.status_code == 405
+    assert installed.headers['allow'] == 'POST'
+    assert installed.headers.get_list('set-cookie') == []
 
 
 @pytest.mark.parametrize('has_remember_cookie', [True, False])

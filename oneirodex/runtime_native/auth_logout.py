@@ -5,18 +5,41 @@ from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
 
-from .response_compat import flask_redirect_response
+from .response_compat import flask_http_exception_response, flask_redirect_response
 
 
 def create_auth_logout_router(flask_app: FastAPI):
     router = APIRouter()
 
-    @router.post('/logout')
+    @router.api_route('/logout', methods=['GET', 'HEAD', 'POST'])
     def logout(request: Request):
+        from oneirodex.utils.security_headers import security_header_values
+
+        if request.method in ('GET', 'HEAD'):
+            from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
+
+            # Setup state is database-backed. NativeRuntimeContext.app_context
+            # binds the request's native SQLAlchemy session without importing
+            # the retired Flask runtime; Flask's context remains available to
+            # the compatibility test harness.
+            with flask_app.app_context():
+                setup_redirect = should_redirect_to_setup()
+                setup_target = get_setup_redirect_url() if setup_redirect else None
+
+            if setup_redirect:
+                response = flask_redirect_response(setup_target)
+                for key, value in security_header_values(flask_app.config).items():
+                    response.headers.setdefault(key, value)
+                if request.method == 'HEAD':
+                    response.body = b''
+                return response
+            response = flask_http_exception_response(flask_app, request, 405)
+            response.headers['Allow'] = 'POST'
+            return response
+
         from oneirodex.runtime_native.request_auth import _lifetime_seconds
         from oneirodex.runtime_native.session_compat import load_session_cookie
         from oneirodex.runtime_native.oidc_status import _set_session_cookie
-        from oneirodex.utils.security_headers import security_header_values
 
         config = flask_app.config
         cookie_name = str(config.get('SESSION_COOKIE_NAME') or 'session')
