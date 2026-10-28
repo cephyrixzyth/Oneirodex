@@ -104,8 +104,11 @@ body {
   gap: 1.4375rem;
 }
 
-.auth-pilot__form--register .auth-pilot__field input {
+.auth-pilot__form--register .auth-pilot__field input:not([type='checkbox']) {
   box-sizing: border-box;
+  font-size: var(--od-font-base);
+  font-weight: 400;
+  line-height: 1.5;
   height: 2.5rem;
   min-height: 2.5rem;
   padding: 0.5rem 0.75rem;
@@ -114,7 +117,9 @@ body {
 .auth-pilot__form--register > .auth-pilot__submit {
   min-height: 2.9rem;
   padding: 0.65rem 1rem;
+  font-size: var(--od-font-base);
   font-weight: 600;
+  line-height: 1.5;
 }
 
 .auth-pilot__card--login > .auth-pilot__brand + .auth-pilot__title {
@@ -542,7 +547,12 @@ body {
 }
 
 .auth-pilot__links--register a {
+  width: calc(100% - 0.25rem);
+  min-height: 2.925rem;
+  justify-self: center;
   border-radius: var(--od-radius-md);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .auth-pilot__links--login a:hover,

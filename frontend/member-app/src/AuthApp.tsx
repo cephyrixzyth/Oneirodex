@@ -279,7 +279,13 @@ export function AuthApp({
                 required
               />
             </label>
-            <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+            <Button
+              variant="primary"
+              size="lg"
+              className="auth-pilot__submit"
+              disabled={busy}
+              type="submit"
+            >
               {busy ? 'Registering…' : 'Register'}
             </Button>
           </form>

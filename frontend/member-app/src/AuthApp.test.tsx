@@ -142,9 +142,9 @@ test('registration preserves invite token and shows the generic account request 
   })
   render(<AuthApp />)
   fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'new-member' } })
-  expect(screen.getByRole('button', { name: 'Register' }).closest('form')).toHaveAttribute(
-    'novalidate',
-  )
+  const submit = screen.getByRole('button', { name: 'Register' })
+  expect(submit).toHaveClass('od-btn--lg', 'auth-pilot__submit')
+  expect(submit.closest('form')).toHaveAttribute('novalidate')
   expect(
     screen.getByText(
       "You were invited to join this Oneirodex library. Choose a username and password to request an account. After confirming your email, you will choose the password used to sign in. You will not share the inviter's login.",
