@@ -15,8 +15,9 @@ See docs/strategy/security-legal-playbook.md (S2).
 
 from __future__ import annotations
 
-import ipaddress
+import gzip
 import io
+import ipaddress
 import socketserver
 import threading
 from types import SimpleNamespace
@@ -70,6 +71,37 @@ def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length()
     oversized = _ChunkedResponse([b''], headers={'Content-Length': '5'})
     with pytest.raises(ResponseTooLarge):
         read_response_limited(oversized, 4)
+
+
+def test_read_response_limited_caps_real_gzip_decoded_bytes():
+    from urllib3.response import HTTPResponse
+
+    def response_for(payload):
+        encoded = gzip.compress(payload)
+        response = requests.Response()
+        response.status_code = 200
+        response.headers = {
+            'Content-Encoding': 'gzip',
+            'Content-Length': str(len(encoded)),
+        }
+        response.raw = HTTPResponse(
+            body=io.BytesIO(encoded),
+            headers=response.headers,
+            preload_content=False,
+            decode_content=False,
+        )
+        return response
+
+    exact = response_for(b'x' * 4096)
+    assert int(exact.headers['Content-Length']) < 4096
+    assert read_response_limited(exact, 4096) == b'x' * 4096
+    exact.close()
+
+    expanded = response_for(b'x' * 4097)
+    assert int(expanded.headers['Content-Length']) < 4096
+    with pytest.raises(ResponseTooLarge):
+        read_response_limited(expanded, 4096)
+    assert expanded.raw.closed is True
 
 
 def test_download_magnets_drop_embedded_network_targets_but_keep_normal_metadata():
