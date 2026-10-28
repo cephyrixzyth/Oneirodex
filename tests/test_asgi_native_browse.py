@@ -4201,6 +4201,33 @@ def test_native_check_username_bearer_requires_social_read_scope(monkeypatch):
     assert allowed.json() == {'exists': True}
 
 
+def test_native_check_username_options_matches_flask_allow_order(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/api/check_username', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == 'POST, OPTIONS'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['content-length'] == '0'
+    assert response.content == b''
+
+
+def test_native_check_username_rejects_oversized_json_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"username":"free","padding":"' + (b'x' * (70_000 - 31)) + b'"}'
+
+    response = _run(
+        runtime, '/api/check_username', cookie=cookie, method='POST',
+        content=body,
+        headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
 def test_native_current_user_role_does_not_push_flask_context(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     monkeypatch.setattr(

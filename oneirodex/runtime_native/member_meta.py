@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
+from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
@@ -93,6 +94,15 @@ def create_member_meta_router(
             if request.method == 'HEAD':
                 response.body = b''
             return response
+
+    @router.options('/api/check_username')
+    async def check_username_options():
+        # Flask's automatic OPTIONS response preserves POST before OPTIONS.
+        return Response(
+            status_code=200,
+            headers={'Allow': 'POST, OPTIONS'},
+            media_type='text/html; charset=utf-8',
+        )
 
     @router.post('/api/check_username')
     async def check_username(request: Request):
