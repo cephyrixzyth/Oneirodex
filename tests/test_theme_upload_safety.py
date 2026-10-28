@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
 from pathlib import Path
+import stat
 from threading import Barrier
 import zipfile
 
@@ -92,6 +93,22 @@ def test_upload_rejects_invalid_theme_name_before_install(manager):
     with manager.app.test_request_context():
         assert manager.upload_theme(archive) is None
     assert not list(Path(manager.theme_folder).iterdir())
+
+
+def test_upload_rejects_symlink_entries_before_extracting(manager):
+    archive = _theme_zip('Symlink Theme')
+    with zipfile.ZipFile(archive, 'a') as output:
+        link = zipfile.ZipInfo('css/external.css')
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        output.writestr(link, '../../outside.css')
+    archive.seek(0)
+
+    with manager.app.test_request_context():
+        assert manager.upload_theme(archive) is None
+
+    assert not list(Path(manager.theme_folder).iterdir())
+    assert not Path(manager.app.config['UPLOAD_FOLDER'], 'outside.css').exists()
 
 
 def test_overlapping_uploads_keep_their_own_theme_files(manager, monkeypatch):
