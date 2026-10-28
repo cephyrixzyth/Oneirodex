@@ -151,20 +151,18 @@ def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
     assert not member_shell.member_shell_route('/api/auth/runtime-bootstrap')
 
 
-def test_invites_route_renders_member_shell_and_retains_site_url_warning(monkeypatch):
-    from oneirodex.utils import public_origin
-
+def test_invites_route_renders_member_shell_without_duplicate_site_url_flash(monkeypatch):
     client, session_data = _native_client(monkeypatch, user=SimpleNamespace(
         id=14, name='Home <Player>', role='admin', avatarpath=None,
         preferences=SimpleNamespace(theme='default', icon_pack='outline'),
     ))
-    monkeypatch.setattr(public_origin, 'site_url_is_configured', lambda: False)
+    session_data['_flashes'] = []
 
     response = client.get('/user/invites')
 
     assert response.status_code == 200
     assert 'data-user-id="14"' in response.text
-    assert 'public Site URL' in response.text
+    assert 'Set a public Site URL' not in response.text
     assert not session_data.get('_flashes')
 
 
