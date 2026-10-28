@@ -272,6 +272,10 @@ test('expired or invalid confirmation links surface an alert and keep the back l
   )
   render(<AuthApp />)
   expect(await screen.findByRole('heading', { name: 'Link expired' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--account',
+  )
   expect(
     screen.getByText(
       'Request a new activation from an admin or try registering again with a fresh invite.',
@@ -280,6 +284,7 @@ test('expired or invalid confirmation links surface an alert and keep the back l
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Request a new activation from an admin',
   )
+  expect(screen.getAllByRole('alert')).toHaveLength(1)
   expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
 })
 
@@ -302,9 +307,12 @@ test('email confirmation inspection is read-only until the mailbox owner sets a 
   render(<AuthApp />)
 
   expect(await screen.findByRole('heading', { name: 'Confirm your email' })).toBeInTheDocument()
-  expect(
-    await screen.findByRole('button', { name: 'Confirm email and activate account' }),
-  ).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  const confirmSubmit = await screen.findByRole('button', {
+    name: 'Confirm email and activate account',
+  })
+  expect(confirmSubmit).toHaveClass('od-btn--lg', 'auth-pilot__submit--account')
+  expect(confirmSubmit.closest('form')).toHaveClass('auth-pilot__form--account')
   expect(api.confirmEmail).not.toHaveBeenCalled()
   expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
 

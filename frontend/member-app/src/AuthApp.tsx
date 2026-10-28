@@ -117,7 +117,14 @@ export function AuthApp({
                 ? 'invalid'
                 : 'error',
         )
-        setError(message)
+        if (
+          !normalized.includes('expired') &&
+          !normalized.includes('not found') &&
+          !normalized.includes('invalid') &&
+          !normalized.includes('not valid')
+        ) {
+          setError(message)
+        }
       })
     return () => controller.abort()
   }, [bootstrap, page, token])
@@ -414,7 +421,12 @@ export function AuthApp({
                       ? 'Could not confirm this email'
                       : 'Confirm your email'}
         </h1>
-        <p className="auth-pilot__lede">
+        <p
+          className="auth-pilot__lede"
+          role={
+            ['expired', 'invalid', 'not-found'].includes(confirmationState) ? 'alert' : undefined
+          }
+        >
           {confirmationState === 'confirmed'
             ? 'Your email is confirmed. Sign in to open your household library.'
             : confirmationState === 'already'
@@ -433,7 +445,7 @@ export function AuthApp({
         </p>
         {confirmationState === 'ready' ? (
           <form
-            className="auth-pilot__form"
+            className="auth-pilot__form auth-pilot__form--account"
             noValidate
             onSubmit={(event) => {
               const form = event.currentTarget
@@ -480,12 +492,18 @@ export function AuthApp({
                 required
               />
             </label>
-            <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+            <Button
+              variant="primary"
+              size="lg"
+              className="auth-pilot__submit auth-pilot__submit--account"
+              disabled={busy}
+              type="submit"
+            >
               {busy ? 'Confirming…' : 'Confirm email and activate account'}
             </Button>
           </form>
         ) : null}
-        <nav className="auth-pilot__links" aria-label="Account actions">
+        <nav className="auth-pilot__links auth-pilot__links--account" aria-label="Account actions">
           <a href="/login">Back to sign in</a>
           <a href="/register">Create account</a>
         </nav>
@@ -503,7 +521,7 @@ export function AuthApp({
             ? 'auth-pilot__card auth-pilot__card--login'
             : page === 'register'
               ? 'auth-pilot__card auth-pilot__card--register'
-              : page === 'reset-request' || page === 'reset-confirm'
+              : page === 'reset-request' || page === 'reset-confirm' || page === 'confirm-email'
                 ? 'auth-pilot__card auth-pilot__card--account'
                 : 'auth-pilot__card'
         }
