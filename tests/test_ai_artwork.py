@@ -26,6 +26,18 @@ PNG_B64 = (
 )
 
 
+def _response_with_json(payload, *, status_code=200):
+    import json
+
+    body = json.dumps(payload).encode('utf-8')
+    response = MagicMock(
+        status_code=status_code,
+        headers={'Content-Length': str(len(body))},
+    )
+    response.iter_content.return_value = [body]
+    return response
+
+
 class TestPrompt:
     def test_uses_catalogue_facts(self):
         prompt = build_prompt(name='Portal 2', platform='PC Windows', genres=['Puzzle'])
@@ -60,19 +72,19 @@ class TestPrompt:
 class TestA1111Adapter:
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_decodes_returned_image(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=200, json=lambda: {'images': [PNG_B64]},
-        )
+        mock_post.return_value = _response_with_json({'images': [PNG_B64]})
         data = A1111Generator('http://sd:7860').generate(
             'x', width=512, height=768, timeout=5,
         )
         assert data.startswith(b'\x89PNG')
         assert mock_post.call_args.kwargs['allow_redirects'] is False
+        assert mock_post.call_args.kwargs['stream'] is True
+        mock_post.return_value.close.assert_called_once()
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_tolerates_a_data_url_prefix(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=200, json=lambda: {'images': [f'data:image/png;base64,{PNG_B64}']},
+        mock_post.return_value = _response_with_json(
+            {'images': [f'data:image/png;base64,{PNG_B64}']},
         )
         data = A1111Generator('http://sd:7860').generate(
             'x', width=512, height=768, timeout=5,
@@ -81,22 +93,36 @@ class TestA1111Adapter:
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_http_error_is_reported_not_swallowed(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=500, json=lambda: {})
+        mock_post.return_value = _response_with_json({}, status_code=500)
         with pytest.raises(ArtworkGenerationError, match='HTTP 500'):
             A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_redirect_is_rejected_without_following(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=302, json=lambda: {})
+        mock_post.return_value = _response_with_json({}, status_code=302)
         with pytest.raises(ArtworkGenerationError, match='HTTP 302'):
             A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
         assert mock_post.call_args.kwargs['allow_redirects'] is False
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_empty_image_list_is_an_error(self, mock_post):
-        mock_post.return_value = MagicMock(status_code=200, json=lambda: {'images': []})
+        mock_post.return_value = _response_with_json({'images': []})
         with pytest.raises(ArtworkGenerationError, match='no image'):
             A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
+
+    @patch('oneirodex.utils.ai_artwork.requests.post')
+    def test_rejects_streamed_response_over_the_artwork_limit(self, mock_post, monkeypatch):
+        import oneirodex.utils.ai_artwork as ai_artwork
+
+        body = b'{"images":[]}'
+        response = MagicMock(status_code=200, headers={})
+        response.iter_content.return_value = [body[:4], body[4:]]
+        mock_post.return_value = response
+        monkeypatch.setattr(ai_artwork, 'MAX_OUTBOUND_IMAGE_BYTES', 8)
+
+        with pytest.raises(ArtworkGenerationError, match='response is too large'):
+            A1111Generator('http://sd:7860').generate('x', width=1, height=1, timeout=1)
+        response.close.assert_called()
 
     @patch('oneirodex.utils.ai_artwork.requests.post')
     def test_unreachable_endpoint_is_an_error(self, mock_post):

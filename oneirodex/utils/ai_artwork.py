@@ -24,10 +24,16 @@ should need to change.
 from __future__ import annotations
 
 import base64
+import json
 import os
 from typing import Protocol
 
 import requests
+from oneirodex.utils.http_safe import (
+    MAX_OUTBOUND_IMAGE_BYTES,
+    ResponseTooLarge,
+    read_response_limited,
+)
 
 # Kept short: the prompt is catalogue facts, not a creative brief, and a long
 # tail of adjectives makes the output less recognisable rather than more.
@@ -144,6 +150,7 @@ class A1111Generator:
                 json=payload,
                 timeout=timeout,
                 allow_redirects=False,
+                stream=True,
             )
         except requests.RequestException as exc:
             # requests exceptions can embed the configured URL, including
@@ -151,14 +158,27 @@ class A1111Generator:
             # useful without reflecting endpoint details.
             raise ArtworkGenerationError('Artwork endpoint unreachable') from exc
 
-        if response.status_code != 200:
-            raise ArtworkGenerationError(
-                f'Artwork endpoint returned HTTP {response.status_code}',
-            )
         try:
-            images = (response.json() or {}).get('images') or []
-        except ValueError as exc:
-            raise ArtworkGenerationError('Artwork endpoint returned invalid JSON') from exc
+            if response.status_code != 200:
+                raise ArtworkGenerationError(
+                    f'Artwork endpoint returned HTTP {response.status_code}',
+                )
+            try:
+                payload_data = json.loads(read_response_limited(response, MAX_OUTBOUND_IMAGE_BYTES))
+            except ResponseTooLarge as exc:
+                raise ArtworkGenerationError(
+                    'Artwork endpoint response is too large',
+                ) from exc
+            except ValueError as exc:
+                raise ArtworkGenerationError('Artwork endpoint returned invalid JSON') from exc
+            except requests.RequestException as exc:
+                raise ArtworkGenerationError(
+                    'Artwork endpoint response could not be read',
+                ) from exc
+        finally:
+            response.close()
+
+        images = (payload_data or {}).get('images') or []
         if not images:
             raise ArtworkGenerationError('Artwork endpoint returned no image')
 

@@ -204,6 +204,8 @@ talks to an endpoint outside the process, so it stays opt-in.
 
 - Calls `POST /sdapi/v1/txt2img` on your endpoint. Nothing leaves your network;
   there is no hosted provider and no API key to buy.
+- The JSON response is streamed and capped at **25 MiB** before it is parsed;
+  oversized or interrupted responses fail without replacing the existing art.
 - `AI_ARTWORK_ENGINE=comfyui` is recognised but **not implemented** — it raises
   a clear error naming the missing workflow rather than silently producing
   nothing. Use `a1111` for now.
