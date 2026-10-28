@@ -355,11 +355,22 @@ def create_setup_transition_router(
             step = body['step']
             current_step = data.current_step()
             if current_step != step:
-                _setup_form_flash(
-                    auth.session_data, 'warning',
-                    'This setup step is no longer current. Reload setup to continue.',
-                )
-                response = flask_redirect_response('/setup', status_code=302)
+                if step == 1:
+                    # A competing first-admin submission may have completed
+                    # setup after this request rendered its form. Match the
+                    # legacy winner/loser flow: leave the losing session
+                    # signed out and send it directly to sign-in.
+                    _setup_form_flash(
+                        auth.session_data, 'warning',
+                        'Setup has already been completed.',
+                    )
+                    response = flask_redirect_response('/login', status_code=302)
+                else:
+                    _setup_form_flash(
+                        auth.session_data, 'warning',
+                        'This setup step is no longer current. Reload setup to continue.',
+                    )
+                    response = flask_redirect_response('/setup', status_code=302)
             elif step > 1 and (auth.user is None or _role(auth.user) != 'admin'):
                 _setup_form_flash(
                     auth.session_data, 'warning',
@@ -395,13 +406,20 @@ def create_setup_transition_router(
                     )
 
                 if failure:
-                    _setup_form_flash(auth.session_data, 'error', failure[1])
-                    detail = failure[3]
-                    if isinstance(detail, dict):
-                        for errors in detail.values():
-                            for message in errors:
-                                _setup_form_flash(auth.session_data, 'error', str(message))
-                    response = flask_redirect_response(return_to, status_code=302)
+                    if step == 1 and failure[0] == 'conflict':
+                        _setup_form_flash(
+                            auth.session_data, 'warning',
+                            'Setup has already been completed.',
+                        )
+                        response = flask_redirect_response('/login', status_code=302)
+                    else:
+                        _setup_form_flash(auth.session_data, 'error', failure[1])
+                        detail = failure[3]
+                        if isinstance(detail, dict):
+                            for errors in detail.values():
+                                for message in errors:
+                                    _setup_form_flash(auth.session_data, 'error', str(message))
+                        response = flask_redirect_response(return_to, status_code=302)
                 elif result and '_error' in result:
                     _setup_form_flash(auth.session_data, 'error', result['_error'][1])
                     response = flask_redirect_response(return_to, status_code=302)

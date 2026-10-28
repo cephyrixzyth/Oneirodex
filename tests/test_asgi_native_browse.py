@@ -9737,6 +9737,66 @@ def test_lazy_asgi_setup_form_admin_gate_matches_flask_redirect_shape(monkeypatc
     assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in response.text
 
 
+def test_lazy_asgi_setup_first_admin_stale_form_redirects_to_login(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 2,
+        transition=lambda *args, **kwargs: pytest.fail('stale first-admin form must not transition'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'late.admin',
+            'email': 'late@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
+    assert '_user_id' not in session
+
+
+def test_lazy_asgi_setup_first_admin_lock_conflict_redirects_to_login(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 1,
+        transition=lambda *args, **kwargs: (
+            None, ('conflict', 'Setup has already been completed.', 409, None), None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'late.admin',
+            'email': 'late@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
+    assert '_user_id' not in session
+
+
 def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(monkeypatch):
     calls = []
     data = SimpleNamespace(
