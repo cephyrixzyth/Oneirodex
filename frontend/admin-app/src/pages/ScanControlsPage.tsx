@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
@@ -130,6 +130,20 @@ export function ScanControlsPage() {
         <Button onClick={() => setRevision((value) => value + 1)}>
           Retry loading scan controls
         </Button>
+      ) : null}
+      {!loading && !loadError && libraries.length === 0 ? (
+        <section
+          className="od-admin-panel od-scan-controls__empty"
+          aria-labelledby="scan-no-libraries"
+        >
+          <div>
+            <h2 id="scan-no-libraries">No libraries yet</h2>
+            <p>Add a library before starting automatic or manual scans.</p>
+          </div>
+          <Link className="od-btn od-btn--secondary" to="/libraries">
+            Create your first library
+          </Link>
+        </section>
       ) : null}
       <form id="automatic-scan" className="od-admin-panel od-scan-controls" onSubmit={submit}>
         <h2>Automatic scan</h2>

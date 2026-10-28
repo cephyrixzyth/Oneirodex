@@ -109,10 +109,26 @@ test('keeps automatic scan and manual identification together on the scan manage
   expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Scan jobs' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'No libraries yet' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Create your first library' })).toHaveAttribute(
+    'href',
+    '/libraries',
+  )
   expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
     'href',
     '/admin/scan-jobs',
   )
+})
+
+test('hides first-library onboarding once a library is available', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : { roots: [] },
+  )
+  renderPage()
+  await screen.findByRole('option', { name: 'Nintendo' })
+  expect(screen.queryByRole('heading', { name: 'No libraries yet' })).not.toBeInTheDocument()
 })
 
 test('keeps scan start errors visible in the automatic scan form', async () => {
