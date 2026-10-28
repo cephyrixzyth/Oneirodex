@@ -47,10 +47,33 @@ def test_create_github_issue_posts_when_token_set(monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def read(self):
-            return b'{"number": 42, "html_url": "https://github.com/cephyrixzyth/oneirodex/issues/42"}'
+        def read(self, size=-1):
+            return b'{"number": 42, "html_url": "https://github.com/cephyrixzyth/oneirodex/issues/42"}'[:size]
 
     with patch('oneirodex.utils.github_issues.urllib.request.urlopen', return_value=Resp()):
         result = create_github_issue(title='hello', body='world', labels=['support'])
     assert result['ok'] is True
     assert result['number'] == 42
+
+
+def test_create_github_issue_rejects_oversized_provider_response(monkeypatch):
+    from oneirodex.utils.github_issues import MAX_GITHUB_RESPONSE_BYTES
+
+    monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'ghp_test')
+    monkeypatch.setenv('SUPPORT_GITHUB_REPO', 'cephyrixzyth/oneirodex')
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, size=-1):
+            assert size == MAX_GITHUB_RESPONSE_BYTES + 1
+            return b'x' * size
+
+    with patch('oneirodex.utils.github_issues.urllib.request.urlopen', return_value=Resp()):
+        result = create_github_issue(title='hello', body='world')
+
+    assert result == {'ok': False, 'error': 'GitHub API response exceeded the size limit'}

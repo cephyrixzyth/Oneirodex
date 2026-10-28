@@ -9,6 +9,9 @@ import urllib.request
 from typing import Any
 
 
+MAX_GITHUB_RESPONSE_BYTES = 64 * 1024
+
+
 def support_github_config() -> tuple[str | None, str]:
     token = (os.getenv('SUPPORT_GITHUB_TOKEN') or '').strip() or None
     # GitHub rename landed: default is cephyrixzyth/oneirodex. The old
@@ -72,14 +75,17 @@ def create_github_issue(*, title: str, body: str, labels: list[str] | None = Non
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
+            raw = resp.read(MAX_GITHUB_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
+            return {'ok': False, 'error': 'GitHub API response exceeded the size limit'}
+        data = json.loads(raw.decode('utf-8'))
         return {
             'ok': True,
             'number': data.get('number'),
             'url': data.get('html_url'),
         }
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode('utf-8', errors='replace')[:400]
+        detail = exc.read(400).decode('utf-8', errors='replace')
         return {'ok': False, 'error': f'GitHub HTTP {exc.code}: {detail}'}
     except Exception as exc:
         return {'ok': False, 'error': str(exc)}
