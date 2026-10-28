@@ -20,7 +20,8 @@ interface RuntimeBootstrap {
 }
 
 type Page = 'login' | 'register' | 'reset-request' | 'reset-confirm' | 'confirm-email' | 'setup'
-type ConfirmationState = 'loading' | 'ready' | 'confirmed' | 'already' | 'expired' | 'invalid' | 'not-found' | 'error'
+type ConfirmationState =
+  'loading' | 'ready' | 'confirmed' | 'already' | 'expired' | 'invalid' | 'not-found' | 'error'
 const navigateWindow = (url: string) => window.location.assign(url)
 
 function pageForPath(path: string): Page {
@@ -181,16 +182,20 @@ export function AuthApp({
               )
               return
             }
-            void submit(event, async (formData) => {
-              const result = await signIn(
-                {
-                  username: String(formData.get('username') || ''),
-                  password: String(formData.get('password') || ''),
-                },
-                { next: params.get('next') || undefined },
-              )
-              navigate(result.next_url)
-            }, true)
+            void submit(
+              event,
+              async (formData) => {
+                const result = await signIn(
+                  {
+                    username: String(formData.get('username') || ''),
+                    password: String(formData.get('password') || ''),
+                  },
+                  { next: params.get('next') || undefined },
+                )
+                navigate(result.next_url)
+              },
+              true,
+            )
           }}
         >
           <label className="auth-pilot__field">
@@ -289,7 +294,10 @@ export function AuthApp({
               {busy ? 'Registering…' : 'Register'}
             </Button>
           </form>
-          <nav className="auth-pilot__links auth-pilot__links--register" aria-label="Account actions">
+          <nav
+            className="auth-pilot__links auth-pilot__links--register"
+            aria-label="Account actions"
+          >
             <a href="/login">Back to sign in</a>
           </nav>
         </>
@@ -301,7 +309,7 @@ export function AuthApp({
           Enter your email and we will send a reset link if an account exists.
         </p>
         <form
-          className="auth-pilot__form"
+          className="auth-pilot__form auth-pilot__form--account"
           noValidate
           onSubmit={(event) =>
             submit(event, async (data) => {
@@ -320,11 +328,17 @@ export function AuthApp({
               required
             />
           </label>
-          <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+          <Button
+            variant="primary"
+            size="lg"
+            className="auth-pilot__submit auth-pilot__submit--account"
+            disabled={busy}
+            type="submit"
+          >
             {busy ? 'Sending…' : 'Send reset link'}
           </Button>
         </form>
-        <nav className="auth-pilot__links" aria-label="Account actions">
+        <nav className="auth-pilot__links auth-pilot__links--account" aria-label="Account actions">
           <a href="/login">Back to sign in</a>
         </nav>
       </>
@@ -333,7 +347,7 @@ export function AuthApp({
         <h1 className="auth-pilot__title">Choose a new password</h1>
         <p className="auth-pilot__lede">Enter and confirm your new password to finish the reset.</p>
         <form
-          className="auth-pilot__form"
+          className="auth-pilot__form auth-pilot__form--account"
           noValidate
           onSubmit={(event) =>
             submit(event, async (data) => {
@@ -369,11 +383,17 @@ export function AuthApp({
               required
             />
           </label>
-          <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+          <Button
+            variant="primary"
+            size="lg"
+            className="auth-pilot__submit auth-pilot__submit--account"
+            disabled={busy}
+            type="submit"
+          >
             {busy ? 'Saving…' : 'Reset password'}
           </Button>
         </form>
-        <nav className="auth-pilot__links" aria-label="Account actions">
+        <nav className="auth-pilot__links auth-pilot__links--account" aria-label="Account actions">
           <a href="/login">Back to sign in</a>
         </nav>
       </>
@@ -442,11 +462,23 @@ export function AuthApp({
           >
             <label className="auth-pilot__field">
               <span>Choose a password</span>
-              <input autoComplete="new-password" minLength={8} name="password" type="password" required />
+              <input
+                autoComplete="new-password"
+                minLength={8}
+                name="password"
+                type="password"
+                required
+              />
             </label>
             <label className="auth-pilot__field">
               <span>Confirm password</span>
-              <input autoComplete="new-password" minLength={8} name="confirm_password" type="password" required />
+              <input
+                autoComplete="new-password"
+                minLength={8}
+                name="confirm_password"
+                type="password"
+                required
+              />
             </label>
             <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
               {busy ? 'Confirming…' : 'Confirm email and activate account'}
@@ -471,7 +503,9 @@ export function AuthApp({
             ? 'auth-pilot__card auth-pilot__card--login'
             : page === 'register'
               ? 'auth-pilot__card auth-pilot__card--register'
-              : 'auth-pilot__card'
+              : page === 'reset-request' || page === 'reset-confirm'
+                ? 'auth-pilot__card auth-pilot__card--account'
+                : 'auth-pilot__card'
         }
         id="auth-content"
         aria-labelledby="auth-brand"

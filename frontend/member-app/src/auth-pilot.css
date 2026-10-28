@@ -10,7 +10,11 @@ body {
   place-items: center;
   padding: var(--od-space-6);
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--od-accent) 16%, transparent), transparent 55%),
+    radial-gradient(
+      ellipse 80% 50% at 50% -10%,
+      color-mix(in srgb, var(--od-accent) 16%, transparent),
+      transparent 55%
+    ),
     var(--od-bg);
   color: var(--od-text);
   font-family: var(--font-ui);
@@ -74,12 +78,29 @@ body {
   padding: clamp(1.25rem, 4vw, 2rem);
 }
 
+.auth-pilot__card--account {
+  box-sizing: border-box;
+  width: min(100%, 28rem);
+  gap: 1.25rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  padding-block-end: calc(clamp(1.25rem, 4vw, 2rem) + 0.125rem);
+}
+
 .auth-pilot__card--register > .auth-pilot__brand {
+  justify-self: center;
+}
+
+.auth-pilot__card--account > .auth-pilot__brand {
   justify-self: center;
 }
 
 .auth-pilot__card--register > .auth-pilot__title,
 .auth-pilot__card--register > .auth-pilot__lede {
+  text-align: center;
+}
+
+.auth-pilot__card--account > .auth-pilot__title,
+.auth-pilot__card--account > .auth-pilot__lede {
   text-align: center;
 }
 
@@ -90,8 +111,23 @@ body {
   line-height: 1.25;
 }
 
+.auth-pilot__card--account > .auth-pilot__title {
+  font-size: clamp(var(--od-font-xl), 2.5vw, var(--od-font-2xl));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
 .auth-pilot__card--register > .auth-pilot__brand + .auth-pilot__title {
   margin-block-start: calc(0px - var(--od-space-1));
+}
+
+.auth-pilot__card--account > .auth-pilot__brand + .auth-pilot__title {
+  margin-block-start: calc(0px - var(--od-space-2));
+}
+
+.auth-pilot__card--account > .auth-pilot__title + .auth-pilot__lede {
+  margin-block-start: calc(0px - var(--od-space-2));
 }
 
 .auth-pilot__form--register .auth-pilot__field {
@@ -100,8 +136,19 @@ body {
   font-weight: 500;
 }
 
+.auth-pilot__form--account .auth-pilot__field {
+  gap: 0.6625rem;
+  font-size: var(--od-font-md);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 .auth-pilot__card--register .auth-pilot__form--register {
   gap: 1.4375rem;
+}
+
+.auth-pilot__card--account .auth-pilot__form--account {
+  gap: 1.35rem;
 }
 
 .auth-pilot__form--register .auth-pilot__field input:not([type='checkbox']) {
@@ -114,7 +161,25 @@ body {
   padding: 0.5rem 0.75rem;
 }
 
+.auth-pilot__form--account .auth-pilot__field input:not([type='checkbox']) {
+  box-sizing: border-box;
+  font-size: var(--od-font-base);
+  font-weight: 400;
+  line-height: 1.5;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
 .auth-pilot__form--register > .auth-pilot__submit {
+  min-height: 2.9rem;
+  padding: 0.65rem 1rem;
+  font-size: var(--od-font-base);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.auth-pilot__form--account > .auth-pilot__submit {
   min-height: 2.9rem;
   padding: 0.65rem 1rem;
   font-size: var(--od-font-base);
@@ -529,8 +594,15 @@ body {
   margin-block-start: calc(0px - 0.65rem);
 }
 
+.auth-pilot__links--account {
+  display: grid;
+  gap: 0.6rem;
+  margin-block-start: calc(0px - 0.525rem);
+}
+
 .auth-pilot__links--login a,
-.auth-pilot__links--register a {
+.auth-pilot__links--register a,
+.auth-pilot__links--account a {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -555,13 +627,24 @@ body {
   line-height: 1.5;
 }
 
+.auth-pilot__links--account a {
+  width: calc(100% - 0.25rem);
+  min-height: 2.925rem;
+  justify-self: center;
+  border-radius: var(--od-radius-md);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .auth-pilot__links--login a:hover,
-.auth-pilot__links--register a:hover {
+.auth-pilot__links--register a:hover,
+.auth-pilot__links--account a:hover {
   background: var(--od-surface);
 }
 
 .auth-pilot__links--login a:focus-visible,
-.auth-pilot__links--register a:focus-visible {
+.auth-pilot__links--register a:focus-visible,
+.auth-pilot__links--account a:focus-visible {
   outline: 2px solid var(--od-focus-ring);
   outline-offset: 2px;
 }
@@ -656,6 +739,11 @@ body {
 
   .auth-pilot__card--register {
     padding: clamp(1.25rem, 4vw, 2rem);
+  }
+
+  .auth-pilot__card--account {
+    padding: clamp(1.25rem, 4vw, 2rem);
+    padding-block-end: calc(clamp(1.25rem, 4vw, 2rem) + 0.125rem);
   }
 
   .auth-pilot__card--login > .auth-pilot__title {
