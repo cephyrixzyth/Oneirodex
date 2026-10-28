@@ -275,6 +275,7 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
     """Bytes of the primary ROM: the file itself, or the one dump inside an archive."""
     from oneirodex.utils.rom_archive import (
         ArchiveRomError,
+        RomExpansionBudget,
         choose_rom_member,
         extract_rom_from_7z,
         extract_rom_from_rar,
@@ -304,11 +305,22 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
                 with archive.open(member) as handle:
                     return handle.read(MAX_ROM_BYTES + 1)[:MAX_ROM_BYTES]
         with tempfile.TemporaryDirectory(prefix='od-ra-') as tmp:
+            # Archive listings can omit or under-report member sizes. Keep the
+            # decompressor's disk budget aligned with the limit enforced for
+            # raw and ZIP ROMs, then verify the resulting file before reading
+            # it into memory.
+            budget = RomExpansionBudget(MAX_ROM_BYTES)
             if ext == '.7z':
-                dest = extract_rom_from_7z(str(target), tmp, member=member, platform=platform_key)
+                dest = extract_rom_from_7z(
+                    str(target), tmp, member=member, platform=platform_key, budget=budget,
+                )
             elif ext == '.rar':
-                dest = extract_rom_from_rar(str(target), tmp, member=member, platform=platform_key)
+                dest = extract_rom_from_rar(
+                    str(target), tmp, member=member, platform=platform_key, budget=budget,
+                )
             else:
+                return None
+            if Path(dest).stat().st_size > MAX_ROM_BYTES:
                 return None
             return Path(dest).read_bytes()
     except (OSError, KeyError, zipfile.BadZipFile, ArchiveRomError):
