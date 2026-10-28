@@ -142,23 +142,35 @@ test('registration preserves invite token and shows the generic account request 
   })
   render(<AuthApp />)
   fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'new-member' } })
-  expect(screen.getByRole('button', { name: 'Create account' }).closest('form')).toHaveAttribute(
+  expect(screen.getByRole('button', { name: 'Register' }).closest('form')).toHaveAttribute(
     'novalidate',
   )
   expect(
     screen.getByText(
-      "You were invited to join this Oneirodex library. Choose a username and registration password; after confirming your email, you will set the password used to sign in. You will not share the inviter's login.",
+      "You were invited to join this Oneirodex library. Choose a username and password to request an account. After confirming your email, you will choose the password used to sign in. You will not share the inviter's login.",
     ),
   ).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-password' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Register' }))
   expect(await screen.findByRole('heading', { name: 'Request received' })).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('If eligible, check your email.')
   expect(api.registerAccount).toHaveBeenCalledWith(
     { username: 'new-member', email: 'new@example.com', password: 'secret-password' },
     { inviteToken: 'invite-token' },
   )
+})
+
+test('standard registration copy matches the v1.1.8 invitation guidance', async () => {
+  window.history.replaceState({}, '', '/register')
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Registration requires a whitelisted email or a valid invite link.'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
 })
 
 test('reset request uses the generic recovery message', async () => {

@@ -228,8 +228,8 @@ export function AuthApp({
           <h1 className="auth-pilot__title">Create your account</h1>
           <p className="auth-pilot__lede">
             {inviteToken
-              ? "You were invited to join this Oneirodex library. Choose a username and registration password; after confirming your email, you will set the password used to sign in. You will not share the inviter's login."
-              : 'Registration requires a whitelisted email or a valid invite link. After confirming your email, you will set the password used to sign in.'}
+              ? "You were invited to join this Oneirodex library. Choose a username and password to request an account. After confirming your email, you will choose the password used to sign in. You will not share the inviter's login."
+              : 'Registration requires a whitelisted email or a valid invite link.'}
           </p>
           <form
             className="auth-pilot__form"
@@ -274,7 +274,7 @@ export function AuthApp({
               />
             </label>
             <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
-              {busy ? 'Creating account…' : 'Create account'}
+              {busy ? 'Registering…' : 'Register'}
             </Button>
           </form>
           <nav className="auth-pilot__links" aria-label="Account actions">
