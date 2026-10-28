@@ -9797,6 +9797,40 @@ def test_lazy_asgi_setup_first_admin_lock_conflict_redirects_to_login(monkeypatc
     assert '_user_id' not in session
 
 
+@pytest.mark.parametrize(
+    ('current_step', 'location', 'message'),
+    [
+        (3, '/setup', 'Please complete the admin account setup first.'),
+        (None, '/login', 'Setup already completed.'),
+    ],
+)
+def test_lazy_asgi_setup_stale_smtp_form_matches_legacy_warning(
+    monkeypatch, current_step, location, message,
+):
+    data = SimpleNamespace(
+        current_step=lambda: current_step,
+        transition=lambda *args, **kwargs: pytest.fail('stale SMTP form must not transition'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/smtp', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'smtp_port': '587', 'skip_smtp': '1'},
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == location
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'] == [('warning', message)]
+    assert '_user_id' not in saved_session
+
+
 def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(monkeypatch):
     calls = []
     data = SimpleNamespace(

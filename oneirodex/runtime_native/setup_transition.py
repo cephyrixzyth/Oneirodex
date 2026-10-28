@@ -366,11 +366,24 @@ def create_setup_transition_router(
                     )
                     response = flask_redirect_response('/login', status_code=302)
                 else:
-                    _setup_form_flash(
-                        auth.session_data, 'warning',
-                        'This setup step is no longer current. Reload setup to continue.',
-                    )
-                    response = flask_redirect_response('/setup', status_code=302)
+                    if current_step is None and step in {2, 3}:
+                        _setup_form_flash(
+                            auth.session_data, 'warning',
+                            'Setup already completed.',
+                        )
+                        response = flask_redirect_response('/login', status_code=302)
+                    else:
+                        stale_messages = {
+                            '/setup/smtp': 'Please complete the admin account setup first.',
+                            '/setup/features': 'Please complete the previous setup steps first.',
+                            '/setup/igdb': 'Please complete the previous setup steps first.',
+                        }
+                        stale_message = stale_messages.get(path)
+                        if stale_message:
+                            _setup_form_flash(
+                                auth.session_data, 'warning', stale_message,
+                            )
+                        response = flask_redirect_response('/setup', status_code=302)
             elif step > 1 and (auth.user is None or _role(auth.user) != 'admin'):
                 _setup_form_flash(
                     auth.session_data, 'warning',
