@@ -12,19 +12,22 @@ import json
 import os
 from datetime import datetime, timezone
 
+import requests
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL, StoreAccount, User, UserOwnedTitle
 from oneirodex.utils.global_settings import global_settings_row
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import ResponseTooLarge, safe_request_limited
 from oneirodex.utils.security import validate_user_outbound_http_url
 from oneirodex.utils.store_capabilities import REGISTER_ACCOUNT_STORES
 from oneirodex.utils.store_ownership_limits import (
     MAX_OWNED_TITLES_PER_USER,
     OWNERSHIP_REGISTER_LIMIT_ERROR,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError
 
 
 # meta_quest = register-only ownership (CSV); never downloads DRM titles.
@@ -33,6 +36,7 @@ from oneirodex.utils.store_ownership_limits import (
 #   when ENABLE_UNOFFICIAL_STORE_SYNC names the store. Never downloads.
 VALID_STORES = REGISTER_ACCOUNT_STORES
 UNOFFICIAL_OPT_IN_STORES = frozenset({'xbox', 'psn'})
+MAX_STORE_PROVIDER_RESPONSE_BYTES = 64 * 1024 * 1024
 #: Width of UserOwnedTitle.external_app_id. Xbox package family names and
 #: Amazon product IDs run well past the original 32.
 EXTERNAL_APP_ID_MAX = 128
@@ -167,12 +171,21 @@ def get_amazon_api_token() -> str | None:
 
 def _outbound(method: str, url: str, **kwargs):
     kwargs.setdefault('timeout', 30)
-    return safe_request(
-        method,
-        url,
-        validator=validate_user_outbound_http_url,
-        **kwargs,
-    )
+    try:
+        with requests.Session() as session:
+            return safe_request_limited(
+                method,
+                url,
+                validator=validate_user_outbound_http_url,
+                max_response_bytes=MAX_STORE_PROVIDER_RESPONSE_BYTES,
+                session=session,
+                **kwargs,
+            )
+    except ResponseTooLarge as exc:
+        raise StoreSyncError(
+            'Store provider response exceeds the supported size limit',
+            'invalid_response',
+        ) from exc
 
 
 def _any_account_credential(store: str) -> bool:

@@ -6,11 +6,13 @@ import hashlib
 import os
 import tempfile
 import zlib
+import zipfile
 from pathlib import Path
 from typing import BinaryIO
 
 from oneirodex.utils.rom_archive import ARCHIVE_EXTENSIONS, PLATFORM_DUMP_SUFFIXES
 from oneirodex.utils.security import is_plain_file_within
+from oneirodex.utils.rom_archive_types import ArchiveRomError
 
 # Prefer single-file ROM dumps when a library path is a folder.
 _ROM_SUFFIXES = frozenset({
@@ -175,13 +177,13 @@ def _select_inner_hash_members(
 
 
 def _hash_zip_member(archive_path: str, member: str) -> dict[str, str] | None:
-    import zipfile
+    from oneirodex.utils.rom_archive_zip import open_bounded_zip
 
     try:
-        with zipfile.ZipFile(archive_path, 'r') as archive:
+        with open_bounded_zip(archive_path) as archive:
             with archive.open(member) as handle:
                 return hash_fileobj(handle)
-    except (OSError, KeyError, zipfile.BadZipFile):
+    except (OSError, KeyError, zipfile.BadZipFile, ArchiveRomError):
         return None
 
 

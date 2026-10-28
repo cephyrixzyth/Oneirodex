@@ -282,6 +282,7 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
         list_roms_in_archive,
         path_is_supported_archive,
     )
+    from oneirodex.utils.rom_archive_zip import open_bounded_zip
     from oneirodex.utils.rom_hash import resolve_hashable_file
 
     target = resolve_hashable_file(path)
@@ -301,7 +302,7 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
             return None
         ext = target.suffix.lower()
         if ext == '.zip':
-            with zipfile.ZipFile(target, 'r') as archive:
+            with open_bounded_zip(target) as archive:
                 with archive.open(member) as handle:
                     return handle.read(MAX_ROM_BYTES + 1)[:MAX_ROM_BYTES]
         with tempfile.TemporaryDirectory(prefix='od-ra-') as tmp:

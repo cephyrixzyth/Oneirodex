@@ -33,6 +33,7 @@ from oneirodex.utils.http_safe import (
     read_response_limited,
     safe_get,
     safe_request,
+    safe_request_limited,
 )
 from oneirodex.utils.security import (
     _embedded_ipv4,
@@ -71,6 +72,50 @@ def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length()
     oversized = _ChunkedResponse([b''], headers={'Content-Length': '5'})
     with pytest.raises(ResponseTooLarge):
         read_response_limited(oversized, 4)
+
+
+def test_safe_request_limited_streams_caches_and_closes_response(monkeypatch):
+    import oneirodex.utils.http_safe as http_safe
+
+    response = _ChunkedResponse([b'{"ok":', b'true}'])
+    session = requests.Session()
+    captured = {}
+
+    def fake_safe_request(method, url, *, validator, session, **kwargs):
+        captured.update(method=method, url=url, session=session, kwargs=kwargs)
+        return response
+
+    monkeypatch.setattr(http_safe, 'safe_request', fake_safe_request)
+    try:
+        bounded = safe_request_limited(
+            'GET', 'https://provider.invalid/list', validator=lambda url: (True, url),
+            max_response_bytes=16, session=session, timeout=5,
+        )
+    finally:
+        session.close()
+
+    assert captured['session'] is session
+    assert captured['kwargs']['stream'] is True
+    assert bounded._content == b'{"ok":true}'
+    assert bounded._content_consumed is True
+    assert bounded.closed is True
+
+
+def test_safe_request_limited_closes_and_rejects_oversized_response(monkeypatch):
+    import oneirodex.utils.http_safe as http_safe
+
+    response = _ChunkedResponse([b'abcd', b'ef'])
+    session = requests.Session()
+    monkeypatch.setattr(http_safe, 'safe_request', lambda *a, **k: response)
+    try:
+        with pytest.raises(ResponseTooLarge):
+            safe_request_limited(
+                'GET', 'https://provider.invalid/list', validator=lambda url: (True, url),
+                max_response_bytes=5, session=session,
+            )
+    finally:
+        session.close()
+    assert response.closed is True
 
 
 def test_read_response_limited_caps_real_gzip_decoded_bytes():

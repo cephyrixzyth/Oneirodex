@@ -64,6 +64,20 @@ def _unique_steam_app_id() -> int:
     return 700_000_000 + (uuid4().int % 99_000_000)
 
 
+def test_ownership_outbound_maps_oversized_provider_body_to_redacted_error(monkeypatch):
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    def too_large(*_args, **_kwargs):
+        raise ResponseTooLarge('private upstream body content')
+
+    monkeypatch.setattr(store_ownership_common, 'safe_request_limited', too_large)
+    with pytest.raises(StoreSyncError) as caught:
+        store_ownership_common._outbound('GET', 'https://provider.invalid/list')
+
+    assert caught.value.reason == 'invalid_response'
+    assert 'private upstream' not in str(caught.value)
+
+
 def test_match_steam_app_id(db_session, lib):
     game_uuid = str(uuid4())
     app_id = _unique_steam_app_id()
