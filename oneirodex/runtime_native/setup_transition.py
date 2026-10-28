@@ -426,7 +426,13 @@ def create_setup_transition_router(
                         )
                         response = flask_redirect_response('/login', status_code=302)
                     else:
-                        _setup_form_flash(auth.session_data, 'error', failure[1])
+                        message = failure[1]
+                        if step == 1 and failure[0] == 'internal':
+                            message = (
+                                'The admin account could not be saved. '
+                                'Check the server log for details.'
+                            )
+                        _setup_form_flash(auth.session_data, 'error', message)
                         detail = failure[3]
                         if isinstance(detail, dict):
                             for errors in detail.values():

@@ -9717,6 +9717,40 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
     )
 
 
+def test_lazy_asgi_setup_first_admin_storage_failure_matches_legacy_form_notice(monkeypatch):
+    failure_message = 'The administrator account could not be created.'
+    data = SimpleNamespace(
+        current_step=lambda: 1,
+        transition=lambda *_args, **_kwargs: (
+            None, ('internal', failure_message, 500, None), None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'first.admin',
+            'email': 'admin@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/setup'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=3600,
+    )
+    assert saved_session['_flashes'] == [(
+        'error',
+        'The admin account could not be saved. Check the server log for details.',
+    )]
+
+
 def test_lazy_asgi_setup_form_admin_gate_matches_flask_redirect_shape(monkeypatch):
     data = SimpleNamespace(
         current_step=lambda: 2,
