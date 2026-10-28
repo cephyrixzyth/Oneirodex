@@ -9,16 +9,19 @@ resolves here.
 
 from __future__ import annotations
 
+import locale
 import logging
 import os
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
 # re-exported here because callers and tests import them from this module.
 logger = logging.getLogger(__name__)
+MAX_EXTRACTOR_OUTPUT_BYTES = 16 * 1024 * 1024
 
 from oneirodex.utils.rom_archive_select import (  # noqa: F401
     choose_rom_member,
@@ -103,12 +106,71 @@ def _configure_rarfile_tools(rarfile_mod) -> list[str]:
 
 
 def _run_extractor(cmdline: list[str], *, timeout: int = 120) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    """Run an archive-listing helper with a shared stdout/stderr byte cap."""
+    process = subprocess.Popen(
         cmdline,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout = bytearray()
+    stderr = bytearray()
+    captured_bytes = 0
+    captured_lock = threading.Lock()
+    output_limit_hit = threading.Event()
+
+    def _drain(stream, target: bytearray) -> None:
+        nonlocal captured_bytes
+        while True:
+            chunk = stream.read(64 * 1024)
+            if not chunk:
+                return
+            with captured_lock:
+                remaining = MAX_EXTRACTOR_OUTPUT_BYTES - captured_bytes
+                if remaining > 0:
+                    target.extend(chunk[:remaining])
+                    captured_bytes += min(len(chunk), remaining)
+                if len(chunk) > remaining:
+                    output_limit_hit.set()
+                    return
+
+    readers = [
+        threading.Thread(target=_drain, args=(process.stdout, stdout), daemon=True),
+        threading.Thread(target=_drain, args=(process.stderr, stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+
+    deadline = time.monotonic() + timeout
+    timed_out = False
+    while process.poll() is None:
+        if output_limit_hit.wait(0.02):
+            process.kill()
+            break
+        if time.monotonic() >= deadline:
+            timed_out = True
+            process.kill()
+            break
+    returncode = process.wait()
+    for reader in readers:
+        reader.join()
+    process.stdout.close()
+    process.stderr.close()
+
+    encoding = locale.getpreferredencoding(False)
+    decoded_stdout = stdout.decode(encoding, errors='replace')
+    decoded_stderr = stderr.decode(encoding, errors='replace')
+    if timed_out:
+        raise subprocess.TimeoutExpired(
+            cmdline, timeout, output=decoded_stdout, stderr=decoded_stderr,
+        )
+    if output_limit_hit.is_set():
+        raise ArchiveRomError(
+            'Archive listing output exceeds the configured size limit',
+            status_code=413,
+            code='extract_output_too_large',
+        )
+    return subprocess.CompletedProcess(
+        cmdline, returncode, stdout=decoded_stdout, stderr=decoded_stderr,
     )
 
 

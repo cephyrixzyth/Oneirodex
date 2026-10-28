@@ -125,6 +125,21 @@ def _fake_run(stdout):
     return lambda cmdline, **kw: subprocess.CompletedProcess(cmdline, 0, stdout=stdout, stderr='')
 
 
+def test_extractor_listing_output_is_bounded(tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(rom_archive, 'MAX_EXTRACTOR_OUTPUT_BYTES', 64)
+    with pytest.raises(ArchiveRomError) as exc:
+        rom_archive._run_extractor([
+            sys.executable,
+            '-c',
+            'import sys; sys.stdout.write("x" * 4096)',
+        ])
+
+    assert exc.value.status_code == 413
+    assert exc.value.code == 'extract_output_too_large'
+
+
 def test_7z_listing_drops_traversal_absolute_and_link_members(monkeypatch):
     stdout = '\n'.join([
         _7z_block('../victim.nes'),
