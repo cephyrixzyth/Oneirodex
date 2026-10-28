@@ -131,7 +131,7 @@ def test_worker_failure_does_not_escape_to_the_caller(app):
     assert not thread.is_alive()
 
 
-def test_library_deletion_worker_actually_deletes(app, no_savepoint_db):
+def test_library_deletion_worker_deletes_metadata_but_preserves_rom(app, no_savepoint_db, tmp_path):
     """End-to-end through the real worker, on its own session.
 
     Nothing covered this before: the route test asserts only that the job is
@@ -159,10 +159,12 @@ def test_library_deletion_worker_actually_deletes(app, no_savepoint_db):
         db.session.commit()
         library_uuid = library.uuid
 
+        rom_path = tmp_path / 'synthetic-game.nes'
+        rom_path.write_bytes(b'oneirodex test rom')
         game = Game(
             name='Doomed Game',
             library_uuid=library_uuid,
-            full_disk_path='/nonexistent/doomed',
+            full_disk_path=str(rom_path),
         )
         db.session.add(game)
         db.session.commit()
@@ -191,6 +193,7 @@ def test_library_deletion_worker_actually_deletes(app, no_savepoint_db):
         assert db.session.execute(
             select(Game).filter_by(uuid=game_uuid)
         ).scalars().first() is None
+        assert rom_path.read_bytes() == b'oneirodex test rom'
 
     deletion_progress.pop(job_id, None)
 
