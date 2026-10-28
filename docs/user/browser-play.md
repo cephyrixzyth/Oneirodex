@@ -89,7 +89,7 @@ Residual limits that tuning can't fully fix in-browser: WASM is single-threaded 
 
 ## Compressed ROMs (extract-on-play)
 
-Browser Play streams via `GET /api/downloadrom/<uuid>` (ASGI). Compressed formats are extracted into a request-scoped cache and removed after streaming. The combined expanded output for a play request is limited to 64 GiB; requests over that limit return `archive_too_large` (HTTP 413). 7z and RAR member-listing tools also have a combined 16 MiB stdout/stderr limit; an archive exceeding it returns `extract_output_too_large` (HTTP 413). These limits cover nested archives and disc companions as well as the selected ROM and archive metadata.
+Browser Play streams via `GET /api/downloadrom/<uuid>` (ASGI). Compressed formats are extracted into a request-scoped cache and removed after streaming. The combined output budget for a play request is limited to 64 GiB, including nested archive extraction, disc companions, and generated CUE `play.zip` bundles; requests over that limit return `archive_too_large` (HTTP 413). 7z and RAR member-listing tools also have a combined 16 MiB stdout/stderr limit; an archive exceeding it returns `extract_output_too_large` (HTTP 413).
 
 | Format | Notes |
 |---|---|

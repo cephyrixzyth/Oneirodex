@@ -168,7 +168,7 @@ class RomExpansionBudget:
         size = max(0, int(size))
         if size > self.remaining:
             raise ArchiveRomError(
-                'Expanded archive output exceeds the 64 GiB limit',
+                'ROM processing output exceeds the 64 GiB limit',
                 status_code=413,
                 code='archive_too_large',
             )

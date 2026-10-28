@@ -721,14 +721,14 @@ def test_rom_endpoint_serves_a_cue_bundle_from_the_cache(served):
 
 
 def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served, monkeypatch):
-    from oneirodex.utils import rom_archive
+    from oneirodex.utils import rom_archive_types
     from oneirodex.utils.rom_archive_types import RomExpansionBudget
 
     archive_path = served.root / 'compressed.zip'
     with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('game.nes', b'X' * 64)
     game = _make_game(served.db, archive_path)
-    monkeypatch.setattr(rom_archive, 'RomExpansionBudget', lambda: RomExpansionBudget(32))
+    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda: RomExpansionBudget(32))
 
     wire = _get_rom(served, game)
 
@@ -736,6 +736,28 @@ def test_rom_endpoint_bounds_archive_expansion_and_removes_request_cache(served,
     assert b'archive_too_large' in wire.body
     cache_root = served.tmp / 'runtime' / 'rom_cache'
     assert not list(cache_root.iterdir()), 'failed request must remove its temporary extraction directory'
+
+
+def test_rom_endpoint_shares_expansion_budget_with_cue_bundle(served, monkeypatch):
+    from oneirodex.utils import rom_archive_types
+    from oneirodex.utils.rom_archive_types import RomExpansionBudget
+
+    cue_text = 'FILE "disc.bin" BINARY\n'
+    disc_bytes = b'D' * 32
+    archive_path = served.root / 'disc.zip'
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('disc.cue', cue_text)
+        archive.writestr('disc.bin', disc_bytes)
+    game = _make_game(served.db, archive_path)
+    limit = len(cue_text.encode('utf-8')) + len(disc_bytes) + 8
+    monkeypatch.setattr(rom_archive_types, 'RomExpansionBudget', lambda: RomExpansionBudget(limit))
+
+    wire = _get_rom(served, game)
+
+    assert _status(wire) == 413
+    assert b'archive_too_large' in wire.body
+    cache_root = served.tmp / 'runtime' / 'rom_cache'
+    assert not list(cache_root.iterdir()), 'over-budget bundle must remove the request cache'
 
 
 def _get_zip(served, request_id, wire=None) -> _Wire:

@@ -10,7 +10,6 @@ import gzip
 import io
 import os
 import re
-import shutil
 import zipfile
 from pathlib import Path
 from oneirodex.utils.rom_archive_select import _is_rom_name
@@ -319,7 +318,12 @@ def _rewrite_cue_file_paths(cue_text: str) -> str:
     return _CUE_FILE_LINE_RE.sub(_replace, cue_text)
 
 
-def _write_vetted_member(archive: zipfile.ZipFile, real_root: str, companion: Path) -> None:
+def _write_vetted_member(
+    archive: zipfile.ZipFile,
+    real_root: str,
+    companion: Path,
+    budget: RomExpansionBudget,
+) -> None:
     """Add *companion* to *archive* from a vetted open handle, not from its path.
 
     ``archive.write(path)`` opens the path again, so a companion swapped for a
@@ -335,10 +339,16 @@ def _write_vetted_member(archive: zipfile.ZipFile, real_root: str, companion: Pa
         member.external_attr = (info.st_mode & 0xFFFF) << 16
         member.file_size = info.st_size
         with archive.open(member, 'w') as target:
-            shutil.copyfileobj(source, target, 1024 * 1024)
+            budget.copy_stream(source, target)
 
 
-def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None = None) -> tuple[str, str]:
+def bundle_playable_rom_zip(
+    rom_path: str,
+    cache_dir: str,
+    *,
+    root: str | None = None,
+    budget: RomExpansionBudget | None = None,
+) -> tuple[str, str]:
     """
     Bundle a resolved `.cue` sheet with its sibling disc images (.bin/.img/.iso/
     .raw/.wav) into one stored (uncompressed) zip named `play.zip`, so a single
@@ -361,6 +371,7 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None =
     path = Path(rom_path)
     if path.suffix.lower() != '.cue':
         return rom_path, path.name
+    budget = budget or RomExpansionBudget()
 
     source_dir = path.parent
     try:
@@ -423,13 +434,15 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None =
         ) from exc
 
     rewritten_cue = _rewrite_cue_file_paths(cue_text)
+    cue_bytes = rewritten_cue.encode('utf-8')
 
     tmp_path = f'{zip_path}.tmp-{os.getpid()}'
     try:
         with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_STORED) as zf:
-            zf.writestr(path.name, rewritten_cue)
+            budget.consume(len(cue_bytes))
+            zf.writestr(path.name, cue_bytes)
             for companion in companions:
-                _write_vetted_member(zf, real_root, companion)
+                _write_vetted_member(zf, real_root, companion, budget)
         os.replace(tmp_path, zip_path)
     except OSError as exc:
         raise ArchiveRomError(

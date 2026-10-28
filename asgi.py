@@ -5114,6 +5114,7 @@ class LazyASGIApp:
         """Handle ROM file downloads for emulator"""
         from oneirodex.models import Game, User
         from oneirodex.utils.rom_archive import ArchiveRomError
+        from oneirodex.utils.rom_archive_types import RomExpansionBudget
 
         rom_match = re.match(r'/api/downloadrom/([a-f0-9-]+)', path)
         if not rom_match:
@@ -5196,6 +5197,7 @@ class LazyASGIApp:
             # Extraction output is request-scoped: retries and concurrent plays
             # cannot reuse partial files or accumulate unbounded cache contents.
             cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
+            rom_budget = RomExpansionBudget()
             try:
                 platform_key = library_platform_key(game)
                 try:
@@ -5203,12 +5205,16 @@ class LazyASGIApp:
                         game.full_disk_path,
                         cache_dir=cache_dir,
                         platform=platform_key,
+                        budget=rom_budget,
                     )
                     target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
                     # Multi-track discs (.cue + .bin/.img/...) need every file in one
                     # response — WebRetro never gets a second chance to fetch companions.
                     bundled_path, bundled_name = bundle_playable_rom_zip(
-                        target, cache_dir, root=root if root_is_resolved else None
+                        target,
+                        cache_dir,
+                        root=root if root_is_resolved else None,
+                        budget=rom_budget,
                     )
                     if bundled_path != target:
                         target, root, root_is_resolved = bundled_path, cache_dir, False

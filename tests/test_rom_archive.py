@@ -347,6 +347,30 @@ def test_bundle_cue_bin_zips_and_rewrites_paths(tmp_path):
         assert zf.read('Game (Disc 1).bin') == b'BINDATA' * 1000
 
 
+def test_cue_archive_and_bundle_share_output_budget(tmp_path):
+    archive_path = tmp_path / 'disc.zip'
+    cue_text = 'FILE "disc.bin" BINARY\n'
+    disc_bytes = b'D' * 32
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('disc.cue', cue_text)
+        archive.writestr('disc.bin', disc_bytes)
+
+    cache = tmp_path / 'cache'
+    # Extraction consumes the cue and disc bytes. The later play.zip would
+    # duplicate them, exceeding the same request-level limit.
+    budget = RomExpansionBudget(len(cue_text.encode('utf-8')) + len(disc_bytes) + 8)
+    resolved, _ = resolve_playable_rom_path(
+        str(archive_path), cache_dir=str(cache), platform='PSX', budget=budget,
+    )
+
+    with pytest.raises(ArchiveRomError) as exc:
+        bundle_playable_rom_zip(resolved, str(cache), budget=budget)
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'play.zip').exists()
+    assert not list(cache.glob('play.zip.tmp-*'))
+
+
 def test_bundle_reuses_fresh_zip(tmp_path):
     disc_dir = tmp_path / 'disc'
     disc_dir.mkdir()
