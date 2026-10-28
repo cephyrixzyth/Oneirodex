@@ -138,7 +138,7 @@ test('Big Picture gamepad Y toggles the Friends companion', async () => {
     if (originalGetGamepads) {
       Object.defineProperty(navigator, 'getGamepads', originalGetGamepads)
     } else {
-      delete (navigator as Navigator & { getGamepads?: () => Gamepad[] }).getGamepads
+      Reflect.deleteProperty(navigator, 'getGamepads')
     }
   }
 })

@@ -17,6 +17,23 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/setup/integrations')
 })
 
+test('SMTP setup preserves v1.1.8 step labels and both actions', async () => {
+  window.history.replaceState({}, '', '/setup/smtp')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 2,
+    platforms: [],
+    settings: {},
+  })
+  const navigate = vi.fn()
+  render(<SetupWizard navigate={navigate} />)
+
+  expect(await screen.findByRole('heading', { name: 'Email (SMTP)' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Next step' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Skip SMTP' })).toBeInTheDocument()
+})
+
 test('integrations setup matches provider groups and preserves explicit configure choices', async () => {
   api.loadSetupState.mockResolvedValue({
     complete: false,

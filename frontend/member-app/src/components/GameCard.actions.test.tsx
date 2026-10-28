@@ -131,7 +131,7 @@ test('status write failure keeps the current status and shows feedback', async (
 
   renderCard(<GameCard game={game} showPlayStatus />)
   await user.click(screen.getByRole('button', { name: /game status: no status/i }))
-  await user.click(screen.getByRole('button', { name: 'Beaten', exact: true }))
+  await user.click(screen.getByRole('button', { name: /^Beaten$/i }))
 
   await waitFor(() =>
     expect(showToast).toHaveBeenCalledWith('Could not update game status. Please try again.', 'error'),

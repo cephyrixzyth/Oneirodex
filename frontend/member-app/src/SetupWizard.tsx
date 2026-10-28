@@ -11,8 +11,8 @@ const STEP_URLS: Record<number, string> = {
   6: '/setup/library',
 }
 const STEP_TITLES: Record<number, string> = {
-  1: 'Create administrator',
-  2: 'Email delivery',
+  1: 'Create your admin account',
+  2: 'Email (SMTP)',
   3: 'Features',
   4: 'Connect game metadata',
   5: 'Choose API connections',
@@ -185,10 +185,10 @@ export function SetupWizard({
             <p className="auth-pilot__message">
               Create the administrator account that will finish configuring this library.
             </p>
-            {input('username', 'Administrator username', 'text', true)}
-            {input('email', 'Administrator email', 'email', true)}
+            {input('username', 'Admin Username', 'text', true)}
+            {input('email', 'Admin Email', 'email', true)}
             {input('password', 'Password', 'password', true)}
-            {input('confirm_password', 'Confirm password', 'password', true)}
+            {input('confirm_password', 'Confirm Password', 'password', true)}
           </>
         ) : null}
         {step === 2 ? (
@@ -458,7 +458,11 @@ export function SetupWizard({
         <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
           {busy
             ? 'Saving…'
-            : step === 4
+            : step === 1
+              ? 'Next Step'
+              : step === 2
+                ? 'Next step'
+                : step === 4
               ? 'Save IGDB and continue'
               : step === 5
                 ? 'Save choices and continue'
@@ -480,13 +484,15 @@ export function SetupWizard({
                 )
             }}
           >
-            {step === 4
-              ? 'Skip and continue'
-              : step === 5
-                ? 'Skip API setup'
-                : step === 6
-                  ? 'Finish without a library'
-                  : 'Skip this step'}
+            {step === 2
+              ? 'Skip SMTP'
+              : step === 4
+                ? 'Skip and continue'
+                : step === 5
+                  ? 'Skip API setup'
+                  : step === 6
+                    ? 'Finish without a library'
+                    : 'Skip this step'}
           </Button>
         ) : null}
       </form>

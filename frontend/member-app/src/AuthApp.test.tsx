@@ -254,7 +254,7 @@ test('expired or invalid confirmation links surface an alert and keep the back l
 test('email confirmation inspection is read-only until the mailbox owner sets a password', async () => {
   window.history.replaceState({}, '', '/confirm/signed-token')
   api.confirmEmail.mockResolvedValue({ confirmed: true, already_confirmed: false })
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     if (String(input).startsWith('/api/auth/confirm/')) {
       return { ok: true, json: async () => ({ confirmed: false, already_confirmed: false }) } as Response
     }
@@ -298,20 +298,20 @@ test('first-run direct entry loads the active step and submits it to the transit
   api.submitSetupStep.mockResolvedValue({ step: 2, next_url: '/setup/smtp' })
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
-  expect(await screen.findByRole('heading', { name: 'Create administrator' })).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Administrator username'), {
+  expect(await screen.findByRole('heading', { name: 'Create your admin account' })).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Admin Username'), {
     target: { value: 'setup_admin' },
   })
-  fireEvent.change(screen.getByLabelText('Administrator email'), {
+  fireEvent.change(screen.getByLabelText('Admin Email'), {
     target: { value: 'setup@example.com' },
   })
   fireEvent.change(screen.getByLabelText('Password'), {
     target: { value: 'correct horse battery' },
   })
-  fireEvent.change(screen.getByLabelText('Confirm password'), {
+  fireEvent.change(screen.getByLabelText('Confirm Password'), {
     target: { value: 'correct horse battery' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Next Step' }))
   await waitFor(() =>
     expect(api.submitSetupStep).toHaveBeenCalledWith({
       step: 1,
