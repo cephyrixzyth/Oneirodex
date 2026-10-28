@@ -149,6 +149,10 @@ export function AuthApp({
     }
   }
 
+  const confirmationError =
+    page === 'confirm-email' &&
+    ['expired', 'invalid', 'not-found', 'error'].includes(confirmationState)
+
   const content =
     !bootstrap && !bootError ? (
       <p className="auth-pilot__status" role="status">
@@ -434,7 +438,7 @@ export function AuthApp({
               : confirmationState === 'expired'
                 ? 'Request a new activation from an admin or try registering again with a fresh invite.'
                 : confirmationState === 'invalid'
-                  ? 'Check your email for the correct link, or sign in if your account is already active.'
+                  ? 'This confirmation link is not valid. Check your email for the correct link, or sign in if your account is already active.'
                   : confirmationState === 'not-found'
                     ? 'The account for this confirmation link was not found.'
                     : confirmationState === 'error'
@@ -503,9 +507,25 @@ export function AuthApp({
             </Button>
           </form>
         ) : null}
-        <nav className="auth-pilot__links auth-pilot__links--account" aria-label="Account actions">
-          <a href="/login">Back to sign in</a>
-          <a href="/register">Create account</a>
+        <nav
+          className={
+            confirmationError
+              ? 'auth-pilot__links auth-pilot__links--account auth-pilot__links--confirmation-error'
+              : 'auth-pilot__links auth-pilot__links--account'
+          }
+          aria-label="Account actions"
+        >
+          <a
+            className={
+              confirmationError
+                ? 'od-btn od-btn--primary od-btn--lg auth-pilot__confirmation-back'
+                : undefined
+            }
+            href="/login"
+          >
+            Back to sign in
+          </a>
+          {!confirmationError ? <a href="/register">Create account</a> : null}
         </nav>
       </>
     )
@@ -521,9 +541,11 @@ export function AuthApp({
             ? 'auth-pilot__card auth-pilot__card--login'
             : page === 'register'
               ? 'auth-pilot__card auth-pilot__card--register'
-              : page === 'reset-request' || page === 'reset-confirm' || page === 'confirm-email'
+              : page === 'reset-request' || page === 'reset-confirm'
                 ? 'auth-pilot__card auth-pilot__card--account'
-                : 'auth-pilot__card'
+                : page === 'confirm-email'
+                  ? `auth-pilot__card auth-pilot__card--account${confirmationError ? ' auth-pilot__card--confirmation-error' : ''}`
+                  : 'auth-pilot__card'
         }
         id="auth-content"
         aria-labelledby="auth-brand"

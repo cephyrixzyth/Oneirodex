@@ -272,9 +272,13 @@ test('expired or invalid confirmation links surface an alert and keep the back l
   )
   render(<AuthApp />)
   expect(await screen.findByRole('heading', { name: 'Link expired' })).toBeInTheDocument()
-  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass(
+    'auth-pilot__card--account',
+    'auth-pilot__card--confirmation-error',
+  )
   expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
     'auth-pilot__links--account',
+    'auth-pilot__links--confirmation-error',
   )
   expect(
     screen.getByText(
@@ -285,6 +289,14 @@ test('expired or invalid confirmation links surface an alert and keep the back l
     'Request a new activation from an admin',
   )
   expect(screen.getAllByRole('alert')).toHaveLength(1)
+  expect(
+    screen.getByRole('navigation', { name: 'Account actions' }).querySelectorAll('a'),
+  ).toHaveLength(1)
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveClass(
+    'od-btn--primary',
+    'od-btn--lg',
+    'auth-pilot__confirmation-back',
+  )
   expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
 })
 
