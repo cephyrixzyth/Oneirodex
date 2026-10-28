@@ -172,6 +172,8 @@ export function SetupWizard({
               ? 'Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.'
               : step === 6
                 ? 'Optional. Add a library now and start its first scan, or finish setup and add it later. Use a path visible inside the server, such as /storage/nes, under an allowed library location. Game files remain read-only.'
+                : step === 1
+                  ? 'Oneirodex initial setup — one household admin to get started.'
                 : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       <form
@@ -183,7 +185,8 @@ export function SetupWizard({
         {step === 1 ? (
           <>
             <p className="auth-pilot__message">
-              Create the administrator account that will finish configuring this library.
+              Local username and password is enough for home installs. Authentik / OIDC SSO is
+              optional and can be enabled later under Admin → Integrations.
             </p>
             {input('username', 'Admin Username', 'text', true)}
             {input('email', 'Admin Email', 'email', true)}

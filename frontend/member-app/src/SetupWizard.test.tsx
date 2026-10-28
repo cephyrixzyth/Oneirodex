@@ -17,6 +17,30 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/setup/integrations')
 })
 
+test('admin setup keeps the v1.1.8 welcome and sign-in guidance', async () => {
+  window.history.replaceState({}, '', '/setup')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 1,
+    platforms: [],
+    settings: {},
+  })
+  render(<SetupWizard navigate={vi.fn()} />)
+
+  expect(await screen.findByRole('heading', { name: 'Create your admin account' })).toBeInTheDocument()
+  expect(screen.getByText('Oneirodex initial setup — one household admin to get started.'))
+    .toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Local username and password is enough for home installs. Authentik / OIDC SSO is optional and can be enabled later under Admin → Integrations.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('Admin Username')).toBeRequired()
+  expect(screen.getByLabelText('Admin Email')).toBeRequired()
+  expect(screen.getByRole('button', { name: 'Next Step' })).toBeInTheDocument()
+})
+
 test('SMTP setup preserves v1.1.8 step labels and both actions', async () => {
   window.history.replaceState({}, '', '/setup/smtp')
   api.loadSetupState.mockResolvedValue({

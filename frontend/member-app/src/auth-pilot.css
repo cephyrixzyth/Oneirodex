@@ -43,7 +43,8 @@ body {
 
 .auth-pilot__card:has(.auth-pilot__setup-progress) {
   box-sizing: border-box;
-  width: min(100%, 48rem);
+  width: min(100%, 28rem);
+  gap: var(--od-space-6);
   padding: calc(var(--od-space-6) + var(--od-space-3));
 }
 
@@ -119,6 +120,11 @@ body {
 }
 
 .auth-pilot__card:has(.auth-pilot__form--providers) {
+  box-sizing: border-box;
+  width: min(100%, 48rem);
+}
+
+.auth-pilot__card:has(.auth-pilot__form--library) {
   box-sizing: border-box;
   width: min(100%, 48rem);
 }
@@ -212,6 +218,43 @@ body {
   border-color: var(--od-accent);
   color: var(--od-text);
   font-weight: 650;
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) > .auth-pilot__title {
+  font-size: clamp(var(--od-font-xl), 2.5vw, var(--od-font-2xl));
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) .auth-pilot__form:not(.auth-pilot__form--providers):not(.auth-pilot__form--library) {
+  gap: var(--od-space-5);
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) .auth-pilot__field {
+  gap: var(--od-space-1);
+  font-size: var(--od-font-md);
+  font-weight: 500;
+  line-height: var(--od-line-base);
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) .auth-pilot__field input:not([type='checkbox']) {
+  box-sizing: border-box;
+  height: calc(var(--od-control-h) + var(--od-space-1));
+  min-height: calc(var(--od-control-h) + var(--od-space-1));
+  padding: var(--od-space-3) var(--od-space-4);
+  font-size: var(--od-font-base);
+  font-weight: 400;
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) .auth-pilot__message {
+  font-size: var(--od-font-md);
+  line-height: var(--od-line-base);
+}
+
+.auth-pilot__card:has(.auth-pilot__setup-progress) .auth-pilot__submit {
+  min-height: calc(var(--od-control-h) + var(--od-space-3) + var(--od-space-1) / 2);
+  padding: calc(var(--od-space-3) + var(--od-space-1) / 2) var(--od-space-6);
+  font-size: var(--od-font-base);
+  font-weight: 600;
+  line-height: var(--od-line-base);
 }
 
 .auth-pilot__setup-mark {
