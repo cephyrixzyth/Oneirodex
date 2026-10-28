@@ -114,6 +114,19 @@ def create_member_meta_router(
                 csrf_response = csrf_error_response(request, auth.session_data, flask_app.config)
                 if csrf_response is not None:
                     response = csrf_response
+            if (
+                response is None
+                and auth.token is not None
+                and not auth.has_scope('read:social')
+            ):
+                from oneirodex.utils.api_contract import api_error_payload
+                from starlette.responses import JSONResponse
+
+                payload, status = api_error_payload(
+                    'Missing scope: read:social', code='forbidden',
+                    detail={'required_scope': 'read:social'},
+                )
+                response = JSONResponse(payload, status_code=status)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:

@@ -158,6 +158,7 @@ def list_icon_packs_api():
 
 @apis_bp.route('/check_username', methods=['POST'])
 @login_required
+@require_api_token_scope('read:social')
 @validate_body(CheckUsernameBody)
 def check_username(body: CheckUsernameBody):
     print(F"Route: /api/check_username - {current_user.name} - {current_user.role}")    

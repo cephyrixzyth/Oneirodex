@@ -4166,6 +4166,41 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
     assert 'set-cookie' not in anonymous_no_csrf.headers
 
 
+def test_native_check_username_bearer_requires_social_read_scope(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from types import SimpleNamespace
+
+    scopes = {'write:presence'}
+    auth = SimpleNamespace(
+        user=_flask_app._fake_user,
+        token=object(),
+        session_data={},
+        should_set_session_cookie=False,
+        has_scope=lambda scope: scope in scopes,
+    )
+    monkeypatch.setattr(
+        member_meta, 'request_auth_context', lambda *_args, **_kwargs: auth,
+    )
+
+    denied = _run(
+        runtime, '/api/check_username', method='POST',
+        json_body={'username': 'Taken'},
+        headers={'Authorization': 'Bearer gt_deadbeef_social-test'},
+    )
+    assert denied.status_code == 403
+    assert denied.json()['error_code'] == 'forbidden'
+    assert denied.json()['detail'] == {'required_scope': 'read:social'}
+
+    scopes.add('read:social')
+    allowed = _run(
+        runtime, '/api/check_username', method='POST',
+        json_body={'username': 'Taken'},
+        headers={'Authorization': 'Bearer gt_deadbeef_social-test'},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json() == {'exists': True}
+
+
 def test_native_current_user_role_does_not_push_flask_context(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     monkeypatch.setattr(
