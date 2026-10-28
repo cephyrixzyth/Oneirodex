@@ -201,7 +201,13 @@ export function AuthApp({
             <span>Password</span>
             <input autoComplete="current-password" name="password" type="password" required />
           </label>
-          <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
+          <Button
+            variant="primary"
+            size="lg"
+            className="auth-pilot__submit"
+            disabled={busy}
+            type="submit"
+          >
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>

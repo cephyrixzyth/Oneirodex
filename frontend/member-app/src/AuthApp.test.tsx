@@ -40,9 +40,9 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
   expect(await screen.findByRole('heading', { name: 'Sign in to Oneirodex' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Sign in' }).closest('form')).toHaveAttribute(
-    'novalidate',
-  )
+  const submit = screen.getByRole('button', { name: 'Sign in' })
+  expect(submit).toHaveClass('od-btn--lg', 'auth-pilot__submit')
+  expect(submit.closest('form')).toHaveAttribute('novalidate')
   expect(api.setCsrfToken).toHaveBeenCalledWith('csrf-test')
   expect(screen.getByRole('link', { name: 'Household SSO' })).toHaveAttribute('href', '/login/oidc')
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'member' } })

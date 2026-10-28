@@ -167,6 +167,9 @@ body {
 
 .auth-pilot__form--login .auth-pilot__submit {
   min-height: 3rem;
+  font-size: var(--od-font-base);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .auth-pilot__card:has(.auth-pilot__form--providers) {
