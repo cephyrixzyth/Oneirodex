@@ -113,6 +113,27 @@ def test_a_blocked_destination_keeps_its_reason(signed_in, monkeypatch):
     assert 'zzz' not in str(body) and '169.254' not in str(body)
 
 
+def test_acquire_strips_magnet_network_targets_before_sending(signed_in, monkeypatch):
+    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    sent = []
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.acquire.send_to_download_client',
+        lambda url, *, provider: sent.append((url, provider)) or {'queued': True},
+    )
+    magnet = (
+        'magnet:?xt=urn:btih:abc&dn=Sample+game'
+        '&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce'
+    )
+
+    response = signed_in.post(
+        '/api/acquire/download',
+        json={'magnet': magnet, 'provider': 'qbittorrent'},
+    )
+
+    assert response.status_code == 200
+    assert sent == [('magnet:?xt=urn%3Abtih%3Aabc&dn=Sample+game', 'qbittorrent')]
+
+
 def test_a_debrid_http_error_does_not_leak_the_query_string_key(signed_in, monkeypatch):
     monkeypatch.setattr('oneirodex.routes_apis.acquire.debrid_enabled', lambda: True)
     response = requests.Response()

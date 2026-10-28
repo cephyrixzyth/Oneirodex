@@ -2314,6 +2314,33 @@ def test_lazy_asgi_acquire_send_requires_librarian_without_provider_call(monkeyp
     assert runtime._fake_acquire_actions.calls == []
 
 
+def test_lazy_asgi_acquire_strips_magnet_network_targets_before_provider_call(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app._fake_user.role = 'librarian'
+    cookie, csrf = _signed_session_with_csrf()
+    from oneirodex.utils.security import validate_download_client_url
+
+    runtime._fake_acquire_actions.validate_url = lambda url: validate_download_client_url(url)
+
+    async def send_download():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/acquire/download',
+                json={'magnet': 'magnet:?xt=urn:btih:abc&tr=http%3A%2F%2F127.0.0.1%2Fannounce'},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(send_download())
+
+    assert response.status_code == 200
+    assert runtime._fake_acquire_actions.calls == [
+        ('send', 'magnet:?xt=urn%3Abtih%3Aabc', 'qbittorrent'),
+    ]
+
+
 @pytest.mark.parametrize(
     ('path', 'expected_key'),
     [('/api/social/status', 'friend_count'), ('/api/social/friends', 'friends')],

@@ -39,6 +39,7 @@ from oneirodex.utils.security import (
     is_blocked_outbound_host,
     is_cloud_metadata_host,
     validate_connector_http_url,
+    validate_download_client_url,
     validate_user_outbound_http_url,
 )
 
@@ -69,6 +70,52 @@ def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length()
     oversized = _ChunkedResponse([b''], headers={'Content-Length': '5'})
     with pytest.raises(ResponseTooLarge):
         read_response_limited(oversized, 4)
+
+
+def test_download_magnets_drop_embedded_network_targets_but_keep_normal_metadata():
+    magnet = (
+        'magnet:?xt=urn:btih:abc&dn=Sample+game&xl=512'
+        '&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce'
+        '&ws=http%3A%2F%2Fdb%3A5432%2F'
+        '&as=http%3A%2F%2F127.0.0.1%2Fsource'
+        '&xs=http%3A%2F%2F127.0.0.1%2Fexact'
+        '&x.pe=127.0.0.1%3A8080&unknown=http%3A%2F%2Flocalhost%2F'
+    )
+
+    ok, sanitized = validate_download_client_url(magnet)
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc&dn=Sample+game&xl=512'
+    assert all(key not in sanitized for key in ('tr=', 'ws=', 'as=', 'xs=', 'x.pe=', 'unknown='))
+
+
+def test_download_magnet_filters_semicolon_delimited_targets_and_preserves_hash_only_uri():
+    ok, sanitized = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc;tr=http%3A%2F%2F127.0.0.1%2Fannounce'
+    )
+    plain = 'magnet:?xt=urn:btih:abc'
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc'
+    assert validate_download_client_url(plain) == (True, plain)
+
+
+def test_download_magnet_drops_double_encoded_query_delimiters_and_fragment():
+    ok, sanitized = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc&dn=Safe%252526tr%253Dhttp%253A%252F%252F127.0.0.1%252Fannounce#tr=http://127.0.0.1'
+    )
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc'
+
+
+def test_download_magnet_rejects_identity_when_repeated_decoding_reveals_delimiter():
+    ok, error = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc%2526tr%253Dhttp%253A%252F%252F127.0.0.1%252Fannounce'
+    )
+
+    assert ok is False
+    assert 'valid magnet URI' in error
 
 
 def test_provider_image_fetch_streams_and_enforces_shared_limit(monkeypatch):

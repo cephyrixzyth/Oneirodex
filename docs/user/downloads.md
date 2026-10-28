@@ -35,3 +35,4 @@ Related: [getting-started.md](getting-started.md) · admin scan docs [libraries-
 - Searches admin-configured native Torznab/Newznab indexers and optional Prowlarr/Jackett hubs. Hits show the **indexer** name; warnings from search (if returned) appear above results.
 - If no native/hub indexers are ready, the page shows an empty state pointing admins to **Admin → Arr**.
 - Sending to qBit / Transmission / SABnzbd / NZBGet / debrid is **librarian or admin** only.
+- Before forwarding a magnet, Oneirodex removes tracker, web-seed, source, explicit-peer, and unrecognized query fields. Some private-tracker magnets may not resolve through Acquire; add those directly in the configured client when needed. This input filter does not replace network egress controls for the client container.

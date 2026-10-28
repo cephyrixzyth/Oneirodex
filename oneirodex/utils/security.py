@@ -12,7 +12,7 @@ import stat
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from requests.exceptions import RequestException
 from requests.models import PreparedRequest
@@ -653,25 +653,89 @@ def validate_user_outbound_http_url(url: str) -> tuple[bool, str]:
 
 
 def validate_download_client_url(url: str) -> tuple[bool, str]:
-    """Allow public HTTP(S) links and valid BitTorrent magnets to download clients."""
+    """Allow public HTTP(S) links and magnets without embedded fetch targets."""
     if not isinstance(url, str) or not url.strip():
         return False, 'Download URL is required'
 
     candidate = url.strip()
-    parsed = urlparse(candidate)
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return False, 'Download URL is invalid'
     scheme = parsed.scheme.lower()
     if scheme in {'http', 'https'}:
         return validate_user_outbound_http_url(candidate)
 
     if scheme == 'magnet' and not parsed.netloc:
-        xt_values = parse_qs(parsed.query).get('xt', [])
-        valid_xt = any(
-            value.startswith(('urn:btih:', 'urn:btmh:'))
-            and bool(value.partition(':')[2].partition(':')[2])
-            for value in xt_values
-        )
-        if valid_xt:
+        # Tracker, web-seed, acceptable-source, exact-source, and explicit-peer
+        # fields make the configured download client perform requests to
+        # attacker-selected destinations. Since that client resolves and
+        # follows those targets independently, app-side hostname validation
+        # cannot pin its eventual connection. Keep only content identity and
+        # display/selection metadata; unknown fields are dropped as well.
+        if len(candidate) > 8192:
+            return False, 'Magnet URI is too long'
+        try:
+            # Treat literal semicolons as separators too, so alternate query
+            # parsing cannot hide a fetch-bearing field from this filter.
+            pairs = parse_qsl(
+                parsed.query.replace(';', '&'),
+                keep_blank_values=True,
+                max_num_fields=64,
+            )
+        except ValueError:
+            return False, 'Magnet URI has too many parameters'
+
+        def valid_topic(value: str) -> bool:
+            return (
+                value.startswith(('urn:btih:', 'urn:btmh:'))
+                and bool(value.partition(':')[2].partition(':')[2])
+            )
+
+        def inert_query_value(value: str) -> bool:
+            # Avoid parser differentials where a downstream client decodes a
+            # display value again and then interprets it as another query.
+            decoded = value
+            for _ in range(16):
+                if '&' in decoded or ';' in decoded:
+                    return False
+                next_value = unquote(decoded)
+                if next_value == decoded:
+                    return True
+                decoded = next_value
+            return False
+
+        safe_keys = {'xt', 'dn', 'xl', 'kt', 'so'}
+        topic_values = [
+            value
+            for key, value in pairs
+            if key.lower() == 'xt'
+            and valid_topic(value)
+            and inert_query_value(value)
+        ]
+        if not topic_values:
+            return False, 'Download URL scheme must be http, https, or a valid magnet URI'
+
+        safe_pairs = [
+            (key.lower(), value)
+            for key, value in pairs
+            if key.lower() in safe_keys
+            and (key.lower() != 'xt' or valid_topic(value))
+            and inert_query_value(value)
+        ]
+        if (
+            len(safe_pairs) == len(pairs)
+            and ';' not in parsed.query
+            and all(key == key.lower() for key, _value in pairs)
+            and not parsed.path
+            and not parsed.fragment
+        ):
             return True, candidate
+
+        sanitized = urlunparse(
+            parsed._replace(path='', query=urlencode(safe_pairs), fragment='')
+        )
+        return True, sanitized
 
     return False, 'Download URL scheme must be http, https, or a valid magnet URI'
 
