@@ -232,7 +232,7 @@ export function AuthApp({
               : 'Registration requires a whitelisted email or a valid invite link.'}
           </p>
           <form
-            className="auth-pilot__form"
+            className="auth-pilot__form auth-pilot__form--register"
             noValidate
             onSubmit={(event) =>
               submit(event, async (data) => {
@@ -277,7 +277,7 @@ export function AuthApp({
               {busy ? 'Registering…' : 'Register'}
             </Button>
           </form>
-          <nav className="auth-pilot__links" aria-label="Account actions">
+          <nav className="auth-pilot__links auth-pilot__links--register" aria-label="Account actions">
             <a href="/login">Back to sign in</a>
           </nav>
         </>
@@ -454,7 +454,13 @@ export function AuthApp({
         Skip to account form
       </a>
       <section
-        className={page === 'login' ? 'auth-pilot__card auth-pilot__card--login' : 'auth-pilot__card'}
+        className={
+          page === 'login'
+            ? 'auth-pilot__card auth-pilot__card--login'
+            : page === 'register'
+              ? 'auth-pilot__card auth-pilot__card--register'
+              : 'auth-pilot__card'
+        }
         id="auth-content"
         aria-labelledby="auth-brand"
       >

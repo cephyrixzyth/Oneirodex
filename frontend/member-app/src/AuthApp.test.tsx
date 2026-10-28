@@ -166,10 +166,19 @@ test('standard registration copy matches the v1.1.8 invitation guidance', async 
   render(<AuthApp />)
 
   expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--register')
+  expect(document.querySelector('.auth-pilot__form')).toHaveClass('auth-pilot__form--register')
   expect(
     screen.getByText('Registration requires a whitelisted email or a valid invite link.'),
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument()
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--register',
+  )
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute(
+    'href',
+    '/login',
+  )
   expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
 })
 
