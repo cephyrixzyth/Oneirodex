@@ -193,9 +193,14 @@ body.od-shell-host header.od-topbar .od-topbar__start {
 .od-topnav__dropdown-panel a.active,
 .od-topnav__dropdown-panel button[role='menuitem']:hover,
 .od-topnav__dropdown-panel button[role='menuitem']:focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
-  outline: none;
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
+}
+
+.od-topnav__dropdown-panel a:focus-visible,
+.od-topnav__dropdown-panel button[role='menuitem']:focus-visible {
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
+  outline-offset: 2px;
 }
 
 .od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']) {
@@ -214,8 +219,8 @@ body.od-shell-host header.od-topbar .od-topbar__start {
 .od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']):hover,
 .od-topnav__dropdown-panel.od-menu-surface
   :is(a[role='menuitem'], button[role='menuitem']):focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
 }
 
 .od-topnav__username {
