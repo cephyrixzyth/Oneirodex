@@ -752,6 +752,8 @@ class TestExportUnmatchedFolders:
 
     def test_export_csv_default(self, client, admin_user, sample_unmatched_folder):
         """Test CSV export (default format) includes the unmatched folder."""
+        sample_unmatched_folder.folder_path = '/test/unmatched/=HYPERLINK("https://example.invalid")'
+        db.session.commit()
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
@@ -763,7 +765,7 @@ class TestExportUnmatchedFolders:
 
         body = response.get_data(as_text=True)
         assert 'folder_path' in body  # header row
-        assert '/test/unmatched/folder' in body
+        assert "'=HYPERLINK" in body
 
     def test_export_json_format(self, client, admin_user, sample_unmatched_folder):
         """Test JSON export returns the unmatched folder as a list of dicts."""

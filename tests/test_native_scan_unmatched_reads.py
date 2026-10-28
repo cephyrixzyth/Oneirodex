@@ -191,6 +191,7 @@ def test_duplicates_projection_fix_log_limit_and_head(runtime):
 
 def test_json_and_csv_exports_keep_headers_shapes_region_and_no_pagination(runtime):
     app, _flask_app, data, _users, _tokens, cookies = runtime
+    data.rows[0][0]['folder_name'] = '=HYPERLINK("https://example.invalid")'
     json_export = _request(
         app, '/api/unmatched_folders/export?format=json&region=USA&paginate=true&limit=1&offset=1',
         cookie=cookies['admin'],
@@ -210,6 +211,7 @@ def test_json_and_csv_exports_keep_headers_shapes_region_and_no_pagination(runti
     assert csv_export.headers['content-type'].startswith('text/csv')
     assert 'matched_game_name' in csv_export.text.splitlines()[0]
     assert 'Existing' in csv_export.text
+    assert "'=HYPERLINK" in csv_export.text
     assert invalid.status_code == 400 and invalid.json()['error_code'] == 'bad_request'
 
 

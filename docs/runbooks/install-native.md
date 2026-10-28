@@ -259,6 +259,11 @@ when it is not on `PATH`, so a stock PostgreSQL install needs no extra work.
 
 Start it: `.\startweb_windows.cmd`
 
+The Windows launcher defaults to one Uvicorn worker. Keep this default because
+login attempt limits, caches, and event state are held per process. Set
+`UVICORN_WORKERS` in `.env` only if you accept split per-worker state or have
+configured shared state and throttling.
+
 ### Run as a service
 
 Windows has no built-in way to run a script as a service. Two workable options:

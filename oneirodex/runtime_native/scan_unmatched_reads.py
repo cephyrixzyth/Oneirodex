@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
+from oneirodex.utils.csv_safety import neutralize_spreadsheet_formulas
 
 from .request_auth import request_auth_context
 
@@ -379,7 +380,7 @@ async def _export(request, flask_app, data):
         flat['matched_game_size_bytes'] = matched.get('size_bytes')
         flat['matched_game_date_identified'] = matched.get('date_identified')
         flat['matched_game_date_created'] = matched.get('date_created')
-        writer.writerow(flat)
+        writer.writerow(neutralize_spreadsheet_formulas(flat))
     return Response(
         buffer.getvalue(), media_type='text/csv',
         headers={'Content-Disposition': f'attachment; filename="unmatched_folders_{filename_status}.csv"'},
