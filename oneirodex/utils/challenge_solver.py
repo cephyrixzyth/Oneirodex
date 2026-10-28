@@ -475,6 +475,7 @@ def fetch_with_challenge_retry(
     *,
     session: requests.Session | None = None,
     validator: Any = None,
+    max_response_bytes: int | None = None,
     _solver_used: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
@@ -487,6 +488,29 @@ def fetch_with_challenge_retry(
     """
     http = session or requests
     timeout = kwargs.pop('timeout', DEFAULT_TIMEOUT_SEC)
+    if max_response_bytes is not None:
+        if max_response_bytes <= 0:
+            raise ValueError('max_response_bytes must be positive')
+        if not isinstance(session, requests.Session):
+            raise ValueError('A bounded response requires a caller-owned requests.Session')
+        # The challenge detector inspects response.text. Make that inspection
+        # safe by buffering only through the shared decoded-byte limit first.
+        kwargs['stream'] = True
+
+    def bound_response(response: requests.Response) -> requests.Response:
+        if max_response_bytes is None:
+            return response
+        from oneirodex.utils.http_safe import read_response_limited
+
+        try:
+            content = read_response_limited(response, max_response_bytes)
+        except Exception:
+            response.close()
+            raise
+        response._content = content  # type: ignore[attr-defined]
+        response._content_consumed = True  # type: ignore[attr-defined]
+        response.close()
+        return response
 
     if validator is not None:
         from oneirodex.utils.http_safe import safe_request
@@ -498,7 +522,7 @@ def fetch_with_challenge_retry(
     else:
         request_fn = getattr(http, method.lower())
 
-    resp = request_fn(url, timeout=timeout, **kwargs)
+    resp = bound_response(request_fn(url, timeout=timeout, **kwargs))
 
     if _solver_used or not is_challenge_response(resp):
         return resp
@@ -521,9 +545,16 @@ def fetch_with_challenge_retry(
         return resp
 
     retry_kwargs = _apply_solution_to_request_kwargs(kwargs, solution)
-    retry_resp = request_fn(url, timeout=timeout, **retry_kwargs)
+    retry_resp = bound_response(request_fn(url, timeout=timeout, **retry_kwargs))
     if is_challenge_response(retry_resp) and solution.body:
-        retry_resp._content = solution.body.encode('utf-8', errors='replace')  # type: ignore[attr-defined]
+        solved_body = solution.body.encode('utf-8', errors='replace')
+        if max_response_bytes is not None and len(solved_body) > max_response_bytes:
+            from oneirodex.utils.http_safe import ResponseTooLarge
+
+            raise ResponseTooLarge(
+                f'Response exceeds {max_response_bytes} bytes',
+            )
+        retry_resp._content = solved_body  # type: ignore[attr-defined]
         retry_resp.status_code = solution.status_code
     return retry_resp
 

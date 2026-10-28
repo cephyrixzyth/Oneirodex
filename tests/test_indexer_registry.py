@@ -127,6 +127,52 @@ def test_stub_torznab_search_returns_hit(app, db_session, monkeypatch):
     assert 'stub.torrent' in (hits[0].download_url or '')
 
 
+def test_all_indexer_searches_use_the_bounded_response_fetch(monkeypatch):
+    calls = []
+
+    def valid_url(url, **_kwargs):
+        return True, url
+
+    def fake_fetch(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if 'native.example' in url:
+            return _FakeResp(TORZNAB_XML)
+        if 'prowlarr.example' in url:
+            return _FakeResp(
+                '[{"title":"Prowlarr hit","downloadUrl":"https://cdn.example/p"}]',
+                headers={'Content-Type': 'application/json'},
+            )
+        return _FakeResp(
+            '{"Results":[{"Title":"Jackett hit","Link":"https://cdn.example/j"}]}',
+            headers={'Content-Type': 'application/json'},
+        )
+
+    monkeypatch.setattr(arr_connectors, 'validate_outbound_http_url', valid_url)
+    monkeypatch.setattr(arr_connectors, 'validate_connector_http_url', valid_url)
+    monkeypatch.setattr(arr_connectors, 'fetch_with_challenge_retry', fake_fetch)
+
+    native_hits = arr_connectors._search_native_indexer(
+        {'name': 'Native', 'url': 'https://native.example/api', 'api_key': 'k'},
+        'game', limit=5,
+    )
+    prowlarr_hits = arr_connectors._search_prowlarr(
+        {'prowlarr_url': 'https://prowlarr.example', 'prowlarr_api_key': 'k'},
+        'game', limit=5,
+    )
+    jackett_hits = arr_connectors._search_jackett(
+        {'jackett_url': 'https://jackett.example', 'jackett_api_key': 'k'},
+        'game', limit=5,
+    )
+
+    assert [hit.title for hit in native_hits] == ['Stub Game Release']
+    assert [hit.title for hit in prowlarr_hits] == ['Prowlarr hit']
+    assert [hit.title for hit in jackett_hits] == ['Jackett hit']
+    assert len(calls) == 3
+    assert all(kwargs['max_response_bytes'] == arr_connectors.MAX_INDEXER_RESPONSE_BYTES
+               for _method, _url, kwargs in calls)
+    assert all(kwargs['session'] is not None for _method, _url, kwargs in calls)
+
+
 def test_bulk_import_json_and_csv(app, db_session):
     _ensure_arr_settings(db_session, indexers=[])
     with app.app_context():

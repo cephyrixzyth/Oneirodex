@@ -27,6 +27,7 @@ from oneirodex.utils.runtime_config import get_runtime_config
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 20
+MAX_INDEXER_RESPONSE_BYTES = 2 * 1024 * 1024
 
 _CONNECTOR_URL_KEYS = (
     'prowlarr_url',
@@ -325,6 +326,18 @@ def _never_lan_indexer_url(url: str) -> tuple[bool, str]:
     return validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
 
 
+def _fetch_indexer_response(method: str, url: str, **kwargs) -> requests.Response:
+    """Fetch an indexer result with a bounded decoded body before inspection."""
+    with requests.Session() as session:
+        return fetch_with_challenge_retry(
+            method,
+            url,
+            session=session,
+            max_response_bytes=MAX_INDEXER_RESPONSE_BYTES,
+            **kwargs,
+        )
+
+
 def _search_native_indexer(indexer: dict[str, Any], query: str, *, limit: int) -> list[ArrHit]:
     base = (indexer.get('url') or '').strip()
     api_key = (indexer.get('api_key') or '').strip()
@@ -340,7 +353,7 @@ def _search_native_indexer(indexer: dict[str, Any], query: str, *, limit: int) -
         'apikey': api_key,
         'limit': limit,
     }
-    resp = fetch_with_challenge_retry(
+    resp = _fetch_indexer_response(
         'get',
         api_url,
         params=params,
@@ -475,7 +488,7 @@ def _as_int(value: Any) -> int | None:
 
 def _search_prowlarr(cfg: dict, query: str, *, limit: int) -> list[ArrHit]:
     url = urljoin(cfg['prowlarr_url'] + '/', 'api/v1/search')
-    resp = fetch_with_challenge_retry(
+    resp = _fetch_indexer_response(
         'get',
         url,
         params={'query': query, 'type': 'search', 'limit': limit},
@@ -506,7 +519,7 @@ def _search_prowlarr(cfg: dict, query: str, *, limit: int) -> list[ArrHit]:
 
 def _search_jackett(cfg: dict, query: str, *, limit: int) -> list[ArrHit]:
     url = urljoin(cfg['jackett_url'] + '/', 'api/v2.0/indexers/all/results')
-    resp = fetch_with_challenge_retry(
+    resp = _fetch_indexer_response(
         'get',
         url,
         params={'apikey': cfg['jackett_api_key'], 'Query': query},

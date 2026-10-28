@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,16 @@ def _mock_response(status: int, text: str = '', headers: dict | None = None) -> 
     resp._content = text.encode('utf-8')
     resp.headers = headers or {}
     resp.url = 'https://example.test/page'
+    return resp
+
+
+def _stream_response(status: int, body: bytes, headers: dict | None = None) -> requests.Response:
+    resp = requests.Response()
+    resp.status_code = status
+    resp.headers.update(headers or {})
+    resp.raw = BytesIO(body)
+    resp._content = False
+    resp.url = 'https://example.test/search'
     return resp
 
 
@@ -228,6 +239,97 @@ def test_fetch_with_challenge_retry_disabled_unchanged(app, db_session, monkeypa
     assert mock_get.call_count == 1
     assert mock_solve.call_count == 0
     assert resp.status_code == 503
+
+
+def test_fetch_with_challenge_retry_bounds_streamed_response_and_keeps_small_control(monkeypatch):
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    small = _stream_response(200, b'{"results":[]}')
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=small))
+    response = fetch_with_challenge_retry(
+        'get', 'https://indexer.example/search', session=session,
+        max_response_bytes=64,
+    )
+    assert response.text == '{"results":[]}'
+    assert session.get.call_args.kwargs['stream'] is True
+    session.close()
+
+    large = _stream_response(200, b'x' * 65)
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=large))
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    assert large.raw.closed
+    session.close()
+
+
+def test_bounded_fetch_keeps_the_validated_safe_request_path(monkeypatch):
+    from oneirodex.utils import http_safe
+
+    response = _stream_response(200, b'{"results":[]}')
+    session = requests.Session()
+    seen = {}
+
+    def fake_safe_request(method, url, *, validator, session, **kwargs):
+        seen.update(method=method, url=url, validator=validator, session=session, **kwargs)
+        return response
+
+    monkeypatch.setattr(http_safe, 'safe_request', fake_safe_request)
+
+    def validator(url):
+        return True, url
+
+    bounded = fetch_with_challenge_retry(
+        'get', 'https://indexer.example/search', session=session,
+        validator=validator, max_response_bytes=64,
+    )
+
+    assert bounded.text == '{"results":[]}'
+    assert seen['session'] is session
+    assert seen['validator'] is validator
+    assert seen['stream'] is True
+    session.close()
+
+
+def test_fetch_with_challenge_retry_bounds_challenge_detection_and_retry(monkeypatch):
+    from oneirodex.utils import challenge_solver
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    challenge = _stream_response(
+        503, b'<title>Just a moment...</title>' + b'x' * 80,
+    )
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=challenge))
+    solver = MagicMock()
+    monkeypatch.setattr(challenge_solver, 'challenge_solver_enabled', lambda *_args: True)
+    monkeypatch.setattr(challenge_solver, '_solver_client', lambda *_args: solver)
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    solver.request_get.assert_not_called()
+    session.close()
+
+    first = _stream_response(503, b'<title>Just a moment...</title>')
+    retry = _stream_response(503, b'<title>Just a moment...</title>')
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(side_effect=[first, retry]))
+    solver.request_get.return_value = SolverSolution(
+        url='https://indexer.example/search', status_code=200,
+        body='x' * 65, headers={}, cookies=[], user_agent=None,
+    )
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    assert session.get.call_count == 2
+    session.close()
 
 
 def test_challenge_solver_failure_does_not_retain_or_log_url_secrets(monkeypatch, caplog):
