@@ -89,7 +89,7 @@ describe('ScansPage queued jobs', () => {
     expect(screen.queryByRole('heading', { name: 'Dupe glance' })).not.toBeInTheDocument()
   })
 
-  test('embedded jobs panel is a compact recent-activity glance and links to full history', async () => {
+  test('full-history page keeps all matching jobs available without a recent-job cap', async () => {
     const jobs = Array.from({ length: 27 }, (_, index) => ({
       id: `job-${index + 1}`,
       library_name: `Library ${index + 1}`,
@@ -107,77 +107,12 @@ describe('ScansPage queued jobs', () => {
       })),
     )
 
-    render(
-      <MemoryRouter>
-        <ScansPage embedded />
-      </MemoryRouter>,
-    )
+    render(<MemoryRouter><ScansPage /></MemoryRouter>)
 
     expect(await screen.findByText('Library 1')).toBeInTheDocument()
-    expect(screen.getByText('Showing 5 recent jobs of 27.')).toBeInTheDocument()
-    expect(screen.getByText('Library 5')).toBeInTheDocument()
-    expect(screen.queryByText('Library 6')).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Scan jobs table' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('group', { name: 'Filter scan jobs by status' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Clear completed' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
-      'href',
-      '/admin/scan-jobs',
-    )
-    expect(
-      screen.getByRole('link', { name: 'Open full scan history for filters and actions.' }),
-    ).toHaveAttribute('href', '/admin/scan-jobs')
-  })
-
-  test('embedded glance keeps Stop and Cancel queue available for active jobs', async () => {
-    const user = userEvent.setup()
-    const jobs = [
-      {
-        id: 'running-glance',
-        library_name: 'PCWIN',
-        status: 'Running',
-        scan_folder: '/storage/pc',
-        total_folders: 10,
-        folders_success: 1,
-      },
-      {
-        id: 'queued-glance',
-        library_name: 'PS2',
-        status: 'Queued',
-        queue_position: 1,
-        scan_folder: '/storage/ps2',
-      },
-    ]
-    const fetchMock = vi.fn(async (url) => {
-      const isStatus = String(url).includes('/api/scan_jobs_status')
-      return {
-        ok: isStatus || String(url).includes('/cancel_scan_job/'),
-        status: isStatus ? 200 : 302,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        text: async () => JSON.stringify(jobs),
-        json: async () => jobs,
-      }
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(
-      <MemoryRouter>
-        <ScansPage embedded />
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByRole('button', { name: 'Stop' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Cancel queue' }))
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/cancel_scan_job/queued-glance',
-        expect.objectContaining({ method: 'POST' }),
-      ),
-    )
-    expect(screen.getByText('Queued scan job queued-glance cancelled.')).toBeInTheDocument()
+    expect(screen.getByText('Library 27')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Scan jobs table' })).toBeInTheDocument()
+    expect(screen.queryByText('Recent scan jobs')).not.toBeInTheDocument()
   })
 
   test('uses the legacy Scan Jobs browser title', async () => {

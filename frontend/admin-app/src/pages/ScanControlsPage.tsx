@@ -4,7 +4,6 @@ import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useScanControls, type Schedule } from './useScanControls'
-import { ScansPage } from './ScansPage'
 import './ScanControlsPage.css'
 
 export function ScanControlsPage() {
@@ -91,8 +90,8 @@ export function ScanControlsPage() {
   useEffect(() => {
     const sectionId =
       hash.slice(1) ||
-      (activeTab === 'manual' ? 'manual-identify' : activeTab === 'jobs' ? 'scan-jobs' : '')
-    if (!['automatic-scan', 'manual-identify', 'scan-jobs'].includes(sectionId)) return
+      (activeTab === 'manual' ? 'manual-identify' : '')
+    if (!['automatic-scan', 'manual-identify'].includes(sectionId)) return
     const target = document.getElementById(sectionId)
     if (!target) return
 
@@ -119,7 +118,7 @@ export function ScanControlsPage() {
               ? 'Scans'
               : undefined
       }
-      lede="Start or schedule an automatic scan, identify games manually, and review scan jobs on this page."
+      lede="Start or schedule an automatic scan, or identify games manually. Open Scan jobs from this toolbar to review scan history."
     >
       <PageStatus
         loading={loading}
@@ -528,7 +527,6 @@ export function ScanControlsPage() {
           <PageStatus announcement="status">{linkStatus}</PageStatus>
         ) : null}
       </section>
-      <ScansPage embedded />
       {browseOpen ? (
         <Modal
           open

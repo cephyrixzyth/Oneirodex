@@ -106,17 +106,14 @@ test('keeps automatic scan and manual identification together on the scan manage
   expect(await screen.findByRole('heading', { name: 'Scan management' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('list', { name: 'Recent scan jobs' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Scan jobs' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'No libraries yet' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Create your first library' })).toHaveAttribute(
     'href',
     '/libraries',
-  )
-  expect(screen.getByRole('link', { name: 'View full scan history' })).toHaveAttribute(
-    'href',
-    '/admin/scan-jobs',
   )
 })
 

@@ -1,5 +1,4 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { PageStatus, Button, confirmAction, errorFromResponse } from '@oneirodex/ui'
 import { csrfHeaders, getJson } from '../api/adminApi'
 import { DataTable } from '../components/DataTable'
@@ -20,7 +19,7 @@ import { useVisibilityPoll } from '../hooks/useVisibilityPoll'
 import { errorText } from '../utils/errorText'
 import './ScansPage.css'
 
-export function ScansPage({ embedded = false }: { embedded?: boolean }) {
+export function ScansPage() {
   const [status, setStatus] = useState<ScanJobsPayload>(null)
   const [error, setError] = useState<unknown>(null)
   const [actionError, setActionError] = useState('')
@@ -108,8 +107,7 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
           .includes(needle),
     )
   })
-  const visibleJobs = embedded ? filteredJobs.slice(0, 25) : filteredJobs
-  const glanceJobs = jobs.slice(0, 5)
+  const visibleJobs = filteredJobs
   const statusPayload = (status && !Array.isArray(status) ? status : {}) as Record<string, unknown>
   const message =
     statusPayload.message || statusPayload.status_message || statusPayload.phase || null
@@ -433,11 +431,9 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
                 />
               </label>
               <span className="od-table-count" aria-live="polite">
-                {embedded && filteredJobs.length > visibleJobs.length
-                  ? `Showing ${visibleJobs.length} of ${filteredJobs.length} matching scan jobs`
-                  : filteredJobs.length === jobs.length
-                    ? `${jobs.length} scan job${jobs.length === 1 ? '' : 's'}`
-                    : `${filteredJobs.length} of ${jobs.length} scan jobs`}
+                {filteredJobs.length === jobs.length
+                  ? `${jobs.length} scan job${jobs.length === 1 ? '' : 's'}`
+                  : `${filteredJobs.length} of ${jobs.length} scan jobs`}
               </span>
             </div>
             {/* Scan jobs sort and filter like every other table now (W27-C2).
@@ -640,113 +636,6 @@ export function ScansPage({ embedded = false }: { embedded?: boolean }) {
       {conflictDialogs}
     </>
   )
-  if (embedded) {
-    return (
-      <section
-        id="scan-jobs"
-        className="od-scan-jobs-workspace"
-        tabIndex={-1}
-        aria-labelledby="od-scan-jobs-heading"
-      >
-        <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
-          <h2 id="od-scan-jobs-heading">Scan jobs</h2>
-          <Link className="od-btn od-btn--secondary" to="/admin/scan-jobs">
-            View full scan history
-          </Link>
-        </div>
-        <div className="od-admin-panel od-scan-glance">
-          <PageStatus error={error} errorMessage="Unable to load scan status." />
-          <PageStatus error={actionError} />
-          {actionMessage ? (
-            <PageStatus announcement="status" inline>
-              {actionMessage}
-            </PageStatus>
-          ) : null}
-          <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
-            <Button
-              type="button"
-              className="od-btn--accent"
-              onClick={() => void startRefreshAll()}
-              disabled={refreshing}
-            >
-              {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
-            </Button>
-            {scanMotifActive ? (
-              <PageStatus
-                announcement="status"
-                inline
-                className="od-admin-scan-live"
-                dataState={running ? 'running' : 'queued'}
-              >
-                <span className="od-spinner od-spinner--sm" aria-hidden="true" />
-                {runningJob
-                  ? 'Scanning…'
-                  : stoppingJob
-                    ? 'Stopping…'
-                    : `Queued… (${queuedJobs.length})`}
-              </PageStatus>
-            ) : null}
-          </div>
-          {!status ? (
-            <PageStatus loading loadingMessage="Loading scan status…" />
-          ) : (
-            <>
-              <p className="od-scan-summary">{scanSummary}</p>
-              {message ? <p className="od-admin-lede">{message as ReactNode}</p> : null}
-              <ul className="od-scan-glance__list" aria-label="Recent scan jobs">
-                {glanceJobs.map((job) => {
-                  const path = String(job.scan_folder || '')
-                  const libraryName = String(job.library_name || job.library || 'Unknown library')
-                  const statusLabel = String(job.status || 'Unknown')
-                  const jobStatus = statusLabel.toLowerCase()
-                  const queued = isScanQueuedStatus(job.status)
-                  const canStop = jobStatus === 'running' || queued
-                  const detail = String(job.error_message || job.current_processing || '')
-                  return (
-                    <li className="od-scan-glance__item" key={String(job.id)}>
-                      <div className="od-scan-glance__heading">
-                        <strong>{libraryName}</strong>
-                        <span className="od-scan-glance__status">{statusLabel}</span>
-                      </div>
-                      <code className="od-scan-glance__path" title={path}>
-                        {path || 'No scan path reported'}
-                      </code>
-                      {detail ? <p className="od-scan-glance__detail">{detail}</p> : null}
-                      {canStop ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="od-btn--secondary"
-                          disabled={Boolean(busyJobKey) || actionBusy}
-                          title={queued ? 'Cancel queued scan before it starts' : 'Stop this scan'}
-                          onClick={() => void cancelScanJob(job)}
-                        >
-                          {busyJobKey === job.id
-                            ? queued
-                              ? 'Cancelling…'
-                              : 'Stopping…'
-                            : queued
-                              ? 'Cancel queue'
-                              : 'Stop'}
-                        </Button>
-                      ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-              {jobs.length > glanceJobs.length ? (
-                <p className="od-scan-glance__more">
-                  Showing {glanceJobs.length} recent jobs of {jobs.length}.{' '}
-                  <Link to="/admin/scan-jobs">Open full scan history for filters and actions.</Link>
-                </p>
-              ) : null}
-            </>
-          )}
-        </div>
-        {conflictDialogs}
-      </section>
-    )
-  }
   return (
     <Page
       title="Scan jobs"

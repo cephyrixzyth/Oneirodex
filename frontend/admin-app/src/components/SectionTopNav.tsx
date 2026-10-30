@@ -65,7 +65,7 @@ export function SectionTopNav() {
         href: '/scan_management?active_tab=manual#manual-identify',
         label: 'Manual identify',
       },
-      { id: 'jobs', href: '/scan_management?active_tab=jobs#scan-jobs', label: 'Scan jobs' },
+      { id: 'jobs', href: '/admin/scan-jobs', label: 'Scan jobs' },
     ]
     return (
       <AdminPageActions label="Scan pages">

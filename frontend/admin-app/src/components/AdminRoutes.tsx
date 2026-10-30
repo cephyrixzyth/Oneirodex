@@ -118,7 +118,8 @@ function ScanManagementRoute() {
   const location = useLocation()
   const { search } = location
   const tab = new URLSearchParams(search).get('active_tab') || 'auto'
-  if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />
+  if (tab === 'jobs') return <Navigate replace to="/admin/scan-jobs" state={location.state} />
+  if (['auto', 'manual'].includes(tab)) return <ScanControlsPage />
   if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />
   if (tab === 'unmatched') return <ScanUnmatchedPage />
   if (tab === 'scan_filters') return <ScanFiltersPage />
