@@ -22,7 +22,7 @@ Related: [members-and-invites.md](members-and-invites.md) · [settings-modules.m
 | Library | Game metadata, paths, artwork you stored | Paths point at disks you mounted (`DATA_FOLDER_GAMES`, `ONEIRODEX_LIBRARY_ROOTS`) |
 | Playtime | Per-user totals and session heartbeats | `share_activity` (default on) controls whether others in the household see it |
 | Presence | Online / away / in-game | Derived from play sessions and companion heartbeats, not a third-party tracker |
-| Chat | Channel messages, reactions, attachments | Household Spaces only. **No Discord** |
+| Chat | Channel messages, reactions, attachments | Household Spaces only. **No Discord**. Attachment reads recheck channel access and return `Cache-Control: private, no-store` |
 | Store ownership | Steam ID; GOG / Epic / Amazon / Xbox / PlayStation sign-in tokens; synced title IDs and names; per-store sync history (status, redacted reason code, counts, times; last 20 per store) | Register only — never a store download. Tokens are never returned by any API after save. Sync errors reach members and admins as fixed sentences, never provider error text, request URLs or tokens. Disconnect removes the link, its titles, match decisions and sync history |
 | Notifications | In-app inbox + archive | Optional SMTP for mentions/DMs and a daily digest, each a member preference |
 | Support reports | Title, body, optional logs, client/url hints | Stays local unless you configured GitHub issue sync |

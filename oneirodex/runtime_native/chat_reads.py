@@ -1266,7 +1266,10 @@ def create_chat_reads_router(
                             path, media_type=mime, filename=original_name,
                             content_disposition_type='attachment' if download else 'inline',
                         )
-                        response.headers['Cache-Control'] = 'private, max-age=3600'
+                        # Attachment access is channel-ACL scoped. Prevent a
+                        # shared browser profile from reusing one account's
+                        # cached bytes after an account switch.
+                        response.headers['Cache-Control'] = 'private, no-store'
                 except Exception:  # noqa: BLE001 — keep storage detail private
                     from oneirodex.utils.api_contract import api_error_payload
 

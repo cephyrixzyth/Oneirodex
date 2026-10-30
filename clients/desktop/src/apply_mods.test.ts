@@ -357,6 +357,10 @@ describe('apply_mods helpers', () => {
     })
 
     expect(result).toEqual({ ok: true, path: '/appdata/mods/game-42/hd/hd.zip', bytes: 2 })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://cdn.example/hd.zip',
+      expect.objectContaining({ redirect: 'error' }),
+    )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/mods/game-42/hd/hd.zip',
       bytes: [],
@@ -462,7 +466,10 @@ describe('apply_mods helpers', () => {
           fetchImpl: fetchImpl as unknown as typeof fetch,
         })
         expect(result.ok, source).toBe(true)
-        expect(fetchImpl).toHaveBeenCalledWith(source)
+        expect(fetchImpl).toHaveBeenCalledWith(
+          source,
+          expect.objectContaining({ redirect: 'error' }),
+        )
       }
     })
 
@@ -480,10 +487,14 @@ describe('apply_mods helpers', () => {
         fetchImpl: fetchImpl as unknown as typeof fetch,
       })
       expect(result.ok).toBe(false)
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://cdn.example.com/hd.zip',
+        expect.objectContaining({ redirect: 'error' }),
+      )
       expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
     })
 
-    it('accepts an https source that redirects to another https URL', async () => {
+    it('refuses a reported redirect even when the final URL is https', async () => {
       const fetchImpl = vi.fn(async () => ({
         ok: true,
         redirected: true,
@@ -496,7 +507,9 @@ describe('apply_mods helpers', () => {
         mod: modAt('https://cdn.example.com/hd.zip'),
         fetchImpl: fetchImpl as unknown as typeof fetch,
       })
-      expect(result.ok).toBe(true)
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.error).toContain('redirects are not allowed')
+      expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
     })
   })
 

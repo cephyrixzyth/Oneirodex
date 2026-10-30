@@ -373,9 +373,13 @@ export async function stageModFromUrl(opts: {
   }
   const fetchFn = opts.fetchImpl || fetch
   try {
-    const response = await fetchFn(url)
-    // An https source may redirect; the URL it ended on has to pass the same check.
-    // A plain-http leg in the middle of the chain is not visible to `fetch`.
+    // The archive is written into an install folder, so fail closed on every
+    // redirect. Fetch hides intermediate hops; validating only response.url
+    // cannot detect an HTTPS -> HTTP -> HTTPS chain rewritten in transit.
+    const response = await fetchFn(url, { redirect: 'error' })
+    if (response.redirected) {
+      return { ok: false, error: `${opts.mod.name}: mod source redirects are not allowed` }
+    }
     // (Mocks and some runtimes leave `url` empty — nothing to check then.)
     if (response.url) {
       const finalCheck = checkModSourceUrl(response.url)

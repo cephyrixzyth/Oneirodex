@@ -6722,7 +6722,7 @@ def test_native_chat_reaction_toggle_requires_csrf_and_maps_not_found(monkeypatc
     assert calls == [(7, 1, 'heart'), (7, 999, 'heart')]
 
 
-def test_native_chat_attachment_download_preserves_private_cache_and_inline_rules(monkeypatch, tmp_path):
+def test_native_chat_attachment_no_store_and_inline_rules(monkeypatch, tmp_path):
     _flask_app, runtime = _runtime(monkeypatch)
     image = tmp_path / 'cover.png'
     image.write_bytes(b'png-fixture')
@@ -6746,7 +6746,7 @@ def test_native_chat_attachment_download_preserves_private_cache_and_inline_rule
     assert image_response.status_code == file_response.status_code == 200
     assert image_response.content == b'png-fixture'
     assert file_response.content == b'text-fixture'
-    assert image_response.headers['cache-control'] == 'private, max-age=3600'
+    assert image_response.headers['cache-control'] == 'private, no-store'
     assert 'inline' in image_response.headers.get('content-disposition', '')
     assert 'attachment' in file_response.headers.get('content-disposition', '')
     assert missing.status_code == 404
