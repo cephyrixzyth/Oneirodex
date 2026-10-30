@@ -236,10 +236,14 @@ export function SmtpPage() {
                 id="smtp_use_tls"
                 type="checkbox"
                 checked={form.smtp_use_tls}
+                aria-describedby="smtp-tls-help"
                 onChange={(e) => field('smtp_use_tls', e.target.checked)}
               />{' '}
               Use TLS
             </label>
+            <p id="smtp-tls-help" className="od-admin-hint">
+              Port 465 uses implicit TLS and requires this setting. Other TLS-enabled ports use STARTTLS.
+            </p>
             <label className="od-admin-field">
               Default Sender Email
               <input

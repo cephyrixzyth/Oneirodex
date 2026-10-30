@@ -20,7 +20,7 @@ The flow follows the optional, ordered setup used by Plex and Jellyfin: establis
 
 **IGDB credentials:** Admin → Integrations → Metadata & art → **IGDB metadata** accepts a client ID and secret of at least 20 characters. Leave an already-saved secret blank to retain it. **Test connection** uses the saved credentials, even when the form has unsaved edits; it contacts IGDB. The settings form preserves the legacy save contract, while the separate JSON settings API keeps its stricter request validation. Legacy IGDB and SMTP JSON save requests are capped at 64 KiB before parsing.
 
-**SMTP settings:** The form preserves the legacy save rules: enabling SMTP requires its connection fields, while disabled settings remain editable; a blank password keeps an existing saved password. **Test Settings** always checks the saved SMTP settings, even when edits are pending or SMTP is disabled in the form. It checks connection/authentication and does not send a message.
+**SMTP settings:** The form preserves the legacy save rules: enabling SMTP requires its connection fields, while disabled settings remain editable; a blank password keeps an existing saved password. Port 465 uses implicit TLS and requires TLS to stay enabled; other TLS-enabled ports use STARTTLS. **Test Settings** always checks the saved SMTP settings, even when edits are pending or SMTP is disabled in the form. It checks connection/authentication and does not send a message.
 
 **Download requests:** `/admin/manage-downloads` lists each member's zip job and only the ZIP basename; the API does not return the stored full path. Deleting a request record requires a confirmation and does not delete a ZIP file. The React page uses the Flask route and guarded API.
 
@@ -324,7 +324,7 @@ These behaviors are available through the React admin pages. Flask continues to 
 
 ### SMTP
 
-The React admin page provides the SMTP form at the existing URL. Its direct page GET is served by the React shell; the legacy POST at the same URL remains a settings compatibility handler. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Save settings before using **Test Settings**. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
+The React admin page provides the SMTP form at the existing URL. Its direct page GET is served by the React shell; the legacy POST at the same URL remains a settings compatibility handler. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Port 465 uses implicit TLS; other TLS-enabled ports use STARTTLS. Save settings before using **Test Settings**. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
 
 ### Scan / match policy recovery
 

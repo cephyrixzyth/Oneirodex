@@ -156,6 +156,7 @@ class TestSMTPTesterConnection:
     @patch('oneirodex.utils.smtp_test.smtplib.SMTP')
     def test_connection_success_with_auth(self, mock_smtp_class, mock_socket, mock_log, tester, mock_smtp):
         """Test successful connection with authentication."""
+        tester = SMTPTester(debug=True)
         # Setup mocks
         mock_socket.return_value.close.return_value = None
         mock_smtp_class.return_value = mock_smtp
@@ -172,6 +173,7 @@ class TestSMTPTesterConnection:
         assert success is True
         assert result['auth_status'] == 'Authentication successful'
         mock_smtp.login.assert_called_once_with('testuser', 'testpass')
+        mock_smtp.set_debuglevel.assert_not_called()
 
     @patch('oneirodex.utils.smtp_test.log_system_event')
     @patch('oneirodex.utils.smtp_test.socket.create_connection')
@@ -194,6 +196,47 @@ class TestSMTPTesterConnection:
         mock_smtp.starttls.assert_called_once_with(context=mock_context)
         # EHLO should be called twice: once initially, once after STARTTLS
         assert mock_smtp.ehlo.call_count == 2
+
+    @patch('oneirodex.utils.smtp_test.log_system_event')
+    @patch('oneirodex.utils.smtp_test.socket.create_connection')
+    @patch('oneirodex.utils.smtp_transport.ssl.create_default_context')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP_SSL')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
+    def test_connection_port_465_uses_implicit_tls(
+        self, mock_smtp_class, mock_ssl_smtp_class, mock_ssl_context,
+        mock_socket, mock_log, tester, mock_smtp,
+    ):
+        mock_socket.return_value.close.return_value = None
+        mock_ssl_smtp_class.return_value = mock_smtp
+        context = MagicMock()
+        mock_ssl_context.return_value = context
+
+        success, result = tester.test_connection(
+            'smtp.example.com', 465, username='mailer', password='secret', use_tls=True
+        )
+
+        assert success is True
+        assert result['auth_status'] == 'Authentication successful'
+        mock_ssl_smtp_class.assert_called_once_with(
+            'smtp.example.com', 465, timeout=10, context=context
+        )
+        mock_smtp_class.assert_not_called()
+        mock_smtp.starttls.assert_not_called()
+        mock_smtp.login.assert_called_once_with('mailer', 'secret')
+
+    @patch('oneirodex.utils.smtp_test.socket.create_connection')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP_SSL')
+    def test_connection_port_465_rejects_disabled_tls_before_connect(
+        self, mock_ssl_smtp_class, mock_socket, tester,
+    ):
+        success, result = tester.test_connection(
+            'smtp.example.com', 465, username='mailer', password='secret', use_tls=False
+        )
+
+        assert success is False
+        assert result == 'TLS is required for SMTP port 465'
+        mock_socket.assert_not_called()
+        mock_ssl_smtp_class.assert_not_called()
 
     @patch('oneirodex.utils.smtp_test.log_system_event')
     @patch('oneirodex.utils.smtp_test.socket.create_connection')
