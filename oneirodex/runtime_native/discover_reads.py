@@ -343,11 +343,9 @@ def mount_discover_reads_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _native_json_response(flask_app, payload, status: int = 200) -> Response:
-    return Response(
-        content=flask_app.json.dumps(payload),
-        status_code=status,
-        media_type='application/json',
-    )
+    from oneirodex.runtime_native.runtime_context import native_json_response
+
+    return native_json_response(payload, config=flask_app.config, status=status)
 
 
 def _api_ok_response(flask_app, payload, status: int = 200) -> Response:

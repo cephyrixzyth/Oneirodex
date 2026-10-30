@@ -228,6 +228,10 @@ def test_zone_success_uses_api_ok_and_preserves_slug():
     assert response.json() == {
         **payload, 'ok': True, 'error': None, 'error_code': None, 'success': True,
     }
+    assert response.content == (
+        b'{"error":null,"error_code":null,"feed_token":"zone-feed","ok":true,'
+        b'"sections":[{"id":"row-1"}],"slug":"by-era","success":true}\n'
+    )
     assert data.zone_calls == [(151, 'by-era')]
 
 
@@ -244,6 +248,11 @@ def test_zone_not_found_includes_slug_detail():
         'message': 'That Discover zone is not available.',
         'success': False,
     }
+    assert response.content == (
+        b'{"detail":"missing-zone","error":"That Discover zone is not available.",'
+        b'"error_code":"not_found","message":"That Discover zone is not available.",'
+        b'"ok":false,"success":false}\n'
+    )
 
 
 def test_genre_hub_preserves_multi_segment_decoded_genre_path():

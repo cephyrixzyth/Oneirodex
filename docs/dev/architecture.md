@@ -124,6 +124,9 @@ and personal API-token management use
 request-local ORM sessions where needed and direct Starlette JSON responses; they no longer push Flask app
 contexts. Their legacy response shapes, ACL, CSRF, and signed-session behavior
 remain covered by route tests.
+Native API JSON uses the shared `NativeJSONProvider` with Flask-compatible key
+ordering, compact separators, and a trailing newline. Exact-byte tests protect
+this wire-format compatibility for migrated routes.
 The admin challenge-solver and ambient-lighting status, config, and test routes
 now handle authentication, authorization, response serialization, and
 request-scoped ORM work in FastAPI. Config saves accept explicit configuration
