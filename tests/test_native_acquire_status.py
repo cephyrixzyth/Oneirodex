@@ -148,6 +148,31 @@ def test_session_cookie_is_not_written_twice_by_mixed_compatibility_adapters():
     assert response.headers['Vary'] == 'Accept-Encoding, Cookie'
 
 
+def test_session_cookie_preserves_configured_samesite_spelling():
+    from oneirodex.runtime_native.browse import _set_session_cookie as set_browse_cookie
+    from oneirodex.runtime_native.release_calendar import _set_session_cookie as set_calendar_cookie
+    from oneirodex.runtime_native.trailers import _set_session_cookie as set_trailer_cookie
+
+    flask_app = Flask(__name__)
+    flask_app.config.update(
+        SECRET_KEY='native-acquire-secret',
+        SESSION_COOKIE_SAMESITE='Lax',
+    )
+    auth = SimpleNamespace(
+        session_data={'_fresh': True},
+        should_set_session_cookie=True,
+    )
+    for writer in (
+        _set_session_cookie,
+        set_browse_cookie,
+        set_calendar_cookie,
+        set_trailer_cookie,
+    ):
+        response = Response(status_code=302)
+        writer(response, flask_app, auth)
+        assert 'SameSite=Lax' in response.headers['set-cookie']
+
+
 def test_vary_header_merge_supports_starlette_and_werkzeug_responses():
     from werkzeug.wrappers import Response as WerkzeugResponse
 

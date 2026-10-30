@@ -84,7 +84,11 @@ class FakeDiscoverData:
 def make_client(*, authenticated=True, data=None, blueprint_login_view=None):
     flask_app = Flask(__name__)
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('Flask app context used'))
-    flask_app.config.update(SECRET_KEY='native-discover-reads-secret', TESTING=True)
+    flask_app.config.update(
+        SECRET_KEY='native-discover-reads-secret',
+        SESSION_COOKIE_SAMESITE='Lax',
+        TESTING=True,
+    )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.add_url_rule('/member-login', endpoint='member_login', view_func=lambda: 'login')
     user = SimpleNamespace(
@@ -187,10 +191,15 @@ def test_missing_row_returns_not_found_with_identifier_detail():
 def test_anonymous_requests_redirect_with_login_flash_and_next():
     data = FakeDiscoverData()
     client = make_client(authenticated=False, data=data, blueprint_login_view='/member-login')
-    for path in ('/api/discover/sections?from=home', '/api/discover/rows/recent?offset=10'):
+    for path in (
+        '/api/discover/sections?from=home',
+        '/api/discover/rows/recent?offset=10',
+        '/api/discover/surprise?genre=not-an-id',
+    ):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 302
         assert response.headers['location'].startswith('/member-login?next=')
+        assert 'SameSite=Lax' in response.headers['set-cookie']
         session = load_session_cookie(
             response.cookies['session'], 'native-discover-reads-secret', max_age=31_536_000
         )

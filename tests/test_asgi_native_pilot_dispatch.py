@@ -1657,6 +1657,7 @@ def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monke
     assert head.status_code == 200 and head.content == b''
     cookie = response.cookies.get('session')
     assert cookie
+    assert 'SameSite=Lax' in response.headers['set-cookie']
     with app.test_request_context(headers={'Cookie': f'session={cookie}'}):
         validate_csrf(response.json()['csrf_token'])
 

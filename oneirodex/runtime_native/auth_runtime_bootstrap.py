@@ -94,7 +94,7 @@ def member_auth_runtime_bootstrap(
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
     return response
