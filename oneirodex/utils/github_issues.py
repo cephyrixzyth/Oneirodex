@@ -5,11 +5,34 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
 
 MAX_GITHUB_RESPONSE_BYTES = 64 * 1024
+
+
+class _GitHubRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep the support token on GitHub when following repository renames."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urlsplit(newurl)
+        if (
+            target.scheme.lower() != 'https'
+            or target.hostname is None
+            or target.hostname.lower() != 'api.github.com'
+            or target.port not in (None, 443)
+            or target.username is not None
+            or target.password is not None
+        ):
+            raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_github_request(req, *, timeout: int):
+    opener = urllib.request.build_opener(_GitHubRedirectHandler)
+    return opener.open(req, timeout=timeout)
 
 
 def support_github_config() -> tuple[str | None, str]:
@@ -74,7 +97,7 @@ def create_github_issue(*, title: str, body: str, labels: list[str] | None = Non
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with _open_github_request(req, timeout=20) as resp:
             raw = resp.read(MAX_GITHUB_RESPONSE_BYTES + 1)
         if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
             return {'ok': False, 'error': 'GitHub API response exceeded the size limit'}

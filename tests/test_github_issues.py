@@ -1,8 +1,19 @@
 """GitHub Issues helper + support ticket create (token missing → skipped)."""
 
+import io
 from unittest.mock import patch
 
-from oneirodex.utils.github_issues import build_issue_body, create_github_issue, support_github_config
+import pytest
+import urllib.error
+import urllib.request
+
+from oneirodex.utils.github_issues import (
+    _GitHubRedirectHandler,
+    _open_github_request,
+    build_issue_body,
+    create_github_issue,
+    support_github_config,
+)
 
 
 def test_build_issue_body_includes_fields():
@@ -50,7 +61,7 @@ def test_create_github_issue_posts_when_token_set(monkeypatch):
         def read(self, size=-1):
             return b'{"number": 42, "html_url": "https://github.com/cephyrixzyth/oneirodex/issues/42"}'[:size]
 
-    with patch('oneirodex.utils.github_issues.urllib.request.urlopen', return_value=Resp()):
+    with patch('oneirodex.utils.github_issues._open_github_request', return_value=Resp()):
         result = create_github_issue(title='hello', body='world', labels=['support'])
     assert result['ok'] is True
     assert result['number'] == 42
@@ -73,7 +84,50 @@ def test_create_github_issue_rejects_oversized_provider_response(monkeypatch):
             assert size == MAX_GITHUB_RESPONSE_BYTES + 1
             return b'x' * size
 
-    with patch('oneirodex.utils.github_issues.urllib.request.urlopen', return_value=Resp()):
+    with patch('oneirodex.utils.github_issues._open_github_request', return_value=Resp()):
         result = create_github_issue(title='hello', body='world')
 
     assert result == {'ok': False, 'error': 'GitHub API response exceeded the size limit'}
+
+
+def test_github_redirect_handler_allows_same_host_repo_rename_and_keeps_token():
+    req = urllib.request.Request(
+        'https://api.github.com/repos/old/repo/issues',
+        headers={'Authorization': 'Bearer test-token'},
+        data=b'{}',
+        method='POST',
+    )
+    redirected = _GitHubRedirectHandler().redirect_request(
+        req, None, 301, 'Moved', {}, 'https://api.github.com/repos/new/repo/issues'
+    )
+
+    assert redirected.get_method() == 'GET'
+    assert redirected.get_header('Authorization') == 'Bearer test-token'
+
+
+@pytest.mark.parametrize('url', [
+    'http://api.github.com/repos/new/repo/issues',
+    'https://api.github.com.evil.example/repos/new/repo/issues',
+    'https://api.github.com@evil.example/repos/new/repo/issues',
+    'https://api.github.com:444/repos/new/repo/issues',
+])
+def test_github_redirect_handler_rejects_non_api_origin(url):
+    req = urllib.request.Request(
+        'https://api.github.com/repos/old/repo/issues',
+        headers={'Authorization': 'Bearer test-token'},
+        data=b'{}',
+        method='POST',
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as raised:
+        _GitHubRedirectHandler().redirect_request(req, io.BytesIO(), 301, 'Moved', {}, url)
+    raised.value.close()
+
+
+def test_open_github_request_uses_restricted_redirect_handler():
+    req = urllib.request.Request('https://api.github.com/repos/owner/repo/issues')
+    with patch('oneirodex.utils.github_issues.urllib.request.build_opener') as opener:
+        _open_github_request(req, timeout=20)
+
+    opener.assert_called_once_with(_GitHubRedirectHandler)
+    opener.return_value.open.assert_called_once_with(req, timeout=20)
