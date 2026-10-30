@@ -172,7 +172,9 @@ export function DeleteLibrariesModal({
         <div>
           <h2 id={titleId}>{single ? 'Delete library' : `Delete ${targets.length} libraries`}</h2>
           <p className="od-admin-lede">
-            This removes the selected library records and cannot be undone.
+            {single
+              ? 'This removes the library record and cannot be undone.'
+              : 'This removes the selected library records and cannot be undone.'}
           </p>
         </div>
         <Button
