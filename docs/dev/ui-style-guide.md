@@ -31,6 +31,11 @@ already follows it. Unresolved page findings remain in the
 
 Use the shared field and button primitives for file uploads, settings and other forms. Multipart uploads go through the shared browser requester without setting `Content-Type` manually, so the browser supplies the form boundary; retain server-side type, size and content validation. Destructive actions use the shared named confirmation dialog, explain what changes, and keep Cancel as a no-op. Pages preserve a visible loading, failure/Retry, empty and success state.
 
+Related admin settings forms should use the same `.od-admin-panel` surface,
+padding and action hierarchy. A different grouping or container needs a clear
+workflow or accessibility reason recorded with the page review; avoid leaving a
+peer settings form as an unframed exception.
+
 ## Source of truth and package boundary
 
 `frontend/shared` is the private npm workspace package `@oneirodex/ui` (currently

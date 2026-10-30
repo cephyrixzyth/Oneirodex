@@ -5,6 +5,13 @@ and `docs/media/` is produced by four scripts against a **throwaway local
 instance**. Nothing here is a mock-up: if a surface cannot be photographed
 honestly it is skipped and the run says so.
 
+For a focused parity fix, a screenshot may also come from an isolated local
+staging image when the dedicated capture database is unavailable. Record the
+backend image and frontend bundle identity in the private evidence; verify the
+settings are empty or synthetic and mask any non-empty credential controls
+before copying a screenshot into `docs/media/`. This exception does not refresh
+the README product slots unless a matching slot is intentionally replaced.
+
 | Script | Produces |
 |---|---|
 | [`scripts/serve_capture.py`](../../../scripts/serve_capture.py) | the instance: scratch DB `oneirodexcapture`, `.env.capture.local`, admin `admin` / member `mira`, five legal ROMs, Art-studio covers, two-voice chat history, uvicorn on `:5006` |
@@ -13,6 +20,8 @@ honestly it is skipped and the run says so.
 | [`scripts/render_readme_art.py`](../../../scripts/render_readme_art.py) | `hero-banner.png` (Discover framed on the theme background), `h-*.svg` section headers, `card-*.svg` feature cards, `poster-*.png` video tiles — all from the theme tokens and the shared rail icons |
 
 ## Recipe
+
+**2026-10-30 IGDB surface fix:** `admin-igdb-settings.png` was refreshed from the isolated current staging image after IGDB adopted the shared admin panel surface. The capture records the exact backend and frontend bundle in private evidence `.artifacts/parity-v1.1.8/igdb-panel-r1437/evidence.json`; both viewports had no credential values, so the screenshot shows the empty fields without masks. The temporary bundle was restored and `/awake` returned 200. The dedicated capture DB was not available on this host. No README slot was changed.
 
 **Targeted admin refresh:** 2026-10-26 — `admin-smtp-settings.png` and `admin-igdb-settings.png` were refreshed from exact-image current captures after settings action-label, order, sizing, field-label casing, and accessibility-name parity changes. The scan workspace was separately replayed against v1.1.8/current R1210 at desktop and mobile; its paired screenshots and route evidence are in `.artifacts/parity-v1.1.8/scan-workspace-r1213-exact.json`. Admin Discovery Sections was also recaptured with synthetic shelves at desktop and mobile against the same pinned images; those paired QA screenshots are in `.artifacts/parity-v1.1.8/discovery-admin-r1217-exact.json`. The Admin help direct-entry/refresh path was rechecked on those images, with its paired screenshots in `.artifacts/parity-v1.1.8/admin-help-r1218-exact.json`. The admin navigation/settings transition replay is recorded in `.artifacts/parity-v1.1.8/admin-navigation-r1219-exact.json`; QA screenshots there also did not replace README media. The Discover first/last edge-wrap replay against the exact image pair is recorded at `.artifacts/parity-v1.1.8/discover-wrap-parity-r1220-b7b6e101.json`, also outside the README media slots. Member dropdown hover contrast was refreshed on the exact image pair, with QA captures in `.artifacts/parity-v1.1.8/member-dropdown-hover-r1221-exact.json`; it did not replace README media. Discover mobile touch wrap was checked at 390px on the exact image pair; current wrap and the legacy rail-overlay limit are recorded with QA screenshots in `.artifacts/parity-v1.1.8/discover-wrap-parity-r1222-7ed31f16.json`. These were focused captures, not a rerun of all 55 surfaces.
 

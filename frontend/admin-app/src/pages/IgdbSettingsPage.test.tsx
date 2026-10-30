@@ -24,7 +24,7 @@ test('matches the legacy page title and places instructions before credentials',
   expect(instructions).not.toHaveAttribute('open')
   expect(form).not.toBeNull()
   expect(form).toHaveClass('od-igdb-form')
-  expect(form).not.toHaveClass('od-admin-panel')
+  expect(form).toHaveClass('od-admin-panel')
   expect(instructions!.compareDocumentPosition(form!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(screen.getByLabelText('Client Secret')).toHaveAttribute(
     'placeholder',
