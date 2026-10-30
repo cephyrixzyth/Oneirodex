@@ -33,91 +33,101 @@ export function DeleteLibrariesModal({
   const [typed, setTyped] = useState('')
   const [force, setForce] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [jobId, setJobId] = useState('')
+  const [jobIds, setJobIds] = useState<string[]>([])
   const [progress, setProgress] = useState<Progress | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!jobId) return undefined
+    if (!jobIds.length) return undefined
     let disposed = false
-    let source: EventSource | null = null
-    let timer: number | undefined
-    let pollFallbackStarted = false
-    const finish = (data: Progress) => {
+    const sources: EventSource[] = []
+    const timers = new Set<number>()
+    const terminal = new Set<string>()
+    const finish = (jobId: string, data: Progress) => {
       if (disposed) return
       setProgress(data)
-      if (data.status === 'completed') {
-        disposed = true
-        source?.close()
-        if (timer) window.clearTimeout(timer)
-        showToast(
-          data.message || 'Library deletion completed.',
-          Number(data.games_failed) ? 'warn' : 'success',
-        )
-        onDeleted()
-      } else if (data.status === 'error') {
-        disposed = true
-        setError(data.message || 'Library deletion failed.')
-        setBusy(false)
-        source?.close()
-        if (timer) window.clearTimeout(timer)
-      }
-    }
-    const poll = async () => {
-      try {
-        const data = await getJson(`/check_deletion_progress/${encodeURIComponent(jobId)}`)
-        if (data?.status !== 'not_found') finish(data)
-        if (!disposed && data?.status !== 'completed' && data?.status !== 'error')
-          timer = window.setTimeout(() => void poll(), 1000)
-      } catch (cause) {
-        if (!disposed) {
-          setError(errorText(cause) || 'Unable to read deletion progress.')
+      if (data.status === 'completed' || data.status === 'error') {
+        if (terminal.has(jobId)) return
+        terminal.add(jobId)
+        if (data.status === 'completed') {
+          showToast(
+            data.message || 'Library deletion completed.',
+            Number(data.games_failed) ? 'warn' : 'success',
+          )
+        } else {
+          setError(data.message || 'Library deletion failed.')
+        }
+        if (terminal.size === jobIds.length) {
+          sources.forEach((source) => source.close())
+          timers.forEach((timer) => window.clearTimeout(timer))
           setBusy(false)
+          onDeleted()
         }
       }
     }
-    const startPollingFallback = () => {
-      if (disposed || pollFallbackStarted) return
-      pollFallbackStarted = true
-      void poll()
-    }
-    try {
-      source = new EventSource(`/delete_library_progress/${encodeURIComponent(jobId)}`)
-      source.onmessage = (event) => {
+    const watch = (jobId: string) => {
+      let timer: number | undefined
+      let pollFallbackStarted = false
+      let source: EventSource | null = null
+      const poll = async () => {
         try {
-          const data = JSON.parse(event.data) as Progress
-          if (data.status !== 'connected') finish(data)
-        } catch {
-          setError('Unable to read deletion progress.')
-          setBusy(false)
-          source?.close()
+          const data = await getJson(`/check_deletion_progress/${encodeURIComponent(jobId)}`)
+          if (data?.status !== 'not_found') finish(jobId, data)
+          if (!disposed && !terminal.has(jobId)) {
+            timer = window.setTimeout(() => void poll(), 1000)
+            timers.add(timer)
+          }
+        } catch (cause) {
+          if (!disposed) {
+            setError(errorText(cause) || 'Unable to read deletion progress.')
+            setBusy(false)
+          }
         }
       }
-      source.onerror = () => {
-        source?.close()
-        source = null
+      const startPollingFallback = () => {
+        if (disposed || pollFallbackStarted) return
+        pollFallbackStarted = true
+        void poll()
+      }
+      try {
+        source = new EventSource(`/delete_library_progress/${encodeURIComponent(jobId)}`)
+        sources.push(source)
+        source.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as Progress
+            if (data.status !== 'connected') finish(jobId, data)
+          } catch {
+            setError('Unable to read deletion progress.')
+            setBusy(false)
+            source?.close()
+          }
+        }
+        source.onerror = () => {
+          source?.close()
+          source = null
+          startPollingFallback()
+        }
+        // Poll while the stream connects so a quiet EventSource cannot leave a
+        // deletion job unobserved.
+        startPollingFallback()
+      } catch {
         startPollingFallback()
       }
-      // The endpoint can keep the connection pending without dispatching an
-      // EventSource `open` or `message` event. Poll while the stream connects
-      // so completed jobs cannot leave the modal stuck indefinitely.
-      startPollingFallback()
-    } catch {
-      startPollingFallback()
     }
+    jobIds.forEach(watch)
     return () => {
       disposed = true
-      source?.close()
-      if (timer) window.clearTimeout(timer)
+      sources.forEach((source) => source.close())
+      timers.forEach((timer) => window.clearTimeout(timer))
     }
-  }, [jobId, onDeleted])
+  }, [jobIds, onDeleted])
 
   useEffect(() => {
     if (targets) {
       setTyped('')
       setForce(false)
       setBusy(false)
-      setJobId('')
+      setJobIds([])
       setProgress(null)
       setError('')
     }
@@ -147,9 +157,11 @@ export function DeleteLibrariesModal({
         : Array.isArray(result.data?.results)
           ? result.data.results
           : []
-      const first = jobs.find((job: { job_id?: unknown }) => job?.job_id)
-      if (first?.job_id) {
-        setJobId(String(first.job_id))
+      const ids = jobs
+        .map((job: { job_id?: unknown }) => job?.job_id)
+        .filter((jobId: unknown): jobId is string => typeof jobId === 'string' && Boolean(jobId))
+      if (ids.length) {
+        setJobIds(ids)
         showToast(
           result.data?.message || `Delete started for ${targets.length} libraries.`,
           'success',
@@ -231,9 +243,9 @@ export function DeleteLibrariesModal({
         </label>
       ) : null}
       {error ? <PageStatus error={error} errorMessage="Deletion failed." /> : null}
-      {jobId ? (
+      {jobIds.length ? (
         <PageStatus announcement="status" className={'od-delete-libraries__progress'}>
-          <p>{progress?.message || 'Deleting libraries…'}</p>
+          <p>{progress?.message || `Deleting libraries… (${jobIds.length} jobs)`}</p>
           {progress?.current_game ? (
             <p className="od-delete-libraries__current-game">{progress.current_game}</p>
           ) : null}
@@ -252,7 +264,7 @@ export function DeleteLibrariesModal({
           disabled={busy || !valid}
           onClick={() => void confirmDelete()}
         >
-          {jobId ? 'Deleting…' : busy ? 'Starting…' : 'Confirm delete'}
+          {jobIds.length ? 'Deleting…' : busy ? 'Starting…' : 'Confirm delete'}
         </Button>
       </footer>
     </Modal>

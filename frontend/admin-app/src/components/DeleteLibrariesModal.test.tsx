@@ -107,3 +107,45 @@ test('polls completion while the EventSource sends no progress events', async ()
     vi.unstubAllGlobals()
   }
 })
+
+test('tracks every job started by a batch delete before refreshing the library list', async () => {
+  eventSources.length = 0
+  vi.mocked(getJson).mockReset()
+  vi.mocked(postJsonResult).mockReset()
+  vi.stubGlobal('EventSource', FakeEventSource)
+  const onDeleted = vi.fn()
+  vi.mocked(postJsonResult).mockResolvedValue({
+    ok: true,
+    data: {
+      jobs: [{ job_id: 'delete-job-1' }, { job_id: 'delete-job-2' }],
+    },
+  } as Awaited<ReturnType<typeof postJsonResult>>)
+  vi.mocked(getJson).mockResolvedValue({ status: 'completed', message: 'One library deleted.' })
+
+  try {
+    render(
+      <DeleteLibrariesModal
+        targets={[
+          { uuid: 'library-1', name: 'Synthetic Library 1' },
+          { uuid: 'library-2', name: 'Synthetic Library 2' },
+        ]}
+        onClose={vi.fn()}
+        onDeleted={onDeleted}
+      />,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'DELETE 2 LIBRARIES' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+
+    await waitFor(() => expect(eventSources).toHaveLength(2))
+    await waitFor(() => {
+      expect(getJson).toHaveBeenCalledWith('/check_deletion_progress/delete-job-1')
+      expect(getJson).toHaveBeenCalledWith('/check_deletion_progress/delete-job-2')
+    })
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledOnce())
+    expect(eventSources.map((source) => source.close)).toHaveLength(2)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
