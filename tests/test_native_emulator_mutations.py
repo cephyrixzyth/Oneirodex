@@ -303,6 +303,10 @@ def test_cheat_list_download_and_create_keep_legacy_shapes(native):
     assert downloaded.content == b'cheat'
     assert head.status_code == 200 and head.content == b''
     assert downloaded.headers['content-disposition'].endswith('filename="codes.cht"')
+    assert downloaded.headers['cache-control'] == 'no-cache'
+    assert downloaded.headers['content-length'] == str(len(downloaded.content))
+    assert head.headers['cache-control'] == 'no-cache'
+    assert head.headers['content-length'] == str(len(b'cheat'))
     assert created.status_code == 201 and created.json()['name'] == 'created.cht'
     assert ('create_cheat', 'game-1', 'new', [{'code': 'AA'}], None) in data.calls
 
@@ -399,8 +403,23 @@ def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     assert listing.json()['saves'][0]['is_state'] is True
     assert listing.json()['csrf_token']
     assert download.content == b'bytes'
+    assert download.headers['cache-control'] == 'no-cache'
+    assert download.headers['content-length'] == str(len(download.content))
     assert deleted.status_code == 404
     assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes') in data.calls
+
+
+def test_save_options_match_legacy_allow_header(native):
+    _app, api, _data, _user = native
+
+    collection = _request(api, 'OPTIONS', '/api/games/game-1/saves')
+    item = _request(api, 'OPTIONS', '/api/games/game-1/saves/auto')
+
+    assert collection.status_code == item.status_code == 200
+    assert collection.headers['allow'] == 'HEAD, GET, OPTIONS, POST'
+    assert item.headers['allow'] == 'HEAD, GET, OPTIONS, DELETE'
+    assert collection.headers['content-type'] == item.headers['content-type'] == 'text/html; charset=utf-8'
+    assert collection.content == item.content == b''
 
 
 def test_save_aggregate_quota_returns_payload_too_large(native, monkeypatch):

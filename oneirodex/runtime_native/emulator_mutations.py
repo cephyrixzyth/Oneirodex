@@ -339,9 +339,29 @@ def create_emulator_mutations_router(
     async def saves(game_uuid: str, request: Request):
         return await run(request, game_uuid, 'saves')
 
+    @router.options('/api/games/{game_uuid}/saves', include_in_schema=False)
+    async def saves_options(game_uuid: str):
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'HEAD, GET, OPTIONS, POST',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
+
     @router.api_route('/api/games/{game_uuid}/saves/{slot_name}', methods=['GET', 'DELETE', 'HEAD'])
     async def save_file(game_uuid: str, slot_name: str, request: Request):
         return await run(request, game_uuid, 'save_file', slot_name)
+
+    @router.options('/api/games/{game_uuid}/saves/{slot_name}', include_in_schema=False)
+    async def save_file_options(game_uuid: str, slot_name: str):
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'HEAD, GET, OPTIONS, DELETE',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
 
     @router.options('/api/games/{game_uuid}/pc_cheats', include_in_schema=False)
     async def pc_cheats_options(game_uuid: str):
@@ -754,7 +774,11 @@ def _download(payload, name, mime):
 
     safe_name = secure_filename(str(name or 'download')) or 'download'
     return StreamingResponse(BytesIO(payload), media_type=mime,
-                             headers={'Content-Disposition': f'attachment; filename="{safe_name}"'})
+                             headers={
+                                 'Cache-Control': 'no-cache',
+                                 'Content-Disposition': f'attachment; filename="{safe_name}"',
+                                 'Content-Length': str(len(payload)),
+                             })
 
 
 def _finish(response: Response, flask_app, request):
