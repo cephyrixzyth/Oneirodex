@@ -4,6 +4,8 @@ import { csrfHeaders, deleteJson, getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
 
+import { AdminLink } from '../components/AdminLink'
+
 const API = '/api/admin/reference-sets'
 type Platform = { id: string; label: string }
 type ReferenceSet = {
@@ -485,7 +487,7 @@ export function ReferenceSetsPage() {
               ]}
             />
           </section>
-          <a href="/admin/integrations">Back to Integrations</a>
+          <AdminLink to="/admin/integrations">Back to Integrations</AdminLink>
         </>
       ) : null}
     </Page>

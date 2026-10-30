@@ -4,6 +4,8 @@ import { getJson, putJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
 
+import { AdminLink } from '../components/AdminLink'
+
 const API = '/api/admin/server-settings'
 type Field = { key: string; label: string; type?: 'text' | 'url' | 'number'; help?: string }
 type ServerSettingsValues = Record<string, string | number | boolean | null>
@@ -304,7 +306,7 @@ export function ServerSettingsPage() {
               {group.title === 'Scan behavior' ? (
                 <p className="od-admin-hint">
                   Configure match thresholds and naming variants in{' '}
-                  <a href="/admin/scan_match">Scan / match policy</a>.
+                  <AdminLink to="/admin/scan_match">Scan / match policy</AdminLink>.
                 </p>
               ) : null}
             </fieldset>
@@ -320,7 +322,7 @@ export function ServerSettingsPage() {
           </div>
         </form>
       ) : null}
-      <a href="/admin/dashboard">Back to admin</a>
+      <AdminLink to="/admin/dashboard">Back to admin</AdminLink>
     </Page>
   )
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { confirmAction } from '@oneirodex/ui'
+
 import { useSearchParams } from 'react-router-dom'
 import { deleteJson, getJson, postJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
@@ -19,6 +20,7 @@ import { ImagesQueuePanel } from './images/ImagesQueuePanel'
 import { ImagesSingleTitlePanel } from './images/ImagesSingleTitlePanel'
 import { AdminPageActions } from '../components/AdminPageActions'
 import { Page } from '../components/Page'
+import { AdminLink } from '../components/AdminLink'
 
 function ImagesShell({ embedded, children }: { embedded: boolean; children: ReactNode }) {
   const lede = 'Pick artwork for one title and manage pending or failed downloads.'
@@ -357,17 +359,17 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
   return (
     <ImagesShell embedded={embedded}>
       <AdminPageActions label="Image page actions">
-        <a className="od-cbtn" href="/scan_management?active_tab=image_queue">
+        <AdminLink className="od-cbtn" to="/scan_management?active_tab=image_queue">
           Image review table
-        </a>
+        </AdminLink>
         {!embedded ? (
-          <a className="od-cbtn" href="/admin/art_studio">
+          <AdminLink className="od-cbtn" to="/admin/art_studio">
             Art studio
-          </a>
+          </AdminLink>
         ) : null}
-        <a className="od-cbtn" href="/admin/integrations#steamgriddb">
+        <AdminLink className="od-cbtn" to="/admin/integrations#steamgriddb">
           SteamGridDB settings
-        </a>
+        </AdminLink>
       </AdminPageActions>
 
       <ImagesSingleTitlePanel

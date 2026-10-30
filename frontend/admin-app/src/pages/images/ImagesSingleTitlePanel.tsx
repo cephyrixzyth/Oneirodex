@@ -2,6 +2,8 @@ import type { GameHit, ImageRow } from './imagesModel'
 import { ArtworkPicker } from '../../components/ArtworkPicker'
 import { Button } from '@oneirodex/ui'
 
+import { AdminLink } from '../../components/AdminLink'
+
 /** Pick one title by search and manage its images. */
 export function ImagesSingleTitlePanel({
   gameHits,
@@ -48,9 +50,9 @@ export function ImagesSingleTitlePanel({
         <Button onClick={searchGames}>Find</Button>
         {gameUuid ? <Button onClick={() => syncGameParam('', '')}>Clear target</Button> : null}
         {gameUuid ? (
-          <a className="od-btn" href={`/edit_game_images/${encodeURIComponent(gameUuid)}`}>
+          <AdminLink className="od-btn" to={`/edit_game_images/${encodeURIComponent(gameUuid)}`}>
             Edit all artwork
-          </a>
+          </AdminLink>
         ) : null}
       </div>
       {gameHits.length ? (

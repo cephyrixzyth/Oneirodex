@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+
+import { useLocation } from 'react-router-dom'
 
 import { AdminPageActions } from './AdminPageActions'
 import { findSubSection } from './navConfig'
 import { RailIcon } from './railIcons'
+import { AdminLink } from './AdminLink'
 
 const SECTION_HUBS: Record<string, { href: string; label: string }> = {
   settings: { href: '/admin/settings', label: 'All settings' },
@@ -70,7 +72,7 @@ export function SectionTopNav() {
     return (
       <AdminPageActions label="Scan pages">
         {scanPages.map((item) => (
-          <Link
+          <AdminLink
             key={item.id}
             className={`od-cbtn od-cbtn--section${scanView === item.id ? ' is-active' : ''}`}
             to={item.href}
@@ -79,7 +81,7 @@ export function SectionTopNav() {
             }
           >
             {item.label}
-          </Link>
+          </AdminLink>
         ))}
       </AdminPageActions>
     )
@@ -95,14 +97,14 @@ export function SectionTopNav() {
   return (
     <AdminPageActions label={`${here.sub.title} pages`}>
       {hub ? (
-        <Link className="od-cbtn od-cbtn--section" to={hub.href}>
+        <AdminLink className="od-cbtn od-cbtn--section" to={hub.href}>
           {hub.label}
-        </Link>
+        </AdminLink>
       ) : null}
       {here.sub.items.map((item) => {
         const active = item.to === here.item.to
         return (
-          <Link
+          <AdminLink
             ref={active ? setActiveLink : undefined}
             key={item.to}
             className={`od-cbtn od-cbtn--section${active ? ' is-active' : ''}`}
@@ -112,7 +114,7 @@ export function SectionTopNav() {
           >
             <RailIcon name={item.icon} size={16} />
             <span>{item.title}</span>
-          </Link>
+          </AdminLink>
         )
       })}
     </AdminPageActions>

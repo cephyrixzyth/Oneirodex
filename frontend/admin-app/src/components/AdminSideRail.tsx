@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+
+import { useLocation } from 'react-router-dom'
 
 import {
   ADMIN_NAV,
@@ -11,6 +12,7 @@ import {
 } from './navConfig'
 import { RailIcon } from './railIcons'
 import { showToast, signOut } from '@oneirodex/ui'
+import { AdminLink } from './AdminLink'
 
 const COLLAPSED_SECTIONS_KEY = 'od.admin.rail.collapsedSections'
 
@@ -142,7 +144,7 @@ export function AdminSideRail({
     const linkClass = active ? 'od-rail__link is-active' : 'od-rail__link'
     return (
       <li key={link.id}>
-        <Link
+        <AdminLink
           className={linkClass}
           to={link.path}
           data-rail-item={link.id}
@@ -154,7 +156,7 @@ export function AdminSideRail({
             <RailIcon name={link.id} />
           </span>
           <span className="od-rail__label">{link.label}</span>
-        </Link>
+        </AdminLink>
       </li>
     )
   }
@@ -172,10 +174,10 @@ export function AdminSideRail({
       <button type="button" className="od-rail__close" onClick={onCloseDrawer}>
         Close
       </button>
-      <Link className="od-rail__brand od-rail__brand--mark-only" to="/admin/dashboard">
+      <AdminLink className="od-rail__brand od-rail__brand--mark-only" to="/admin/dashboard">
         <span className="od-rail__mark od-brand-mark" aria-hidden="true" />
         <span className="od-rail__brand-text">Oneirodex Admin</span>
-      </Link>
+      </AdminLink>
 
       <nav id="od-primary-navigation" className="od-rail__nav" aria-label="Admin">
         {ADMIN_NAV.map((link) => {
@@ -214,7 +216,7 @@ export function AdminSideRail({
                     const groupActive = here?.sub.id === group.id && here.sectionId === link.id
                     return (
                       <li key={`${link.id}:${group.id}`}>
-                        <Link
+                        <AdminLink
                           className={
                             groupActive
                               ? 'od-rail__link od-rail__link--sub is-active'
@@ -229,7 +231,7 @@ export function AdminSideRail({
                             <RailIcon name={group.icon} />
                           </span>
                           <span className="od-rail__label">{group.title}</span>
-                        </Link>
+                        </AdminLink>
                       </li>
                     )
                   })}
@@ -239,7 +241,7 @@ export function AdminSideRail({
                     const subActive = isActiveSub(sub.href, sub.label)
                     return (
                       <li key={`${link.id}:${sub.href}:${sub.label}`}>
-                        <Link
+                        <AdminLink
                           className={
                             subActive
                               ? 'od-rail__link od-rail__link--sub is-active'
@@ -254,7 +256,7 @@ export function AdminSideRail({
                             <RailIcon name={hubIcon(sub.label)} />
                           </span>
                           <span className="od-rail__label">{sub.label}</span>
-                        </Link>
+                        </AdminLink>
                       </li>
                     )
                   })}

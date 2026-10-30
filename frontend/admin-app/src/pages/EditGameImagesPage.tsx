@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { deleteJson, getJson, postForm, postJson } from '../api/adminApi'
@@ -6,6 +7,7 @@ import { ArtworkPicker } from '../components/ArtworkPicker'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
 import './EditGameImagesPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 type GameImage = { id: number; image_type: string; url: string | null; is_downloaded: boolean }
 
@@ -126,15 +128,15 @@ export function EditGameImagesPage() {
         <a className="od-cbtn" href={`/game/${encodeURIComponent(gameUuid)}`}>
           Back to details
         </a>
-        <a className="od-cbtn" href={`/game_edit/${encodeURIComponent(gameUuid)}`}>
+        <AdminLink className="od-cbtn" to={`/game_edit/${encodeURIComponent(gameUuid)}`}>
           Edit details
-        </a>
-        <a
+        </AdminLink>
+        <AdminLink
           className="od-cbtn"
-          href={`/admin/images?game=${encodeURIComponent(gameUuid)}&name=${encodeURIComponent(title)}`}
+          to={`/admin/images?game=${encodeURIComponent(gameUuid)}&name=${encodeURIComponent(title)}`}
         >
           Art &amp; images
-        </a>
+        </AdminLink>
         <Button
           className="od-btn--secondary"
           onClick={() => void refreshFromProvider()}

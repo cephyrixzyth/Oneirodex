@@ -101,9 +101,9 @@ export function ManualIdentifyPage() {
         setOptions(data as Options)
         setForm((current) => ({
           ...current,
-          name: current.name || (!editing
-            ? suggestedNameFromPath(current.full_disk_path, data.file_extensions)
-            : ''),
+          name:
+            current.name ||
+            (!editing ? suggestedNameFromPath(current.full_disk_path, data.file_extensions) : ''),
           library_uuid: current.library_uuid || data.libraries[0]?.uuid || '',
           category: current.category || data.categories?.[0]?.value || '',
           status: current.status || data.statuses?.[0]?.value || '',
@@ -575,9 +575,9 @@ export function ManualIdentifyPage() {
           </div>
         </form>
         {providerNotice ? (
-          <div className="od-manual-identify__provider-note" role="status">
+          <PageStatus announcement="status" className="od-manual-identify__provider-note">
             {providerNotice}
-          </div>
+          </PageStatus>
         ) : null}
         {providerError ? (
           <PageStatus announcement="alert" className="od-manual-identify__error">

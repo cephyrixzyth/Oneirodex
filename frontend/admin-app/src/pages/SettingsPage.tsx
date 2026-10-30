@@ -1,8 +1,10 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
+
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { SETTINGS_GROUPS } from '../components/navConfig'
 import { RailIcon } from '../components/railIcons'
+import { AdminLink } from '../components/AdminLink'
 
 interface ModuleStatusEntry {
   on?: boolean
@@ -96,7 +98,7 @@ export function SettingsPage() {
             <ul className="od-settings-list">
               {group.items.map((item) => (
                 <li key={item.to}>
-                  <a className="od-settings-row" href={item.to}>
+                  <AdminLink className="od-settings-row" to={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}
                     </span>
@@ -104,7 +106,7 @@ export function SettingsPage() {
                       <ModuleBadge status={moduleStatus?.[item.statusKey]} />
                     ) : null}
                     <span className="od-settings-row__blurb">{item.blurb}</span>
-                  </a>
+                  </AdminLink>
                 </li>
               ))}
             </ul>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from './DataTable'
+import { AdminLink } from './AdminLink'
 
 type ProposalCandidate = { igdb_id?: number | string; name?: string; score?: number }
 
@@ -178,9 +179,9 @@ export function LibraryProposalsPanel() {
                 {approved.map((item) => (
                   <li key={item.href}>
                     {item.name} —{' '}
-                    <a className="od-cbtn" href={item.href}>
+                    <AdminLink className="od-cbtn" to={item.href}>
                       Continue identify
-                    </a>
+                    </AdminLink>
                   </li>
                 ))}
               </ul>

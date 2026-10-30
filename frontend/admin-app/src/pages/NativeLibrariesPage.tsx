@@ -8,16 +8,18 @@ import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
 import { CreateLibraryForm } from '../components/CreateLibraryForm'
+
 import { useNavigate } from 'react-router-dom'
+import { AdminLink } from '../components/AdminLink'
 
 export function NativeLibraryAddPage() {
   const navigate = useNavigate()
   return (
     <Page title="Create library">
       <div className="od-admin-panel__toolbar">
-        <a className="od-cbtn" href="/libraries">
+        <AdminLink className="od-cbtn" to="/libraries">
           Back to libraries
-        </a>
+        </AdminLink>
       </div>
       <CreateLibraryForm onComplete={() => navigate('/libraries')} />
     </Page>
@@ -33,9 +35,9 @@ export function NativeLibrariesPage() {
       <LibrariesPanel
         managementActions={
           <>
-            <a className="od-cbtn" href="/admin/scan-controls">
+            <AdminLink className="od-cbtn" to="/admin/scan-controls">
               Start or schedule a scan
-            </a>
+            </AdminLink>
             <Button
               type="button"
               className="od-btn--accent"
@@ -44,9 +46,9 @@ export function NativeLibrariesPage() {
             >
               {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
             </Button>
-            <a className="od-cbtn" href="/admin/scan-jobs">
+            <AdminLink className="od-cbtn" to="/admin/scan-jobs">
               Scan jobs
-            </a>
+            </AdminLink>
           </>
         }
       />

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+
+import { useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { DataTable } from '../components/DataTable'
 import { errorText } from '../utils/errorText'
 import './NewsletterPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 type Entry = {
   id: number
@@ -169,7 +171,7 @@ export function NewsletterPage() {
               </div>
             </section>
           ) : null}
-          <Link to="/admin/newsletter">Back to newsletters</Link>
+          <AdminLink to="/admin/newsletter">Back to newsletters</AdminLink>
         </>
       ) : data ? (
         <>
@@ -178,14 +180,14 @@ export function NewsletterPage() {
               <strong>Newsletter sending is not ready.</strong>
               {!data.newsletter_enabled ? (
                 <p>
-                  Enable newsletters in <Link to="/admin/new_server_settings">Server settings</Link>
-                  .
+                  Enable newsletters in{' '}
+                  <AdminLink to="/admin/new_server_settings">Server settings</AdminLink>.
                 </p>
               ) : null}
               {!data.smtp_ready ? (
                 <p>
                   Configure an enabled server and sender in{' '}
-                  <Link to="/admin/smtp_settings">SMTP settings</Link>.
+                  <AdminLink to="/admin/smtp_settings">SMTP settings</AdminLink>.
                 </p>
               ) : null}
               <p>You can still review newsletter history.</p>
@@ -271,9 +273,12 @@ export function NewsletterPage() {
                   key: 'action',
                   label: 'Action',
                   render: (row) => (
-                    <Link to={`/admin/newsletter/${row.id}`} aria-label={`View ${row.subject}`}>
+                    <AdminLink
+                      to={`/admin/newsletter/${row.id}`}
+                      aria-label={`View ${row.subject}`}
+                    >
                       View
-                    </Link>
+                    </AdminLink>
                   ),
                 },
               ]}

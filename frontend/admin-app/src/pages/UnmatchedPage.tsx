@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PageStatus } from '@oneirodex/ui'
 import { DupeGlance } from '../components/DupeGlance'
 import { OpenPathModal } from '../components/OpenPathModal'
 import { Page } from '../components/Page'
 import './UnmatchedPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 interface PathModalState {
   path?: string
@@ -33,7 +35,7 @@ export function UnmatchedPage() {
       lede="Review unmatched and duplicate folders, compare candidates, and apply a correction."
     >
       <div className="od-admin-actions-row">
-        <a href="/admin/scan-jobs">Return to scan jobs</a>
+        <AdminLink to="/admin/scan-jobs">Return to scan jobs</AdminLink>
       </div>
       {linkSuccess ? (
         <PageStatus announcement="status" className="od-unmatched__success">

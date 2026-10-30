@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+
+import { useLocation } from 'react-router-dom'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useScanControls, type Schedule } from './useScanControls'
 import './ScanControlsPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 export function ScanControlsPage() {
   const { hash, search } = useLocation()
@@ -88,9 +90,7 @@ export function ScanControlsPage() {
     browseParts,
   } = useScanControls()
   useEffect(() => {
-    const sectionId =
-      hash.slice(1) ||
-      (activeTab === 'manual' ? 'manual-identify' : '')
+    const sectionId = hash.slice(1) || (activeTab === 'manual' ? 'manual-identify' : '')
     if (!['automatic-scan', 'manual-identify'].includes(sectionId)) return
     const target = document.getElementById(sectionId)
     if (!target) return
@@ -139,9 +139,9 @@ export function ScanControlsPage() {
             <h2 id="scan-no-libraries">No libraries yet</h2>
             <p>Add a library before starting automatic or manual scans.</p>
           </div>
-          <Link className="od-btn od-btn--secondary" to="/libraries">
+          <AdminLink className="od-btn od-btn--secondary" to="/libraries">
             Create your first library
-          </Link>
+          </AdminLink>
         </section>
       ) : null}
       <form id="automatic-scan" className="od-admin-panel od-scan-controls" onSubmit={submit}>
@@ -375,7 +375,7 @@ export function ScanControlsPage() {
                 Manual identification needs write access to the selected game folders when local
                 metadata files are enabled. Grant Oneirodex write access or turn off “Write metadata
                 file on manual ID” in Server Settings.{' '}
-                <a href="/admin/new_server_settings">Open Server Settings</a>
+                <AdminLink to="/admin/new_server_settings">Open Server Settings</AdminLink>
               </p>
             ) : null}
           </>
@@ -415,9 +415,9 @@ export function ScanControlsPage() {
                         <span title={row.full_path}>{row.full_path}</span>
                       </td>
                       <td>
-                        <a className="od-cbtn" href={`/add_game_manual?${params}`}>
+                        <AdminLink className="od-cbtn" to={`/add_game_manual?${params}`}>
                           Identify
-                        </a>{' '}
+                        </AdminLink>{' '}
                         <Button
                           type="button"
                           className="od-btn--secondary"

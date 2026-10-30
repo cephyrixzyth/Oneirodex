@@ -4,6 +4,7 @@ import { csrfHeaders, getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { AdminPageActions } from '../components/AdminPageActions'
 import { OpenPathModal } from '../components/OpenPathModal'
+
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   detectLeafType,
@@ -11,6 +12,7 @@ import {
   isGarbageScaffolding,
 } from '../components/unmatchedTriage'
 import './ScanUnmatchedPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 type UnmatchedRow = {
   id: string | number
@@ -1143,9 +1145,9 @@ export function ScanUnmatchedPage() {
                         >
                           Open path
                         </Button>
-                        <a
+                        <AdminLink
                           className="od-btn"
-                          href={`/add_game_manual?${new URLSearchParams({
+                          to={`/add_game_manual?${new URLSearchParams({
                             full_disk_path: String(row.folder_path || ''),
                             library_uuid: String(row.library_uuid || ''),
                             name: String(
@@ -1161,7 +1163,7 @@ export function ScanUnmatchedPage() {
                           })}`}
                         >
                           Fix search
-                        </a>
+                        </AdminLink>
                         {row.status === 'Unmatched' ||
                         row.status === 'Pending' ||
                         row.status === 'Duplicate' ? (

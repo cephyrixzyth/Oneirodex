@@ -11,6 +11,8 @@ import { PM_IGNORE } from '../components/formIgnore'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
+import { AdminLink } from '../components/AdminLink'
+
 const ROLES = ['user', 'librarian', 'child', 'admin']
 
 interface AdminUser {
@@ -124,15 +126,15 @@ export function UsersPage() {
       </p>
 
       <AdminPageActions label="User actions">
-        <a className="od-btn" href="/admin/invites">
+        <AdminLink className="od-btn" to="/admin/invites">
           Invites
-        </a>
-        <a className="od-btn" href="/admin/support">
+        </AdminLink>
+        <AdminLink className="od-btn" to="/admin/support">
           Support inbox
-        </a>
-        <a className="od-btn" href="/admin/manage_invites">
+        </AdminLink>
+        <AdminLink className="od-btn" to="/admin/manage_invites">
           Invite quotas
-        </a>
+        </AdminLink>
       </AdminPageActions>
 
       <CreateUserForm onCreated={load} title="Create user" />

@@ -6,6 +6,8 @@ import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 import './ThemesPage.css'
 
+import { AdminLink } from '../components/AdminLink'
+
 type Theme = {
   folder: string
   name: string
@@ -186,10 +188,7 @@ export function ThemesPage() {
 
     for (const motifId of renderer.CATALOGUE) {
       const motif = loadingConfig?.catalogue.find((row) => row.id === motifId)
-      const node = renderer.buildNode(
-        motifId,
-        'od-loading-motif--sm od-loading-motif--preview',
-      )
+      const node = renderer.buildNode(motifId, 'od-loading-motif--sm od-loading-motif--preview')
       node.setAttribute('tabindex', '0')
       node.setAttribute('title', motif?.name || motifId)
       node.setAttribute('aria-label', motif?.name || motifId)
@@ -305,7 +304,9 @@ export function ThemesPage() {
               ref={motifPreviewRef}
               className="od-themes-motif-preview"
               role="group"
-              aria-label={mode === 'lock' ? 'Selected loading motif preview' : 'Rotating motif previews'}
+              aria-label={
+                mode === 'lock' ? 'Selected loading motif preview' : 'Rotating motif previews'
+              }
             />
             <div className="od-admin-actions-row">
               <Button disabled={busy || (mode === 'lock' && !iconId)} onClick={saveLoadingIcon}>
@@ -392,9 +393,9 @@ export function ThemesPage() {
               <Button variant="danger" disabled={busy} onClick={resetThemes}>
                 Reset Default Themes
               </Button>
-              <a className="od-btn" href="/admin/themes/readme">
+              <AdminLink className="od-btn" to="/admin/themes/readme">
                 Theme authoring guide
-              </a>
+              </AdminLink>
             </div>
           </section>
         </>

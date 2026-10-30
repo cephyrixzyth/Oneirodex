@@ -8,6 +8,7 @@ import {
 } from 'react'
 
 import { buildAdminCommands, filterAdminCommands } from './adminCommands'
+import { AdminLink } from './AdminLink'
 import './AdminCommandPalette.css'
 
 /**
@@ -18,8 +19,7 @@ import './AdminCommandPalette.css'
  * list this small is not worth a new package plus its bundle weight — the whole
  * behaviour is under a hundred lines and stays in our control.
  *
- * Navigation is a full page load (`window.location`), not a router push: most
- * admin routes are still Jinja-rendered, so the React router cannot reach them.
+ * Admin destinations stay inside the React shell through the shared AdminLink.
  */
 export default function AdminCommandPalette() {
   const [open, setOpen] = useState(false)
@@ -117,9 +117,9 @@ export default function AdminCommandPalette() {
           )}
           {results.slice(0, 60).map((command, index) => (
             <li key={command.id}>
-              <a
+              <AdminLink
                 className="od-admin-palette__row"
-                href={command.href}
+                to={command.href}
                 role="option"
                 aria-selected={index === active}
                 data-active={index === active}
@@ -127,7 +127,7 @@ export default function AdminCommandPalette() {
               >
                 <span className="od-admin-palette__label">{command.label}</span>
                 <span className="od-admin-palette__section">{command.section}</span>
-              </a>
+              </AdminLink>
             </li>
           ))}
         </ul>

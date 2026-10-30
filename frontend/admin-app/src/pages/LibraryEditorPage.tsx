@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, csrfToken, putForm } from '../api/adminApi'
@@ -6,6 +7,7 @@ import { Page } from '../components/Page'
 import { LibraryImageCropper } from '../components/LibraryImageCropper'
 import './LibraryEditorPage.css'
 import { showToast } from '../utils/toast'
+import { AdminLink } from '../components/AdminLink'
 
 type LibraryEditorModel = {
   uuid: string
@@ -106,9 +108,9 @@ export function LibraryEditorPage() {
       lede="Update the library name, platform, scan depth, watch preference, or hero image."
     >
       <div className="od-admin-panel__toolbar">
-        <a className="od-cbtn" href="/libraries">
+        <AdminLink className="od-cbtn" to="/libraries">
           Back to libraries
-        </a>
+        </AdminLink>
       </div>
       <PageStatus
         loading={loading}

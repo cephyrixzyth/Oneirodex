@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Modal } from '@oneirodex/ui'
+import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import './LibraryImageCropper.css'
 
 interface CropperInstance {
@@ -259,9 +259,11 @@ export function LibraryImageCropper({
         {imageUrl ? <img ref={imageRef} src={imageUrl} alt="Crop library image" /> : null}
       </div>
       {error ? (
-        <p className="od-library-image-cropper__error" role="alert">
-          {error}
-        </p>
+        <PageStatus
+          error={error}
+          errorMessage={error}
+          className="od-library-image-cropper__error"
+        />
       ) : null}
       <div className="od-library-image-cropper__controls" aria-label="Image crop controls">
         <Button

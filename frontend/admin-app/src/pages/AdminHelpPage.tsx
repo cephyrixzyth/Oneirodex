@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
 import { Page } from '../components/Page'
+import { AdminLink } from '../components/AdminLink'
 
 const ADMIN_HELP_LINKS = [
   {
@@ -44,10 +44,10 @@ export function AdminHelpPage() {
         <ul className="od-settings-list">
           {ADMIN_HELP_LINKS.map((item) => (
             <li key={item.href}>
-              <Link className="od-settings-row" to={item.href}>
+              <AdminLink className="od-settings-row" to={item.href}>
                 <span className="od-settings-row__title">{item.title}</span>
                 <span className="od-admin-lede">{item.description}</span>
-              </Link>
+              </AdminLink>
             </li>
           ))}
         </ul>

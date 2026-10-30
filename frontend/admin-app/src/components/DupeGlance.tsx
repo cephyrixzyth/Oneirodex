@@ -28,6 +28,8 @@ import {
   normalizeTransforms,
 } from './dupeGlance/DupeCompare'
 
+import { AdminLink } from './AdminLink'
+
 export type { UnmatchedFolderRow } from './dupeGlance/dupeGlanceTypes'
 export type { TransformStep } from './dupeGlance/DupeCompare'
 export { formatMatchScore, formatWhyUnmatched, normalizeTransforms } from './dupeGlance/DupeCompare'
@@ -398,13 +400,13 @@ export const DupeGlance = memo(function DupeGlance({
                     >
                       Open path
                     </Button>
-                    <a
+                    <AdminLink
                       className="od-btn"
-                      href={`/add_game_manual?full_disk_path=${encodeURIComponent(String(row.folder_path || ''))}&library_uuid=${encodeURIComponent(String(row.library_uuid || ''))}&name=${encodeURIComponent(String(resolveSearchName(row) || folderBasename(row.folder_path) || ''))}&platform_name=${encodeURIComponent(String(row.platform_name || ''))}&platform_id=${encodeURIComponent(String(row.platform_id || ''))}&from_unmatched=true`}
+                      to={`/add_game_manual?full_disk_path=${encodeURIComponent(String(row.folder_path || ''))}&library_uuid=${encodeURIComponent(String(row.library_uuid || ''))}&name=${encodeURIComponent(String(resolveSearchName(row) || folderBasename(row.folder_path) || ''))}&platform_name=${encodeURIComponent(String(row.platform_name || ''))}&platform_id=${encodeURIComponent(String(row.platform_id || ''))}&from_unmatched=true`}
                       title="Fix search — opens manual add / IGDB search (uses Search name when set)"
                     >
                       Fix search
-                    </a>
+                    </AdminLink>
                     {canMarkKind(row.status)
                       ? markKinds.map(({ kind, label }) => (
                           <Button
