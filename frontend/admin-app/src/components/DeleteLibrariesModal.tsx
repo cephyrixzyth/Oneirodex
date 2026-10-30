@@ -42,6 +42,7 @@ export function DeleteLibrariesModal({
     let disposed = false
     let source: EventSource | null = null
     let timer: number | undefined
+    let pollFallbackStarted = false
     const finish = (data: Progress) => {
       if (disposed) return
       setProgress(data)
@@ -55,9 +56,11 @@ export function DeleteLibrariesModal({
         )
         onDeleted()
       } else if (data.status === 'error') {
+        disposed = true
         setError(data.message || 'Library deletion failed.')
         setBusy(false)
         source?.close()
+        if (timer) window.clearTimeout(timer)
       }
     }
     const poll = async () => {
@@ -72,6 +75,11 @@ export function DeleteLibrariesModal({
           setBusy(false)
         }
       }
+    }
+    const startPollingFallback = () => {
+      if (disposed || pollFallbackStarted) return
+      pollFallbackStarted = true
+      void poll()
     }
     try {
       source = new EventSource(`/delete_library_progress/${encodeURIComponent(jobId)}`)
@@ -88,10 +96,14 @@ export function DeleteLibrariesModal({
       source.onerror = () => {
         source?.close()
         source = null
-        void poll()
+        startPollingFallback()
       }
+      // The endpoint can keep the connection pending without dispatching an
+      // EventSource `open` or `message` event. Poll while the stream connects
+      // so completed jobs cannot leave the modal stuck indefinitely.
+      startPollingFallback()
     } catch {
-      void poll()
+      startPollingFallback()
     }
     return () => {
       disposed = true
