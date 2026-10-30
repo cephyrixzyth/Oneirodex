@@ -11,8 +11,8 @@ name: Desktop build
 # .msi and .rpm remain out until their native build environments are verified.
 # The current stable semver is compatible, but does not enable untested targets.
 #
-# Releases: a `v*` tag push, or a manual run with `release_tag`, attaches every
-# installer to that GitHub release (the `release` job). Nothing else creates one.
+# Releases: a `v*` tag push, or a guarded manual run with `release_tag`, attaches
+# installers to an existing GitHub release. Source/tag/version checks run first.
 
 on:
   workflow_dispatch:
@@ -255,17 +255,64 @@ jobs:
   release:
     name: attach installers to the GitHub release
     needs: build
-    # Only a tag push or an explicit release_tag publishes anything. Ordinary
-    # branch pushes and pull requests stop at workflow artifacts.
+    # Manual release builds must come from the default branch or from the
+    # exact release tag being attached. The validation step also checks that
+    # the tag version and commit match the source that produced these files.
     if: >-
       (github.event_name == 'push' && github.ref_type == 'tag') ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
+        (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+         (github.ref_type == 'tag' && github.ref_name == inputs.release_tag)))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
 
     steps:
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag and source commit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            tag="$REF_NAME"
+          else
+            tag="$RELEASE_TAG"
+          fi
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ "$tag" != "v$version" ]]; then
+            echo "::error::Release tag must be v$version to match VERSION."
+            exit 1
+          fi
+          if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+            git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+          fi
+          tag_commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [[ "$tag_commit" != "$SOURCE_SHA" ]]; then
+            echo "::error::Release tag must point to the commit used to build these installers."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor "$tag_commit" "refs/remotes/origin/$DEFAULT_BRANCH"; then
+            echo "::error::Release source must be reachable from the default branch."
+            exit 1
+          fi
+
+      - name: Confirm the GitHub release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+        run: gh release view "$RELEASE_TAG" --json tagName
+
       - name: Download every installer
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

@@ -5396,29 +5396,24 @@ class LazyASGIApp:
             from starlette.requests import Request
 
             from oneirodex.runtime_native.admin_pilot import _native_auth_backend
-            from oneirodex.runtime_native.auth_resolver import load_active_user_id
-            from oneirodex.runtime_native.request_auth import _lifetime_seconds
-            from oneirodex.runtime_native.session_compat import load_session_cookie
+            from oneirodex.runtime_native.request_auth import request_auth_context
 
             request_scope = {**scope, 'type': 'http'}
             request = Request(request_scope)
-            config = self._flask_app.config
-            session_data = load_session_cookie(
-                request.cookies.get(str(config.get('SESSION_COOKIE_NAME') or 'session')),
-                config.get('SECRET_KEY'),
-                max_age=_lifetime_seconds(config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
-                fallback_secret_keys=config.get('SECRET_KEY_FALLBACKS') or (),
-            )
-            user_id = session_data.get('_user_id')
-            if user_id is None:
-                return None
-
-            find_user, _find_token, _commit_token_touch = _native_auth_backend(self._flask_app)
+            config = dict(self._flask_app.config)
+            find_user, find_token, commit_token_touch = _native_auth_backend(self._flask_app)
             with self._native_database_scope(self._flask_app):
-                user = load_active_user_id(
-                    str(user_id), find_user, allow_legacy_id=bool(config.get('TESTING')),
+                auth = request_auth_context(
+                    request, config,
+                    find_user=find_user,
+                    find_token=find_token,
+                    commit_token_touch=commit_token_touch,
+                    login_manager=getattr(self._flask_app, 'login_manager', None),
+                    allow_bearer=False,
+                    touch_bearer=False,
+                    allow_remember=False,
                 )
-                return user.id if user is not None else None
+                return auth.user.id if auth.user is not None else None
 
         except Exception as e:
             log_system_event(

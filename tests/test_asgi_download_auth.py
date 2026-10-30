@@ -12,6 +12,7 @@ from flask import Flask
 import oneirodex
 from asgi import LazyASGIApp
 from oneirodex.runtime_native import admin_pilot, db_session
+from oneirodex.runtime_native.auth_resolver import encode_remember_cookie, session_identifier
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
@@ -41,6 +42,7 @@ def _configure_native_auth(monkeypatch, app, user, token=None):
         SECRET_KEY='download-auth-test', TESTING=False,
         SESSION_COOKIE_NAME='session',
         PERMANENT_SESSION_LIFETIME=31_536_000,
+        SESSION_PROTECTION='basic',
     )
     async def ready():
         return None
@@ -73,6 +75,65 @@ def test_signed_download_session_uses_framework_free_cookie_and_active_user_chec
     )
     assert asyncio.run(app._get_user_from_session({
         'headers': [(b'cookie', f'session={stale}'.encode('ascii'))],
+    })) is None
+
+
+def test_strong_session_protection_rejects_download_cookie_from_changed_client(monkeypatch):
+    user = _user()
+    app = LazyASGIApp()
+    _configure_native_auth(monkeypatch, app, user)
+    app._flask_app.config['SESSION_PROTECTION'] = 'strong'
+    cookie = dump_session_cookie(
+        {
+            '_user_id': '17:current-fingerprint',
+            '_id': session_identifier('192.0.2.10', 'Oneirodex test agent'),
+        },
+        app._flask_app.config['SECRET_KEY'],
+    )
+    headers = [
+        (b'cookie', f'session={cookie}'.encode('ascii')),
+        (b'user-agent', b'Oneirodex test agent'),
+    ]
+
+    assert asyncio.run(app._get_user_from_session({
+        'headers': headers,
+        'client': ('192.0.2.99', 54321),
+    })) is None
+
+
+def test_strong_session_protection_allows_download_cookie_from_same_client(monkeypatch):
+    user = _user()
+    app = LazyASGIApp()
+    _configure_native_auth(monkeypatch, app, user)
+    app._flask_app.config['SESSION_PROTECTION'] = 'strong'
+    cookie = dump_session_cookie(
+        {
+            '_user_id': '17:current-fingerprint',
+            '_id': session_identifier('192.0.2.10', 'Oneirodex test agent'),
+        },
+        app._flask_app.config['SECRET_KEY'],
+    )
+    headers = [
+        (b'cookie', f'session={cookie}'.encode('ascii')),
+        (b'user-agent', b'Oneirodex test agent'),
+    ]
+
+    assert asyncio.run(app._get_user_from_session({
+        'headers': headers,
+        'client': ('192.0.2.10', 54321),
+    })) == 17
+
+
+def test_download_session_resolver_does_not_accept_remember_cookie(monkeypatch):
+    user = _user()
+    app = LazyASGIApp()
+    _configure_native_auth(monkeypatch, app, user)
+    token = encode_remember_cookie(
+        '17:current-fingerprint', app._flask_app.config['SECRET_KEY'],
+    )
+
+    assert asyncio.run(app._get_user_from_session({
+        'headers': [(b'cookie', f'remember_token={token}'.encode('ascii'))],
     })) is None
 
 

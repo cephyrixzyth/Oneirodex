@@ -103,6 +103,21 @@ def test_admin_settings_put_validates_and_delegates_secret_write():
     assert 'secret-value' not in response.text
 
 
+def test_admin_settings_extra_field_uses_legacy_unprocessable_envelope():
+    data = FakeRetroAchievements()
+    response = make_client(data=data).put(
+        '/api/admin/integrations/retroachievements',
+        json={'username': 'household', 'unexpected': 'value'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Invalid request.'
+    assert response.json()['error_code'] == 'unprocessable'
+    assert response.json()['detail'] == {'unexpected': 'Extra inputs are not permitted'}
+    assert data.saved is None
+    assert 'value' not in response.text
+
+
 def test_member_retroachievements_settings_are_scoped_to_authenticated_member():
     data = FakeRetroAchievements()
     response = make_client(role='user', data=data).put(

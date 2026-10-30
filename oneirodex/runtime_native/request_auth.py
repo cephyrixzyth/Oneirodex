@@ -85,6 +85,7 @@ def request_auth_context(
     now: datetime | None = None,
     allow_bearer: bool = True,
     touch_bearer: bool = True,
+    allow_remember: bool = True,
 ) -> RequestAuthContext:
     """Resolve a request using Flask's session, remember, and Bearer rules.
 
@@ -140,6 +141,7 @@ def request_auth_context(
         authorization_header_name=str(config.get("AUTH_HEADER_NAME") or "Authorization"),
         allow_legacy_id=bool(config.get("TESTING")),
         touch_bearer=touch_bearer,
+        allow_remember=allow_remember,
     )
     return RequestAuthContext(
         session_data=session_data,

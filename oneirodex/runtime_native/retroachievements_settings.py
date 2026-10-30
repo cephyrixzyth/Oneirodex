@@ -178,9 +178,9 @@ def create_retroachievements_settings_router(
                         if auth.should_set_session_cookie:
                             _set_session_cookie(response, flask_app, auth)
                     except ValidationError as exc:
+                        from oneirodex.utils.validation import format_validation_errors
+                        detail = format_validation_errors(exc)
                         if operation == 'member':
-                            from oneirodex.utils.validation import format_validation_errors
-                            detail = format_validation_errors(exc)
                             # Preserve the model name exposed by the legacy
                             # validated-body decorator for non-object JSON.
                             if '__root__' in detail:
@@ -193,7 +193,7 @@ def create_retroachievements_settings_router(
                             )
                         else:
                             payload, status = api_error_payload(
-                                'Invalid RetroAchievements settings.', code='bad_request',
+                                'Invalid request.', code='unprocessable', detail=detail,
                             )
                         response = JSONResponse(payload, status_code=status)
                     except ValueError as exc:

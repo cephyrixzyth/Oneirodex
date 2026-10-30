@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+import pytest
 
 from oneirodex.runtime_native.account_avatar_upload import (
     create_account_avatar_upload_router,
@@ -111,6 +112,59 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
     assert response.headers['x-content-type-options'] == 'nosniff'
 
 
+@pytest.mark.parametrize('overflow', ['fields', 'files'])
+def test_avatar_upload_rejects_excess_multipart_parts_before_saving(overflow):
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    if overflow == 'fields':
+        response = client.post(
+            '/api/account/avatar',
+            headers=browser_headers(),
+            data={'unused_one': 'x', 'unused_two': 'y'},
+            files={'avatar': ('face.png', b'image-bytes', 'image/png')},
+        )
+    else:
+        response = client.post(
+            '/api/account/avatar',
+            headers=browser_headers(),
+            files=[
+                ('avatar', ('face.png', b'image-bytes', 'image/png')),
+                ('unused', ('unused.txt', b'x', 'text/plain')),
+            ],
+        )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+    assert data.commits == 0
+
+
+def test_avatar_upload_rejects_thousands_of_small_multipart_fields():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    boundary = 'avatar-boundary'
+    fields = [
+        f'--{boundary}\r\nContent-Disposition: form-data; name="field-{index}"\r\n\r\nx\r\n'
+        for index in range(2000)
+    ]
+    body = ''.join(fields) + (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="avatar"; '
+        'filename="face.png"\r\nContent-Type: image/png\r\n\r\nimage-bytes\r\n'
+        f'--{boundary}--\r\n'
+    )
+
+    response = client.post(
+        '/api/account/avatar',
+        headers={**browser_headers(), 'Content-Type': f'multipart/form-data; boundary={boundary}'},
+        content=body,
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+    assert data.commits == 0
+
+
 def test_missing_avatar_uses_existing_error_envelope():
     data = FakeAvatarData()
     response = make_client(data=data).post(
@@ -190,6 +244,26 @@ def test_legacy_profile_edit_post_accepts_hidden_csrf_and_redirects():
     assert response.content
     assert data.calls == [('face.png', b'image-bytes', 167)]
     assert data.commits == 1
+
+
+def test_legacy_profile_edit_rejects_excess_multipart_parts_without_saving():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    session = {'_user_id': '167:fp', '_fresh': True}
+    token = generate_csrf_token(session, SECRET)
+    client.cookies.set('session', dump_session_cookie(session, SECRET))
+
+    response = client.post(
+        '/settings_profile_edit',
+        data={'csrf_token': token, 'unused': 'x'},
+        files={'avatar': ('face.png', b'image-bytes', 'image/png')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 413
+    assert response.headers['content-type'].startswith('text/html')
+    assert data.calls == []
+    assert data.commits == 0
 
 
 def test_legacy_profile_edit_rejects_unsupported_extension_with_legacy_form_feedback():

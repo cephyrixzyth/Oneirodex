@@ -114,12 +114,14 @@ def resolve_authentication(
     authorization_header_name: str = "Authorization",
     allow_legacy_id: bool = False,
     touch_bearer: bool = True,
+    allow_remember: bool = True,
 ) -> AuthResolution:
-    """Resolve session, remember cookie, then Bearer auth in Flask-Login order.
+    """Resolve session, optional remember cookie, then optional Bearer auth.
 
     The callbacks perform all persistence operations. Token touch is committed
     exactly once only after token hash, expiry, revocation, and user-active
-    checks pass. Raw credentials are never retained in the returned result.
+    checks pass. Callers that support session cookies only can disable remember
+    resolution with ``allow_remember=False``. Raw credentials are never retained.
     """
     mode = session_protection if session_protection in {"basic", "strong"} else None
     ident = session_identifier(remote_addr, user_agent, forwarded_for)
@@ -145,7 +147,7 @@ def resolve_authentication(
             return AuthResolution(user, source="session")
 
     remember_cookie = cookies.get(remember_cookie_name)
-    has_remember_cookie = (
+    has_remember_cookie = allow_remember and (
         remember_cookie_name in cookies and session_data.get("_remember") != "clear"
     )
     if has_remember_cookie:
