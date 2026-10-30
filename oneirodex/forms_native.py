@@ -24,9 +24,9 @@ def normalize_tile_percent(raw) -> str:
 
 def stored_preference_formdata(prefs) -> dict:
     return {
-        # Match the legacy Preferences form for a user who has never visited
-        # the library and therefore has no persisted preference row.
-        'items_per_page': str(getattr(prefs, 'items_per_page', None) or 20),
+        # Match the legacy Preferences form and UserPreference model default
+        # when a user has not persisted a page-size choice yet.
+        'items_per_page': str(getattr(prefs, 'items_per_page', None) or 50),
         'default_sort': getattr(prefs, 'default_sort', None) or 'name',
         'default_sort_order': getattr(prefs, 'default_sort_order', None) or 'asc',
         'theme': getattr(prefs, 'theme', None) or 'default',
@@ -40,16 +40,8 @@ def stored_preference_formdata(prefs) -> dict:
 
 
 def preference_update_formdata(prefs, payload) -> dict:
-    """Merge a partial preferences update using the legacy POST fallback.
-
-    The visible form defaults its first page-size choice to 20, but legacy
-    partial POSTs filled omitted fields from the persisted-preference helper,
-    whose no-row page-size fallback is 50. Keep that write behavior while
-    leaving the read projection's first-run default unchanged.
-    """
+    """Merge a partial preferences update using the legacy no-row defaults."""
     values = stored_preference_formdata(prefs)
-    if prefs is None and 'items_per_page' not in payload:
-        values['items_per_page'] = '50'
     for key in values:
         if key in payload:
             raw = payload[key]

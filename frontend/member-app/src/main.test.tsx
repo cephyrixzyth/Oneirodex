@@ -98,3 +98,9 @@ test('parses SPA shell config including tileSize', () => {
   expect(config.userId).toBe(42)
   expect(config.sections).toBeUndefined()
 })
+
+test('uses the legacy page-size default when the shell omits perPage', () => {
+  const root = document.createElement('div')
+
+  expect(parseShellConfig(root).perPage).toBe(50)
+})

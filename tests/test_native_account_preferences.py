@@ -69,7 +69,7 @@ def signed_session(*, csrf=False):
 
 
 def test_unpersisted_preferences_use_legacy_page_size_default():
-    assert stored_preference_formdata(None)['items_per_page'] == '20'
+    assert stored_preference_formdata(None)['items_per_page'] == '50'
 
 
 def test_partial_update_without_preference_row_uses_legacy_save_fallback():

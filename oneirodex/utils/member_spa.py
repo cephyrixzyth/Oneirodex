@@ -113,7 +113,7 @@ def _member_root(extra: dict) -> str:
         'username': getattr(current_user, 'name', None) or '',
         'avatar': avatar_url(getattr(current_user, 'avatarpath', None)),
         'locale': (getattr(prefs, 'locale', None) if prefs else None) or 'en',
-        'per-page': configured_or_preference('user_per_page', 'items_per_page', 20),
+        'per-page': configured_or_preference('user_per_page', 'items_per_page', 50),
         'default-sort': configured_or_preference('user_default_sort', 'default_sort', 'name'),
         'default-sort-order': configured_or_preference('user_default_sort_order', 'default_sort_order', 'asc'),
         'library-count': extra.get('library_count', 0),

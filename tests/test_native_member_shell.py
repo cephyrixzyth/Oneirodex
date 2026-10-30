@@ -122,6 +122,17 @@ def test_member_shell_preserves_authenticated_spa_bootstrap_and_session(monkeypa
     assert 'image_refresh_game_uuid' not in session_data
 
 
+def test_favorites_shell_uses_legacy_page_size_when_preference_is_missing(monkeypatch):
+    user = Member()
+    user.preferences = None
+    client, _session_data = _native_client(monkeypatch, user=user)
+
+    response = client.get('/favorites')
+
+    assert response.status_code == 200
+    assert 'data-per-page="50"' in response.text
+
+
 def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
     client, _session_data = _native_client(
         monkeypatch,

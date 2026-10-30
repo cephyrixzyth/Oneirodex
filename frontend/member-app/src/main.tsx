@@ -149,7 +149,7 @@ export function parseShellConfig(rootElement: HTMLElement): MemberShellConfig {
     username: rootElement.dataset.username || '',
     avatar: rootElement.dataset.avatar || '',
     locale: rootElement.dataset.locale || 'en',
-    perPage: Number(rootElement.dataset.perPage) || 20,
+    perPage: Number(rootElement.dataset.perPage) || 50,
     defaultSort: rootElement.dataset.defaultSort || 'name',
     defaultSortOrder: rootElement.dataset.defaultSortOrder || 'asc',
     libraryCount: Number(rootElement.dataset.libraryCount) || 0,
