@@ -106,6 +106,80 @@ def test_empty_favorites_payload_is_a_normal_empty_page(monkeypatch):
     assert payload == {'games': [], 'total': 0, 'pages': 0, 'current_page': 1}
 
 
+def test_empty_favorites_http_contract_matches_wsgi_and_native_asgi(
+    app, client, db_session, configured_install, monkeypatch,
+):
+    import asyncio
+    from contextlib import nullcontext
+
+    import httpx
+    from fastapi import FastAPI
+
+    import asgi
+    from oneirodex import login_manager
+    from oneirodex.runtime_native.favorites import create_favorites_router
+    from oneirodex.runtime_native.session_compat import dump_session_cookie
+    from oneirodex.utils import client_lifecycle, global_settings
+
+    monkeypatch.setattr(global_settings, 'global_settings_row', lambda: None)
+    monkeypatch.setattr(client_lifecycle, 'load_lifecycle_map', lambda _user_id: {})
+
+    user_key = str(uuid4())
+    user = User(
+        name=f'fav-empty-{user_key[:8]}',
+        email=f'fav-empty-{user_key[:8]}@example.com',
+        password_hash='unused', role='user', user_id=user_key,
+        avatarpath='newstyle/avatar_default.jpg', state=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    with client.session_transaction() as session:
+        session['_user_id'] = str(user.id)
+        session['_fresh'] = True
+    wsgi_response = client.get('/api/favorites')
+
+    native_app = FastAPI()
+    native_app.include_router(create_favorites_router(
+        app,
+        find_user=lambda user_id: user if user_id == user.id else None,
+        find_token=lambda _prefix: None,
+        commit_token_touch=lambda _token: None,
+        load_user_id=lambda value: (
+            user if value.split(':', 1)[0] == str(user.id) else None
+        ),
+        login_manager=login_manager,
+        database_scope=lambda _flask_app: nullcontext(),
+    ))
+    asgi._install_native_api_error_handlers(native_app, app.config, app.logger)
+    native_cookie = dump_session_cookie(
+        {
+            '_user_id': f'{user.id}:{user.session_fingerprint()}',
+            '_fresh': True,
+        },
+        app.config['SECRET_KEY'],
+    )
+
+    async def get_native_response():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=native_app, raise_app_exceptions=False,
+            ),
+            base_url='http://localhost',
+        ) as native_client:
+            native_client.cookies.set('session', native_cookie)
+            return await native_client.get('/api/favorites')
+
+    from oneirodex.runtime_native.runtime_context import runtime_config_scope
+
+    with app.app_context(), runtime_config_scope(app.config):
+        native_response = asyncio.run(get_native_response())
+
+    expected = {'games': [], 'total': 0, 'pages': 0, 'current_page': 1}
+    assert wsgi_response.status_code == native_response.status_code == 200
+    assert wsgi_response.get_json() == native_response.json() == expected
+
+
 def test_favorites_pagination_clamps_page_size_and_preserves_requested_page(monkeypatch):
     from oneirodex.utils import browse_query, global_settings, client_lifecycle
 
