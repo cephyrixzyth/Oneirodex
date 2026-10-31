@@ -4,6 +4,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+from email.utils import formatdate, parsedate_to_datetime
 from urllib.parse import urlencode
 
 import httpx
@@ -11764,6 +11765,17 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
     oversized_suffix_range = _run(
         runtime, path, cookie=cookie, headers={'Range': f"bytes=-{'9' * 5000}"},
     )
+    modified_at = parsedate_to_datetime(complete.headers['last-modified']).timestamp()
+    future_if_range = formatdate(modified_at + 60, usegmt=True)
+    stale_if_range = formatdate(modified_at - 60, usegmt=True)
+    future_date_range = _run(
+        runtime, path, cookie=cookie,
+        headers={'Range': 'bytes=2-5', 'If-Range': future_if_range},
+    )
+    stale_date_range = _run(
+        runtime, path, cookie=cookie,
+        headers={'Range': 'bytes=2-5', 'If-Range': stale_if_range},
+    )
     safe_state['value'] = False
     unsafe = _run(runtime, path, cookie=cookie)
     safe_state['value'] = True
@@ -11779,10 +11791,25 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
     assert unchanged.status_code == 304
     assert invalid_range.status_code == 416
     assert invalid_range.headers['content-range'] == 'bytes */10'
+    expected_range_error = (
+        b'<!doctype html>\n<html lang=en>\n<title>416 Requested Range Not Satisfiable</title>\n'
+        b'<h1>Requested Range Not Satisfiable</h1>\n'
+        b'<p>The server cannot provide the requested range.</p>\n'
+    )
+    assert invalid_range.content == expected_range_error
+    assert invalid_range.headers['content-type'] == 'text/html; charset=utf-8'
+    assert invalid_range.headers['content-length'] == '177'
     assert oversized_range.status_code == 416
     assert oversized_range.headers['content-range'] == 'bytes */10'
+    assert oversized_range.content == expected_range_error
     assert oversized_suffix_range.status_code == 416
     assert oversized_suffix_range.headers['content-range'] == 'bytes */10'
+    assert oversized_suffix_range.content == expected_range_error
+    assert future_date_range.status_code == 206
+    assert future_date_range.content == b'2345'
+    assert future_date_range.headers['content-range'] == 'bytes 2-5/10'
+    assert stale_date_range.status_code == 200
+    assert stale_date_range.content == b'0123456789'
     assert unsafe.status_code == 403
     assert denied.status_code == 403
 

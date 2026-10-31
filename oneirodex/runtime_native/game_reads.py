@@ -762,6 +762,18 @@ def _api_error(message: str, code: str, *, detail=None):
     return JSONResponse(payload, status_code=status)
 
 
+def _range_not_satisfiable(size: int) -> Response:
+    """Use the same 416 body and headers Werkzeug's conditional sender returns."""
+    from werkzeug.exceptions import RequestedRangeNotSatisfiable
+
+    legacy_error = RequestedRangeNotSatisfiable(length=size).get_response()
+    return Response(
+        content=legacy_error.get_data(),
+        status_code=legacy_error.status_code,
+        headers=dict(legacy_error.headers),
+    )
+
+
 def _local_image_response(request, handle, path):
     """Serve the already-vetted descriptor with validators and byte ranges."""
     info = os.fstat(handle.fileno())
@@ -793,24 +805,28 @@ def _local_image_response(request, handle, path):
     start, end = 0, max(size - 1, 0)
     range_header = request.headers.get('range')
     if_range = request.headers.get('if-range')
-    if range_header and (not if_range or if_range == etag or if_range == modified):
+    honor_range = not if_range or if_range == etag or if_range == modified
+    if range_header and if_range and not honor_range:
+        try:
+            if_range_date = email.utils.parsedate_to_datetime(if_range).timestamp()
+            honor_range = int(info.st_mtime) <= int(if_range_date)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if range_header and honor_range:
         match = re.fullmatch(r'bytes=(\d*)-(\d*)', range_header.strip())
         if not match or size == 0:
             handle.close()
-            return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+            return _range_not_satisfiable(size)
         first, last = match.groups()
         if not first:
             try:
                 suffix = int(last or '0')
             except (ValueError, OverflowError):
                 handle.close()
-                return Response(
-                    status_code=416,
-                    headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'},
-                )
+                return _range_not_satisfiable(size)
             if suffix <= 0:
                 handle.close()
-                return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+                return _range_not_satisfiable(size)
             start, end = max(size - suffix, 0), size - 1
         else:
             try:
@@ -818,13 +834,10 @@ def _local_image_response(request, handle, path):
                 end = min(int(last), size - 1) if last else size - 1
             except (ValueError, OverflowError):
                 handle.close()
-                return Response(
-                    status_code=416,
-                    headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'},
-                )
+                return _range_not_satisfiable(size)
             if start >= size or end < start:
                 handle.close()
-                return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+                return _range_not_satisfiable(size)
         headers['Content-Range'] = f'bytes {start}-{end}/{size}'
         headers['Content-Length'] = str(end - start + 1)
         status = 206
