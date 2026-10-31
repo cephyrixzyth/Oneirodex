@@ -5,11 +5,15 @@ import { getJson, postJson } from '../api/adminApi'
 import { ScanUnmatchedPage } from './ScanUnmatchedPage'
 
 vi.mock('../api/adminApi', () => ({
+  csrfHeaders: vi.fn(() => ({ 'X-CSRFToken': 'test-csrf' })),
   getJson: vi.fn(),
   postJson: vi.fn(),
 }))
 
-afterEach(() => vi.resetAllMocks())
+afterEach(() => {
+  vi.resetAllMocks()
+  vi.unstubAllGlobals()
+})
 
 test('renders a paginated scan table, carries link feedback, and requests the next page', async () => {
   const allRows = Array.from({ length: 51 }, (_, index) => ({
@@ -36,6 +40,10 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
       count: 1,
     }
   })
+  const request = vi.fn(async () =>
+    ({ ok: true, json: async () => ({ message: 'Folder ignored.' }) }) as Response,
+  )
+  vi.stubGlobal('fetch', request)
 
   render(
     <MemoryRouter
@@ -96,6 +104,26 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
     'od-scan-unmatched__status-label--unmatched',
   )
   expect(within(firstRow).getByTitle('/storage/review/page-0')).toHaveTextContent('page-0')
+
+  const actions = within(firstRow).getByText('Actions')
+  fireEvent.click(actions)
+  const menu = actions.closest('details')
+  expect(menu).toHaveProperty('open', true)
+  fireEvent.click(within(firstRow).getByRole('button', { name: 'Ignore' }))
+  expect(await screen.findByText('Folder ignored.')).toBeInTheDocument()
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('row', { name: /page-0/ }))
+        .getByText('Actions')
+        .closest('details'),
+    ).toHaveProperty('open', false),
+  )
+  expect(
+    within(screen.getByRole('row', { name: /page-0/ }))
+      .getByText('Actions')
+      .closest('details')
+      ?.querySelector('summary'),
+  ).toHaveFocus()
 
   fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'ROM files library' }))

@@ -414,7 +414,7 @@ export function ScanUnmatchedPage() {
     }
   }
 
-  async function toggleIgnore(row: UnmatchedRow) {
+  async function toggleIgnore(row: UnmatchedRow, rowMenu: HTMLDetailsElement | null) {
     setBusyId(row.id)
     setError(null)
     try {
@@ -429,6 +429,12 @@ export function ScanUnmatchedPage() {
       })
       if (!response.ok) throw new Error('Unable to change the folder status.')
       const payload = await response.json()
+      // Reflect the new row state, then close the disclosure so its changed
+      // Ignore/Unignore action is not left open over the refreshed table.
+      if (rowMenu) {
+        rowMenu.open = false
+        rowMenu.querySelector('summary')?.focus()
+      }
       setActionStatus(payload?.data?.message || payload?.message || 'Folder status updated.')
       setReloadKey((value) => value + 1)
     } catch (reason) {
@@ -1232,7 +1238,9 @@ export function ScanUnmatchedPage() {
                           <Button
                             type="button"
                             disabled={busyId === row.id}
-                            onClick={() => void toggleIgnore(row)}
+                            onClick={(event) =>
+                              void toggleIgnore(row, event.currentTarget.closest('details'))
+                            }
                           >
                             {row.status === 'Ignore' ? 'Unignore' : 'Ignore'}
                           </Button>
