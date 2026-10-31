@@ -4217,12 +4217,11 @@ class LazyASGIApp:
         }
         path = scope.get('path', '/')
         if path in direct_routes:
-            allow = 'OPTIONS, GET, HEAD' if path == '/pulse' else 'OPTIONS, HEAD, GET'
             response = Response(
                 content=b'',
                 status_code=200,
                 headers={
-                    'Allow': allow,
+                    'Allow': 'OPTIONS, HEAD, GET',
                     **self._configured_security_headers(),
                 },
                 media_type='text/html',

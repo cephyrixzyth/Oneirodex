@@ -140,11 +140,14 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
+    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
+        'OPTIONS', 'GET', 'HEAD',
+    }
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
     assert all(
-        response.headers['allow'] == 'OPTIONS, GET, HEAD'
+        set(response.headers['allow'].replace(' ', '').split(','))
+        == {'OPTIONS', 'GET', 'HEAD'}
         for response in unsupported
     )
     assert all(
