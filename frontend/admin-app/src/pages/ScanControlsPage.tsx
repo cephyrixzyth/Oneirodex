@@ -394,7 +394,9 @@ export function ScanControlsPage() {
             aria-label="Manual identification candidates; scroll horizontally to see all columns"
           >
             <table className="od-data-table">
-              <caption>Games available for manual identification</caption>
+              <caption className="od-scan-controls__manual-caption">
+                Games available for manual identification
+              </caption>
               <thead>
                 <tr>
                   <th scope="col">Game name</th>

@@ -58,6 +58,14 @@
   min-width: 40rem;
 }
 
+.od-scan-controls__manual-caption {
+  caption-side: top;
+  color: var(--od-text);
+  font-weight: 600;
+  padding-block: var(--od-space-2);
+  text-align: left;
+}
+
 .od-scan-controls__links,
 .od-scan-controls__path,
 .od-scan-controls__interval,

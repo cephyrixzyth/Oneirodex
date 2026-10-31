@@ -215,6 +215,11 @@ test('lists manual identify candidates without starting a scan and links to the 
   await screen.findByRole('option', { name: 'Nintendo' })
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   const identify = await screen.findByRole('link', { name: 'Identify' })
+  expect(
+    screen.getByRole('table', { name: 'Games available for manual identification' }).querySelector(
+      'caption',
+    ),
+  ).toHaveClass('od-scan-controls__manual-caption')
   expect(identify).toHaveAttribute(
     'href',
     '/add_game_manual?full_disk_path=%2Fgames%2FMetroid&library_uuid=lib-1',
