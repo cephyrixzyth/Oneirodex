@@ -54,7 +54,7 @@
 .od-manual-identify__custom-id-action {
   display: flex;
   justify-content: flex-start;
-  grid-column: 1 / -1;
+  margin: var(--od-space-3) 0;
 }
 
 .od-manual-identify__custom-id-action .od-btn {

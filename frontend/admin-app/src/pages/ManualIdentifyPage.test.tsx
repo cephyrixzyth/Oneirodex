@@ -76,16 +76,23 @@ test('loads options, applies an IGDB match, and posts a JSON identify payload', 
   ).toBeInTheDocument()
   const libraryPanel = screen.getByRole('region', { name: 'Library selection' })
   const identityPanel = screen.getByRole('region', { name: 'Game identity' })
+  const metadataSearchPanel = screen.getByRole('region', { name: 'Metadata search' })
+  const locationPanel = screen.getByRole('region', { name: 'Game location' })
   expect(
     libraryPanel.compareDocumentPosition(identityPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy()
   const customEntry = screen.getByRole('button', { name: 'Add non-catalog game' })
+  expect(
+    identityPanel.compareDocumentPosition(customEntry) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
   expect(customEntry).toHaveClass('od-btn--lg')
   expect(customEntry).not.toHaveClass('od-btn--primary')
   expect(customEntry.closest('.od-manual-identify__id')).toBeNull()
   expect(
-    customEntry.compareDocumentPosition(screen.getByLabelText('Name')) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+    customEntry.compareDocumentPosition(metadataSearchPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    metadataSearchPanel.compareDocumentPosition(locationPanel) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy()
   const providerSearches = screen.getByRole('group', { name: 'Metadata provider searches' })
   expect(providerSearches).toHaveClass('od-manual-identify__providers')

@@ -536,11 +536,16 @@ export function ManualIdentifyPage() {
             </span>
           </div>
         </div>
-        <div className="od-manual-identify__custom-id-action">
-          <Button size="lg" type="button" onClick={() => void addNonCatalogGame()}>
-            Add non-catalog game
-          </Button>
-        </div>
+      </section>
+      <div className="od-manual-identify__custom-id-action">
+        <Button size="lg" type="button" onClick={() => void addNonCatalogGame()}>
+          Add non-catalog game
+        </Button>
+      </div>
+      <section
+        className="od-admin-panel od-manual-identify__search-panel"
+        aria-label="Metadata search"
+      >
         <form
           className="od-manual-identify__search"
           onSubmit={(event) => {
@@ -606,6 +611,8 @@ export function ManualIdentifyPage() {
             ))}
           </ul>
         ) : null}
+      </section>
+      <section className="od-admin-panel od-manual-identify__path-panel" aria-label="Game location">
         <label className="od-admin-field od-manual-identify__path">
           Full disk path
           <input
