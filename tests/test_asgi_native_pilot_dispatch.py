@@ -116,9 +116,13 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
             get_response = await client.get('/pulse')
             head_response = await client.head('/pulse')
             options_response = await client.options('/pulse')
-        return get_response, head_response, options_response
+            unsupported = [
+                await client.request(method, '/pulse')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response, options_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.json() == {
         'status': 'ok', 'probe': 'liveness', 'version': app_version,
@@ -136,8 +140,18 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert options_response.headers['allow'] == 'OPTIONS, HEAD, GET'
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
     assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(
+        response.headers['allow'] == 'OPTIONS, GET, HEAD'
+        for response in unsupported
+    )
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        for response in unsupported
+    )
+    assert all(response.content == unsupported[0].content for response in unsupported)
 
 
 def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):

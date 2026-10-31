@@ -3006,6 +3006,10 @@ class LazyASGIApp:
                 await self._handle_liveness(scope, send)
                 return
 
+            if path == '/pulse' and scope.get('method') != 'OPTIONS':
+                await self._handle_liveness_method_not_allowed(scope, send)
+                return
+
             if path == '/awake' and scope.get('method') in ('GET', 'HEAD'):
                 await self._ensure_native_database()
                 await self._handle_readiness(scope, send)
@@ -4213,11 +4217,12 @@ class LazyASGIApp:
         }
         path = scope.get('path', '/')
         if path in direct_routes:
+            allow = 'OPTIONS, GET, HEAD' if path == '/pulse' else 'OPTIONS, HEAD, GET'
             response = Response(
                 content=b'',
                 status_code=200,
                 headers={
-                    'Allow': 'OPTIONS, HEAD, GET',
+                    'Allow': allow,
                     **self._configured_security_headers(),
                 },
                 media_type='text/html',
@@ -4293,6 +4298,32 @@ class LazyASGIApp:
         await send({
             'type': 'http.response.body',
             'body': b'' if scope.get('method') == 'HEAD' else payload,
+            'more_body': False,
+        })
+
+    async def _handle_liveness_method_not_allowed(self, scope, send):
+        """Match Flask's 405 response without constructing an app or DB scope."""
+        body = (
+            b'<!doctype html>\n<html lang=en>\n'
+            b'<title>405 Method Not Allowed</title>\n'
+            b'<h1>Method Not Allowed</h1>\n'
+            b'<p>The method is not allowed for the requested URL.</p>\n'
+        )
+        headers = {
+            'Allow': 'OPTIONS, GET, HEAD',
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': str(len(body)),
+            **self._configured_security_headers(),
+        }
+        await send({
+            'type': 'http.response.start',
+            'status': 405,
+            'headers': [(key.lower().encode('ascii'), value.encode('latin-1'))
+                        for key, value in headers.items()],
+        })
+        await send({
+            'type': 'http.response.body',
+            'body': body,
             'more_body': False,
         })
 
