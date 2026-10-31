@@ -510,6 +510,30 @@ test('DupeGlance shows Stage E propose-only chip and expandable candidates', asy
   expect(screen.getByText('Exact')).toBeInTheDocument()
 })
 
+test('Stage E candidate links reject unsafe schemes from catalog data', async () => {
+  const user = userEvent.setup()
+  vi.mocked(getJson).mockResolvedValue([
+    {
+      id: 7,
+      folder_path: '/games/Celeste',
+      status: 'Unmatched',
+      library_name: 'PC',
+      platform_name: 'PCWIN',
+      stage_e_candidates: [
+        { id: 'candidate-1', name: 'Catalog result', source: 'moby', url: 'javascript:alert(1)' },
+      ],
+      stage_e: { match_reason: 'stage_e_moby_exact' },
+    },
+  ])
+
+  render(<DupeGlance onOpenPath={() => {}} />)
+  await user.selectOptions(screen.getByLabelText(/status/i), 'Unmatched')
+  await screen.findByRole('heading', { name: 'Dupe glance' })
+  await user.click(await screen.findByText(/Stage E candidates \(1\)/i))
+  expect(await screen.findByText('Catalog result')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Catalog result' })).toBeNull()
+})
+
 test('DupeGlance soft-degrades Stage E when fields absent (mid-rollout)', async () => {
   const user = userEvent.setup()
   vi.mocked(getJson).mockResolvedValue([

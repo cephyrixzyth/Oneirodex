@@ -109,6 +109,26 @@ test('a librarian adds a catalogue hit as a tracked row with the registry page a
   })
 })
 
+test('catalogue data with an unsafe URL is shown as text, not a clickable link', async () => {
+  const calls = routeFetch({
+    catalog: {
+      ...CATALOG,
+      hits: [{ ...CATALOG.hits[0], url: 'javascript:alert(1)' }],
+    },
+  })
+  const user = userEvent.setup()
+  render(<ModsPanel gameUuid="g1" canEdit />)
+  await screen.findByText('Configuration Manager')
+  await user.click(screen.getByRole('button', { name: 'Browse catalogue' }))
+  expect(await screen.findByText('BepInExPack')).toBeInTheDocument()
+  expect(screen.getByText('Registry link unavailable').tagName).toBe('SPAN')
+  expect(screen.queryByRole('link', { name: 'Registry page' })).toBeNull()
+  const addButton = screen.getByRole('button', { name: 'Add to list' })
+  expect(addButton).toBeDisabled()
+  await user.click(addButton)
+  expect(calls.some((call) => call.method === 'POST')).toBe(false)
+})
+
 test('the drawer says when a registry had no data rather than showing an empty list', async () => {
   routeFetch({
     catalog: {
