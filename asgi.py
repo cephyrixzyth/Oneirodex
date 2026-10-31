@@ -3038,6 +3038,10 @@ class LazyASGIApp:
                 await self._handle_favicon(scope, send)
                 return
 
+            if path == '/favicon.ico' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if path == '/api/emulator/installed-cores.js' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_installed_cores(scope, send)
                 return
@@ -4302,6 +4306,10 @@ class LazyASGIApp:
 
     async def _handle_liveness_method_not_allowed(self, scope, send):
         """Match Flask's 405 response without constructing an app or DB scope."""
+        await self._handle_get_head_method_not_allowed(scope, send)
+
+    async def _handle_get_head_method_not_allowed(self, scope, send):
+        """Match the shared GET/HEAD 405 contract without constructing Flask."""
         body = (
             b'<!doctype html>\n<html lang=en>\n'
             b'<title>405 Method Not Allowed</title>\n'
@@ -4698,7 +4706,8 @@ class LazyASGIApp:
             send,
             candidate,
             mimetype='image/vnd.microsoft.icon',
-            max_age=3600,
+            max_age=None,
+            additional_headers={'Cache-Control': 'public, max-age=3600'},
         )
 
     async def _handle_confirmation_shell(self, scope, send):

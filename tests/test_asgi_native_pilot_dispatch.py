@@ -1542,18 +1542,23 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
             unsatisfiable = await client.get('/favicon.ico', headers={
                 'Range': f'bytes={len(icon_payload)}-',
             })
+            unsupported = [
+                await client.request(method, '/favicon.ico')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
         return (
             full, head, not_modified_etag, not_modified_date, ranged,
-            if_range, stale_if_range, unsatisfiable,
+            if_range, stale_if_range, unsatisfiable, unsupported,
         )
 
     (
         full, head, not_modified_etag, not_modified_date, ranged,
-        if_range, stale_if_range, unsatisfiable,
+        if_range, stale_if_range, unsatisfiable, unsupported,
     ) = asyncio.run(run())
     assert full.status_code == 200
     assert full.headers['content-type'] == 'image/vnd.microsoft.icon'
     assert full.headers['cache-control'] == 'public, max-age=3600'
+    assert 'expires' not in full.headers
     assert full.content == icon_payload
     assert full.headers['etag']
     assert full.headers['last-modified']
@@ -1572,6 +1577,17 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     assert stale_if_range.content == icon_payload
     assert unsatisfiable.status_code == 416
     assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(
+        set(response.headers['allow'].replace(' ', '').split(','))
+        == {'OPTIONS', 'GET', 'HEAD'}
+        for response in unsupported
+    )
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch, tmp_path):
