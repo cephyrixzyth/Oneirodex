@@ -105,6 +105,47 @@ def test_capture_environment_disables_background_workers(tmp_path, monkeypatch):
     assert settings["ONEIRODEX_ENABLE_BACKGROUND_WORKERS"] == "false"
 
 
+def test_capture_admin_uses_local_bootstrap_database_credential(tmp_path, monkeypatch):
+    from scripts import serve_capture
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DATABASE_URL=postgresql://postgres:generated-local-secret@localhost:5432/oneirodex\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(serve_capture, "ROOT", tmp_path)
+
+    assert serve_capture._default_admin_url() == (
+        "postgresql://postgres:generated-local-secret@localhost:5432/postgres"
+    )
+
+
+def test_capture_admin_ignores_remote_database_url(tmp_path, monkeypatch):
+    from scripts import serve_capture
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DATABASE_URL=postgresql://postgres:remote-secret@db.example.test:5432/oneirodex\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(serve_capture, "ROOT", tmp_path)
+
+    assert serve_capture._default_admin_url() == (
+        "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
+    )
+
+
+def test_capture_database_url_preserves_connection_options():
+    from scripts import serve_capture
+
+    assert serve_capture._database_url(
+        "postgresql://postgres:local-secret@localhost:5432/postgres?sslmode=disable",
+        serve_capture.DB_NAME,
+    ) == (
+        "postgresql://postgres:local-secret@localhost:5432/oneirodexcapture?sslmode=disable"
+    )
+
+
 def test_capture_login_waits_for_native_spa_redirect(monkeypatch):
     from scripts import capture_common
 

@@ -28,6 +28,7 @@ from oneirodex.utils.acquire_readiness import (
     acquire_allowed as _acquire_allowed,
     indexer_readiness as _indexer_readiness,
 )
+from oneirodex.utils.api_tokens import user_has_scope
 from oneirodex.utils.rbac import is_librarian, normalize_role
 from oneirodex.utils.security import validate_download_client_url
 from oneirodex.utils.validation import validate_body
@@ -67,6 +68,12 @@ def acquire_search():
         return api_error(
             'Acquire search is not available on child accounts',
             code='forbidden',
+        )
+    if not user_has_scope('read:library'):
+        return api_error(
+            'Missing scope: read:library',
+            code='forbidden',
+            detail={'required_scope': 'read:library'},
         )
     if not arr_module_on():
         return api_error('Arr module disabled', code='forbidden')

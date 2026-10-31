@@ -372,6 +372,74 @@ class TestChildAcquireAndCommands:
         assert body['error_code'] == 'forbidden'
         assert 'child' in (body.get('error') or '').lower()
 
+    def test_acquire_search_requires_read_library_scope_for_bearer_tokens(
+        self, client, member, db_session, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        calls = []
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(
+            acquire, 'search_indexers',
+            lambda query: calls.append(query) or [],
+        )
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+
+        _row, limited_token = generate_api_token(
+            member, 'social-only', ['read:social'],
+        )
+        denied = client.get(
+            '/api/acquire/search?q=fixture',
+            headers={'Authorization': f'Bearer {limited_token}'},
+        )
+        assert denied.status_code == 403
+        assert denied.get_json()['detail'] == {'required_scope': 'read:library'}
+        assert calls == []
+
+    def test_acquire_search_accepts_read_library_scope_for_bearer_tokens(
+        self, client, member, db_session, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        calls = []
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(
+            acquire, 'search_indexers',
+            lambda query: calls.append(query) or [],
+        )
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+        _row, library_token = generate_api_token(
+            member, 'library-read', ['read:library'],
+        )
+
+        allowed = client.get(
+            '/api/acquire/search?q=fixture',
+            headers={'Authorization': f'Bearer {library_token}'},
+        )
+
+        assert allowed.status_code == 200
+        assert calls == ['fixture']
+
+    def test_acquire_search_keeps_browser_session_access(
+        self, client, app, member, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(acquire, 'search_indexers', lambda _query: [])
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+        _login(client, app, member)
+
+        response = client.get('/api/acquire/search?q=fixture')
+
+        assert response.status_code == 200
+
     def test_child_cannot_queue_install(self, client, app, child_user):
         _login(client, app, child_user)
         resp = client.post(

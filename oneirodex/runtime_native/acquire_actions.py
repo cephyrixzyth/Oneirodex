@@ -98,6 +98,11 @@ def create_acquire_actions_router(
                 role = normalize_role(getattr(auth.user, 'role', None))
                 if role == 'child':
                     response = _error('Acquire search is not available on child accounts', 'forbidden')
+                elif not auth.has_scope('read:library'):
+                    response = _error(
+                        'Missing scope: read:library', 'forbidden',
+                        detail={'required_scope': 'read:library'},
+                    )
                 elif not data.arr_enabled(config=flask_app.config):
                     response = _error('Arr module disabled', 'forbidden')
                 else:
@@ -212,10 +217,10 @@ def _first(request, key):
     return values[0] if values else None
 
 
-def _error(message, code):
+def _error(message, code, *, detail=None):
     from oneirodex.utils.api_contract import api_error_payload
 
-    payload, status = api_error_payload(message, code=code)
+    payload, status = api_error_payload(message, code=code, detail=detail)
     return JSONResponse(payload, status_code=status)
 
 

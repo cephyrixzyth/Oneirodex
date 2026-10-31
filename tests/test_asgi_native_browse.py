@@ -2093,12 +2093,12 @@ def test_native_locale_write_rejects_multipart_part_count_overflow(monkeypatch, 
     assert runtime._fake_locale.calls == []
 
 
-def _bearer_runtime(monkeypatch, scopes):
+def _bearer_runtime(monkeypatch, scopes, *, role='user'):
     import hashlib
 
     _flask_app, runtime = _runtime(monkeypatch)
     user = SimpleNamespace(
-        id=7, role='user', state=True, is_active=True, is_authenticated=True,
+        id=7, role=role, state=True, is_active=True, is_authenticated=True,
     )
     token = SimpleNamespace(
         user_id=7, token_hash=hashlib.sha256(b'social-test').hexdigest(),
@@ -2268,6 +2268,48 @@ def test_lazy_asgi_dispatches_acquire_search_without_provider_network(monkeypatc
     }
     assert runtime._fake_acquire_actions.calls == [('search', 'Fixture', '1.0')]
     assert response.headers['x-content-type-options'] == 'nosniff'
+
+
+@pytest.mark.parametrize('method', ['GET', 'HEAD'])
+def test_lazy_asgi_acquire_search_requires_read_library_scope(monkeypatch, method):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture', method=method,
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    if method == 'GET':
+        assert response.json()['detail'] == {'required_scope': 'read:library'}
+    else:
+        assert response.content == b''
+    assert runtime._fake_acquire_actions.calls == []
+
+
+def test_lazy_asgi_acquire_search_accepts_read_library_token(monkeypatch):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:library'])
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture',
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['results'] == [{'title': 'Fixture result'}]
+    assert runtime._fake_acquire_actions.calls == [('search', 'Fixture', '')]
+
+
+def test_lazy_asgi_acquire_search_preserves_child_account_denial(monkeypatch):
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social'], role='child',
+    )
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture',
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    assert 'child' in response.json()['error'].lower()
+    assert runtime._fake_acquire_actions.calls == []
 
 
 def test_lazy_asgi_dispatches_acquire_send_through_safe_adapter(monkeypatch):

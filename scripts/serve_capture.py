@@ -11,8 +11,10 @@ and then uvicorn serves the result on `CAPTURE_PORT` (default 5006).
     python scripts/serve_capture.py --reset    # drop the scratch DB first
     python scripts/serve_capture.py --seed-only
 
-Nothing here touches the repo-root `.env` or the live database: the scratch
-database is always named `oneirodexcapture`, and the env file is gitignored.
+Nothing here writes the repo-root `.env` or touches the live database: the
+scratch database is always named `oneirodexcapture`, and its env file is
+gitignored. A local `DATABASE_URL` may supply the admin credential for the
+scratch database; remote URLs are ignored.
 """
 from __future__ import annotations
 
@@ -21,12 +23,39 @@ import os
 import secrets
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env.capture.local"
 DB_NAME = "oneirodexcapture"
-DB_ADMIN_URL = os.environ.get("CAPTURE_PG_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:5432/postgres")
-DB_URL = DB_ADMIN_URL.rsplit("/", 1)[0] + f"/{DB_NAME}"
+
+
+def _default_admin_url() -> str:
+    """Reuse a local bootstrap credential without exposing or changing .env."""
+    env_path = ROOT / ".env"
+    if env_path.is_file():
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = raw.partition("=")
+            if not separator or key.strip() != "DATABASE_URL":
+                continue
+            database_url = value.strip().strip("\"'")
+            parsed = urlsplit(database_url)
+            if (
+                parsed.scheme in {"postgres", "postgresql"}
+                and parsed.username == "postgres"
+                and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            ):
+                return urlunsplit(parsed._replace(path="/postgres"))
+            break
+    return "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
+
+
+def _database_url(admin_url: str, database: str) -> str:
+    return urlunsplit(urlsplit(admin_url)._replace(path=f"/{database}"))
+
+
+DB_ADMIN_URL = os.environ.get("CAPTURE_PG_ADMIN_URL") or _default_admin_url()
+DB_URL = _database_url(DB_ADMIN_URL, DB_NAME)
 
 USER = os.environ.get("CAPTURE_USER", "admin")
 PASSWORD = os.environ.get("CAPTURE_PASS", "CaptureAdmin1!")
