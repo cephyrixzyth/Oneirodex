@@ -11761,6 +11761,9 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
     oversized_range = _run(
         runtime, path, cookie=cookie, headers={'Range': f"bytes={'9' * 5000}-"},
     )
+    oversized_suffix_range = _run(
+        runtime, path, cookie=cookie, headers={'Range': f"bytes=-{'9' * 5000}"},
+    )
     safe_state['value'] = False
     unsafe = _run(runtime, path, cookie=cookie)
     safe_state['value'] = True
@@ -11778,6 +11781,8 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
     assert invalid_range.headers['content-range'] == 'bytes */10'
     assert oversized_range.status_code == 416
     assert oversized_range.headers['content-range'] == 'bytes */10'
+    assert oversized_suffix_range.status_code == 416
+    assert oversized_suffix_range.headers['content-range'] == 'bytes */10'
     assert unsafe.status_code == 403
     assert denied.status_code == 403
 
