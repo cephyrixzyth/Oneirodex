@@ -135,18 +135,26 @@ def create_quality_profiles_router(
                         body = None
                 payload_body = body if isinstance(body, dict) else {}
                 if (
-                    path == '/api/quality-profiles'
-                    and request.method == 'PUT'
+                    (
+                        path == '/api/quality-profiles' and request.method == 'PUT'
+                        or profile_id is not None and request.method in ('PUT', 'PATCH')
+                    )
                     and body
                     and not isinstance(body, dict)
                 ):
-                    # The legacy single-object PUT passed truthy JSON scalars
-                    # through to save_quality_profile(), which reports them as
-                    # a bad request. Keep this route's established 400 contract
-                    # while the create/active/score routes retain their newer
-                    # structured 422 validation behavior.
+                    # Legacy profile updates passed truthy JSON scalars through
+                    # to the profile helper, which reports them as bad requests
+                    # (or a missing profile first). Keep that contract while
+                    # create/active/score routes retain their newer 422 validation.
                     try:
-                        response = JSONResponse(data.save(body))
+                        result = (
+                            data.update(profile_id, body)
+                            if profile_id is not None else data.save(body)
+                        )
+                        response = JSONResponse(result)
+                    except KeyError as exc:
+                        payload, status = api_error_payload(str(exc), code='not_found')
+                        response = JSONResponse(payload, status_code=status)
                     except (TypeError, ValueError) as exc:
                         payload, status = api_error_payload(str(exc), code='bad_request')
                         response = JSONResponse(payload, status_code=status)

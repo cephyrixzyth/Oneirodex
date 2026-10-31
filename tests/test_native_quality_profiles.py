@@ -48,6 +48,10 @@ class FakeQualityProfilesData:
         return {'id': profile_id, 'name': 'Example'}
 
     def update(self, profile_id, payload):
+        if profile_id not in {profile['id'] for profile in self.payload['profiles']}:
+            raise KeyError(f'profile not found: {profile_id}')
+        if not isinstance(payload, dict):
+            raise TypeError(f"'{type(payload).__name__}' object is not a mapping")
         return {'id': profile_id, 'name': payload.get('name', 'Updated')}
 
     def delete(self, profile_id):
@@ -284,3 +288,24 @@ def test_legacy_profile_put_keeps_bad_request_for_non_object_json():
         'message': "'list' object is not a mapping",
         'success': False,
     }
+
+
+def test_profile_id_put_patch_keep_legacy_non_object_errors_and_missing_precedence():
+    client = make_client()
+    headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': client.csrf_token,
+    }
+    put = client.put('/api/quality-profiles/balanced', content='["x"]', headers=headers)
+    patch = client.patch('/api/quality-profiles/balanced', content='"x"', headers=headers)
+    missing = client.put('/api/quality-profiles/missing', content='["x"]', headers=headers)
+
+    assert put.status_code == 400
+    assert put.json()['error'] == "'list' object is not a mapping"
+    assert put.json()['error_code'] == 'bad_request'
+    assert patch.status_code == 400
+    assert patch.json()['error'] == "'str' object is not a mapping"
+    assert patch.json()['error_code'] == 'bad_request'
+    assert missing.status_code == 404
+    assert missing.json()['error'] == "'profile not found: missing'"
+    assert missing.json()['error_code'] == 'not_found'
