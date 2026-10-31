@@ -358,6 +358,9 @@ The admin library-health summary `/api/health/library` is also native.
 The complete admin quality-profile API family `/api/quality-profiles` now uses
 FastAPI for list, create, save, activate, detail, update, delete, and score
 actions, including CSRF on writes and the legacy bare JSON responses.
+These routes decode request bodies only for `application/json` and
+`application/*+json` media types, matching the legacy silent JSON parser; other
+content types are treated as an empty JSON body.
 The admin statistics read `/api/admin/statistics` also dispatches through
 FastAPI, keeping the existing aggregate projection, admin session/token-scope
 checks, envelope, no-store response, and HEAD behavior.

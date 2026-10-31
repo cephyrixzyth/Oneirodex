@@ -309,3 +309,30 @@ def test_profile_id_put_patch_keep_legacy_non_object_errors_and_missing_preceden
     assert missing.status_code == 404
     assert missing.json()['error'] == "'profile not found: missing'"
     assert missing.json()['error_code'] == 'not_found'
+
+
+def test_profile_id_put_patch_only_parse_json_content_types():
+    client = make_client()
+    csrf = {'X-CSRFToken': client.csrf_token}
+    base = '/api/quality-profiles/balanced'
+    for method in ('PUT', 'PATCH'):
+        plain = client.request(
+            method, base, content='{"name":"Ignored"}',
+            headers={**csrf, 'Content-Type': 'text/plain'},
+        )
+        form = client.request(
+            method, base, content='{"name":"Ignored"}',
+            headers={**csrf, 'Content-Type': 'application/x-www-form-urlencoded'},
+        )
+        missing_type = client.request(
+            method, base, content='{"name":"Ignored"}', headers=csrf,
+        )
+        json_suffix = client.request(
+            method, base, content='{"name":"Accepted"}',
+            headers={**csrf, 'Content-Type': 'application/merge-patch+json'},
+        )
+
+        assert plain.status_code == form.status_code == missing_type.status_code == 200
+        assert plain.json()['name'] == form.json()['name'] == missing_type.json()['name'] == 'Updated'
+        assert json_suffix.status_code == 200
+        assert json_suffix.json()['name'] == 'Accepted'

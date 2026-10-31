@@ -129,10 +129,15 @@ def create_quality_profiles_router(
                 path = request.url.path
                 body = None
                 if request.method in ('POST', 'PUT', 'PATCH'):
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = None
+                    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+                    is_json = content_type == 'application/json' or (
+                        content_type.startswith('application/') and content_type.endswith('+json')
+                    )
+                    if is_json:
+                        try:
+                            body = await request.json()
+                        except Exception:
+                            body = None
                 payload_body = body if isinstance(body, dict) else {}
                 if (
                     (
