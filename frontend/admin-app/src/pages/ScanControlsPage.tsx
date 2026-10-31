@@ -176,32 +176,34 @@ export function ScanControlsPage() {
           </select>
         </label>
         <div className="od-scan-controls__path">
-          <label className="od-admin-field">
-            Scan location
-            <select
-              className="od-admin-input"
-              value={rootId}
-              onChange={(event) => {
-                invalidateManualPreview()
-                setRootId(event.target.value)
-              }}
-              required
-              disabled={loading || scanning}
-            >
-              {roots.map((root) => (
-                <option key={root.id} value={root.id} disabled={!root.exists || !root.read}>
-                  {root.label}
-                  {!root.exists || !root.read ? ' · unavailable' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          {activeRoot && (!activeRoot.exists || !activeRoot.read) ? (
-            <p className="od-admin-hint">
-              {!activeRoot.exists ? 'Not mounted right now' : 'This location is not readable'}:{' '}
-              {activeRoot.path}
-            </p>
-          ) : null}
+          <div className="od-scan-controls__root">
+            <label className="od-admin-field">
+              Scan location
+              <select
+                className="od-admin-input"
+                value={rootId}
+                onChange={(event) => {
+                  invalidateManualPreview()
+                  setRootId(event.target.value)
+                }}
+                required
+                disabled={loading || scanning}
+              >
+                {roots.map((root) => (
+                  <option key={root.id} value={root.id} disabled={!root.exists || !root.read}>
+                    {root.label}
+                    {!root.exists || !root.read ? ' · unavailable' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {activeRoot && (!activeRoot.exists || !activeRoot.read) ? (
+              <p className="od-admin-hint od-scan-controls__root-status">
+                {!activeRoot.exists ? 'Not mounted right now' : 'This location is not readable'}:{' '}
+                {activeRoot.path}
+              </p>
+            ) : null}
+          </div>
           <label className="od-admin-field">
             Folder inside scan location
             <input

@@ -74,6 +74,17 @@
   flex: 1 1 14rem;
 }
 
+.od-scan-controls__root {
+  display: grid;
+  align-content: start;
+  gap: var(--od-space-2);
+  flex: 1 1 14rem;
+}
+
+.od-scan-controls__root-status {
+  margin: 0;
+}
+
 .od-scan-controls__options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
