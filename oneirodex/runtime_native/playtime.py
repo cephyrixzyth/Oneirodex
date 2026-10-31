@@ -190,6 +190,8 @@ def create_playtime_router(
                     else:
                         payload = {}
                     if response is None:
+                        if payload is None:
+                            payload = {}
                         body = StartPlaytimeSessionBody.model_validate(payload)
                 except ValidationError as exc:
                     response = _api_error(

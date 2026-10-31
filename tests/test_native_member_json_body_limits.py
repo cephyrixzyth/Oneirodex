@@ -103,6 +103,22 @@ def test_playtime_start_non_object_json_preserves_root_validation_error():
     assert data.calls == []
 
 
+def test_playtime_start_json_null_preserves_missing_body_validation_error():
+    client, data = setup_client()
+
+    response = client.post(
+        '/api/playtime/sessions',
+        content=b'null',
+        headers={'content-type': 'application/json'},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body['error_code'] == 'unprocessable'
+    assert body['detail'] == {'game_uuid': 'Field required'}
+    assert data.calls == []
+
+
 def test_social_friend_request_rejects_oversized_json_before_data_write(monkeypatch):
     monkeypatch.setattr(social_writes, '_MAX_JSON_BODY_BYTES', 8)
     client, data = setup_client()
