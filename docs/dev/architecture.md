@@ -361,6 +361,8 @@ actions, including CSRF on writes and the legacy bare JSON responses.
 These routes decode request bodies only for `application/json` and
 `application/*+json` media types, matching the legacy silent JSON parser; other
 content types are treated as an empty JSON body.
+The companion heartbeat applies the same media-type gate while retaining its
+bounded-body limit and tolerant handling of malformed or non-object JSON.
 The admin statistics read `/api/admin/statistics` also dispatches through
 FastAPI, keeping the existing aggregate projection, admin session/token-scope
 checks, envelope, no-store response, and HEAD behavior.

@@ -573,9 +573,16 @@ async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
     body = await read_bounded_body(request, _MAX_HEARTBEAT_BODY_BYTES)
     if body is BODY_TOO_LARGE:
         raise _ClientRequestBodyTooLarge
-    try:
-        value = json.loads(body or b'{}')
-    except (TypeError, ValueError):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if is_json:
+        try:
+            value = json.loads(body or b'{}')
+        except (TypeError, ValueError):
+            value = {}
+    else:
         value = {}
     if not isinstance(value, dict):
         value = {}

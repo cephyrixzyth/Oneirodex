@@ -317,6 +317,50 @@ def test_heartbeat_requires_presence_scope_and_bearer_bypasses_csrf():
     assert writer.data.heartbeat_calls[0][-1] is writer.token
 
 
+def test_heartbeat_only_parses_json_media_types():
+    client = make_client(scopes=('write:presence',))
+    headers = {'Authorization': f'Bearer {RAW_TOKEN}'}
+    ignored = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"ignored-text-body","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'text/plain'},
+    )
+    form = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"ignored-form-body","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+    accepted = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"vendor-json-device","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+
+    assert ignored.status_code == form.status_code == accepted.status_code == 200
+    assert client.data.heartbeat_calls[0][1] != 'ignored-text-body'
+    assert client.data.heartbeat_calls[1][1] != 'ignored-form-body'
+    assert client.data.heartbeat_calls[0][2] is None
+    assert client.data.heartbeat_calls[1][2] is None
+    assert accepted.json()['device_id'] == 'vendor-json-device'
+    assert client.data.heartbeat_calls[2][2] == 'thin'
+
+
+def test_heartbeat_keeps_resilient_malformed_and_non_object_json_handling():
+    client = make_client(scopes=('write:presence',))
+    headers = {
+        'Authorization': f'Bearer {RAW_TOKEN}',
+        'Content-Type': 'application/json',
+    }
+    malformed = client.post('/api/client/heartbeat', content='{', headers=headers)
+    non_object = client.post('/api/client/heartbeat', content='[]', headers=headers)
+
+    assert malformed.status_code == non_object.status_code == 200
+    assert malformed.json()['device_id']
+    assert non_object.json()['device_id']
+    assert client.data.heartbeat_calls[0][2] is None
+    assert client.data.heartbeat_calls[1][2] is None
+
+
 def bearer_headers(client, *, scopes=None):
     session = {}
     csrf = generate_csrf_token(session, SECRET)
