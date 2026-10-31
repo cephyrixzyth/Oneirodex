@@ -95,36 +95,35 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
   })
 
-  test('automatic scan tab shows only the automatic workflow', () => {
+  test('automatic scan workspace includes manual identification and excludes scan history', () => {
     mountAt('/scan_management?active_tab=auto')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'Manual identify', level: 2 }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Recent scan jobs' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'List games to identify' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
     expect(screen.queryByText('Dupe glance')).toBeNull()
   })
 
-  test('manual identify deep link shows scan setup and manual identify only', () => {
+  test('manual identify deep link scrolls within the unified scan workspace', () => {
     mountAt('/scan_management?active_tab=manual')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Scan setup', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Start scan' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Repeat schedule')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
   })
 
-  test('legacy manual scan URL opens the focused manual identify view', () => {
+  test('legacy manual scan URL opens the unified scan workspace at manual identify', () => {
     mountAt('/scan_manual_folder')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Scan setup', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
   })
 
   test('legacy scan jobs deep link opens the dedicated full-history page', async () => {

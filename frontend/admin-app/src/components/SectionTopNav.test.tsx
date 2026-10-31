@@ -66,6 +66,7 @@ test('pages outside Settings and Integrations get no section bar', () => {
 test.each([
   ['/scan_management?active_tab=auto', 'Scanning'],
   ['/scan_management?active_tab=manual', 'Manual identify'],
+  ['/scan_management?active_tab=auto#manual-identify', 'Manual identify'],
   ['/scan_management?active_tab=jobs', 'Scan jobs'],
 ])(
   'scan view %s has one in-app switcher with the current view or section active',
@@ -84,7 +85,7 @@ test.each([
     expect(links.every((link) => link.getAttribute('href'))).toBe(true)
     expect(screen.getByRole('link', { name: 'Manual identify' })).toHaveAttribute(
       'href',
-      '/scan_management?active_tab=manual#manual-identify',
+      '/scan_management?active_tab=auto#manual-identify',
     )
     expect(screen.getByRole('link', { name: 'Scanning' })).toHaveAttribute(
       'href',

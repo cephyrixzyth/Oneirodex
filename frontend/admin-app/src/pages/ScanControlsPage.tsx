@@ -109,20 +109,8 @@ export function ScanControlsPage() {
     <Page
       className="od-scan-controls-page"
       title="Scan management"
-      documentTitle={
-        activeTab === 'manual'
-          ? 'Manual scan'
-          : activeTab === 'jobs'
-            ? 'Scan Jobs'
-            : activeTab === 'auto'
-              ? 'Scans'
-              : undefined
-      }
-      lede={
-        activeTab === 'manual'
-          ? 'Choose scan settings, then list folders or supported game files to identify.'
-          : 'Start or schedule an automatic scan, or open Scan jobs to review scan history.'
-      }
+      documentTitle={activeTab === 'jobs' ? 'Scan Jobs' : 'Scans'}
+      lede="Start or schedule a scan, manually identify folders or files, and review scan history."
     >
       <PageStatus
         loading={loading}
@@ -149,11 +137,9 @@ export function ScanControlsPage() {
         </section>
       ) : null}
       <form id="automatic-scan" className="od-admin-panel od-scan-controls" onSubmit={submit}>
-        <h2>{activeTab === 'manual' ? 'Scan setup' : 'Automatic scan'}</h2>
+        <h2>Automatic scan</h2>
         <p className="od-admin-lede">
-          {activeTab === 'manual'
-            ? 'Choose the library, location and options for manual identification.'
-            : 'Start a scan now or set a repeat schedule for this library and location.'}
+          Choose a library and location, then start or schedule a scan.
         </p>
         {scanError ? <PageStatus error={scanError} /> : null}
         <label className="od-admin-field">
@@ -289,264 +275,258 @@ export function ScanControlsPage() {
             Refetch HowLongToBeat for existing games
           </label>
         </fieldset>
-        {activeTab !== 'manual' ? (
-          <div className="od-scan-controls__schedule">
-            <label className="od-admin-field">
-              Repeat schedule
-              <select
-                className="od-admin-input"
-                value={schedule}
-                onChange={(event) => {
-                  clearScanError()
-                  setSchedule(event.target.value as Schedule)
-                }}
-                disabled={scanning}
-              >
-                <option value="">Once (no repeat)</option>
-                <option value="8_hours">Every 8 hours</option>
-                <option value="24_hours">Every 24 hours</option>
-                <option value="48_hours">Every 48 hours</option>
-                <option value="interval">Every N minutes or hours</option>
-                <option value="cron">Cron expression (UTC)</option>
-              </select>
-            </label>
-            {schedule === 'interval' ? (
-              <div className="od-scan-controls__interval">
-                <label className="od-admin-field">
-                  Interval
-                  <input
-                    className="od-admin-input"
-                    type="number"
-                    min={1}
-                    max={10080}
-                    value={interval}
-                    onChange={(event) => setInterval(Number(event.target.value))}
-                    disabled={scanning}
-                  />
-                </label>
-                <label className="od-admin-field">
-                  Unit
-                  <select
-                    className="od-admin-input"
-                    value={unit}
-                    onChange={(event) => setUnit(event.target.value as typeof unit)}
-                    disabled={scanning}
-                  >
-                    <option value="hours">Hours</option>
-                    <option value="minutes">Minutes</option>
-                  </select>
-                </label>
-              </div>
-            ) : null}
-            {schedule === 'cron' ? (
+        <div className="od-scan-controls__schedule">
+          <label className="od-admin-field">
+            Repeat schedule
+            <select
+              className="od-admin-input"
+              value={schedule}
+              onChange={(event) => {
+                clearScanError()
+                setSchedule(event.target.value as Schedule)
+              }}
+              disabled={scanning}
+            >
+              <option value="">Once (no repeat)</option>
+              <option value="8_hours">Every 8 hours</option>
+              <option value="24_hours">Every 24 hours</option>
+              <option value="48_hours">Every 48 hours</option>
+              <option value="interval">Every N minutes or hours</option>
+              <option value="cron">Cron expression (UTC)</option>
+            </select>
+          </label>
+          {schedule === 'interval' ? (
+            <div className="od-scan-controls__interval">
               <label className="od-admin-field">
-                Cron expression (UTC)
+                Interval
                 <input
                   className="od-admin-input"
-                  value={cron}
-                  onChange={(event) => {
-                    clearScanError()
-                    setCron(event.target.value)
-                  }}
-                  maxLength={64}
-                  placeholder="0 */6 * * *"
-                  required
+                  type="number"
+                  min={1}
+                  max={10080}
+                  value={interval}
+                  onChange={(event) => setInterval(Number(event.target.value))}
                   disabled={scanning}
                 />
               </label>
+              <label className="od-admin-field">
+                Unit
+                <select
+                  className="od-admin-input"
+                  value={unit}
+                  onChange={(event) => setUnit(event.target.value as typeof unit)}
+                  disabled={scanning}
+                >
+                  <option value="hours">Hours</option>
+                  <option value="minutes">Minutes</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {schedule === 'cron' ? (
+            <label className="od-admin-field">
+              Cron expression (UTC)
+              <input
+                className="od-admin-input"
+                value={cron}
+                onChange={(event) => {
+                  clearScanError()
+                  setCron(event.target.value)
+                }}
+                maxLength={64}
+                placeholder="0 */6 * * *"
+                required
+                disabled={scanning}
+              />
+            </label>
+          ) : null}
+        </div>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
+        >
+          {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
+        </Button>
+      </form>
+      <section
+        id="manual-identify"
+        className="od-admin-panel od-scan-controls__manual"
+        tabIndex={-1}
+        aria-labelledby="od-manual-identify-title"
+      >
+        <h2 id="od-manual-identify-title">Manual identify</h2>
+        <p className="od-admin-lede">
+          When no scan is running, list folders or supported game files to identify. If a scan is
+          already running, this action queues the manual scan using the selected scan options.
+        </p>
+        <Button
+          type="button"
+          onClick={() => void listManualCandidates()}
+          disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || manualBusy}
+        >
+          {manualBusy ? 'Listing games…' : 'List games to identify'}
+        </Button>
+        {manualError ? (
+          <>
+            <PageStatus error={manualError} />
+            {manualError.toLowerCase().includes('write permissions') ? (
+              <p className="od-admin-hint">
+                Manual identification needs write access to the selected game folders when local
+                metadata files are enabled. Grant Oneirodex write access or turn off “Write metadata
+                file on manual ID” in Server Settings.{' '}
+                <AdminLink to="/admin/new_server_settings">Open Server Settings</AdminLink>
+              </p>
             ) : null}
+          </>
+        ) : null}
+        {manualStatus ? <PageStatus announcement="status">{manualStatus}</PageStatus> : null}
+        {manualListed && manualRows.length === 0 ? (
+          <PageStatus announcement="status" className="od-admin-lede">
+            No games were found in this folder.
+          </PageStatus>
+        ) : null}
+        {manualRows.length ? (
+          <div
+            className="od-admin-table-wrap od-scan-controls__manual-results"
+            role="region"
+            tabIndex={0}
+            aria-label="Manual identification candidates; scroll horizontally to see all columns"
+          >
+            <table className="od-data-table">
+              <caption>Games available for manual identification</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Game name</th>
+                  <th scope="col">Location</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualRows.map((row) => {
+                  const params = new URLSearchParams({
+                    full_disk_path: row.full_path,
+                    library_uuid: libraryUuid,
+                  })
+                  return (
+                    <tr key={row.full_path}>
+                      <th scope="row">{row.name}</th>
+                      <td>
+                        <span title={row.full_path}>{row.full_path}</span>
+                      </td>
+                      <td>
+                        <AdminLink className="od-cbtn" to={`/add_game_manual?${params}`}>
+                          Identify
+                        </AdminLink>{' '}
+                        <Button
+                          type="button"
+                          className="od-btn--secondary"
+                          onClick={() => {
+                            setLinkPath(row.full_path)
+                            setLinkQuery(row.name)
+                            setLinkHits([])
+                            setLinkSelected(null)
+                            setLinkError('')
+                            setLinkStatus('')
+                          }}
+                          disabled={Boolean(linkPath) || linkBusy}
+                        >
+                          Link existing game
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         ) : null}
-        {activeTab !== 'manual' ? (
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
-          >
-            {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
-          </Button>
-        ) : null}
-      </form>
-      {activeTab === 'manual' ? (
-        <section
-          id="manual-identify"
-          className="od-admin-panel od-scan-controls__manual"
-          tabIndex={-1}
-          aria-labelledby="od-manual-identify-title"
-        >
-          <h2 id="od-manual-identify-title">Manual identify</h2>
-          <p className="od-admin-lede">
-            When no scan is running, list folders or supported game files to identify. If a scan is
-            already running, this action queues the manual scan using the selected scan options.
-          </p>
-          <Button
-            type="button"
-            onClick={() => void listManualCandidates()}
-            disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || manualBusy}
-          >
-            {manualBusy ? 'Listing games…' : 'List games to identify'}
-          </Button>
-          {manualError ? (
-            <>
-              <PageStatus error={manualError} />
-              {manualError.toLowerCase().includes('write permissions') ? (
-                <p className="od-admin-hint">
-                  Manual identification needs write access to the selected game folders when local
-                  metadata files are enabled. Grant Oneirodex write access or turn off “Write
-                  metadata file on manual ID” in Server Settings.{' '}
-                  <AdminLink to="/admin/new_server_settings">Open Server Settings</AdminLink>
-                </p>
-              ) : null}
-            </>
-          ) : null}
-          {manualStatus ? <PageStatus announcement="status">{manualStatus}</PageStatus> : null}
-          {manualListed && manualRows.length === 0 ? (
-            <PageStatus announcement="status" className="od-admin-lede">
-              No games were found in this folder.
-            </PageStatus>
-          ) : null}
-          {manualRows.length ? (
-            <div
-              className="od-admin-table-wrap od-scan-controls__manual-results"
-              role="region"
-              tabIndex={0}
-              aria-label="Manual identification candidates; scroll horizontally to see all columns"
-            >
-              <table className="od-data-table">
-                <caption>Games available for manual identification</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Game name</th>
-                    <th scope="col">Location</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {manualRows.map((row) => {
-                    const params = new URLSearchParams({
-                      full_disk_path: row.full_path,
-                      library_uuid: libraryUuid,
-                    })
-                    return (
-                      <tr key={row.full_path}>
-                        <th scope="row">{row.name}</th>
-                        <td>
-                          <span title={row.full_path}>{row.full_path}</span>
-                        </td>
-                        <td>
-                          <AdminLink className="od-cbtn" to={`/add_game_manual?${params}`}>
-                            Identify
-                          </AdminLink>{' '}
-                          <Button
-                            type="button"
-                            className="od-btn--secondary"
-                            onClick={() => {
-                              setLinkPath(row.full_path)
-                              setLinkQuery(row.name)
-                              setLinkHits([])
-                              setLinkSelected(null)
-                              setLinkError('')
-                              setLinkStatus('')
-                            }}
-                            disabled={Boolean(linkPath) || linkBusy}
-                          >
-                            Link existing game
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-          {linkPath ? (
-            <div className="od-admin-panel" aria-labelledby="od-link-existing-title">
-              <h3 id="od-link-existing-title" className="od-admin-panel-title">
-                Link folder to an existing game
-              </h3>
-              <p className="od-admin-lede">
-                Selected folder: <code>{linkPath}</code>
-              </p>
-              <div className="od-admin-panel__toolbar">
-                <label className="od-admin-field">
-                  Search existing games
-                  <input
-                    className="od-admin-input"
-                    value={linkQuery}
-                    onChange={(event) => {
-                      setLinkQuery(event.target.value)
-                      setLinkHits([])
-                      setLinkSelected(null)
-                      setLinkStatus('')
-                    }}
-                    disabled={linkSearching || linkBusy}
-                    maxLength={100}
-                  />
-                </label>
-                <Button
-                  type="button"
-                  className="od-btn--secondary"
-                  onClick={() => void searchExistingGames()}
-                  disabled={!linkQuery.trim() || linkSearching || linkBusy}
-                >
-                  {linkSearching ? 'Searching…' : 'Search existing games'}
-                </Button>
-              </div>
-              {linkError ? (
-                <PageStatus error={linkError} errorMessage="Unable to link this folder." />
-              ) : null}
-              {linkStatus ? <PageStatus announcement="status">{linkStatus}</PageStatus> : null}
-              {linkHits.length ? (
-                <div role="group" aria-label="Existing game search results">
-                  {linkHits.map((game) => (
-                    <Button
-                      key={game.uuid}
-                      type="button"
-                      className={
-                        linkSelected?.uuid === game.uuid ? 'od-btn--accent' : 'od-btn--secondary'
-                      }
-                      aria-pressed={linkSelected?.uuid === game.uuid}
-                      onClick={() => setLinkSelected(game)}
-                      disabled={linkBusy}
-                    >
-                      {game.name}
-                      {game.full_disk_path ? ` · ${game.full_disk_path}` : ''}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-              <div className="od-admin-panel__toolbar">
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={() => void linkExistingGame()}
-                  disabled={!linkSelected || linkBusy}
-                >
-                  {linkBusy ? 'Linking…' : 'Link selected game'}
-                </Button>
-                <Button
-                  type="button"
-                  className="od-btn--secondary"
-                  onClick={() => {
-                    setLinkPath('')
+        {linkPath ? (
+          <div className="od-admin-panel" aria-labelledby="od-link-existing-title">
+            <h3 id="od-link-existing-title" className="od-admin-panel-title">
+              Link folder to an existing game
+            </h3>
+            <p className="od-admin-lede">
+              Selected folder: <code>{linkPath}</code>
+            </p>
+            <div className="od-admin-panel__toolbar">
+              <label className="od-admin-field">
+                Search existing games
+                <input
+                  className="od-admin-input"
+                  value={linkQuery}
+                  onChange={(event) => {
+                    setLinkQuery(event.target.value)
                     setLinkHits([])
                     setLinkSelected(null)
-                    setLinkError('')
                     setLinkStatus('')
                   }}
-                  disabled={linkBusy}
-                >
-                  Cancel
-                </Button>
-              </div>
+                  disabled={linkSearching || linkBusy}
+                  maxLength={100}
+                />
+              </label>
+              <Button
+                type="button"
+                className="od-btn--secondary"
+                onClick={() => void searchExistingGames()}
+                disabled={!linkQuery.trim() || linkSearching || linkBusy}
+              >
+                {linkSearching ? 'Searching…' : 'Search existing games'}
+              </Button>
             </div>
-          ) : null}
-          {!linkPath && linkStatus ? (
-            <PageStatus announcement="status">{linkStatus}</PageStatus>
-          ) : null}
-        </section>
-      ) : null}
+            {linkError ? (
+              <PageStatus error={linkError} errorMessage="Unable to link this folder." />
+            ) : null}
+            {linkStatus ? <PageStatus announcement="status">{linkStatus}</PageStatus> : null}
+            {linkHits.length ? (
+              <div role="group" aria-label="Existing game search results">
+                {linkHits.map((game) => (
+                  <Button
+                    key={game.uuid}
+                    type="button"
+                    className={
+                      linkSelected?.uuid === game.uuid ? 'od-btn--accent' : 'od-btn--secondary'
+                    }
+                    aria-pressed={linkSelected?.uuid === game.uuid}
+                    onClick={() => setLinkSelected(game)}
+                    disabled={linkBusy}
+                  >
+                    {game.name}
+                    {game.full_disk_path ? ` · ${game.full_disk_path}` : ''}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            <div className="od-admin-panel__toolbar">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void linkExistingGame()}
+                disabled={!linkSelected || linkBusy}
+              >
+                {linkBusy ? 'Linking…' : 'Link selected game'}
+              </Button>
+              <Button
+                type="button"
+                className="od-btn--secondary"
+                onClick={() => {
+                  setLinkPath('')
+                  setLinkHits([])
+                  setLinkSelected(null)
+                  setLinkError('')
+                  setLinkStatus('')
+                }}
+                disabled={linkBusy}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {!linkPath && linkStatus ? (
+          <PageStatus announcement="status">{linkStatus}</PageStatus>
+        ) : null}
+      </section>
       {browseOpen ? (
         <Modal
           open

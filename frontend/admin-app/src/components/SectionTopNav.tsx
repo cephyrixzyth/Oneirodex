@@ -53,7 +53,12 @@ export function SectionTopNav() {
       : pathname === '/admin/scan-jobs'
         ? 'jobs'
         : pathname.startsWith('/scan_management')
-          ? new URLSearchParams(search).get('active_tab') || 'auto'
+          ? new URLSearchParams(search).get('active_tab') === 'jobs'
+            ? 'jobs'
+            : new URLSearchParams(search).get('active_tab') === 'manual' ||
+                hash === '#manual-identify'
+              ? 'manual'
+              : 'auto'
           : ''
   if (['auto', 'manual', 'jobs'].includes(scanView)) {
     const scanPages = [
@@ -64,7 +69,7 @@ export function SectionTopNav() {
       },
       {
         id: 'manual',
-        href: '/scan_management?active_tab=manual#manual-identify',
+        href: '/scan_management?active_tab=auto#manual-identify',
         label: 'Manual identify',
       },
       { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
