@@ -315,6 +315,7 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
     assert all(response.json() == unsupported[0].json() for response in unsupported)
+    assert unsupported[0].content.endswith(b'\n')
     assert unsupported[0].json() == {
         'error': 'The method is not allowed for the requested URL.',
         'error_code': 'bad_request',

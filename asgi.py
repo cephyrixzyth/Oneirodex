@@ -4359,7 +4359,7 @@ class LazyASGIApp:
         payload, status = api_error_payload(message, code='bad_request', status=405)
         body = json.dumps(
             payload, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
-        ).encode('utf-8')
+        ).encode('utf-8') + b'\n'
         response = Response(
             content=body,
             status_code=status,
