@@ -1395,9 +1395,14 @@ def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatc
         ) as client:
             get_response = await client.get('/offline')
             head_response = await client.head('/offline')
-        return get_response, head_response
+            options_response = await client.options('/offline')
+            unsupported = [
+                await client.request(method, '/offline')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.headers['cache-control'] == 'no-cache'
     assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
@@ -1407,6 +1412,22 @@ def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatc
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
+        'OPTIONS', 'GET', 'HEAD',
+    }
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(
+        set(response.headers['allow'].replace(' ', '').split(','))
+        == {'OPTIONS', 'GET', 'HEAD'}
+        for response in unsupported
+    )
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
