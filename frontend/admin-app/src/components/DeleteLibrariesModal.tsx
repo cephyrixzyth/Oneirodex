@@ -197,7 +197,7 @@ export function DeleteLibrariesModal({
           <h2 id={titleId}>{single ? 'Delete library' : `Delete ${targets.length} libraries`}</h2>
           <p className="od-admin-lede">
             {single
-              ? 'This removes the library record and cannot be undone.'
+              ? `Delete library “${targets[0].name}”? This removes the library record and cannot be undone.`
               : 'This removes the selected library records and cannot be undone.'}
           </p>
         </div>
@@ -216,9 +216,7 @@ export function DeleteLibrariesModal({
             <li key={target.uuid}>{target.name}</li>
           ))}
         </ul>
-      ) : (
-        <p className="od-delete-libraries__single">Delete library “{targets[0].name}”?</p>
-      )}
+      ) : null}
       {!single ? (
         <label className="od-delete-libraries__force">
           <input
@@ -232,7 +230,7 @@ export function DeleteLibrariesModal({
       ) : null}
       {!(force && !single) ? (
         <label className="od-admin-field">
-          Type <strong>{expected}</strong> to confirm
+          Type <strong>{expected}</strong> to enable Confirm
           <input
             className="od-admin-input"
             value={typed}
@@ -264,7 +262,7 @@ export function DeleteLibrariesModal({
           disabled={busy || !valid}
           onClick={() => void confirmDelete()}
         >
-          {jobIds.length ? 'Deleting…' : busy ? 'Starting…' : 'Confirm delete'}
+          {jobIds.length ? 'Deleting…' : busy ? 'Starting…' : 'Confirm Delete'}
         </Button>
       </footer>
     </Modal>

@@ -339,11 +339,13 @@ test('row Delete requires the exact library name and posts through the React con
   fireEvent.click(within(row!).getByRole('button', { name: 'Delete _pc library' }))
   const dialog = await screen.findByRole('dialog', { name: 'Delete library' })
   expect(
-    within(dialog).getByText('This removes the library record and cannot be undone.'),
+    within(dialog).getByText(
+      'Delete library “_pc”? This removes the library record and cannot be undone.',
+    ),
   ).toBeInTheDocument()
-  const confirm = within(dialog).getByRole('button', { name: 'Confirm delete' })
+  const confirm = within(dialog).getByRole('button', { name: 'Confirm Delete' })
   expect(confirm).toBeDisabled()
-  fireEvent.change(within(dialog).getByLabelText(/Type _pc to confirm/i), {
+  fireEvent.change(within(dialog).getByLabelText(/Type _pc to enable Confirm/i), {
     target: { value: '_pc' },
   })
   expect(confirm).toBeEnabled()

@@ -46,7 +46,7 @@ test('shows the game currently being deleted in the progress announcement', asyn
   fireEvent.change(screen.getByRole('textbox'), {
     target: { value: 'Synthetic Library' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm Delete' }))
 
   await waitFor(() => expect(eventSources).toHaveLength(1))
   await act(async () => {
@@ -93,7 +93,7 @@ test('polls completion while the EventSource sends no progress events', async ()
       fireEvent.change(screen.getByRole('textbox'), {
         target: { value: 'Synthetic Library' },
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm Delete' }))
       await Promise.resolve()
     })
     expect(eventSources).toHaveLength(1)
@@ -136,7 +136,7 @@ test('tracks every job started by a batch delete before refreshing the library l
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'DELETE 2 LIBRARIES' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Delete' }))
 
     await waitFor(() => expect(eventSources).toHaveLength(2))
     await waitFor(() => {
