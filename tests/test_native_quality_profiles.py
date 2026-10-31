@@ -37,6 +37,8 @@ class FakeQualityProfilesData:
         return {'id': payload.get('id', 'new'), 'name': payload.get('name', 'New')}
 
     def save(self, payload):
+        if not isinstance(payload, dict):
+            raise TypeError(f"'{type(payload).__name__}' object is not a mapping")
         return {'id': 'balanced', 'name': payload.get('name', 'Balanced')}
 
     def set_active(self, profile_id):
@@ -262,3 +264,23 @@ def test_profile_create_rejects_non_object_json_without_writing():
     assert response.status_code == 422
     assert response.json()['error'] == 'Invalid request.'
     assert data.create_calls == 0
+
+
+def test_legacy_profile_put_keeps_bad_request_for_non_object_json():
+    client = make_client()
+    response = client.put(
+        '/api/quality-profiles', content='["x"]',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        'ok': False,
+        'error': "'list' object is not a mapping",
+        'error_code': 'bad_request',
+        'message': "'list' object is not a mapping",
+        'success': False,
+    }

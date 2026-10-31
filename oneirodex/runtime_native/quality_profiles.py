@@ -135,6 +135,22 @@ def create_quality_profiles_router(
                         body = None
                 payload_body = body if isinstance(body, dict) else {}
                 if (
+                    path == '/api/quality-profiles'
+                    and request.method == 'PUT'
+                    and body
+                    and not isinstance(body, dict)
+                ):
+                    # The legacy single-object PUT passed truthy JSON scalars
+                    # through to save_quality_profile(), which reports them as
+                    # a bad request. Keep this route's established 400 contract
+                    # while the create/active/score routes retain their newer
+                    # structured 422 validation behavior.
+                    try:
+                        response = JSONResponse(data.save(body))
+                    except (TypeError, ValueError) as exc:
+                        payload, status = api_error_payload(str(exc), code='bad_request')
+                        response = JSONResponse(payload, status_code=status)
+                elif (
                     body and not isinstance(body, dict)
                     and not path.endswith(('/active', '/score'))
                 ):
