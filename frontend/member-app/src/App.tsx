@@ -291,6 +291,10 @@ export function App() {
       />
       <Route element={<Layout tileSize={tileSize} onTileSizeChange={setTileSize} />}>
         <Route path="/discover" element={<DiscoverApp />} />
+        {/* v1.1.8 served the member shell at this retired playback test URL.
+            Keep its navigation and compatibility notice while reusing the
+            current Discover surface. */}
+        <Route path="/playromtest" element={<DiscoverApp />} />
         <Route
           path="/discover/hub/genre/:genre"
           element={
