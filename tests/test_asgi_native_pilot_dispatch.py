@@ -1,6 +1,7 @@
 """DB-free coverage for native ASGI dispatch and session compatibility."""
 import asyncio
 from contextlib import nullcontext
+import json
 import httpx
 from flask import Flask
 from starlette.responses import PlainTextResponse
@@ -122,6 +123,12 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     assert get_response.json() == {
         'status': 'ok', 'probe': 'liveness', 'version': app_version,
     }
+    assert get_response.content == (
+        json.dumps(
+            {'status': 'ok', 'probe': 'liveness', 'version': app_version},
+            separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/json'
     assert get_response.headers['x-content-type-options'] == 'nosniff'
     assert get_response.headers['content-security-policy']

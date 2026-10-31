@@ -4277,6 +4277,7 @@ class LazyASGIApp:
 
         payload = json.dumps(
             liveness_payload(app_version), separators=(',', ':'), ensure_ascii=False,
+            sort_keys=True,
         ).encode('utf-8') + b'\n'
         headers = {
             'Content-Type': 'application/json',
