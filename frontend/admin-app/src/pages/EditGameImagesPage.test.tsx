@@ -135,3 +135,57 @@ test('accepts dropped screenshot files through the same sequential upload path',
   expect(uploadCall?.[1]?.body).toBeInstanceOf(FormData)
   expect((uploadCall?.[1]?.body as FormData).get('image_type')).toBe('screenshot')
 })
+
+test('deletes screenshots immediately and preserves cover confirmation with cancel support', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/game-1'))
+      return jsonResponse({ ok: true, game: { name: 'Fixture Game' } }) as any
+    if (url.endsWith('/api/game_images/game-1'))
+      return jsonResponse({
+        game_uuid: 'game-1',
+        images: [
+          { id: 4, image_type: 'cover', url: '/cover.png' },
+          { id: 5, image_type: 'screenshot', url: '/screen.png' },
+        ],
+      }) as any
+    if (url.endsWith('/delete_image')) return jsonResponse({ ok: true }) as any
+    return jsonResponse({ ok: true }) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/edit_game_images/game-1']}>
+      <Routes>
+        <Route path="/edit_game_images/:gameUuid" element={<EditGameImagesPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete screenshot' }))
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/delete_image',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+  fetchMock.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete cover image' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Delete cover image?' })
+  expect(
+    within(dialog).getByText('Are you sure you want to delete the cover image?'),
+  ).toBeInTheDocument()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  expect(fetchMock).not.toHaveBeenCalledWith('/delete_image', expect.anything())
+
+  fireEvent.click(screen.getByRole('button', { name: 'Delete cover image' }))
+  const confirmDialog = await screen.findByRole('dialog', { name: 'Delete cover image?' })
+  fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete cover image' }))
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/delete_image',
+      expect.objectContaining({ method: 'POST' }),
+    ),
+  )
+})

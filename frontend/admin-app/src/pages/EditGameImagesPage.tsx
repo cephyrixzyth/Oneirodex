@@ -81,10 +81,11 @@ export function EditGameImagesPage() {
 
   async function deleteImage(image: GameImage) {
     if (
+      image.image_type === 'cover' &&
       !(await confirmAction({
-        title: `Delete ${image.image_type} image?`,
-        body: 'This removes the image file and its library record.',
-        confirmLabel: 'Delete image',
+        title: 'Delete cover image?',
+        body: 'Are you sure you want to delete the cover image?',
+        confirmLabel: 'Delete cover image',
         tone: 'danger',
       }))
     )
