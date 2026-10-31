@@ -116,7 +116,12 @@ export function IgdbSettingsPage() {
     <Page
       title={
         <>
-          <svg className="od-igdb-title-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <svg
+            className="od-igdb-title-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
             <rect x="2" y="6" width="20" height="12" rx="3" />
             <path d="M6 12h4M8 10v4M15 11h.01M18 13h.01" />
           </svg>
@@ -148,17 +153,17 @@ export function IgdbSettingsPage() {
               </a>
             </li>
             <li>Log in with your Twitch account (or create one if needed)</li>
-            <li>Click on "Register Your Application"</li>
+            <li>Click on &quot;Register Your Application&quot;</li>
             <li>
               Fill in the application details:
               <ul>
-                <li>Name: Your choice (e.g., "MyOneirodex")</li>
+                <li>Name: Your choice (e.g., &quot;MyOneirodex&quot;)</li>
                 <li>OAuth Redirect URL: http://localhost (if testing locally)</li>
-                <li>Category: Select "Website Integration"</li>
+                <li>Category: Select &quot;Website Integration&quot;</li>
               </ul>
             </li>
-            <li>After registering, you'll receive your Client ID</li>
-            <li>Click "New Secret" to generate your Client Secret</li>
+            <li>After registering, you&apos;ll receive your Client ID</li>
+            <li>Click &quot;New Secret&quot; to generate your Client Secret</li>
           </ol>
           <p className="od-igdb-instructions__note">
             <strong>Note:</strong> IGDB is owned by Twitch, which is why credentials are obtained
@@ -204,7 +209,9 @@ export function IgdbSettingsPage() {
                   autoComplete="new-password"
                   maxLength={50}
                   minLength={20}
-                  placeholder={secretPresent ? 'Saved. Leave blank to keep it' : 'No secret is saved'}
+                  placeholder={
+                    secretPresent ? 'Saved. Leave blank to keep it' : 'No secret is saved'
+                  }
                   aria-invalid={credentialsInvalid && secret.length > 0 && secret.length < 20}
                   data-saved={secretPresent ? '1' : '0'}
                   aria-describedby="igdb-secret-help"
@@ -237,7 +244,9 @@ export function IgdbSettingsPage() {
                   )}
                 </Button>
                 <span id="igdb-secret-help" className="visually-hidden">
-                  {secretPresent ? 'A secret is saved. Leave blank to keep it. ' : 'No secret is saved. '}
+                  {secretPresent
+                    ? 'A secret is saved. Leave blank to keep it. '
+                    : 'No secret is saved. '}
                   Only a newly entered secret can be shown.
                 </span>
               </div>
