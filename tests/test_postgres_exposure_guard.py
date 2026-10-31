@@ -22,9 +22,9 @@ if SHELL is None and os.name != "nt":
 @pytest.mark.parametrize(
     ("bind", "password", "expected"),
     [
-        ("127.0.0.1", "postgres", 0),
-        ("127.0.0.2", "postgres", 0),
-        ("::1", "postgres", 0),
+        ("127.0.0.1", "postgres", 1),
+        ("127.0.0.2", "postgres", 1),
+        ("::1", "postgres", 1),
         ("0.0.0.0", "postgres", 1),
         ("192.168.50.116", "postgres", 1),
         ("0.0.0.0", "", 1),
@@ -47,7 +47,7 @@ def test_publication_guard_requires_configured_password_for_non_loopback(bind, p
 
     assert result.returncode == expected
     if expected:
-        assert "refuses non-loopback publication" in result.stderr
+        assert "refuses" in result.stderr
 
 
 @pytest.mark.skipif(SHELL is None, reason="POSIX sh is required to exercise the container guard")
@@ -65,6 +65,41 @@ def test_default_password_never_allows_non_loopback_publication():
 
     assert result.returncode != 0
     assert "default" in result.stderr
+
+
+@pytest.mark.skipif(SHELL is None, reason="POSIX sh is required to exercise the container guard")
+def test_legacy_default_password_is_blocked_by_default_even_on_loopback(tmp_path):
+    env = os.environ.copy()
+    env.update(POSTGRES_HOST_BIND="127.0.0.1", POSTGRES_PASSWORD="postgres", PGDATA=str(tmp_path))
+    result = subprocess.run(
+        [SHELL, "-c", '. "$1" && oneirodex_guard_postgres_publication', "guard-test", str(POLICY)],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true" in result.stderr
+
+
+@pytest.mark.skipif(SHELL is None, reason="POSIX sh is required to exercise the container guard")
+def test_legacy_default_password_requires_opt_in_and_an_existing_volume(tmp_path):
+    env = os.environ.copy()
+    env.update(
+        POSTGRES_HOST_BIND="127.0.0.1",
+        POSTGRES_PASSWORD="postgres",
+        ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD="true",
+        PGDATA=str(tmp_path),
+    )
+    command = [SHELL, "-c", '. "$1" && oneirodex_guard_postgres_publication', "guard-test", str(POLICY)]
+    fresh = subprocess.run(command, env=env, capture_output=True, text=True, check=False)
+    assert fresh.returncode != 0
+    assert "new database volume" in fresh.stderr
+
+    (tmp_path / "PG_VERSION").write_text("17\n", encoding="ascii")
+    existing = subprocess.run(command, env=env, capture_output=True, text=True, check=False)
+    assert existing.returncode == 0, existing.stderr
 
 
 def _run_persisted_password_probe(

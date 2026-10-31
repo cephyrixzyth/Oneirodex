@@ -48,15 +48,21 @@ if [[ "${EMBEDDED}" == "false" && -f /.dockerenv ]]; then
     export POSTGRES_DB="${POSTGRES_DB:-oneirodex}"
 
     # The env templates ship a placeholder, not a password. It is public (it is
-    # in this repo), so starting a database with it is refused outright. The
-    # old default `postgres` is only warned about: existing stacks rely on it.
+    # in this repo), so starting a database with it is refused outright. The old
+    # default `postgres` is allowed only when explicitly opted in for a legacy
+    # stack; the database container separately verifies that its volume exists.
     if [[ "${POSTGRES_PASSWORD}" == CHANGE_ME* || "${DATABASE_URL}" == *":CHANGE_ME"* ]]; then
         echo "❌ POSTGRES_PASSWORD is still the template placeholder. Set a strong password in .env"
         echo "   (e.g. openssl rand -hex 24) before the first start; see docs/runbooks/docker-compose-deploy.md."
         exit 1
     fi
     if [[ "${POSTGRES_PASSWORD}" == "postgres" ]]; then
-        echo "⚠️  POSTGRES_PASSWORD is the old default 'postgres'. Rotate it (docs/runbooks/docker-compose-deploy.md)."
+        if [[ "${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}" != "true" ]]; then
+            echo "❌ POSTGRES_PASSWORD is the legacy default 'postgres'. Set a unique password or explicitly enable legacy compatibility for an existing database volume."
+            echo "   See docs/runbooks/docker-compose-deploy.md."
+            exit 1
+        fi
+        echo "⚠️  Legacy PostgreSQL password compatibility is enabled. Rotate POSTGRES_PASSWORD, then disable ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD."
     fi
 
     if [[ -z "${DATABASE_URL}" \

@@ -139,10 +139,13 @@ over the Compose network.
 |---|---|---|
 | Published host port | `127.0.0.1:5432` — `POSTGRES_HOST_BIND` (default `127.0.0.1`) and `POSTGRES_HOST_PORT` (default `5432`) | Set `POSTGRES_HOST_BIND=<host LAN IP>` (or `0.0.0.0`) in `.env`; when an existing database volume is present, startup verifies the configured password through a private loopback-only connection before exposing the port. |
 | Client auth | `docker/postgres/pg_hba.conf`: scram-sha-256 from loopback, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` only. There is no `0.0.0.0/0` rule. | Add a line for any other CIDR (a custom Docker address pool, Tailscale `100.64.0.0/10`, a global IPv6 prefix), then `docker compose up -d --force-recreate db`. |
-| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and the app container refuses to start while it is still set. Compose falls back to `postgres` only when the variable is unset, so old stacks keep starting (with a warning in the log). | See below. |
+| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and both app and database startup reject it. Compose retains the old `postgres` fallback for interpolation, but startup rejects it by default. | For an existing volume only, set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` to regain service temporarily, rotate the DB credential below, then set it back to `false`. New volumes reject the default even with the compatibility flag. |
 
-The database entrypoint also checks the effective host bind before starting. An
-unset or legacy `postgres` password remains supported on loopback. Non-loopback
+The database entrypoint checks the password and effective host bind before
+starting. The legacy `postgres` password is blocked unless the explicit
+`ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` compatibility flag is set and an
+existing `db_data` volume is detected. This flag is temporary: keep the host bind
+on loopback, rotate to a unique password, then turn the flag off. Non-loopback
 publication requires a non-default `POSTGRES_PASSWORD`. On an existing database
 volume, startup temporarily starts Postgres bound only to the container's
 loopback interface and authenticates with the configured password before the
@@ -162,14 +165,25 @@ python -c "import secrets; print(secrets.token_hex(24))"     # or: openssl rand 
 ### Upgrading an existing stack
 
 `git pull` then `docker compose up -d` recreates `db` with the new port mapping. The
-stack still starts with your current `.env` and the database is untouched, but two
-things change:
+database volume is untouched. If your `.env` has no password or still uses the
+legacy value `postgres`, enable temporary compatibility before starting:
+
+```dotenv
+ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true
+```
+
+Keep `POSTGRES_HOST_BIND=127.0.0.1`, rotate the password using the procedure below,
+then set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=false` and recreate the app and
+database containers. The database guard refuses the legacy default for fresh
+volumes even while the compatibility flag is enabled.
+
+The other change is:
 
 - **The host port is now loopback-only.** If something on another machine connects
   to this host's `5432` (pytest, a GUI client, a second app), set `POSTGRES_HOST_BIND`
   as above.
-- **If `.env` still has `POSTGRES_PASSWORD=postgres` (or none), the superuser password
-  is a known value.** It is no longer reachable from the LAN, but rotate it.
+- **A legacy `postgres` password is now an explicit, temporary compatibility choice.**
+  Rotate it as soon as the upgraded stack is running.
 - **Before enabling a non-loopback bind, rotate the password inside the database**
   using the steps below. The database entrypoint checks that the configured
   password authenticates against the existing volume before allowing the bind.

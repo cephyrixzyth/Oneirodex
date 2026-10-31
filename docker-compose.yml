@@ -70,6 +70,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-oneirodex}
+      - ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}
       - ENABLE_ARR_MODULE=${ENABLE_ARR_MODULE:-true}
       - ENABLE_ARR_HARDLINK_PIPELINE=${ENABLE_ARR_HARDLINK_PIPELINE:-true}
       - ALLOW_PRIVATE_LAN_URLS=${ALLOW_PRIVATE_LAN_URLS:-true}
@@ -194,14 +195,14 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       # SET A STRONG PASSWORD in .env (.env.*.example say how to generate one).
-      # The `postgres` fallback only exists so a stack whose .env predates this
-      # variable keeps starting; it is a known password, so never rely on it on a
-      # host anyone else can reach. Postgres reads this only when it first creates
-      # the db_data volume: changing it later does NOT rotate an existing database
-      # (docs/runbooks/docker-compose-deploy.md § Postgres password).
+      # The `postgres` fallback is retained only for an explicitly opted-in
+      # existing volume. The guard rejects it for new volumes and by default.
+      # Postgres reads this only when it first creates db_data; changing it later
+      # does NOT rotate an existing database (see the deployment runbook).
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-oneirodex}
       - POSTGRES_HOST_BIND=${POSTGRES_HOST_BIND:-127.0.0.1}
+      - ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}
       - PGDATA=/var/lib/postgresql/data/pgdata
     # Force a Compose-friendly HBA so Docker-bridge IPs can connect without SSL.
     # (Stale volume pg_hba with only hostssl → "no encryption" / no pg_hba entry.)
