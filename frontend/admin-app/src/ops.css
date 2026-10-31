@@ -1040,10 +1040,18 @@ body.od-shell-host .od-admin-main:has(.od-dash),
 }
 
 .od-dash__body > .od-ops-metric,
-.od-dash__body > .od-ops-status,
 .od-dash__body > .od-ops-panel {
   flex: 1 1 auto;
   height: 100%;
+  margin-bottom: 0;
+}
+
+/* Let the health banner report its full intrinsic height to DashboardBoard's
+   auto-fit observer. A percentage height pins long issue text to the initial
+   one-row track, where the following metric row can cover the overflow. */
+.od-dash__body > .od-ops-status {
+  flex: 0 0 auto;
+  height: auto;
   margin-bottom: 0;
 }
 
