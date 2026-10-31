@@ -98,18 +98,18 @@ test('keeps the legacy 10080 interval maximum for both hour and minute schedules
   expect(screen.getByLabelText('Interval')).toHaveAttribute('max', '10080')
 })
 
-test('keeps automatic scan and manual identification together on the scan management page', async () => {
+test('automatic tab hides manual identification to keep the workspace focused', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries' ? [] : { roots: [] },
   )
   renderPage()
   expect(await screen.findByRole('heading', { name: 'Scan management' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Automatic scan' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Manual identify' })).not.toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
   expect(screen.queryByRole('list', { name: 'Recent scan jobs' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'List games to identify' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'No libraries yet' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Create your first library' })).toHaveAttribute(
     'href',
@@ -400,7 +400,7 @@ test('restores the selected library from scan-management deep links', async () =
   await waitFor(() => expect(library).toHaveValue('lib-2'))
 })
 
-test('manual deep link keeps automatic scan actions visible and focuses identification', async () => {
+test('manual deep link keeps shared scan setup visible and hides automatic-only actions', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'
       ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
@@ -426,8 +426,8 @@ test('manual deep link keeps automatic scan actions visible and focuses identifi
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
   expect(screen.getByLabelText('Remove games whose files are missing')).toBeInTheDocument()
   expect(screen.getByLabelText('Download missing images')).toBeInTheDocument()
-  expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
+  expect(screen.queryByLabelText('Repeat schedule')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Start scan' })).not.toBeInTheDocument()
 })
 
 test('confirms linking a listed folder to an existing game before posting', async () => {

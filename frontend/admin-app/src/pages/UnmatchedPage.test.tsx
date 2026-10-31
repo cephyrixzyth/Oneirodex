@@ -37,7 +37,7 @@ test('direct unmatched page retains review controls and links back to scan jobs'
   expect(screen.getByRole('link', { name: 'Return to scan jobs' })).toBeVisible()
   expect(screen.getByRole('link', { name: 'Return to scan jobs' })).toHaveAttribute(
     'href',
-    '/admin/scan-jobs',
+    '/scan_management?active_tab=jobs',
   )
 })
 

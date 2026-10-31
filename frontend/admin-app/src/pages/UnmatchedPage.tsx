@@ -35,7 +35,7 @@ export function UnmatchedPage() {
       lede="Review unmatched and duplicate folders, compare candidates, and apply a correction."
     >
       <div className="od-admin-actions-row">
-        <AdminLink to="/admin/scan-jobs">Return to scan jobs</AdminLink>
+        <AdminLink to="/scan_management?active_tab=jobs">Return to scan jobs</AdminLink>
       </div>
       {linkSuccess ? (
         <PageStatus announcement="status" className="od-unmatched__success">

@@ -62,7 +62,7 @@ const CASES = [
   ['/admin/scan-controls', 'Scan management'],
   ['/add_game_manual', 'Identify game'],
   ['/game_edit/123e4567-e89b-12d3-a456-426614174000', 'Edit game entry'],
-  ['/edit_game_images/123e4567-e89b-12d3-a456-426614174000', 'Edit game images'],
+  ['/edit_game_images/123e4567-e89b-12d3-a456-426614174000', 'Library · Artwork Edit Images'],
   ['/admin/unmatched', 'Unmatched folders'],
   ['/admin/themes/readme', 'Creating Your Own Theme'],
   ['/admin/art_studio', 'Art studio'],
@@ -95,34 +95,36 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
   })
 
-  test('automatic scan tab keeps both scan workflows on the same page', () => {
+  test('automatic scan tab shows only the automatic workflow', () => {
     mountAt('/scan_management?active_tab=auto')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Manual identify', level: 2 }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Recent scan jobs' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'List games to identify' })).not.toBeInTheDocument()
     expect(screen.queryByText('Dupe glance')).toBeNull()
   })
 
-  test('manual identify deep link renders the same combined scan page', () => {
+  test('manual identify deep link shows scan setup and manual identify only', () => {
     mountAt('/scan_management?active_tab=manual')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan setup', level: 2 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Scan jobs' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start scan' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Repeat schedule')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start scan' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Repeat schedule')).not.toBeInTheDocument()
   })
 
-  test('legacy manual scan URL opens manual identify in the combined scan page', () => {
+  test('legacy manual scan URL opens the focused manual identify view', () => {
     mountAt('/scan_manual_folder')
     expect(screen.getByRole('heading', { name: 'Scan management', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Manual identify', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Automatic scan', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scan setup', level: 2 })).toBeInTheDocument()
   })
 
   test('legacy scan jobs deep link opens the dedicated full-history page', async () => {
@@ -131,9 +133,38 @@ describe('AdminRoutes path -> page', () => {
     expect(screen.queryByRole('heading', { name: 'Automatic scan' })).not.toBeInTheDocument()
   })
 
-  test('/admin/scan-jobs keeps the full-history jobs page available', async () => {
-    mountAt('/admin/scan-jobs')
+  test('scan jobs stays in the scan management route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/scan_management?active_tab=jobs']}>
+        <AdminRoutes />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
     expect(await screen.findByRole('heading', { name: 'Scan jobs', level: 1 })).toBeInTheDocument()
+    expect(screen.getByTestId('current-location')).toHaveTextContent(
+      '/scan_management?active_tab=jobs',
+    )
+    expect(screen.queryByRole('heading', { name: 'Automatic scan' })).not.toBeInTheDocument()
+  })
+
+  test('/admin/scan-jobs remains a compatibility redirect', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => [],
+      text: async () => '',
+    })) as unknown as typeof globalThis.fetch
+    render(
+      <MemoryRouter initialEntries={['/admin/scan-jobs']}>
+        <AdminRoutes />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('heading', { name: 'Scan jobs', level: 1 })).toBeInTheDocument()
+    expect(screen.getByTestId('current-location')).toHaveTextContent(
+      '/scan_management?active_tab=jobs',
+    )
     expect(screen.queryByRole('heading', { name: 'Automatic scan' })).not.toBeInTheDocument()
   })
 

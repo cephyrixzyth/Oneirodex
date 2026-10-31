@@ -46,7 +46,7 @@ export function NativeLibrariesPage() {
             >
               {refreshing ? 'Refreshing…' : 'Refresh all libraries'}
             </Button>
-            <AdminLink className="od-cbtn" to="/admin/scan-jobs">
+            <AdminLink className="od-cbtn" to="/scan_management?active_tab=jobs">
               Scan jobs
             </AdminLink>
           </>

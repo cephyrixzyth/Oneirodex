@@ -118,7 +118,7 @@ function ScanManagementRoute() {
   const location = useLocation()
   const { search } = location
   const tab = new URLSearchParams(search).get('active_tab') || 'auto'
-  if (tab === 'jobs') return <Navigate replace to="/admin/scan-jobs" state={location.state} />
+  if (tab === 'jobs') return <ScansPage />
   if (['auto', 'manual'].includes(tab)) return <ScanControlsPage />
   if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />
   if (tab === 'unmatched') return <ScanUnmatchedPage />
@@ -130,13 +130,7 @@ function ScanManagementRoute() {
 
 function UnmatchedCompatibilityRoute() {
   const location = useLocation()
-  return (
-    <Navigate
-      replace
-      to="/scan_management?active_tab=unmatched"
-      state={location.state}
-    />
-  )
+  return <Navigate replace to="/scan_management?active_tab=unmatched" state={location.state} />
 }
 
 export function AdminRoutes() {
@@ -208,7 +202,7 @@ export function AdminRoutes() {
       <Route path="/admin/statistics" element={<StatisticsPage />} />
       <Route
         path="/admin/scan-jobs"
-        element={<ScansPage />}
+        element={<Navigate replace to="/scan_management?active_tab=jobs" />}
       />
       <Route path="/admin/scan-controls" element={<ScanControlsPage />} />
       <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
