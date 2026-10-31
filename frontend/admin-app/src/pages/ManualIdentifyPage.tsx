@@ -205,6 +205,8 @@ export function ManualIdentifyPage() {
   }
 
   async function chooseProvider(row: Candidate) {
+    setProviderNotice('')
+    setProviderError('')
     try {
       const data = await getJson('/api/get_next_custom_igdb_id')
       const provider =
@@ -218,6 +220,9 @@ export function ManualIdentifyPage() {
         provider_urls: { ...current.provider_urls, [provider]: row.url || '' },
       }))
       setCandidates([])
+      setProviderNotice(
+        `Applied ${searchSource.toUpperCase()} match (custom IGDB ID). Save to keep.`,
+      )
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : 'Could not allocate a custom catalog ID.',

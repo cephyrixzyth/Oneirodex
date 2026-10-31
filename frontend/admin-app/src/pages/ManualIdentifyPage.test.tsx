@@ -432,6 +432,61 @@ test('keeps missing provider-key guidance inline as a polite status', async () =
   ).toBeTruthy()
 })
 
+test('announces when a provider match is applied to the identify form', async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/api/admin/manual-identify/options'))
+      return response({
+        libraries: [{ uuid: 'lib-1', name: 'Parity Batch Library', platform_name: 'PC Windows' }],
+        taxonomies: {
+          genres: [],
+          game_modes: [],
+          themes: [],
+          platforms: [],
+          player_perspectives: [],
+        },
+        categories: [],
+        statuses: [],
+      }) as any
+    if (url.startsWith('/api/search_metadata?'))
+      return response({
+        results: [
+          {
+            name: 'Moby Match',
+            summary: 'Local fixture summary',
+            url: 'https://example.invalid/moby',
+          },
+        ],
+      }) as any
+    if (url === '/api/get_next_custom_igdb_id') return response({ next_id: 2000000999 }) as any
+    return response({}) as any
+  })
+  globalThis.fetch = fetchMock as unknown as typeof fetch
+  render(
+    <MemoryRouter initialEntries={['/add_game_manual?name=Provider+probe']}>
+      <Routes>
+        <Route path="/add_game_manual" element={<ManualIdentifyPage />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Search MobyGames' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Use this match' }))
+
+  expect(await screen.findByLabelText('IGDB ID')).toHaveValue(2000000999)
+  expect(screen.getByLabelText('Name')).toHaveValue('Moby Match')
+  const status = await screen.findByRole('status')
+  expect(status).toHaveTextContent('Applied MOBYGAMES match (custom IGDB ID). Save to keep.')
+  expect(status).toHaveClass('od-manual-identify__provider-note')
+  expect(
+    status.compareDocumentPosition(screen.getByLabelText('Full disk path')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    fetchMock.mock.calls.some(([input]) => String(input) === '/api/get_next_custom_igdb_id'),
+  ).toBe(true)
+})
+
 test('explains that a game name is required before searching other providers', async () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
