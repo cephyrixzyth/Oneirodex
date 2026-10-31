@@ -3,7 +3,7 @@ import { initiateGameDownload } from '../../api/downloads'
 import { seatCanUseCompanion } from '../../utils/seatMode'
 import { attachPatchCatalogGuide, searchPatchCatalog } from '../../api/patchCatalog'
 import { showToast } from '../../utils/toast'
-import { Button } from '@oneirodex/ui'
+import { Button, safeExternalUrl } from '@oneirodex/ui'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useState } from 'react'
@@ -68,6 +68,7 @@ export function DetailsTranslationsSection({
           {game.translation_patches.map((patch: TranslationPatch) => {
             const versionKey = `patch:${patch.uuid}`
             const applyBusy = busyVersionKey === versionKey
+            const guideUrl = safeExternalUrl(patch.source_url)
             // TC-3: a thin seat gets the Guide link, never a queue button.
             const patchCompanionAvailable =
               seatCanUseCompanion() &&
@@ -88,7 +89,11 @@ export function DetailsTranslationsSection({
                     <Button
                       type="button"
                       disabled={!canDownload || Boolean(busyVersionKey)}
-                      title={!canDownload ? 'Patch downloads are unavailable for child accounts' : undefined}
+                      title={
+                        !canDownload
+                          ? 'Patch downloads are unavailable for child accounts'
+                          : undefined
+                      }
                       aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                       onClick={() => {
                         if (!canDownload) return
@@ -97,13 +102,8 @@ export function DetailsTranslationsSection({
                     >
                       {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
                     </Button>
-                    {patch.source_url ? (
-                      <a
-                        className="od-btn"
-                        href={patch.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+                    {guideUrl ? (
+                      <a className="od-btn" href={guideUrl} target="_blank" rel="noreferrer">
                         Guide
                       </a>
                     ) : null}
@@ -111,7 +111,11 @@ export function DetailsTranslationsSection({
                       <Button
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
-                        title={!canDownload ? 'Companion patch actions are unavailable for child accounts' : undefined}
+                        title={
+                          !canDownload
+                            ? 'Companion patch actions are unavailable for child accounts'
+                            : undefined
+                        }
                         aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return
@@ -221,10 +225,10 @@ export function DetailsTranslationsSection({
                       {hit.notes ? <p className="od-details-page__muted">{hit.notes}</p> : null}
                     </div>
                     <div className="od-details-page__version-actions">
-                      {hit.source_url ? (
+                      {safeExternalUrl(hit.source_url) ? (
                         <a
                           className="od-btn"
-                          href={hit.source_url}
+                          href={safeExternalUrl(hit.source_url) || undefined}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -233,12 +237,14 @@ export function DetailsTranslationsSection({
                       ) : null}
                       <Button
                         type="button"
-                        disabled={catalogBusy}
+                        disabled={catalogBusy || !safeExternalUrl(hit.source_url)}
                         onClick={() => {
+                          const sourceUrl = safeExternalUrl(hit.source_url)
+                          if (!sourceUrl) return
                           setCatalogBusy(true)
                           void attachPatchCatalogGuide({
                             game_uuid: game.uuid,
-                            source_url: hit.source_url,
+                            source_url: sourceUrl,
                             notes: hit.notes,
                             target_language: hit.target_language,
                             patch_format: hit.patch_format,

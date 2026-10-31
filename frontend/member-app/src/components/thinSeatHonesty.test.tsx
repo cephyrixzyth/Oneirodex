@@ -108,6 +108,27 @@ test('Translations: a thin seat keeps the Guide link and loses the queue button'
   expect(screen.getByRole('link', { name: 'Guide' })).toBeInTheDocument()
 })
 
+test('Translations: a non-HTTP(S) guide URL is not rendered as a link', () => {
+  seat('thin')
+  render(
+    <MemoryRouter>
+      <DetailsTranslationsSection
+        game={{
+          ...game,
+          translation_patches: [
+            { uuid: 'p-unsafe', label: 'Unsafe patch', source_url: 'javascript:alert(1)' },
+          ],
+        }}
+        busyVersionKey={null}
+        setBusyVersionKey={noop}
+        setVersionActionStatus={noop}
+        setRetryCount={noop}
+      />
+    </MemoryRouter>,
+  )
+  expect(screen.queryByRole('link', { name: 'Guide' })).toBeNull()
+})
+
 test('Open path: a thin seat copies the path and never queues open_path', async () => {
   seat('thin')
   const user = userEvent.setup()

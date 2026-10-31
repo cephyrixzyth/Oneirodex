@@ -14,6 +14,7 @@ On Library, the **LANG** badge chip (in the left filter column) filters to title
 - Prefer patches from a source you trust (operator-curated URLs or your own files).
 - Oneirodex does **not** scrape third-party patch databases.
 - Operators may enable a **local YAML/JSON catalog** (`ENABLE_PATCH_CATALOG` + `PATCH_CATALOG_PATH`) to attach guide URLs — see [`data/patch_catalog.example.json`](../../data/patch_catalog.example.json).
+- Guide links must use an absolute HTTP or HTTPS URL to appear or be attached; other URL schemes are ignored.
 
 ## Live translate (no fan patch)
 
