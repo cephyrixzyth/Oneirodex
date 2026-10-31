@@ -173,7 +173,7 @@ export function IgdbSettingsPage() {
         </div>
       </details>
       {!loading ? (
-        <form className="od-admin-panel od-igdb-form" noValidate onSubmit={save}>
+        <form className="od-igdb-form" noValidate onSubmit={save}>
           <fieldset className="od-igdb-form__fieldset" disabled={disabled}>
             <legend className="visually-hidden">API credentials</legend>
             <div className="od-igdb-form__group">
