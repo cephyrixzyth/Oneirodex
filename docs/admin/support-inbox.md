@@ -35,6 +35,8 @@ Global settings: `admin_notify_support` (and related `admin_notify_*` for librar
 - `GET /api/support/tickets/<id>` — full ticket including logs.
 - `POST /api/support/tickets/<id>/resolve` — admin
 
+Ticket timestamps are serialized as ISO-8601 UTC with an explicit `+00:00` offset, consistently across create, list, detail, and resolve responses.
+
 ### Related member feeds (Wave 2c)
 
 - `GET /api/notifications` — `{ notifications, unread_count, empty }`

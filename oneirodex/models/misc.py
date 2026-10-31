@@ -367,8 +367,8 @@ class SupportTicket(db.Model):
             'github_issue_number': self.github_issue_number,
             'github_issue_url': self.github_issue_url,
             'github_sync': self.github_sync,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'created_at': _utc_isoformat(self.created_at),
+            'resolved_at': _utc_isoformat(self.resolved_at),
             'resolved_by_user_id': self.resolved_by_user_id,
         }
         if compact:

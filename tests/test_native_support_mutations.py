@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -64,6 +65,22 @@ def test_member_support_ticket_creation_validates_rate_limit_and_envelope():
     assert response.json()['ok'] is True
     assert data.created[0] == 7
     assert data.created[1]['title'] == 'A useful report'
+
+
+def test_support_ticket_serializes_database_timestamps_as_explicit_utc():
+    from oneirodex.models import SupportTicket
+
+    stored_utc = datetime(2026, 10, 31, 3, 0)
+    stored_offset_time = datetime(2026, 10, 31, 8, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    ticket = SupportTicket(
+        id=17, user_id=7, title='Synthetic report', body='',
+        created_at=stored_utc, resolved_at=stored_offset_time,
+    )
+
+    result = ticket.to_dict()
+
+    assert result['created_at'] == '2026-10-31T03:00:00+00:00'
+    assert result['resolved_at'] == '2026-10-31T03:00:00+00:00'
 
 
 def test_admin_resolve_is_scoped_and_not_found_is_explicit():
