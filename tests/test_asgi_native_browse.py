@@ -2544,6 +2544,28 @@ def test_native_next_custom_igdb_id_keeps_signed_in_bare_payload_and_head(monkey
     ]
 
 
+def test_native_next_custom_igdb_id_keeps_legacy_database_error(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    def fail_next_id():
+        raise RuntimeError('database failure')
+
+    monkeypatch.setattr(runtime._fake_game_reads, 'next_custom_igdb_id', fail_next_id)
+
+    response = _run(
+        runtime, '/api/get_next_custom_igdb_id', cookie=_signed_session(),
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        'ok': False,
+        'error': 'Could not work out the next custom IGDB id',
+        'error_code': 'internal',
+        'message': 'Could not work out the next custom IGDB id',
+        'success': False,
+    }
+
+
 def test_native_game_search_preserves_first_query_values_and_member_payload(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     response = _run(
