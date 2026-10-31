@@ -87,6 +87,22 @@ def test_playtime_start_rejects_oversized_json_before_data_write(monkeypatch):
     assert data.calls == []
 
 
+def test_playtime_start_non_object_json_preserves_root_validation_error():
+    client, data = setup_client()
+
+    response = client.post(
+        '/api/playtime/sessions',
+        content=b'[]',
+        headers={'content-type': 'application/json'},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body['error_code'] == 'unprocessable'
+    assert '__root__' in body['detail']
+    assert data.calls == []
+
+
 def test_social_friend_request_rejects_oversized_json_before_data_write(monkeypatch):
     monkeypatch.setattr(social_writes, '_MAX_JSON_BODY_BYTES', 8)
     client, data = setup_client()
