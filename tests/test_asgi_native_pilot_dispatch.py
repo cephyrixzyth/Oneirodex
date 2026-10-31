@@ -292,9 +292,14 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
         ) as client:
             get_response = await client.get('/api/emulator/installed-cores.js')
             head_response = await client.head('/api/emulator/installed-cores.js')
-        return get_response, head_response
+            options_response = await client.options('/api/emulator/installed-cores.js')
+            unsupported = [
+                await client.request(method, '/api/emulator/installed-cores.js')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.text == 'var OD_INSTALLED_CORES = ["nestopia", "snes9x"];\n'
     assert get_response.headers['content-type'] == 'application/javascript; charset=utf-8'
@@ -303,6 +308,20 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
+        'OPTIONS', 'GET', 'HEAD',
+    }
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.json() == unsupported[0].json() for response in unsupported)
+    assert unsupported[0].json() == {
+        'error': 'The method is not allowed for the requested URL.',
+        'error_code': 'bad_request',
+        'message': 'The method is not allowed for the requested URL.',
+        'ok': False,
+        'success': False,
+    }
 
 
 def test_install_manifest_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):

@@ -3034,6 +3034,10 @@ class LazyASGIApp:
                 await self._handle_get_head_method_not_allowed(scope, send)
                 return
 
+            if path == '/manifest.webmanifest' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if path in ('/sw.js', '/vr/sw.js') and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_service_worker(scope, send, path)
                 return
@@ -3052,6 +3056,10 @@ class LazyASGIApp:
 
             if path == '/api/emulator/installed-cores.js' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_installed_cores(scope, send)
+                return
+
+            if path == '/api/emulator/installed-cores.js' and scope.get('method') != 'OPTIONS':
+                await self._handle_api_method_not_allowed(scope, receive, send)
                 return
 
             if (
@@ -4341,6 +4349,26 @@ class LazyASGIApp:
             'body': body,
             'more_body': False,
         })
+
+    async def _handle_api_method_not_allowed(self, scope, receive, send):
+        """Return the JSON 405 envelope for native API paths without Flask."""
+        from starlette.responses import Response
+        from oneirodex.utils.api_contract import api_error_payload
+
+        message = 'The method is not allowed for the requested URL.'
+        payload, status = api_error_payload(message, code='bad_request', status=405)
+        body = json.dumps(
+            payload, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8')
+        response = Response(
+            content=body,
+            status_code=status,
+            headers={
+                'Content-Type': 'application/json',
+                **self._configured_security_headers(),
+            },
+        )
+        await response(scope, receive, send)
 
     async def _handle_readiness(self, scope, send):
         """Run readiness with request-local DB scope without Flask dispatch."""
