@@ -3034,6 +3034,10 @@ class LazyASGIApp:
                 await self._handle_service_worker(scope, send, path)
                 return
 
+            if path in ('/sw.js', '/vr/sw.js') and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if path == '/favicon.ico' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_favicon(scope, send)
                 return

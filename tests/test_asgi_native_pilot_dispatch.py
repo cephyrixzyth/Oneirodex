@@ -1443,14 +1443,19 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
             root_stale_if_range = await client.get('/sw.js', headers={
                 'Range': 'bytes=0-9', 'If-Range': '"stale"',
             })
+            unsupported = [
+                await client.request(method, path)
+                for path in ('/sw.js', '/vr/sw.js')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
         return (
             root_worker, vr_worker, root_head, root_not_modified, root_range,
-            root_if_range, root_stale_if_range,
+            root_if_range, root_stale_if_range, unsupported,
         )
 
     (
         root_worker, vr_worker, root_head, root_not_modified, root_range,
-        root_if_range, root_stale_if_range,
+        root_if_range, root_stale_if_range, unsupported,
     ) = asyncio.run(run())
     assert root_worker.status_code == vr_worker.status_code == 200
     assert root_worker.headers['service-worker-allowed'] == '/'
@@ -1469,6 +1474,17 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     assert root_if_range.content == root_worker.content[:10]
     assert root_stale_if_range.status_code == 200
     assert root_stale_if_range.content == root_worker.content
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(
+        set(response.headers['allow'].replace(' ', '').split(','))
+        == {'OPTIONS', 'GET', 'HEAD'}
+        for response in unsupported
+    )
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
