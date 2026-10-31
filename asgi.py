@@ -4696,6 +4696,7 @@ class LazyASGIApp:
             mimetype='application/javascript; charset=utf-8',
             max_age=None,
             additional_headers={'Service-Worker-Allowed': allowed_scope},
+            skip_additional_headers_for_status=(416,),
         )
 
     async def _handle_favicon(self, scope, send):

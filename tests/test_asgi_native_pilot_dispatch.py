@@ -1443,6 +1443,9 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
             root_stale_if_range = await client.get('/sw.js', headers={
                 'Range': 'bytes=0-9', 'If-Range': '"stale"',
             })
+            root_unsatisfiable = await client.get('/sw.js', headers={
+                'Range': f'bytes={len(root_worker.content)}-',
+            })
             unsupported = [
                 await client.request(method, path)
                 for path in ('/sw.js', '/vr/sw.js')
@@ -1450,12 +1453,12 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
             ]
         return (
             root_worker, vr_worker, root_head, root_not_modified, root_range,
-            root_if_range, root_stale_if_range, unsupported,
+            root_if_range, root_stale_if_range, root_unsatisfiable, unsupported,
         )
 
     (
         root_worker, vr_worker, root_head, root_not_modified, root_range,
-        root_if_range, root_stale_if_range, unsupported,
+        root_if_range, root_stale_if_range, root_unsatisfiable, unsupported,
     ) = asyncio.run(run())
     assert root_worker.status_code == vr_worker.status_code == 200
     assert root_worker.headers['service-worker-allowed'] == '/'
@@ -1474,6 +1477,11 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     assert root_if_range.content == root_worker.content[:10]
     assert root_stale_if_range.status_code == 200
     assert root_stale_if_range.content == root_worker.content
+    assert root_unsatisfiable.status_code == 416
+    assert root_unsatisfiable.headers['content-range'] == (
+        f'bytes */{len(root_worker.content)}'
+    )
+    assert 'service-worker-allowed' not in root_unsatisfiable.headers
     assert all(response.status_code == 405 for response in unsupported)
     assert all(
         set(response.headers['allow'].replace(' ', '').split(','))
