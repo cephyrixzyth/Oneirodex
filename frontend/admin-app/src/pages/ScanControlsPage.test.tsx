@@ -128,6 +128,28 @@ test('hides first-library onboarding once a library is available', async () => {
   expect(screen.queryByRole('heading', { name: 'No libraries yet' })).not.toBeInTheDocument()
 })
 
+test('explains why a configured scan location is unavailable', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : {
+          roots: [
+            {
+              id: 'server',
+              label: 'Server',
+              path: '/storage',
+              default: true,
+              exists: false,
+              read: false,
+            },
+          ],
+        },
+  )
+  renderPage('/scan_management?active_tab=auto')
+  expect(await screen.findByText('Not mounted right now: /storage')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Browse folders' })).toBeDisabled()
+})
+
 test('keeps scan start errors visible in the automatic scan form', async () => {
   vi.mocked(getJson).mockImplementation(async (url) =>
     url === '/api/get_libraries'

@@ -196,6 +196,12 @@ export function ScanControlsPage() {
               ))}
             </select>
           </label>
+          {activeRoot && (!activeRoot.exists || !activeRoot.read) ? (
+            <p className="od-admin-hint">
+              {!activeRoot.exists ? 'Not mounted right now' : 'This location is not readable'}:{' '}
+              {activeRoot.path}
+            </p>
+          ) : null}
           <label className="od-admin-field">
             Folder inside scan location
             <input
