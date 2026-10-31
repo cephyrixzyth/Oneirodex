@@ -291,7 +291,9 @@ Leave these until the contract can be preserved; do not force them.
 - `rename_preview` / `rename_apply` — missing `game_uuid` is 404, not a
   presence guard.
 - `library_tools_backfill_steam_metadata` — every field optional; the *success*
-  body carries `updated` / `skipped` / `errors`.
+  body carries `updated` / `skipped` / `errors`. Malformed JSON and truthy
+  non-object JSON return 400 `bad_request` before a backfill can run. Empty
+  bodies and falsey JSON values keep the legacy default behavior.
 
 ### `routes_apis/chat.py`
 

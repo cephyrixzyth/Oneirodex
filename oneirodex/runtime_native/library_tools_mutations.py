@@ -5,6 +5,8 @@ so the router can be exercised using fake-only tests.
 """
 from __future__ import annotations
 
+import json
+
 from .form_compat import first_form_value
 from typing import Any, Callable
 from urllib.parse import urlencode
@@ -614,7 +616,22 @@ async def _doctor_apply_renames(request, app, data):
 
 
 async def _backfill_steam_metadata(request, app, data):
-    body = await _json_body(request) or {}
+    raw_body = await request.body()
+    if raw_body.strip():
+        try:
+            parsed_body = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return _error(400, 'bad_request', 'Request body must be valid JSON')
+        if isinstance(parsed_body, dict):
+            body = parsed_body
+        elif parsed_body:
+            return _error(400, 'bad_request', 'Request body must be a JSON object')
+        else:
+            # Preserve the legacy empty-body defaults for JSON null, false,
+            # zero, empty strings, and empty arrays.
+            body = {}
+    else:
+        body = {}
     try:
         limit = min(max(int(body.get('limit') or 100), 1), 500)
     except (TypeError, ValueError):

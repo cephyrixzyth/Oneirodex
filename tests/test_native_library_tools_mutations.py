@@ -558,3 +558,23 @@ def test_backfill_and_freshness_delegate_operations_and_preserve_contracts(runti
                          'only_incomplete': True, 'cascade': False}) in data.calls
     assert ('freshness', 'lib1', 50, False) in data.calls
 
+
+@pytest.mark.parametrize('raw', [b'{', b'[1]', b'true', b'"non-empty"'])
+def test_backfill_rejects_malformed_or_non_object_json_without_invoking_backfill(runtime, raw):
+    app, data, cookies = runtime
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookies['admin'])
+            return await client.post(
+                '/api/library_tools/backfill_steam_metadata', content=raw,
+                headers={'Content-Type': 'application/json'}, follow_redirects=False,
+            )
+
+    response = asyncio.run(run())
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert 'backfill' not in [call[0] for call in data.calls]
+
