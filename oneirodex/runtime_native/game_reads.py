@@ -800,14 +800,28 @@ def _local_image_response(request, handle, path):
             return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
         first, last = match.groups()
         if not first:
-            suffix = int(last or '0')
+            try:
+                suffix = int(last or '0')
+            except (ValueError, OverflowError):
+                handle.close()
+                return Response(
+                    status_code=416,
+                    headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'},
+                )
             if suffix <= 0:
                 handle.close()
                 return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
             start, end = max(size - suffix, 0), size - 1
         else:
-            start = int(first)
-            end = min(int(last), size - 1) if last else size - 1
+            try:
+                start = int(first)
+                end = min(int(last), size - 1) if last else size - 1
+            except (ValueError, OverflowError):
+                handle.close()
+                return Response(
+                    status_code=416,
+                    headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'},
+                )
             if start >= size or end < start:
                 handle.close()
                 return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
