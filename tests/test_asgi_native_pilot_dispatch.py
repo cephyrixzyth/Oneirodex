@@ -1577,6 +1577,7 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     assert stale_if_range.content == icon_payload
     assert unsatisfiable.status_code == 416
     assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
+    assert 'cache-control' not in unsatisfiable.headers
     assert all(response.status_code == 405 for response in unsupported)
     assert all(
         set(response.headers['allow'].replace(' ', '').split(','))

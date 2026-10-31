@@ -4598,6 +4598,7 @@ class LazyASGIApp:
         max_age: int | None,
         additional_headers: dict[str, str] | None = None,
         security_headers: dict[str, str] | None = None,
+        skip_additional_headers_for_status: tuple[int, ...] = (),
     ):
         """Send a trusted static file with Werkzeug-compatible validators and ranges."""
         try:
@@ -4645,8 +4646,9 @@ class LazyASGIApp:
         response_headers = response.get_wsgi_headers(environ)
         for key, value in (security_headers or self._configured_security_headers()).items():
             response_headers.set(key, value)
-        for key, value in (additional_headers or {}).items():
-            response_headers.set(key, value)
+        if response.status_code not in skip_additional_headers_for_status:
+            for key, value in (additional_headers or {}).items():
+                response_headers.set(key, value)
         headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
                    for key, value in response_headers]
         status_code = response.status_code
@@ -4708,6 +4710,7 @@ class LazyASGIApp:
             mimetype='image/vnd.microsoft.icon',
             max_age=None,
             additional_headers={'Cache-Control': 'public, max-age=3600'},
+            skip_additional_headers_for_status=(416,),
         )
 
     async def _handle_confirmation_shell(self, scope, send):
