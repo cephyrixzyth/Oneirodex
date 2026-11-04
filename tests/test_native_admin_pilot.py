@@ -4,6 +4,7 @@ import hashlib
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -14,6 +15,36 @@ from flask_wtf.csrf import validate_csrf
 from oneirodex.runtime_native.admin_pilot import create_admin_pilot
 from oneirodex.runtime_native import ADMIN_STATIC_ROUTES
 from oneirodex.utils.security_headers import apply_security_headers
+
+
+def test_admin_shell_uses_default_theme_scripts_but_selected_theme_styles(tmp_path, monkeypatch):
+    from oneirodex.runtime_native.admin_pilot import _native_legacy_chrome_fields
+    from oneirodex.utils import asset_urls, library_paths, preset_themes
+
+    library = tmp_path / 'library'
+    selected = library / 'themes' / 'uploaded-theme'
+    default = library / 'themes' / 'default'
+    (selected / 'css').mkdir(parents=True)
+    (selected / 'js').mkdir()
+    (default / 'css').mkdir(parents=True)
+    (default / 'js').mkdir()
+    (selected / 'css' / 'base.css').write_text('uploaded style', encoding='utf-8')
+    (selected / 'js' / 'preferences_modal.js').write_text('uploaded script', encoding='utf-8')
+    (default / 'js' / 'preferences_modal.js').write_text('shipped script', encoding='utf-8')
+    monkeypatch.setattr(library_paths, 'library_dir', lambda *_args: str(library))
+    monkeypatch.setattr(asset_urls, 'library_dir', lambda *_args: str(library))
+    monkeypatch.setattr(preset_themes, 'canonical_theme_slug', lambda _value: 'uploaded-theme')
+
+    fields = _native_legacy_chrome_fields(SimpleNamespace(
+        preferences=SimpleNamespace(theme='uploaded-theme', icon_pack='outline'),
+        avatarpath=None,
+    ))
+
+    scripts = fields['theme']['scripts']
+    stylesheets = fields['theme']['stylesheets']
+    assert any('/library/themes/default/js/preferences_modal.js' in url for url in scripts)
+    assert not any('/library/themes/uploaded-theme/js/' in url for url in scripts)
+    assert any('/library/themes/uploaded-theme/css/base.css' in url for url in stylesheets)
 
 
 class PilotUser(UserMixin):

@@ -29,7 +29,7 @@ def _native_legacy_chrome_fields(user) -> dict:
     """Build the same chrome payload without Flask request globals."""
     import os
 
-    from oneirodex.utils.asset_urls import asset_version
+    from oneirodex.utils.asset_urls import asset_version, theme_asset_url
     from oneirodex.utils.library_paths import library_dir
     from oneirodex.utils.preset_themes import canonical_theme_slug, era_for_theme
 
@@ -46,13 +46,8 @@ def _native_legacy_chrome_fields(user) -> dict:
         return value
 
     def theme_asset(path: str) -> str:
-        candidate = theme_root / theme / path
-        selected_theme = theme
-        if not candidate.is_file():
-            candidate = theme_root / 'default' / path
-            selected_theme = 'default'
-        return static(
-            f'library/themes/{selected_theme}/{path}', candidate
+        return theme_asset_url(
+            path, theme=theme, static_url_path='/static',
         )
 
     paths = [
