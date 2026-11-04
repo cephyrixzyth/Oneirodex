@@ -276,6 +276,19 @@ def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
         json={'library_dest_dir': 'library'},
         headers={'X-CSRFToken': disabled_client.csrf_token},
     )
+    disabled_invalid = disabled_client.post(
+        '/api/arr/hardlink/preview', json={},
+        headers={'X-CSRFToken': disabled_client.csrf_token},
+    )
+    module_disabled_client = _client(enabled=False)
+    module_disabled_invalid = module_disabled_client.post(
+        '/api/arr/hardlink/preview', json={},
+        headers={'X-CSRFToken': module_disabled_client.csrf_token},
+    )
+    module_disabled_valid = module_disabled_client.post(
+        '/api/arr/hardlink/preview', json={'library_dest_dir': 'library'},
+        headers={'X-CSRFToken': module_disabled_client.csrf_token},
+    )
 
     assert invalid_csrf.status_code == 400
     assert preview.status_code == 200
@@ -285,6 +298,12 @@ def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
     assert apply.status_code == 201
     assert apply.json()['applied_count'] == 1
     assert disabled.status_code == 403
+    assert disabled_invalid.status_code == 403
+    assert disabled_invalid.json()['error_code'] == 'forbidden'
+    assert module_disabled_invalid.status_code == 403
+    assert module_disabled_invalid.json()['error_code'] == 'forbidden'
+    assert module_disabled_valid.status_code == 403
+    assert module_disabled_valid.json()['error'] == 'Arr module is disabled'
 
 
 def test_hardlink_preview_uses_explicit_app_config_without_flask_context(tmp_path):
