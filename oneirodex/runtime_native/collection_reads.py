@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .csrf_compat import csrf_error_response
 
 COLLECTION_REORDER_BODY_MAX_BYTES = 64 * 1024
@@ -268,16 +268,18 @@ def create_collection_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from starlette.responses import JSONResponse
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from starlette.responses import JSONResponse
 
-                response = JSONResponse(data.list(
-                    auth.user,
-                    admin_access=_admin_access(auth.user, auth.token),
-                ))
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
+                    response = JSONResponse(data.list(
+                        auth.user,
+                        admin_access=_admin_access(auth.user, auth.token),
+                    ))
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
 
-                    _set_session_cookie(response, flask_app, auth)
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -456,29 +458,31 @@ def create_collection_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_error_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_error_payload
 
-                payload, status = data.detail(
-                    auth.user,
-                    collection_uuid,
-                    admin_access=_admin_access(auth.user, auth.token),
-                )
-                if status != 200:
-                    message = (
-                        'Collection not found' if status == 404
-                        else 'That collection is private'
+                    payload, status = data.detail(
+                        auth.user,
+                        collection_uuid,
+                        admin_access=_admin_access(auth.user, auth.token),
                     )
-                    code = 'not_found' if status == 404 else 'forbidden'
-                    payload, response_status = api_error_payload(
-                        message, code=code, status=status
-                    )
-                    response = JSONResponse(payload, status_code=response_status)
-                else:
-                    response = JSONResponse(payload)
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
+                    if status != 200:
+                        message = (
+                            'Collection not found' if status == 404
+                            else 'That collection is private'
+                        )
+                        code = 'not_found' if status == 404 else 'forbidden'
+                        payload, response_status = api_error_payload(
+                            message, code=code, status=status
+                        )
+                        response = JSONResponse(payload, status_code=response_status)
+                    else:
+                        response = JSONResponse(payload)
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
 
-                    _set_session_cookie(response, flask_app, auth)
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 

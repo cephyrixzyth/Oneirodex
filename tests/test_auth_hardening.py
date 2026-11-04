@@ -15,12 +15,14 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from flask import Flask, g
 
 from oneirodex.models import ApiToken, User
 from oneirodex.utils import api_tokens
 from oneirodex.utils.api_tokens import (
     generate_api_token,
     require_api_scope,
+    require_api_token_scope,
     user_has_scope,
     verify_bearer_token_detailed,
 )
@@ -262,6 +264,35 @@ class TestScopeDecoratorEnvelope:
             assert body['ok'] is False
             assert body['error_code'] == 'forbidden'
             assert body['detail']['required_scope'] == 'admin'
+
+
+def test_bearer_scope_decorator_denies_narrow_token_and_keeps_sessions(monkeypatch):
+    app = Flask(__name__)
+    monkeypatch.setattr(
+        api_tokens,
+        'user_has_scope',
+        lambda scope: scope == 'read:social',
+        raising=False,
+    )
+    calls = []
+
+    @require_api_token_scope('read:library')
+    def protected_route():
+        calls.append('called')
+        return {'ok': True}
+
+    with app.test_request_context('/api/library'):
+        g.api_token = object()
+        denied, status = protected_route()
+        assert status == 403
+        assert denied.get_json()['detail'] == {'required_scope': 'read:library'}
+
+    assert calls == []
+
+    with app.test_request_context('/api/library'):
+        g.api_token = None
+        assert protected_route() == {'ok': True}
+    assert calls == ['called']
 
 
 # --- Child ACL: Bearer deny-list, minting, acquire, companion commands ------

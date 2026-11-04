@@ -131,12 +131,17 @@ from oneirodex.runtime_native.session_compat import (
 
 
 class FakeBrowseData:
+    def __init__(self):
+        self.calls = []
+
     def query(self, args, user):
+        self.calls.append(('query', user.id, list(args.items(multi=True))))
         assert user.id == 7
         assert args.get('page', 1, type=int) == 3
         return object()
 
     def payload(self, _result):
+        self.calls.append(('payload',))
         return {'games': [], 'total': 0, 'pages': 0, 'current_page': 3}
 
 
@@ -1309,7 +1314,11 @@ class FakeNewsFeedData:
 
 
 class FakeCollectionReadData:
+    def __init__(self):
+        self.calls = []
+
     def list(self, user, *, admin_access):
+        self.calls.append(('list', user.id, admin_access))
         assert user.id == 7
         assert admin_access is False
         return {'collections': [{
@@ -1318,6 +1327,7 @@ class FakeCollectionReadData:
         }]}
 
     def detail(self, user, collection_uuid, *, admin_access):
+        self.calls.append(('detail', user.id, collection_uuid, admin_access))
         assert user.id == 7
         assert admin_access is False
         if collection_uuid == 'missing':
@@ -1750,7 +1760,8 @@ def _runtime(monkeypatch, *, admin=False):
         lambda _prefix: None,
         lambda _token: None,
     ))
-    monkeypatch.setattr(browse, 'BrowseDataAccess', lambda: FakeBrowseData())
+    fake_browse = FakeBrowseData()
+    monkeypatch.setattr(browse, 'BrowseDataAccess', lambda: fake_browse)
     monkeypatch.setattr(
         acquire_status, 'AcquireStatusData', lambda: FakeAcquireStatusData()
     )
@@ -1885,8 +1896,9 @@ def _runtime(monkeypatch, *, admin=False):
     )
     fake_news = FakeNewsFeedData()
     monkeypatch.setattr(news_feeds, 'NewsFeedData', lambda: fake_news)
+    fake_collections = FakeCollectionReadData()
     monkeypatch.setattr(
-        collection_reads, 'CollectionReadData', lambda: FakeCollectionReadData()
+        collection_reads, 'CollectionReadData', lambda: fake_collections,
     )
     monkeypatch.setattr(wishlist, 'WishlistData', lambda: FakeWishlistData())
     fake_notifications = FakeNotificationData()
@@ -1928,6 +1940,8 @@ def _runtime(monkeypatch, *, admin=False):
     runtime._fake_file_types = fake_file_types
     runtime._fake_locale = fake_locale
     runtime._fake_news = fake_news
+    runtime._fake_browse = fake_browse
+    runtime._fake_collections = fake_collections
     return flask_app, runtime
 
 
@@ -4031,6 +4045,61 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
     assert missing_status.json()['status'] is None
     assert missing_status.json()['message'] == 'Status cleared'
     assert 'game-a' not in runtime._fake_member_game_state.statuses
+
+
+def test_native_library_reads_require_read_library_for_bearer(monkeypatch):
+    paths = [
+        '/api/favorites',
+        '/api/check_favorite/game-a',
+        '/api/get_game_status/game-a',
+        '/api/collections',
+        '/api/collections/collection-1',
+        '/browse_games?page=3',
+    ]
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_favorites.calls == []
+    assert runtime._fake_member_game_state.calls == []
+    assert runtime._fake_collections.calls == []
+    assert runtime._fake_browse.calls == []
+
+
+def test_native_library_reads_keep_read_library_and_browser_session_access(monkeypatch):
+    paths = [
+        '/api/favorites',
+        '/api/check_favorite/game-a',
+        '/api/get_game_status/game-a',
+        '/api/collections',
+        '/api/collections/collection-1',
+        '/browse_games?page=3',
+    ]
+    runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+
+    for path in paths:
+        response = _run(
+            runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
+
+    browser_runtime = _runtime(monkeypatch)[1]
+    session_response = _run(
+        browser_runtime, '/browse_games?page=3', cookie=_signed_session(),
+    )
+    assert session_response.status_code == 200
 
 
 def test_native_single_game_status_body_is_bounded_before_json_parse(monkeypatch):

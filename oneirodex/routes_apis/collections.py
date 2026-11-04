@@ -60,6 +60,7 @@ def _item_counts_by_collection_id(collection_ids: list[int]) -> dict[int, int]:
 
 @apis_bp.route('/collections', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def list_collections():
     query = select(GameCollection).order_by(GameCollection.created_at.desc())
     rows = db.session.execute(query).scalars().all()
@@ -133,6 +134,7 @@ def _filtered_collection_payload(collection: GameCollection):
 
 @apis_bp.route('/collections/<collection_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_collection(collection_uuid: str):
     collection = db.session.execute(
         select(GameCollection).filter_by(uuid=collection_uuid)

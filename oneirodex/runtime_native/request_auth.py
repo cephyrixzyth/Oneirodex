@@ -73,6 +73,27 @@ class RequestAuthContext:
         return token_has_scope(self.user, self.token, scope)
 
 
+def require_bearer_scope(auth: RequestAuthContext, scope: str):
+    """Return the standard forbidden response when a bearer lacks ``scope``.
+
+    Browser sessions retain their existing access. Callers should resolve the
+    normal unauthenticated response before invoking this helper.
+    """
+    if auth.token is None or auth.user is None or auth.has_scope(scope):
+        return None
+
+    from starlette.responses import JSONResponse
+
+    from oneirodex.utils.api_contract import api_error_payload
+
+    payload, status = api_error_payload(
+        f'Missing scope: {scope}',
+        code='forbidden',
+        detail={'required_scope': scope},
+    )
+    return JSONResponse(payload, status_code=status)
+
+
 def request_auth_context(
     request: Any,
     config: Mapping[str, Any],

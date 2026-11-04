@@ -10,7 +10,11 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
-from .request_auth import RequestAuthContext, request_auth_context
+from .request_auth import (
+    RequestAuthContext,
+    request_auth_context,
+    require_bearer_scope,
+)
 from .response_compat import add_vary_header, flask_redirect_response
 
 
@@ -62,6 +66,9 @@ def create_browse_router(
                     flask_app,
                     request,
                 )
+            scope_response = require_bearer_scope(context, 'read:library')
+            if scope_response is not None:
+                return _secure_response(scope_response, flask_app, request)
 
             # Werkzeug's MultiDict preserves the legacy Flask ``request.args``
             # API, including typed ``get(..., type=int)`` and first-value rules.

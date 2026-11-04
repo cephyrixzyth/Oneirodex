@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _UNSUPPORTED_JSON_CONTENT_TYPE = object()
 _INVALID_JSON_PAYLOAD = object()
@@ -121,6 +121,8 @@ def create_member_game_state_router(
         response = None
         if write and auth.token is not None and not auth.has_scope('write:library'):
             response = _api_error('Forbidden', 'forbidden')
+        if response is None and not write:
+            response = require_bearer_scope(auth, 'read:library')
         if write and auth.token is None:
             from .csrf_compat import csrf_error_response
 
