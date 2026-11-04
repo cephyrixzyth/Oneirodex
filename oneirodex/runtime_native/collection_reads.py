@@ -20,7 +20,7 @@ class CollectionReadData:
         from sqlalchemy import func, select
 
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GameCollection, GameCollectionItem
+        from oneirodex.models import Game, GameCollection, GameCollectionItem
 
         rows = db.session.execute(
             select(GameCollection).order_by(GameCollection.created_at.desc())
@@ -33,14 +33,20 @@ class CollectionReadData:
         ]
         collection_ids = [collection.id for collection in visible]
         if collection_ids:
-            counts = db.session.execute(
+            item_query = (
                 select(
                     GameCollectionItem.collection_id,
                     func.count(GameCollectionItem.id),
                 )
+                .join(Game, Game.uuid == GameCollectionItem.game_uuid)
                 .where(GameCollectionItem.collection_id.in_(collection_ids))
                 .group_by(GameCollectionItem.collection_id)
-            ).all()
+            )
+            if not admin_access:
+                from oneirodex.utils.library_acl import apply_game_access_filters
+
+                item_query = apply_game_access_filters(item_query, user)
+            counts = db.session.execute(item_query).all()
             count_map = {identifier: int(count) for identifier, count in counts}
         else:
             count_map = {}
@@ -56,7 +62,7 @@ class CollectionReadData:
         from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GameCollection
+        from oneirodex.models import Game, GameCollection, GameCollectionItem
 
         collection = db.session.execute(
             select(GameCollection).filter_by(uuid=collection_uuid)
@@ -67,17 +73,20 @@ class CollectionReadData:
             collection.owner_user_id == user.id or admin_access
         ):
             return None, 403
-        payload = _collection_payload(
-            collection, user, admin_access=admin_access, include_items=True
+        item_query = (
+            select(GameCollectionItem)
+            .join(Game, Game.uuid == GameCollectionItem.game_uuid)
+            .where(GameCollectionItem.collection_id == collection.id)
+            .order_by(GameCollectionItem.position)
         )
-        if collection.owner_user_id != user.id and not admin_access:
-            from oneirodex.utils.library_acl import user_can_access_game
+        if not admin_access:
+            from oneirodex.utils.library_acl import apply_game_access_filters
 
-            payload['items'] = [
-                item.to_dict() for item in collection.items
-                if user_can_access_game(user, item.game)
-            ]
-            payload['item_count'] = len(payload['items'])
+            item_query = apply_game_access_filters(item_query, user)
+        items = db.session.execute(item_query).scalars().all()
+        payload = _collection_payload(collection, user, admin_access=admin_access)
+        payload['items'] = [item.to_dict() for item in items]
+        payload['item_count'] = len(items)
         return payload, 200
 
     def create(self, user, body):
@@ -123,9 +132,12 @@ class CollectionReadData:
         if 'is_public' in payload:
             collection.is_public = bool(payload.get('is_public'))
         db.session.commit()
-        return _collection_payload(
-            collection, user, admin_access=admin_access, include_items=True
-        ), None
+        payload, status = self.detail(
+            user, collection_uuid, admin_access=admin_access
+        )
+        if status != 200:
+            return None, (status, 'not_found', 'Collection not found')
+        return payload, None
 
     def delete(self, user, collection_uuid: str, *, admin_access: bool):
         from sqlalchemy import select

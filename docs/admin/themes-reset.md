@@ -6,7 +6,7 @@ Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...
 
 ## Uploading a theme
 
-Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded content, and 1,024 archive entries. Unsafe archive paths and special files are rejected before extraction. Each upload uses its own temporary directory; concurrent uploads cannot mix files. If two uploads use the same theme name, one is accepted and the other is refused without replacing the installed theme.
+Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded content, and 1,024 archive entries. Unsafe archive paths and special files are rejected before extraction. Each upload uses its own temporary directory; concurrent uploads cannot mix files. If two uploads use the same theme name, one is accepted and the other is refused without replacing the installed theme. Uploaded theme JavaScript is not executed; shell scripts load only from the shipped default theme. Uploaded CSS and other theme assets remain available.
 
 ## Admin theme management UI
 

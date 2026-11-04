@@ -78,6 +78,11 @@ def theme_asset_url(
             theme = 'default'
 
     root = Path(library_dir(package_root)) / 'themes'
+    # Theme ZIPs are administrator-managed, but themes can be selected by
+    # individual accounts. Never execute uploaded JavaScript in the app's
+    # authenticated origin; only shipped/default scripts are trusted.
+    if Path(path).suffix.lower() in ('.js', '.mjs'):
+        theme = 'default'
     themed = root / theme / path
     if themed.is_file():
         return _static_url(

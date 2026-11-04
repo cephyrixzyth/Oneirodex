@@ -88,6 +88,11 @@ Normal browser account flows and public invite redemption remain available.
 
 ## Child accounts
 
+Collection item lists and counts follow the child's current library allow-list
+and genre/theme restrictions, including when the child owns the collection.
+Changing those restrictions immediately changes what appears in existing
+collections.
+
 `child` is not a cosmetic label. On top of parental library allowlists:
 
 - No `admin`, `write:library`, or `write:download` — on **session cookies and Bearer tokens**

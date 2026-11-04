@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from flask_login import login_user
 
-from oneirodex.models import Game, Library, User
+from oneirodex.models import Game, GameCollection, GameCollectionItem, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.library_acl import (
     allowed_library_uuids,
@@ -92,6 +92,52 @@ def test_child_allowlist_and_query(db_session, child, libs, adult):
     names = {g.name for g in db_session.execute(q).scalars().all()}
     assert 'Kid Game' in names
     assert 'Adult Game' not in names
+
+
+def test_child_collection_owner_sees_only_currently_allowed_games(
+    app, client, db_session, child, libs,
+):
+    allowed_library, denied_library = libs
+    set_user_library_allowlist(child.id, [allowed_library.uuid])
+    allowed_game = Game(
+        name='Visible Shelf Game', library_uuid=allowed_library.uuid,
+        full_disk_path='/tmp/' + uuid4().hex,
+    )
+    denied_game = Game(
+        name='Hidden Shelf Game', library_uuid=denied_library.uuid,
+        full_disk_path='/tmp/' + uuid4().hex,
+    )
+    db_session.add_all([allowed_game, denied_game])
+    db_session.flush()
+    collection = GameCollection(
+        name='Owned shelf', owner_user_id=child.id, is_public=True,
+    )
+    db_session.add(collection)
+    db_session.flush()
+    db_session.add_all([
+        GameCollectionItem(collection_id=collection.id, game_uuid=allowed_game.uuid),
+        GameCollectionItem(collection_id=collection.id, game_uuid=denied_game.uuid),
+    ])
+    db_session.commit()
+    _login(client, app, child)
+
+    listed = client.get('/api/collections')
+    detail = client.get(f'/api/collections/{collection.uuid}')
+    updated = client.patch(
+        f'/api/collections/{collection.uuid}', json={'name': 'Renamed shelf'},
+    )
+
+    assert listed.status_code == 200
+    owned_row = next(
+        row for row in listed.get_json()['collections']
+        if row['uuid'] == collection.uuid
+    )
+    assert owned_row['item_count'] == 1
+    for response in (detail, updated):
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload['item_count'] == 1
+        assert [item['game_name'] for item in payload['items']] == ['Visible Shelf Game']
 
 
 def test_get_libraries_respects_acl(client, app, db_session, child, libs):
