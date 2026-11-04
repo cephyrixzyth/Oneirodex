@@ -16,7 +16,7 @@ from .csrf_compat import (
 )
 from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _MAX_JSON_BODY_BYTES = 64 * 1024
 
@@ -194,9 +194,11 @@ def create_account_preferences_router(
             elif auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.choices(auth.user)))
+                    response = JSONResponse(api_ok_payload(data.choices(auth.user)))
 
             from oneirodex.utils.security_headers import security_header_values
 

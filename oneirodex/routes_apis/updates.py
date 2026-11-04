@@ -42,6 +42,7 @@ def _dlc_summary(game: Game) -> dict | None:
 
 @apis_bp.route('/updates/inbox', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def updates_inbox():
     """List games that look behind store versions (member + librarian/admin).
 

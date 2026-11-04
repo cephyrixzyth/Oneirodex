@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .query_compat import first_query_value
 
 _UUID_RE = re.compile(
@@ -345,7 +345,10 @@ def create_game_reads_router(
             return data.save_assists(game, body, config=flask_app.config, package_root=flask_app.root_path)
         return data.save_assists(game, body)
 
-    def read(request: Request, game_uuid: str, operation: str, *, required_scope=None, operation_args=None):
+    def read(
+        request: Request, game_uuid: str, operation: str, *,
+        required_scope='read:library', operation_args=None,
+    ):
         with request_scope():
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
@@ -419,6 +422,8 @@ def create_game_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             handle = None
             if response is None:
                 try:
@@ -570,6 +575,8 @@ def create_game_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 args = MultiDict(request.query_params.multi_items())
                 query = args.get('query', '').strip()

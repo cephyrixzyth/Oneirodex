@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class VrReadData:
@@ -200,6 +200,8 @@ def create_vr_read_router(
                 load_user_id=load_user_id, login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None and not data.enabled(flask_app):
                 response = _api_error('VR browse is disabled', 'forbidden')
             if response is None:
@@ -232,6 +234,8 @@ def create_vr_read_router(
                 load_user_id=load_user_id, login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None and not data.enabled(flask_app):
                 response = _api_error('VR browse is disabled', 'forbidden')
             if response is None:
@@ -249,7 +253,9 @@ def create_vr_read_router(
                 response.body = b''
             return response
 
-    def authorize(request: Request, *, write=False, librarian=False):
+    def authorize(
+        request: Request, *, write=False, librarian=False, required_scope=None,
+    ):
         auth = request_auth_context(
             request, flask_app.config, find_user=find_user,
             find_token=find_token, commit_token_touch=commit_token_touch,
@@ -262,6 +268,8 @@ def create_vr_read_router(
             response = csrf_error_response(request, auth.session_data, flask_app.config)
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
+        if response is None and required_scope:
+            response = require_bearer_scope(auth, required_scope)
         if response is None and librarian:
             from oneirodex.utils.role_catalog import role_at_least
 
@@ -278,7 +286,7 @@ def create_vr_read_router(
     def get_game_vr_profiles(request: Request, game_uuid: str):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth, response = authorize(request)
+            auth, response = authorize(request, required_scope='read:library')
             if response is None:
                 game, refusal = data.accessible_game(auth.user, game_uuid)
                 if refusal:

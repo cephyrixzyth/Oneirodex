@@ -671,16 +671,21 @@ class FakeMemberMetaData:
 
 
 class FakeVrReadData:
+    def __init__(self):
+        self.calls = []
+
     def enabled(self, flask_app):
         return flask_app.config.get('ENABLE_VR_BROWSE') == '1'
 
     def catalog(self, user, *, page, per_page, compatibility):
+        self.calls.append(('catalog', user.id))
         return {
             'page': page, 'pages': 1, 'total': 1,
             'games': [{'uuid': 'vr-1', 'name': 'Headset title', 'vr_compat': compatibility or 'native_vr'}],
         }
 
     def detail(self, user, game_uuid):
+        self.calls.append(('detail', user.id, game_uuid))
         if game_uuid == 'blocked':
             return None, 'forbidden'
         if game_uuid == 'missing':
@@ -690,6 +695,7 @@ class FakeVrReadData:
         }, None
 
     def accessible_game(self, user, game_uuid):
+        self.calls.append(('accessible_game', user.id, game_uuid))
         if game_uuid == 'missing':
             return None, 'not_found'
         if game_uuid == 'blocked':
@@ -1021,7 +1027,11 @@ class FakeAccountSummaryData:
 
 
 class FakeAccountPreferencesData:
+    def __init__(self):
+        self.calls = []
+
     def choices(self, user):
+        self.calls.append(('choices', user.id))
         assert user.id == 7
         return {
             'preferences': {'theme': 'default', 'tile_size': '50'},
@@ -1875,8 +1885,9 @@ def _runtime(monkeypatch, *, admin=False):
     monkeypatch.setattr(
         account_summary, 'AccountInvitesData', lambda: FakeAccountSummaryData()
     )
+    fake_account_preferences = FakeAccountPreferencesData()
     monkeypatch.setattr(
-        account_preferences, 'AccountPreferencesData', lambda _app=None: FakeAccountPreferencesData()
+        account_preferences, 'AccountPreferencesData', lambda _app=None: fake_account_preferences
     )
     monkeypatch.setattr(
         account_stock_avatar, 'StockAvatarData', lambda: FakeAccountStockAvatarData()
@@ -1952,6 +1963,7 @@ def _runtime(monkeypatch, *, admin=False):
     runtime._fake_favorites = fake_favorites
     runtime._fake_member_meta = fake_member_meta
     runtime._fake_vr_reads = fake_vr_reads
+    runtime._fake_account_preferences = fake_account_preferences
     runtime._fake_notifications = fake_notifications
     runtime._fake_social_writes = fake_social_writes
     runtime._fake_wanted = fake_wanted
@@ -4201,6 +4213,57 @@ def test_native_personal_reads_keep_read_library_access(monkeypatch):
     for path in paths:
         response = _run(
             runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
+
+
+def test_native_game_update_preference_and_vr_reads_require_library_scope(monkeypatch):
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+    runtime._fake_vr_reads.enabled = lambda _flask_app: True
+    paths = [
+        '/api/search?query=fixture',
+        '/api/games/game-1/details',
+        '/api/games/game-1/more_from',
+        '/api/games/game-1/editions',
+        '/api/games/game-1/freshness',
+        '/api/games/game-1/assists',
+        '/api/game_screenshots/game-1',
+        '/api/game_images/game-1',
+        '/game/game-1/local_image/cover',
+        '/api/updates/inbox',
+        '/api/account/preferences',
+        '/api/vr/catalog',
+        '/api/vr/games/vr-1',
+        '/api/games/vr-1/vr_profiles',
+    ]
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_game_reads.calls == []
+    assert runtime._fake_game_reads.searches == []
+    assert runtime._fake_update_reads.calls == []
+    assert runtime._fake_account_preferences.calls == []
+    assert runtime._fake_vr_reads.calls == []
+
+    read_runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+    read_runtime._fake_vr_reads.enabled = lambda _flask_app: True
+    for path in paths:
+        if path.startswith('/game/'):
+            continue
+        response = _run(
+            read_runtime, path, headers={'Authorization': read_library},
         )
         assert response.status_code == 200, (path, response.text)
 
