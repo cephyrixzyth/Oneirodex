@@ -312,10 +312,13 @@ start compatibility workers. It also
 serves `/offline` directly using the member-free HTML builder, and
 `/sw.js` plus `/vr/sw.js` from shipped application files with their existing
 scope and no-cache headers; mutable library overrides cannot replace these
-origin-wide worker scripts. `/favicon.ico` uses the native GET/HEAD response
-path with the one-hour `Cache-Control` policy, conditional and byte-range
-semantics, and the legacy 405 response for unsupported methods. Its session-
-independent response omits `Vary: Cookie`. A native FastAPI redirect handler
+origin-wide worker scripts. These static routes retain their GET/HEAD and
+automatic OPTIONS behavior, and return the legacy 405 response for unsupported
+methods. Worker 416 responses omit `Service-Worker-Allowed`, matching Flask's
+range-error headers. `/favicon.ico` uses the native GET/HEAD response path with
+the one-hour `Cache-Control` policy, conditional and byte-range semantics, and
+the legacy 405 response for unsupported methods. Its session-independent
+response omits `Vary: Cookie`. A native FastAPI redirect handler
 also serves `/` and `/index`. It keeps setup
 redirects ahead of login checks, sends anonymous users to login, and sends
 authenticated users to Discover; the setup utility uses the native DB session
@@ -329,7 +332,9 @@ headers, and HEAD behavior. The shared FastAPI app still initializes after
 Flask during the transition. Requests to `/api/emulator/installed-cores.js`
 build the existing disk-backed WebRetro
 allowlist directly in ASGI with its JavaScript content type and five-minute
-private cache policy.
+private cache policy. Its unsupported methods retain the API JSON 405 envelope
+and final newline used by the Flask response; automatic OPTIONS remains empty
+with the legacy Allow method set.
 The shared native FastAPI API app converts unmatched HTTP errors and unexpected
 handler failures into the standard API error envelope, preserves safe security
 headers, logs unexpected failures server-side, and does not expose exception
