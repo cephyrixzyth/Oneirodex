@@ -5049,7 +5049,7 @@ class LazyASGIApp:
             max_age=3600 if cache_control == b'public, max-age=3600' else None,
             additional_headers={
                 **baseline,
-                **theme_document_security_headers(path),
+                **theme_document_security_headers(path, content_type),
                 'Cache-Control': cache_control.decode('ascii'),
             },
             security_headers=baseline,

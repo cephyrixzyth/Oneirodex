@@ -126,9 +126,10 @@ Icon-pack fallback is unchanged: when a theme is selected and no pack is named, 
 (new rows still default to `outline`).
 
 Uploaded theme assets share the app's static origin so their CSS, fonts, and artwork can load normally.
-If an uploaded HTML, SVG, or XML-family document is opened directly, the static response applies a
-restrictive CSP sandbox: scripts, forms, popups, and same-origin privileges are disabled. Theme
-JavaScript is not selected by member or admin shells; their scripts come from the shipped default
+If an uploaded HTML/XHTML, SVG (including compressed SVG), XML/XSLT, or web archive document is
+opened directly, the static response applies a restrictive CSP sandbox: scripts, forms, popups, and
+same-origin privileges are disabled. Theme JavaScript is not selected by member or admin shells;
+their scripts come from the shipped default
 theme. CSS and fonts keep their normal asset behavior. SVG artwork is still served as an image, while
 subresources referenced from inside an active document are blocked by default.
 

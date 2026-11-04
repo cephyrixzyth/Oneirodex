@@ -134,7 +134,9 @@ def test_static_file_get_and_head_keep_legacy_body_and_cache_behavior(
     assert actual_headers[b'cache-control'] == b'public, max-age=3600'
 
 
-@pytest.mark.parametrize('suffix', ['html', 'svg', 'xhtml', 'xml', 'xsl'])
+@pytest.mark.parametrize(
+    'suffix', ['html', 'svg', 'svgz', 'xhtml', 'xml', 'xsl', 'mht', 'mhtml'],
+)
 def test_uploaded_theme_documents_are_sandboxed_when_served_directly(tmp_path, suffix):
     path = f'/static/library/themes/rogue/preview.{suffix}'
     status, headers, _ = _serve_response(
@@ -146,6 +148,17 @@ def test_uploaded_theme_documents_are_sandboxed_when_served_directly(tmp_path, s
     assert b'sandbox' in headers[b'content-security-policy']
     assert b"default-src 'none'" in headers[b'content-security-policy']
     assert headers[b'x-content-type-options'] == b'nosniff'
+
+
+def test_theme_document_mime_type_aliases_are_sandboxed(tmp_path):
+    from oneirodex.utils.static_files import theme_document_security_headers
+
+    assert theme_document_security_headers(
+        '/static/library/themes/rogue/asset.bin', 'image/svg+xml; charset=utf-8',
+    )['Content-Security-Policy'].startswith('sandbox;')
+    assert theme_document_security_headers(
+        '/static/library/themes/rogue/asset.bin', 'message/rfc822',
+    )['Content-Security-Policy'].startswith('sandbox;')
 
 
 def test_theme_css_and_regular_svg_artwork_keep_normal_static_headers(tmp_path):

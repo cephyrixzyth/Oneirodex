@@ -43,18 +43,29 @@ _ORDER = {'public': 0, 'member': 1, 'private': 2}
 # the app's origin privileges when opened directly. Preserve normal SVG image
 # rendering while disabling script, forms, popups and same-origin access.
 _ACTIVE_THEME_DOCUMENT_SUFFIXES = frozenset({
-    '.html', '.htm', '.shtml', '.xhtml', '.xht', '.xhtm',
-    '.svg', '.xml', '.xsl', '.xslt',
+    '.html', '.htm', '.shtml', '.xhtml', '.xht', '.xhtm', '.mht', '.mhtml',
+    '.svg', '.svgz', '.xml', '.xsl', '.xslt',
+})
+_ACTIVE_THEME_DOCUMENT_MIMETYPES = frozenset({
+    'text/html', 'application/xhtml+xml', 'image/svg+xml', 'text/xml',
+    'application/xml', 'application/xslt+xml', 'message/rfc822',
+    'application/x-mimearchive',
 })
 
 
-def theme_document_security_headers(url_path: str) -> dict[str, str]:
+def theme_document_security_headers(
+    url_path: str, content_type: str | None = None,
+) -> dict[str, str]:
     """Return a restrictive document CSP for active files in uploaded themes."""
     parts = _static_parts(url_path)
     if len(parts) < 3 or parts[0].casefold() != 'library' or parts[1].casefold() != 'themes':
         return {}
     suffix = Path(parts[-1]).suffix.casefold()
-    if suffix not in _ACTIVE_THEME_DOCUMENT_SUFFIXES:
+    mimetype = (content_type or '').split(';', 1)[0].strip().casefold()
+    if (
+        suffix not in _ACTIVE_THEME_DOCUMENT_SUFFIXES
+        and mimetype not in _ACTIVE_THEME_DOCUMENT_MIMETYPES
+    ):
         return {}
     return {
         'Content-Security-Policy': (
@@ -148,7 +159,9 @@ def serve_relocated_static(app) -> None:
         if path is None or not path.is_file():
             abort(404)
         response = send_file(path, max_age=app.get_send_file_max_age(str(path)))
-        for key, value in theme_document_security_headers(url_path).items():
+        for key, value in theme_document_security_headers(
+            url_path, response.mimetype,
+        ).items():
             response.headers.setdefault(key, value)
         return response
 
