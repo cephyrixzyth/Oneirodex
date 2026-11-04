@@ -3952,6 +3952,17 @@ def test_native_admin_freshness_refresh_requires_admin_csrf_and_keeps_result(mon
         ('admin_games', 'lib-a', 15), ('freshness', 'stale'), ('commit',),
     ]
 
+    runtime._fake_batch_refresh.freshness_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    failed = asyncio.run(send({'limit': 3, 'library_uuid': 'lib-a'}))
+    assert failed.status_code == 200
+    assert failed.json()['errors'] == [{
+        'uuid': 'stale', 'name': 'Stale', 'error': 'Could not check this title',
+    }]
+    assert 'private-password' not in failed.text
+    assert 'postgres://' not in failed.text
+
 
 def test_native_batch_image_refresh_requires_librarian_and_queues(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
