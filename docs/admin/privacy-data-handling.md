@@ -55,6 +55,9 @@ scheme, hostname or port, they discard authentication, cookies and provider
 headers; original query parameters are not appended again. Body-preserving
 307/308 redirects are supported within one origin; replay to another origin is
 rejected because request bodies may contain store credentials.
+Debrid API calls begin at fixed HTTPS provider URLs and validate each redirect
+hop against the public-only HTTPS policy; redirects to private or cleartext
+destinations are refused.
 
 ## Delegated tokens and private reads
 

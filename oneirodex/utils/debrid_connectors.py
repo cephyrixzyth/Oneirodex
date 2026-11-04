@@ -12,8 +12,16 @@ from sqlalchemy import select
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.challenge_solver import fetch_with_challenge_retry
+from oneirodex.utils.security import validate_outbound_http_url
 
 DEFAULT_TIMEOUT = 30
+
+
+def _validate_debrid_url(url: str) -> tuple[bool, str]:
+    """Debrid API requests and redirects must stay on public HTTPS hosts."""
+    return validate_outbound_http_url(
+        url, allow_http=False, allow_private_lan=False,
+    )
 
 
 def _settings() -> GlobalSettings | None:
@@ -98,6 +106,7 @@ def real_debrid_add_magnet(magnet: str) -> dict[str, Any]:
         headers={'Authorization': f'Bearer {token}'},
         data={'magnet': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -113,6 +122,7 @@ def alldebrid_upload_magnet(magnet: str) -> dict[str, Any]:
         params={'agent': 'Oneirodex', 'apikey': key},
         data={'magnets[]': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -127,6 +137,7 @@ def premiumize_add_magnet(magnet: str) -> dict[str, Any]:
         'https://www.premiumize.me/api/transfer/create',
         data={'apikey': key, 'src': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -142,6 +153,7 @@ def torbox_add_magnet(magnet: str) -> dict[str, Any]:
         headers={'Authorization': f'Bearer {key}'},
         data={'magnet': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
