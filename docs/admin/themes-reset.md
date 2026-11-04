@@ -129,7 +129,8 @@ Uploaded theme assets share the app's static origin so their CSS, fonts, and art
 If an uploaded HTML, SVG, or XML-family document is opened directly, the static response applies a
 restrictive CSP sandbox: scripts, forms, popups, and same-origin privileges are disabled. Theme
 JavaScript is not selected by member or admin shells; their scripts come from the shipped default
-theme. CSS, fonts, and SVG artwork embedded as images keep their normal asset behavior.
+theme. CSS and fonts keep their normal asset behavior. SVG artwork is still served as an image, while
+subresources referenced from inside an active document are blocked by default.
 
 Never edit `oneirodex/static/library/themes/` in git — it is runtime output. Change `oneirodex/setup/default_theme/` and bump generator version when output format changes.
 
