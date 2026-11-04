@@ -23,6 +23,36 @@ databases, and write a `.env` with a generated `SECRET_KEY`. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
 
+For store-provider sync, provide a separate operator-managed Fernet key-ring
+JSON file and set `ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` to its absolute path.
+Keep the key file and a protected backup outside database and library backup
+payloads. The key ring is separate from `.env`'s `SECRET_KEY`; losing it makes
+encrypted store credentials unavailable. The JSON structure is
+`{ "active_key_id": "key-a", "keys": { "key-a": "<Fernet key>" } }`.
+On Linux, make the parent directory private and the key file mode `0600`; the
+app rejects group- or world-readable key-ring files. On Windows, use an NTFS ACL
+that grants read access only to the Oneirodex service account and administrators.
+The portable permission check cannot validate Windows ACLs.
+
+After updating the schema with the new release, stop every old app writer and
+take a protected database backup before running
+`python scripts/migrate_store_credentials.py` from the repository root. A
+pre-conversion backup may contain plaintext provider credentials.
+For an external PostgreSQL database, set the correct `DATABASE_URL` and key-ring
+file path explicitly in the command's process environment. For an embedded
+database, the script resolves the database from `ONEIRODEX_CONFIG_DIR` (default
+`/config`) when embedded mode is enabled or auto-selected; run it in the
+environment that owns that database. The script does not read
+`.env` or fall back to `TEST_DATABASE_URL`. It verifies each ciphertext before
+clearing legacy plaintext, commits one row at a time, can be safely rerun, prints
+counts only, and makes no provider calls. Keep all old app writers stopped
+through conversion. Missing/invalid keys, conflicts, or row failures exit
+nonzero. Fix the cause and rerun before relying on existing links.
+
+For rotation, add a key ID, switch `active_key_id`, and rerun the same command.
+Keep old keys until `rotated=0`, no row failures, and no retained database
+backup requires the old key.
+
 The Linux, macOS, and Windows installers use the same expedition field-terminal
 presentation: Onei appears as a shaded, character-ramp portrait of an armored
 abyssal crab kaiju rising over the city; install steps read like an adventure log.

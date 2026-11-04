@@ -197,10 +197,16 @@ async def _dispatch_action(request, flask_app, data, auth, action, store):
         try:
             account = data.connect(user_id, store, _connect_fields(store, body))
         except Exception as exc:
-            from oneirodex.utils.store_sync_errors import SyncOutcomeError
+            from oneirodex.utils.store_credentials import StoreCredentialError
+            from oneirodex.utils.store_sync_errors import (
+                SyncOutcomeError,
+                classify_sync_exception,
+            )
 
             if isinstance(exc, SyncOutcomeError):
                 return _outcome_error(store, exc.reason, exc.job)
+            if isinstance(exc, StoreCredentialError):
+                return _outcome_error(store, classify_sync_exception(exc))
             if isinstance(exc, ValueError):
                 return _error(400, 'bad_request', str(exc))
             raise

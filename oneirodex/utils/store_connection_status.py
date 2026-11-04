@@ -25,6 +25,8 @@ global success flag):
 """
 from __future__ import annotations
 
+import os
+
 from sqlalchemy import case, func, select
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -81,6 +83,65 @@ def _household_token(store: str) -> bool:
     return False
 
 
+def _household_refresh_persists(store: str) -> bool:
+    """Whether the configured household path can write refreshed tokens.
+
+    This is presence-only status logic. GOG/Amazon only persist when a refresh
+    token is configured; Xbox's adapter refreshes and persists on each sync.
+    Epic and PSN do not write refreshed household credentials.
+    """
+    if store == 'gog':
+        return bool(
+            (os.getenv('GOG_REFRESH_TOKEN') or '').strip()
+            or (os.getenv('GOG_API_TOKEN') or '').strip()
+        )
+    if store == 'amazon':
+        from oneirodex.utils.store_ownership_amazon import (
+            _flatten_amazon_credential,
+            _household_env,
+            _parse_credential_json,
+        )
+
+        raw, _access, _serial = _household_env()
+        if not raw:
+            return False
+        if raw.lstrip().startswith('{'):
+            normalized = _flatten_amazon_credential(_parse_credential_json(raw))
+            return bool(normalized.get('refresh_token'))
+        # The adapter treats a configured scalar household token as refresh.
+        return True
+    if store == 'xbox':
+        from oneirodex.utils.store_ownership_xbox import get_xbox_api_token
+        return bool(get_xbox_api_token())
+    return False
+
+
+def _credential_keyring_available() -> bool:
+    from oneirodex.utils.store_credentials import (
+        StoreCredentialError,
+        load_store_credential_keyring,
+    )
+
+    try:
+        load_store_credential_keyring()
+    except StoreCredentialError:
+        return False
+    return True
+
+
+def _credential_keyring_required(store: str, source: str, env: dict) -> bool:
+    """Whether connecting/syncing this current path can require encryption."""
+    if store not in _TOKEN_STORES or env['credential_keyring']:
+        return False
+    if source in {'migration_required', 'unavailable', 'member'}:
+        return True
+    if source == 'household':
+        return bool(env['household_refresh_persists'].get(store, False))
+    # A missing token can still be added through the connect/reconnect form;
+    # identifier-only links remain allowed by the route when no secret is sent.
+    return source == 'none'
+
+
 def _client_package(store: str) -> bool:
     if store == 'xbox':
         from oneirodex.utils.store_ownership_xbox import client_available
@@ -116,7 +177,19 @@ def _credential_source(store: str, account: StoreAccount | None, env: dict) -> s
     if account is None:
         return 'household' if env['household'].get(store) else 'none'
     module = import_module(f'oneirodex.utils.store_ownership_{store}')
-    source = module.credential_source(account)
+    try:
+        source = module.credential_source(account)
+    except Exception as exc:
+        from oneirodex.utils.store_credentials import (
+            StoreCredentialError,
+            StoreCredentialMigrationRequired,
+        )
+
+        if isinstance(exc, StoreCredentialMigrationRequired):
+            return 'migration_required'
+        if isinstance(exc, StoreCredentialError):
+            return 'unavailable'
+        raise
     if (source == 'member' and store in _UNTAGGED_HOUSEHOLD_COPIES and account.updated_at is None
             and env['household'].get(store)):
         # Saved before LIB-04 tagged household copies (updated_at is still NULL
@@ -139,6 +212,10 @@ def _environment() -> dict:
         'opted_in': unofficial_store_opt_in(),
         'steam_key': bool(get_steam_web_api_key()),
         'household': {store: _household_token(store) for store in _TOKEN_STORES},
+        'household_refresh_persists': {
+            store: _household_refresh_persists(store) for store in _TOKEN_STORES
+        },
+        'credential_keyring': _credential_keyring_available(),
         'packages': {store: _client_package(store) for store in ('xbox', 'psn')},
     }
 
@@ -166,7 +243,14 @@ def _derive(provider, account, records, job, env, now):
     # opted in; that is a missing prerequisite, not an import-only service.
     could_be_live = live or bool(provider.get('requires_unofficial_opt_in'))
     source = _credential_source(store, account, env)
-    missing = _setup_missing(store, provider, env) if could_be_live else None
+    if source == 'migration_required':
+        missing = 'credential_migration'
+    elif source == 'unavailable':
+        missing = 'credential_keyring'
+    elif _credential_keyring_required(store, source, env):
+        missing = 'credential_keyring'
+    else:
+        missing = _setup_missing(store, provider, env) if could_be_live else None
     owned = records['owned'] if records else 0
     if job is not None and account is not None and account.created_at is not None and (
         _naive(job.started_at) < _naive(account.created_at)
@@ -186,6 +270,9 @@ def _derive(provider, account, records, job, env, now):
         actions = ['cancel'] if job.cancellable and not job.cancel_requested else []
     elif not env['enabled']:
         state, actions = 'disabled', []
+    elif source in {'migration_required', 'unavailable'}:
+        state = 'not_configured'
+        actions = ['import_csv'] + (['disconnect'] if clearable else [])
     elif not could_be_live:
         state = 'import_only'
         actions = ['import_csv'] if caps['csv_import'] != 'unavailable' else []
@@ -198,6 +285,10 @@ def _derive(provider, account, records, job, env, now):
         if store == 'steam' and missing == 'server_key':
             # A Steam ID needs no key: free-game claims record the title and
             # open Steam with it. Only the live library read needs the key.
+            actions.insert(0, 'reconnect' if account is not None else 'connect')
+        elif missing == 'credential_keyring':
+            # The link can still be identifier-only. A token submission is
+            # guarded by the same key-ring check in the connect route.
             actions.insert(0, 'reconnect' if account is not None else 'connect')
     elif account is None:
         state, actions = 'not_connected', ['connect', 'import_csv'] + (['disconnect'] if clearable else [])
@@ -238,6 +329,7 @@ def _derive(provider, account, records, job, env, now):
         'credential': {
             'source': source,
             'household_available': bool(env['household'].get(store, False)),
+            'keyring_available': bool(env.get('credential_keyring', False)),
         },
         'account': {
             'connected': account is not None,

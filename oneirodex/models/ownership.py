@@ -21,8 +21,10 @@ class StoreAccount(db.Model):
     )
     store = db.Column(db.String(16), nullable=False)  # steam|gog|epic|amazon|playnite
     external_account_id = db.Column(db.String(64), nullable=True)
-    # Refresh / device-auth secret for live GOG/Epic/Amazon sync. Never returned in to_dict.
+    # Legacy plaintext field retained only for a one-time conversion. Never returned.
     credential = db.Column(db.Text, nullable=True)
+    # Versioned authenticated ciphertext; key material lives outside the DB.
+    credential_ciphertext = db.Column(db.Text, nullable=True)
     created_at = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),

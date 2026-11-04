@@ -65,6 +65,17 @@ def test_member_support_ticket_creation_validates_rate_limit_and_envelope():
     assert response.json()['ok'] is True
     assert data.created[0] == 7
     assert data.created[1]['title'] == 'A useful report'
+    assert data.created[1]['sync_to_github'] is False
+
+
+def test_member_support_ticket_can_explicitly_opt_in_to_github_sync():
+    data = FakeSupport()
+    response = make_client(data=data).post('/api/support/tickets', json={
+        'title': 'A useful report', 'sync_to_github': True,
+    })
+
+    assert response.status_code == 201
+    assert data.created[1]['sync_to_github'] is True
 
 
 def test_support_ticket_serializes_database_timestamps_as_explicit_utc():

@@ -571,6 +571,10 @@
                               },
                               "household_available": {
                                 "type": "boolean"
+                              },
+                              "keyring_available": {
+                                "type": "boolean",
+                                "description": "Whether member store credentials can be securely saved on this server. Optional in responses from older servers."
                               }
                             }
                           },
@@ -2258,7 +2262,7 @@
         }
       },
       "post": {
-        "summary": "Create support ticket (optional GitHub sync)",
+        "summary": "Create support ticket (local by default; GitHub sync requires member opt-in)",
         "security": [
           {
             "cookieAuth": []
@@ -2267,6 +2271,78 @@
             "bearerAuth": []
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "body": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "symptom": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "kind": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "area": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "severity": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "logs": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "sync_to_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Send this report to the administrator-configured GitHub repository. Requires explicit member opt-in."
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created"

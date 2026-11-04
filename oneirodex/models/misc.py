@@ -341,7 +341,7 @@ class SupportTicket(db.Model):
     status = db.Column(db.String(32), default='open', nullable=False)  # open|resolved|closed
     github_issue_number = db.Column(db.Integer, nullable=True)
     github_issue_url = db.Column(db.String(512), nullable=True)
-    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|synced|skipped|error
+    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|synced|skipped|error|local_only
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     resolved_at = db.Column(db.DateTime, nullable=True)
     resolved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)

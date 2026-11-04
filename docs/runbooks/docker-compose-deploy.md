@@ -56,6 +56,8 @@ cp .env.docker.example .env          # local/NAS
 # Set LIBRARY_HOST_PATH = HOST library/appdata path (default ./data/library)
 # Optional BIOS: EMULATOR_BIOS_HOST_PATH + uncomment bios bind in compose
 #   (appdata only — never games share; never commit firmware binaries)
+# Optional store credential key ring: prepare the separate operator-managed JSON
+# file, then uncomment its read-only bind mount below.
 # Do NOT set DATABASE_URL=@localhost — Compose builds URL with host "db"
 docker compose up -d --build
 ```
@@ -125,9 +127,68 @@ Do **not** conflate games (scan root) with library/uploads. Compose header has a
 | **Optional BIOS / firmware** | `EMULATOR_BIOS_HOST_PATH` (uncomment bind in compose) | `/app/oneirodex/static/library/bios` | **rw** | Private host firmware under appdata — not games. Public stance remains Admin upload-only — [unraid-deploy.md § Local private BIOS](unraid-deploy.md#local-private-bios-mount-vs-public-upload) |
 | Optional WebRetro cores | `WEBRETRO_CORES_HOST_PATH` (uncomment in compose) | `/app/oneirodex/static/vendor/webretro/cores` | rw | Operator WASM cores — [webretro-cores.md](webretro-cores.md) |
 | Postgres | Compose volume `db_data` | `/var/lib/postgresql/data/pgdata` | rw | DB |
+| Store credential key ring | `ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH` (uncomment in compose) | `/run/secrets/oneirodex-store-credential-keyring.json` | **ro** | Dedicated key file; back it up separately from database/library data |
 | pg_hba | `./docker/postgres/pg_hba.conf` | `/etc/oneirodex/pg_hba.conf` | ro | App↔db TCP without SSL (scram still required), private source ranges only |
 
 If app loops on `no pg_hba.conf entry … no encryption`, recreate `db` with current Compose or use the one-liner in [container-wont-start.md](container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption).
+
+### Store credential key ring
+
+Store-provider credentials use a dedicated Fernet key ring, separate from
+`SECRET_KEY` and database credentials. Create a JSON file outside the database
+and library backup payloads, restrict host access, then mount it read-only at
+`/run/secrets/oneirodex-store-credential-keyring.json`. Configure
+`ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` to that in-container path. The JSON
+shape is `{ "active_key_id": "key-a", "keys": { "key-a": "<Fernet key>" } }`;
+keep prior key IDs in `keys` while data encrypted under them remains.
+On Linux, keep the containing directory private and set the key-ring file to
+mode `0600`; the app refuses to load a key ring with group or other permission
+bits. On Windows, set an NTFS ACL that grants read access only to the Oneirodex
+service account and administrators; Python cannot validate those ACLs with its
+portable POSIX-mode check.
+
+Back up the key ring separately under protected access. Database backups without
+the key ring cannot restore encrypted store sync; the key ring itself must not be
+placed in the database or library backup payload. Losing it leaves encrypted
+credentials unreadable.
+
+The key ring is optional at install time. Without it, saving member sign-in
+tokens is unavailable and token-backed paths that need to persist refreshed
+credentials are marked not configured. Members can still save an account
+identifier without a token, import a list, or disconnect; existing links and
+title history are retained. Some operator household-token paths that do not
+persist refreshed credentials remain usable.
+
+#### Convert existing credentials after upgrading
+
+The schema upgrade must run once on the new image before the conversion command.
+Stop every old app instance first so no old version can write plaintext while
+conversion runs. Before conversion, take a protected database backup; a backup
+made before conversion can still contain plaintext provider credentials. With
+the new Compose image started once and its schema upgrade
+complete, stop the app and run:
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_store_credentials.py
+docker compose up -d app
+```
+
+The Compose service supplies `DATABASE_URL` and the mounted key-ring path to the
+converter. It requires that process-level `DATABASE_URL`; it does not read `.env`
+or fall back to `TEST_DATABASE_URL`. It verifies each ciphertext against the
+source before clearing legacy plaintext, commits one row at a time, is safe to
+rerun, prints counts only, and makes no provider calls. A missing or invalid key,
+database conflict, or row failure exits nonzero; investigate the redacted count
+and rerun after fixing the cause. Do not leave the app stopped until the
+conversion succeeds and new app is started.
+
+For key rotation, add a new key ID to `keys`, set `active_key_id` to it, then run
+the same converter while the new app is stopped. It re-encrypts values under the
+active key and verifies before commit. Keep the previous key IDs until the run
+reports `rotated=0` with no failures and no retained database backups require
+those keys. Never remove keys based only on the current database if older
+backups still contain ciphertext encrypted under them.
 
 ## Postgres exposure and password
 

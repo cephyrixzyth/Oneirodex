@@ -19,13 +19,13 @@ Related: [members-and-invites.md](members-and-invites.md) · [settings-modules.m
 |---|---|---|
 | Accounts | Username, Argon2 password hash, role, optional email | Emailless accounts use an unroutable `.invalid` placeholder — [members-and-invites.md](members-and-invites.md) |
 | Sessions | Signed session cookie + CSRF token | Same-origin. API tokens are **hashed** (SHA-256); the raw `gt_…` secret is shown once |
-| Library | Game metadata, paths, artwork you stored | Paths point at disks you mounted (`DATA_FOLDER_GAMES`, `ONEIRODEX_LIBRARY_ROOTS`) |
-| Playtime | Per-user totals and session heartbeats | `share_activity` (default on) controls whether others in the household see it |
+| Library | Game metadata, paths, artwork you stored | Paths point at disks you mounted (`DATA_FOLDER_GAMES`, `ONEIRODEX_LIBRARY_ROOTS`); member freshness responses omit absolute install paths |
+| Playtime | Per-user totals and session heartbeats | `share_activity` (default on) controls whether accepted friends see live play status in Discover. It does not hide historical playtime from profile or comparison views when those viewers already have access to the member's library/social data. |
 | Presence | Online / away / in-game | Derived from play sessions and companion heartbeats, not a third-party tracker |
 | Chat | Channel messages, reactions, attachments | Household Spaces only. **No Discord**. Attachment reads recheck channel access and return `Cache-Control: private, no-store` |
-| Store ownership | Steam ID; GOG / Epic / Amazon / Xbox / PlayStation sign-in tokens; synced title IDs and names; per-store sync history (status, redacted reason code, counts, times; last 20 per store) | Register only — never a store download. Tokens are never returned by any API after save. Sync errors reach members and admins as fixed sentences, never provider error text, request URLs or tokens. Disconnect removes the link, its titles, match decisions and sync history |
+| Store ownership | Steam ID; GOG / Epic / Amazon / Xbox / PlayStation sign-in tokens; synced title IDs and names; per-store sync history (status, redacted reason code, counts, times; last 20 per store) | Register only — never a store download. Provider credentials are encrypted at rest with a dedicated operator-managed key ring, never returned by APIs, and do not use `SECRET_KEY`. Sync errors reach members and admins as fixed sentences, never provider error text, request URLs or tokens. Disconnect removes the link, its titles, match decisions and sync history |
 | Notifications | In-app inbox + archive | Optional SMTP for mentions/DMs and a daily digest, each a member preference |
-| Support reports | Title, body, optional logs, client/url hints | Stays local unless you configured GitHub issue sync |
+| Support reports | Title, body, optional logs, client/url hints | Stays on this server by default. The member must opt in before a report is sent to GitHub. |
 | Companion devices | Heartbeat / last-seen | Desktop client stores its token in the OS credential store, not plaintext config |
 
 There is no Oneirodex cloud account, no product analytics SaaS, and no Discord.
@@ -45,7 +45,7 @@ Container startup passes parsed database connection settings to its probe as env
 | News feeds | `ONEIRODEX_NEWS_FEEDS` (http/https only) | The **server** fetches public destinations and checks each redirect under the same policy. Private-network feeds and responses above 512,000 decoded bytes are skipped; members can hide individual sources |
 | OIDC | `OIDC_ENABLED` | Username / email / groups from *your* IdP (Authentik, etc.); the configured issuer must use HTTPS |
 | LiveKit | Voice profile | Room tokens for household voice; media goes to the LiveKit you deployed |
-| GitHub support | `SUPPORT_GITHUB_*` | Report titles/bodies you chose to file upstream |
+| GitHub support | `SUPPORT_GITHUB_*` and the member's per-report opt-in | The selected report, context, optional logs, reporter ID, and role go to the administrator-configured repository. Members can keep reports local by leaving the opt-in unchecked. |
 | WebRetro cores | First boot fetch | WASM cores from the operator-provisioned install path — [webretro-cores.md](../runbooks/webretro-cores.md) |
 
 ROM files, BIOS, and artwork you pointed the library at never upload to a Oneirodex service — there isn't one.
@@ -117,6 +117,10 @@ Thin-client tokens (browse / social) still work.
 ## Backups and deletion
 
 Postgres holds accounts, chat, playtime, and the catalog. Game files live on the library mounts.
+The store-credential key ring is required to decrypt linked provider credentials and must be
+backed up separately under protected access. A database backup without the matching key ring
+cannot restore store sync. Backups created before credential conversion may still contain
+plaintext provider credentials and should remain protected accordingly.
 Deleting a user cascades their progress, tokens, and chat authorship per schema `ON DELETE`.
 Deleting a game removes its play sessions and per-game progress; game requests, owned-title
 matches, and linked game-server records remain with their game reference cleared where the

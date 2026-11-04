@@ -85,7 +85,7 @@ def support_ticket_create(body: CreateSupportTicketBody):
         url_hint=(body.url_hint or body.url or '')[:512] or None,
         logs=logs_raw or None,
         status='open',
-        github_sync='pending',
+        github_sync='pending' if body.sync_to_github else 'local_only',
         created_at=now,
     )
     db.session.add(ticket)
@@ -93,21 +93,22 @@ def support_ticket_create(body: CreateSupportTicketBody):
 
     # The kind leads the title and rides along as a label, so the distinction
     # survives into the issue tracker instead of stopping at our database.
-    gh = create_github_issue(
-        title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
-        body=build_issue_body(ticket.to_dict()),
-        labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
-    )
-    if gh.get('ok'):
-        ticket.github_sync = 'synced'
-        ticket.github_issue_number = gh.get('number')
-        ticket.github_issue_url = gh.get('url')
-    elif gh.get('skipped'):
-        ticket.github_sync = 'skipped'
-    else:
-        ticket.github_sync = 'error'
-        current_app.logger.warning('GitHub issue sync failed: %s', gh.get('error'))
-    db.session.commit()
+    if body.sync_to_github:
+        gh = create_github_issue(
+            title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
+            body=build_issue_body(ticket.to_dict()),
+            labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
+        )
+        if gh.get('ok'):
+            ticket.github_sync = 'synced'
+            ticket.github_issue_number = gh.get('number')
+            ticket.github_issue_url = gh.get('url')
+        elif gh.get('skipped'):
+            ticket.github_sync = 'skipped'
+        else:
+            ticket.github_sync = 'error'
+            current_app.logger.warning('GitHub issue sync failed: %s', gh.get('error'))
+        db.session.commit()
 
     try:
         notify_admins(

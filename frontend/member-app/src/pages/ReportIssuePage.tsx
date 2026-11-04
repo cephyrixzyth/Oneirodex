@@ -53,6 +53,7 @@ export function ReportIssuePage() {
   const [client, setClient] = useState('')
   const [url, setUrl] = useState(seeded.url)
   const [logs, setLogs] = useState('')
+  const [syncToGithub, setSyncToGithub] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<any>(null)
   const [busy, setBusy] = useState(false)
@@ -75,11 +76,13 @@ export function ReportIssuePage() {
         client_hint: client,
         url_hint: url,
         logs,
+        sync_to_github: syncToGithub,
       })
       setResult(data.ticket)
       setTitle('')
       setBody('')
       setLogs('')
+      setSyncToGithub(false)
       setDetailsOpen(false)
       setLogsOpen(false)
     } catch (err: any) {
@@ -107,7 +110,8 @@ export function ReportIssuePage() {
               </a>
             </>
           ) : null}
-          {result.github_sync === 'skipped' ? ' · GitHub sync skipped (token not set)' : null}
+          {result.github_sync === 'local_only' ? ' · Kept on this server; GitHub sync was not requested' : null}
+          {result.github_sync === 'skipped' ? ' · GitHub sync unavailable; ticket stayed on this server' : null}
           {result.github_sync === 'error' ? ' · GitHub sync failed (ticket kept)' : null}
           {' · '}
           <Link to="/notifications">Notifications</Link>
@@ -253,6 +257,19 @@ export function ReportIssuePage() {
             </div>
           ) : null}
         </details>
+
+        <label className="od-report__github-opt-in">
+          <input
+            type="checkbox"
+            checked={syncToGithub}
+            onChange={(event) => setSyncToGithub(event.target.checked)}
+          />
+          <span>
+            Also send this report to GitHub. This includes the report details, context, and any logs
+            you provide, plus your account identifier and role. The server administrator configures
+            the destination repository and its access.
+          </span>
+        </label>
 
         <div className="od-report__actions">
           <Button type="submit" disabled={busy}>

@@ -48,6 +48,20 @@ def test_database_url(sqlite_path=None):
 test_database_url.__test__ = False
 
 
+@pytest.fixture(autouse=True)
+def _store_credential_test_keyring(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    path = tmp_path / 'store-credential-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test',
+        'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE', str(path))
+
+
 def _use_explicit_sqlite_transactions(engine):
     """Use real transactions for SQLite when Python lacks its autocommit API."""
     if engine.dialect.name != 'sqlite':
@@ -354,7 +368,9 @@ def test_credential_source_is_reported_not_revealed(app, monkeypatch):
         _link(MEMBER, 'gog', credential=None)
         client = _client(app, MEMBER)
         entry = _state(client, 'gog')
-        assert entry['state'] == 'needs_credential' and entry['credential'] == {'source': 'none', 'household_available': False}
+        assert entry['state'] == 'needs_credential' and entry['credential'] == {
+            'source': 'none', 'household_available': False, 'keyring_available': True,
+        }
         monkeypatch.setenv('GOG_REFRESH_TOKEN', SECRET)
         entry = _state(client, 'gog')
         assert entry['state'] == 'connected' and entry['credential']['source'] == 'household'
@@ -481,7 +497,9 @@ def test_gog_missing_names_are_partial_and_household_tokens_stay_labelled(app, m
         outcome = _run(MEMBER, 'gog')
         assert outcome['job'].status == 'partial' and outcome['reason'] == 'names_incomplete'
         assert _titles(MEMBER, 'gog') == 2, 'IDs are recorded even without names'
-        stored = json.loads(db.session.execute(select(StoreAccount.credential).where(StoreAccount.user_id == MEMBER)).scalar())
+        from oneirodex.utils.store_credentials import read_store_credential
+        account = db.session.execute(select(StoreAccount).where(StoreAccount.user_id == MEMBER)).scalar_one()
+        stored = json.loads(read_store_credential(account))
         assert stored['origin'] == 'household'
         assert _state(_client(app, MEMBER), 'gog')['credential']['source'] == 'household'
 
@@ -568,8 +586,11 @@ def test_xbox_keeps_the_operator_client_pair_out_of_member_rows(app, monkeypatch
         monkeypatch.setattr(store_ownership_xbox, '_xbox_title_history',
                             lambda t: ([('1234', 'Halo')], store_ownership_xbox._stored_tokens(t, {'refresh_token': 'r2'}, '2533')))
         assert _run(MEMBER, 'xbox')['job'].status == 'succeeded'
-        saved = db.session.execute(select(StoreAccount.credential).where(StoreAccount.store == 'xbox')).scalar()
+        from oneirodex.utils.store_credentials import read_store_credential
+        account = db.session.execute(select(StoreAccount).where(StoreAccount.store == 'xbox')).scalar_one()
+        saved = read_store_credential(account)
         assert SECRET not in saved and json.loads(saved)['origin'] == 'household'
+        assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
         assert _state(_client(app, MEMBER), 'xbox')['credential']['source'] == 'household'
 
 
@@ -627,14 +648,18 @@ def test_amazon_household_access_token_is_reported_and_serial_has_its_own_reason
     with app.app_context():
         _link(MEMBER, 'amazon', credential=None)
         entry = _state(_client(app, MEMBER), 'amazon')
-        assert entry['credential'] == {'source': 'household', 'household_available': True}
+        assert entry['credential'] == {
+            'source': 'household', 'household_available': True, 'keyring_available': True,
+        }
         # A member's own token is never paired with the household serial.
         store_ownership_amazon.connect_amazon_account(MEMBER, refresh_token='mine')
         assert _run(MEMBER, 'amazon')['reason'] == 'device_serial_missing'
         assert _state(_client(app, MEMBER), 'amazon')['state'] == 'reauth_required'
         # Reconnecting with only the serial keeps the saved token.
         store_ownership_amazon.connect_amazon_account(MEMBER, device_serial='my-serial')
-        saved = json.loads(db.session.execute(select(StoreAccount.credential).where(StoreAccount.store == 'amazon')).scalar())
+        from oneirodex.utils.store_credentials import read_store_credential
+        account = db.session.execute(select(StoreAccount).where(StoreAccount.store == 'amazon')).scalar_one()
+        saved = json.loads(read_store_credential(account))
         assert saved == {'refresh_token': 'mine', 'device_serial': 'my-serial'}
         assert _state(_client(app, MEMBER), 'amazon')['state'] == 'connected'
 
@@ -650,7 +675,10 @@ def test_members_cannot_tag_their_own_credential_as_household(app, store, body):
     connect = getattr(module, f'connect_{store}_account')
     with app.app_context():
         connect(MEMBER, **body)
-        stored = json.loads(db.session.execute(select(StoreAccount.credential).where(StoreAccount.store == store)).scalar())
+        from oneirodex.utils.store_credentials import read_store_credential
+        account = db.session.execute(select(StoreAccount).where(StoreAccount.store == store)).scalar_one()
+        stored = json.loads(read_store_credential(account))
+        assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
         assert 'origin' not in stored and 'household_fp' not in stored
         assert _state(_client(app, MEMBER), store)['credential']['source'] in ('member', 'none')
 

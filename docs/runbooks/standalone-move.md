@@ -95,6 +95,20 @@ docker compose run --rm --no-deps -v ./move:/move:ro \
   option for it, so the password stays out of your shell history.
 - The server's own `SECRET_KEY` comes from the app container's environment. It
   is used to re-encrypt encrypted saves.
+- Store-provider credentials use a separate operator-managed key ring, not the
+  database dump. Copy that protected file independently to the target, set
+  `ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` to its new local path, and preserve
+  every key ID needed by the restored ciphertext. Keep the key-ring backup
+  outside the move archive and database/library backup payloads.
+- After the schema has been upgraded on the target, run
+  `python scripts/migrate_store_credentials.py` with the target
+  `ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` available. For an external database,
+  set the target `DATABASE_URL` explicitly in the process environment. For the
+  single-container embedded-PostgreSQL target, run the script inside the new
+  running app container; it resolves the database from `/config`, so leave that
+  container running. The converter does not load `.env` or fall back to
+  `TEST_DATABASE_URL`. Keep old-version writers stopped, and verify/migrate every
+  row before depending on restored store links.
 - Files go into the server's library folder (`LIBRARY_HOST_PATH`). If a file
   with the same name and different content is already there, the import stops
   before anything is written.

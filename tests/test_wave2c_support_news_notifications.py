@@ -64,7 +64,7 @@ def test_support_ticket_title_only_optional_symptom_logs(client, app, db_session
     assert ticket['body'] == ''
     assert ticket['logs'] is None
     assert ticket['has_logs'] is False
-    assert ticket['github_sync'] == 'skipped'
+    assert ticket['github_sync'] == 'local_only'
 
 
 def test_support_ticket_missing_title_is_422(client, app, db_session, member_user):

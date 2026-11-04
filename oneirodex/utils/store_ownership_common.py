@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -192,8 +192,10 @@ def _any_account_credential(store: str) -> bool:
     row = db.session.execute(
         select(StoreAccount.id).where(
             StoreAccount.store == store,
-            StoreAccount.credential.isnot(None),
-            StoreAccount.credential != '',
+            or_(
+                and_(StoreAccount.credential.isnot(None), StoreAccount.credential != ''),
+                and_(StoreAccount.credential_ciphertext.isnot(None), StoreAccount.credential_ciphertext != ''),
+            ),
         ).limit(1)
     ).first()
     return row is not None
@@ -398,6 +400,8 @@ def connect_store_account(
     credential: str | None = None,
 ) -> StoreAccount:
     """Link a register-only store account (optional external ID / note / secret)."""
+    from oneirodex.utils.store_credentials import write_store_credential
+
     if store not in VALID_STORES:
         raise ValueError(f'Unsupported store: {store}')
     # The column holds 64 characters. An over-long note used to fail the INSERT,
@@ -418,7 +422,7 @@ def connect_store_account(
             account.updated_at = now
         account.external_account_id = external_account_id
         if credential:
-            account.credential = credential
+            write_store_credential(account, credential)
 
     account = existing()
     if account:
@@ -428,13 +432,14 @@ def connect_store_account(
             user_id=user_id,
             store=store,
             external_account_id=external_account_id,
-            credential=credential,
             # Naive UTC like every LIB-04 time. The model's aware default is
             # shifted to the session time zone by PostgreSQL on a non-UTC
             # server, and status compares this with job start times.
             created_at=now,
             updated_at=now,
         )
+        if credential:
+            write_store_credential(account, credential)
         db.session.add(account)
     try:
         db.session.commit()

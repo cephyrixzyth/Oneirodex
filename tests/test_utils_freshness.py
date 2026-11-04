@@ -27,6 +27,7 @@ def test_detect_local_from_folder_name():
     assert facts['version'] == '1.0.38251'
     assert facts['dlc_count_hint'] == 5
     assert facts['source'] == 'folder_name'
+    assert 'path' not in facts
 
 
 def test_detect_local_from_nfo_when_name_clean():
@@ -40,6 +41,26 @@ def test_detect_local_from_nfo_when_name_clean():
     facts = detect_local_facts(game)
     assert facts['version'] == '1.9.23494.3'
     assert facts['source'] == 'nfo'
+
+
+def test_freshness_public_view_redacts_legacy_cached_absolute_path():
+    from oneirodex.utils.freshness.service import freshness_public_view
+
+    game = SimpleNamespace(
+        freshness_status='unknown',
+        freshness_confidence='none',
+        freshness_checked_at=None,
+        local_version=None,
+        remote_version_summary=None,
+        steam_app_id=None,
+        freshness_payload={
+            'local': {'version': None, 'path': r'Z:\private\library\Game'},
+        },
+    )
+
+    result = freshness_public_view(game)
+
+    assert result['local'] == {'version': None}
 
 
 def test_detect_local_facts_accepts_explicit_app_for_path_allowlisting(tmp_path):

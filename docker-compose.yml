@@ -66,6 +66,7 @@ services:
       - ONEIRODEX_LIBRARY_ROOTS=${ONEIRODEX_LIBRARY_ROOTS:-}
       - UPLOAD_FOLDER=/app/oneirodex/static/library
       - SECRET_KEY=${SECRET_KEY}
+      - ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE=${ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE:-/run/secrets/oneirodex-store-credential-keyring.json}
       - DEV_MODE=${DEV_MODE:-false}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -176,6 +177,10 @@ services:
       # games share. Empty host dir is fine (Admin upload still works into it).
       # Never commit BIOS binaries; never bake them into the public image.
       # - "${EMULATOR_BIOS_HOST_PATH:-/mnt/user/appdata/oneirodex/bios}:/app/oneirodex/static/library/bios"
+      # Optional persistent provider-credential key ring. Create/protect the JSON
+      # file first, then uncomment and set ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH.
+      # Keep the host file and its protected backup outside DB/library backup payloads.
+      # - "${ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH}:/run/secrets/oneirodex-store-credential-keyring.json:ro"
     depends_on:
       db:
         condition: service_healthy

@@ -61,7 +61,9 @@ def _epic_device_auth_for(account: StoreAccount) -> dict:
     # The household device auth is used only when the member saved nothing.
     # An incomplete member paste (e.g. a Legendary user.json) is reported as
     # incomplete rather than silently syncing the household account's library.
-    data = _parse_credential_json(account.credential)
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    data = _parse_credential_json(read_store_credential(account))
     if data:
         return data
     env_raw = get_epic_api_token()

@@ -99,7 +99,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 - **Spaces** — servers with their own text *and* voice channels, household-wide or invite-only; presence, profiles, DMs, @mentions, reactions, threads — [social-and-voice.md](docs/user/social-and-voice.md)
 - **Friends dock** (rail · pinned · pop-out · Big Picture **Y** · desktop always-on-top)
 - Optional **LiveKit** voice and screenshare (`docker compose --profile livekit`) — [livekit-unraid.md](docs/runbooks/livekit-unraid.md)
-- In-app **Report issue** → admin **Support inbox** → GitHub Issues when configured — [support-inbox.md](docs/admin/support-inbox.md)
+- In-app **Report issue** → admin **Support inbox** → optional GitHub Issues sync after member opt-in — [support-inbox.md](docs/admin/support-inbox.md)
 
 **Admin & ops**
 - Libraries & scans, scan jobs, unmatched, filters, release filters, extensions, image queue

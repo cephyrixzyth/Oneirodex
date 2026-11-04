@@ -2,11 +2,11 @@
 
 > **Doc status:** Active
 
-Teammate reports land in-app and optionally on GitHub. Discord is not used.
+Teammate reports land in-app. GitHub sync is opt-in on each report. Discord is not used.
 
 ## Member path
 
-Members open **More → Report issue** (`/report`). Fields: title (required), symptom/body (optional), area, severity; **Context** (deploy, client, URL) and **Logs** stay collapsed until expanded.
+Members open **More → Report issue** (`/report`). Fields: title (required), symptom/body (optional), area, severity; **Context** (deploy, client, URL) and **Logs** stay collapsed until expanded. Reports stay on this server unless the member checks **Also send this report to GitHub**. That opt-in sends report details, context, optional logs, reporter ID, and role to the repository configured by the administrator.
 
 Caps on create: symptom ≤2000 chars, logs ≤4000 chars. List payloads omit log blobs (`has_logs` + truncated `body` / `body_preview` + `empty`).
 
@@ -21,7 +21,7 @@ Caps on create: symptom ≤2000 chars, logs ≤4000 chars. List payloads omit lo
 
 | Variable | Purpose |
 |---|---|
-| `SUPPORT_GITHUB_TOKEN` | PAT with `issues:write`. If unset, ticket still saves; `github_sync=skipped`. |
+| `SUPPORT_GITHUB_TOKEN` | PAT with `issues:write`. GitHub sync runs only when a member opts in; otherwise the ticket is saved locally with `github_sync=local_only`. If opted in but the token is unset, the ticket still saves locally with `github_sync=skipped`. |
 | `SUPPORT_GITHUB_REPO` | Default `cephyrixzyth/oneirodex` |
 
 ## Admin alert prefs

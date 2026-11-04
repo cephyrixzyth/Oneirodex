@@ -60,6 +60,12 @@ export function StoreConnectionCard({
   const can = (action: StoreConnectionAction) => actions.includes(action)
   const working = busy !== null
   const connectFields = CONNECT_FIELDS[provider] || []
+  const keyringUnavailable =
+    connection.credential.keyring_available === false ||
+    connection.setup.missing === 'credential_keyring'
+  const visibleConnectFields = keyringUnavailable
+    ? connectFields.filter((field) => !field.secret && !field.requiresKeyring)
+    : connectFields
   const note = credentialNote(connection)
   const sentence = stateSentence(connection)
   const last = connection.last_sync
@@ -264,7 +270,14 @@ export function StoreConnectionCard({
           data-form-type="other"
           onSubmit={submitConnect}
         >
-          {connectFields.map((field) => (
+          {keyringUnavailable ? (
+            <p className="od-store-card__note" role="status">
+              The server key ring is unavailable. You can save an account identifier, but member
+              sign-in tokens cannot be saved until your administrator configures it. An enabled
+              household sign-in remains in use.
+            </p>
+          ) : null}
+          {visibleConnectFields.map((field) => (
             <label key={field.name}>
               {field.label}
               {field.kind === 'secret-multiline' ? (

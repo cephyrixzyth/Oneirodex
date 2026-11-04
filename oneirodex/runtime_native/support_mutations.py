@@ -56,25 +56,28 @@ class SupportMutationData:
             client_hint=(body.get('client_hint') or body.get('client') or '')[:120] or None,
             url_hint=(body.get('url_hint') or body.get('url') or '')[:512] or None,
             logs=(body.get('logs') or '').strip()[:_LOGS_MAX] or None,
-            status='open', github_sync='pending', created_at=now,
+            status='open',
+            github_sync='pending' if body.get('sync_to_github') is True else 'local_only',
+            created_at=now,
         )
         db.session.add(ticket)
         db.session.commit()
-        gh = create_github_issue(
-            title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
-            body=build_issue_body(ticket.to_dict()),
-            labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
-        )
-        if gh.get('ok'):
-            ticket.github_sync = 'synced'
-            ticket.github_issue_number = gh.get('number')
-            ticket.github_issue_url = gh.get('url')
-        elif gh.get('skipped'):
-            ticket.github_sync = 'skipped'
-        else:
-            ticket.github_sync = 'error'
-            logging.getLogger(__name__).warning('GitHub issue sync failed')
-        db.session.commit()
+        if body.get('sync_to_github') is True:
+            gh = create_github_issue(
+                title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
+                body=build_issue_body(ticket.to_dict()),
+                labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
+            )
+            if gh.get('ok'):
+                ticket.github_sync = 'synced'
+                ticket.github_issue_number = gh.get('number')
+                ticket.github_issue_url = gh.get('url')
+            elif gh.get('skipped'):
+                ticket.github_sync = 'skipped'
+            else:
+                ticket.github_sync = 'error'
+                logging.getLogger(__name__).warning('Support ticket GitHub sync failed')
+            db.session.commit()
         try:
             notify_admins(
                 kind='support_ticket', title=f'Support: {ticket.title}',

@@ -77,7 +77,9 @@ def disconnect_psn_account(user_id: int) -> None:
 
 def _npsso_source(account: StoreAccount) -> tuple[str, str | None]:
     """(npsso, origin): the member's own token, else the household PSN_NPSSO."""
-    data = _parse_credential_json(account.credential)
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    data = _parse_credential_json(read_store_credential(account))
     token = str(data.get('npsso') or data.get('token') or '').strip()
     if token:
         return token, None

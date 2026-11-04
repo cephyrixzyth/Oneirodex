@@ -46,6 +46,10 @@ services:
       - "${DATA_FOLDER_GAMES:-./games}:/storage:ro"
       - "${LIBRARY_HOST_PATH:-./data/library}:/app/oneirodex/static/library"
       - "${WEBRETRO_CORES_HOST_PATH:-./data/webretro-cores}:/app/oneirodex/static/vendor/webretro/cores"
+      # Optional read-only provider-credential key-ring file. Uncomment after
+      # creating/protecting the host JSON file; never place it in the DB/library
+      # backup payload. Set ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE in APP_ENV_FILE.
+      # - "${ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH}:/run/secrets/oneirodex-store-credential-keyring.json:ro"
     stop_grace_period: 60s
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5006/awake || exit 1"]

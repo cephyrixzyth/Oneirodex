@@ -58,11 +58,22 @@ export interface StoreConnection {
   state: StoreConnectionState
   live: boolean
   cancellable: boolean
-  setup: { ready: boolean; missing: 'server_key' | 'opt_in' | 'client_package' | null }
+  setup: {
+    ready: boolean
+    missing:
+      | 'server_key'
+      | 'opt_in'
+      | 'client_package'
+      | 'credential_keyring'
+      | 'credential_migration'
+      | null
+  }
   /** `unknown`: saved before LIB-04 on a server with a household sign-in, so it may be one. */
   credential: {
-    source: 'member' | 'household' | 'unknown' | 'none' | 'not_required'
+    source: 'member' | 'household' | 'unknown' | 'none' | 'not_required' | 'unavailable'
     household_available: boolean
+    /** Present on current servers; optional for older server responses. */
+    keyring_available?: boolean
   }
   account: {
     connected: boolean

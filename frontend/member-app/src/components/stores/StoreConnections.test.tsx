@@ -557,6 +557,71 @@ test('a sign-in of unknown origin says it may be the household one; Steam links 
   ).toBeInTheDocument()
 })
 
+test('key-ring and migration setup states explain the operator action and keep only safe actions', async () => {
+  stubFetch(() =>
+    jsonResponse(
+      connectionsBody([
+        connection('gog', {
+          state: 'not_configured',
+          setup: { ready: false, missing: 'credential_keyring' },
+          credential: { source: 'none', household_available: false, keyring_available: false },
+          account: { connected: false, linked_at: null, updated_at: null },
+          actions: ['connect', 'import_csv'],
+        }),
+        connection('epic', {
+          state: 'not_configured',
+          setup: { ready: false, missing: 'credential_migration' },
+          credential: { source: 'unavailable', household_available: false },
+          account: { connected: true, linked_at: null, updated_at: null },
+          actions: ['import_csv', 'disconnect'],
+        }),
+      ]),
+    ),
+  )
+
+  render(<StoreConnections />)
+
+  const gog = await screen.findByRole('listitem', { name: 'GOG' })
+  expect(within(gog).getByText(/configure the credential key ring/i)).toBeInTheDocument()
+  expect(within(gog).getByRole('button', { name: 'Link account' })).toBeInTheDocument()
+  expect(within(gog).getByRole('button', { name: 'Import a list' })).toBeInTheDocument()
+  fireEvent.click(within(gog).getByRole('button', { name: 'Link account' }))
+  expect(within(gog).getByText(/save an account identifier without a token/i)).toBeInTheDocument()
+  expect(within(gog).getByLabelText(/GOG user ID/i)).toBeInTheDocument()
+  expect(within(gog).queryByLabelText(/GOG refresh token/i)).toBeNull()
+
+  const epic = card('Epic Games')
+  expect(within(epic).getByText(/run the credential migration/i)).toBeInTheDocument()
+  expect(within(epic).getByRole('button', { name: 'Import a list' })).toBeInTheDocument()
+  expect(within(epic).getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
+  expect(within(epic).queryByRole('button', { name: /reconnect/i })).toBeNull()
+})
+
+test('hides member token and device fields while key ring is unavailable, even with household access', async () => {
+  const user = userEvent.setup()
+  stubFetch(() =>
+    jsonResponse(
+      connectionsBody([
+        connection('amazon', {
+          name: 'Amazon Games',
+          state: 'not_connected',
+          setup: { ready: true, missing: null },
+          credential: { source: 'household', household_available: true, keyring_available: false },
+          actions: ['connect', 'import_csv'],
+        }),
+      ]),
+    ),
+  )
+  render(<StoreConnections />)
+
+  const amazon = await screen.findByRole('listitem', { name: 'Amazon Games' })
+  await user.click(within(amazon).getByRole('button', { name: 'Link account' }))
+  expect(within(amazon).getByLabelText(/Amazon user ID/i)).toBeInTheDocument()
+  expect(within(amazon).queryByLabelText(/Nile \/ Heroic/i)).toBeNull()
+  expect(within(amazon).queryByLabelText(/Device serial/i)).toBeNull()
+  expect(within(amazon).getByText(/household sign-in remains in use/i)).toBeInTheDocument()
+})
+
 /**
  * Chrome clears focus to <body> a task after the focused button is disabled;
  * jsdom never does, and its blur() ignores a disabled element. Reproduce it:

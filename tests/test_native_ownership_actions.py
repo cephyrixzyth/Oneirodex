@@ -15,6 +15,10 @@ from oneirodex.runtime_native.ownership_actions import (
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token,
 )
+from oneirodex.utils.store_credentials import (
+    StoreCredentialKeyUnavailable,
+    StoreCredentialMigrationRequired,
+)
 from oneirodex.utils.store_sync_errors import SyncOutcomeError
 
 
@@ -23,12 +27,15 @@ class FakeOwnershipActions:
         self.calls = []
         self.is_enabled = True
         self.sync_error = None
+        self.connect_error = None
 
     def enabled(self):
         return self.is_enabled
 
     def connect(self, user_id, store, fields):
         self.calls.append(('connect', user_id, store, fields))
+        if self.connect_error:
+            raise self.connect_error
         return SimpleNamespace(to_dict=lambda: {'store': store, 'linked': True})
 
     def disconnect(self, user_id, store):
@@ -130,6 +137,27 @@ def test_connect_validation_uses_shared_422_envelope(native_client):
     assert 'steam_id' in response.json()['detail']
     assert 'secret' not in response.text
     assert data.calls == []
+
+
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (StoreCredentialKeyUnavailable('secret keyring path'), 'credential_storage_unavailable'),
+        (StoreCredentialMigrationRequired('legacy token value'), 'credential_migration_required'),
+    ],
+)
+def test_connect_credential_errors_use_redacted_setup_contract(native_client, error, reason):
+    runtime, data = native_client
+    data.connect_error = error
+
+    response = _request(runtime, 'POST', '/api/ownership/gog', json={'refresh_token': 'sensitive-token'})
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['detail']['reason'] == reason
+    assert 'secret keyring path' not in response.text
+    assert 'legacy token value' not in response.text
+    assert 'sensitive-token' not in response.text
 
 
 def test_connect_json_mimetype_matches_flask_request_is_json(native_client):

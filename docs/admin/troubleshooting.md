@@ -94,7 +94,7 @@ sent and need no configuration. CSP **enforces** by default (`CSP_ENFORCE=true`)
 
 ## Support tickets not on GitHub
 
-Expected if `SUPPORT_GITHUB_TOKEN` unset (`github_sync=skipped`). Ticket + admin notification still work — [support-inbox.md](support-inbox.md).
+Expected when the member leaves GitHub sync unchecked (`github_sync=local_only`), or opts in while `SUPPORT_GITHUB_TOKEN` is unset (`github_sync=skipped`). The local ticket and admin notification still work — [support-inbox.md](support-inbox.md).
 
 ## Voice
 

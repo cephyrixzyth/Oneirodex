@@ -33,3 +33,4 @@ class CreateSupportTicketBody(BaseModel):
     client: str | None = None
     url_hint: str | None = None
     url: str | None = None
+    sync_to_github: bool = False

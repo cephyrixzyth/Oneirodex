@@ -3,6 +3,7 @@ Playnite kill switch, the status route, admin authorization, the poller's job
 records and long provider IDs. Provider calls are faked; nothing leaves the host.
 """
 import json
+import os
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,20 @@ from flask_login import login_user
 from sqlalchemy import select
 
 from oneirodex.models import GlobalSettings, StoreAccount, StoreSyncJob, User, UserOwnedTitle
+
+
+@pytest.fixture(autouse=True)
+def _store_credential_test_keyring(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    path = tmp_path / 'store-credential-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test',
+        'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE', str(path))
 
 
 def _person(db_session, role='user'):
@@ -181,8 +196,12 @@ def test_connect_is_refused_while_a_sync_runs(client, app, db_session, member):
     db_session.commit()
     response = client.post('/api/ownership/gog', json={'refresh_token': 'second'})
     assert response.status_code == 409 and response.get_json()['detail']['reason'] == 'sync_in_progress'
-    stored = db_session.execute(select(StoreAccount.credential).filter_by(user_id=member.id, store='gog')).scalar()
-    assert json.loads(stored) == {'refresh_token': 'first'}
+    from oneirodex.utils.store_credentials import read_store_credential
+    stored_account = db_session.execute(
+        select(StoreAccount).filter_by(user_id=member.id, store='gog')
+    ).scalar_one()
+    assert json.loads(read_store_credential(stored_account)) == {'refresh_token': 'first'}
+    assert stored_account.credential is None and stored_account.credential_ciphertext.startswith('odsc:v1:')
     assert client.delete('/api/ownership/gog').status_code == 409
 
 

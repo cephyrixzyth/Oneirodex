@@ -138,7 +138,7 @@ export function SupportInboxPage() {
                       #{t.github_issue_number}
                     </a>
                   ) : (
-                    t.github_sync
+                    t.github_sync === 'local_only' ? 'Local only' : t.github_sync
                   ),
               },
               {

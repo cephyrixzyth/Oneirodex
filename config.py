@@ -119,6 +119,10 @@ class Config(object):
     # which mounts are libraries. See docs/runbooks/remote-scan-locations.md.
     LIBRARY_ROOTS = _parse_library_roots(getenv_product('LIBRARY_ROOTS'))
 
+    # Read-only operator-managed key-ring file, mounted separately from DB and
+    # backup storage. Store-provider credentials never derive from SECRET_KEY.
+    STORE_CREDENTIAL_KEYRING_FILE = getenv_product('STORE_CREDENTIAL_KEYRING_FILE')
+
     # YOU CAN LEAVE ALL THESE SETTINGS AT DEFAULT:
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'oneirodex/static/library')
     SECRET_KEY = _load_secret_key()

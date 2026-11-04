@@ -46,7 +46,14 @@ from . import apis_bp
 from oneirodex.utils.store_capabilities import provider_capabilities
 from oneirodex.utils.store_connection_status import member_connections
 from oneirodex.utils.store_ownership_common import unofficial_store_opt_in
-from oneirodex.utils.store_sync_errors import REASONS, StoreSyncError, SyncOutcomeError, reason_payload
+from oneirodex.utils.store_credentials import StoreCredentialError
+from oneirodex.utils.store_sync_errors import (
+    REASONS,
+    StoreSyncError,
+    SyncOutcomeError,
+    classify_sync_exception,
+    reason_payload,
+)
 from oneirodex.utils.store_sync_all import sync_all_stores
 from oneirodex.utils.store_sync_jobs import (
     LIVE_SYNC_ADAPTERS,
@@ -207,6 +214,8 @@ def _connect_response(store, connect):
         account = exclusive_link_change(current_user.id, store, 'connect', connect)
     except SyncOutcomeError as exc:
         return _outcome_error(store, exc.reason, exc.job)
+    except StoreCredentialError as exc:
+        return _outcome_error(store, classify_sync_exception(exc))
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     return api_ok({

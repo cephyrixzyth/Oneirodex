@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.utils.launcher_imports import MAX_TITLES
 from oneirodex.utils.store_ownership_limits import MAX_OWNERSHIP_CSV_BYTES
+from oneirodex.utils.store_credentials import has_store_credential
 from oneirodex.models import StoreAccount, UserOwnedTitle
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
 # re-exported here because callers and tests import them from this module.
@@ -307,7 +308,7 @@ def get_ownership_summary(user_id: int) -> dict:
             'opt_in': (store in unofficial_store_opt_in()) if unofficial else None,
             'connected': account is not None,
             'external_account_id': account.external_account_id if account else None,
-            'has_credential': bool(account.credential) if account else False,
+            'has_credential': has_store_credential(account),
             'owned_count': owned_count,
             'matched_count': matched_count,
             # The UI needs to be able to say "snapshot from 3 weeks ago" rather

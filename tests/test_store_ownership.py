@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 from uuid import uuid4
+import json
+import os
 
 import pytest
 from flask import Flask
@@ -25,6 +27,20 @@ from oneirodex.utils.store_ownership import (
     upsert_owned_title,
 )
 from oneirodex.utils.store_sync_errors import StoreSyncError
+
+
+@pytest.fixture(autouse=True)
+def _store_credential_test_keyring(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    path = tmp_path / 'store-credential-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test',
+        'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE', str(path))
 
 
 @pytest.fixture
@@ -641,7 +657,9 @@ def test_gog_live_sync_register_only(mock_out, db_session, user):
     account = db_session.execute(
         select(StoreAccount).filter_by(user_id=user.id, store='gog')
     ).scalars().one()
-    assert 'refresh_token' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert 'refresh_token' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     assert 'access_token' not in account.to_dict()
 
 
@@ -786,7 +804,9 @@ def test_amazon_live_sync_register_only(mock_out, db_session, user):
     account = db_session.execute(
         select(StoreAccount).filter_by(user_id=user.id, store='amazon')
     ).scalars().one()
-    assert 'refresh_token' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert 'refresh_token' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     assert 'access_token' not in account.to_dict()
 
 
@@ -888,7 +908,9 @@ def test_unofficial_stores_go_live_only_when_opted_in(db_session, user, monkeypa
     result = sync_xbox_owned_games(user.id)
     assert result == {'synced': 2, 'matched': 0, 'store': 'xbox'}
     account = db_session.execute(select(StoreAccount).filter_by(user_id=user.id, store='xbox')).scalars().one()
-    assert account.external_account_id == '2533274' and '"refresh_token": "y"' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert account.external_account_id == '2533274' and '"refresh_token": "y"' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     rows = db_session.execute(select(UserOwnedTitle).filter_by(user_id=user.id, store='xbox')).scalars().all()
     assert {r.external_app_id for r in rows} == {'1234ABCD', '5678EFGH'}
 
