@@ -165,10 +165,14 @@ def create_batch_refresh_router(
                                 'status': public.get('status'),
                                 'confidence': public.get('confidence'),
                             })
-                        except Exception as exc:  # noqa: BLE001 — legacy item-level result
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'batch freshness item check failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
                                 'uuid': uuid, 'name': getattr(game, 'name', None),
-                                'error': str(exc),
+                                'error': 'Could not check this title',
                             })
                     try:
                         data.commit()
@@ -252,9 +256,14 @@ def create_batch_refresh_router(
                                 'uuid': game.uuid, 'name': game.name,
                                 'status': public.get('status'),
                             })
-                        except Exception as exc:  # noqa: BLE001 — preserve per-game outcomes
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'admin freshness item check failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
-                                'uuid': game.uuid, 'name': game.name, 'error': str(exc),
+                                'uuid': game.uuid, 'name': game.name,
+                                'error': 'Could not check this title',
                             })
                     try:
                         data.commit()
@@ -330,10 +339,14 @@ def create_batch_refresh_router(
                         try:
                             data.enqueue_images(flask_app, uuid)
                             queued.append({'uuid': uuid, 'name': game.name, 'status': 'queued'})
-                        except Exception as exc:  # noqa: BLE001 — legacy item-level result
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'batch image refresh queue failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
                                 'uuid': uuid, 'name': getattr(game, 'name', None),
-                                'error': str(exc),
+                                'error': 'Could not queue the image refresh',
                             })
                     response = JSONResponse({
                         'ok': len(errors) == 0, 'queued': queued,

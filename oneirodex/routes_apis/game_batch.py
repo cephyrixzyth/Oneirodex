@@ -138,13 +138,16 @@ def games_batch_favorite(body: BatchFavoriteBody):
                 already.discard(uid)
             updated.append({'uuid': uid, 'favorite': favorite})
         except Exception as exc:
-            errors.append({'uuid': uid, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch favorite item update failed (%s)', type(exc).__name__,
+            )
+            errors.append({'uuid': uid, 'error': 'Could not update favorite'})
 
     try:
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        current_app.logger.warning('batch commit failed: %s', exc)
+        current_app.logger.warning('batch commit failed (%s)', type(exc).__name__)
         return api_error(
             'Could not save the change', code='internal',
             updated=[], skipped=skipped, errors=errors, limit=BATCH_FAVORITE_MAX,
@@ -289,13 +292,16 @@ def games_batch_status():
                 existing_rows[uid] = status
             updated.append({'uuid': uid, 'status': status_out})
         except Exception as exc:
-            errors.append({'uuid': uid, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch play-status item update failed (%s)', type(exc).__name__,
+            )
+            errors.append({'uuid': uid, 'error': 'Could not update play status'})
 
     try:
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        current_app.logger.warning('batch status commit failed: %s', exc)
+        current_app.logger.warning('batch status commit failed (%s)', type(exc).__name__)
         return api_error(
             'Could not save the play status', code='internal',
             updated=[], skipped=skipped, errors=errors,
@@ -395,7 +401,9 @@ def games_batch_wishlist():
                 db.session.delete(row)
                 updated.append({'uuid': uid, 'id': row.id})
             except Exception as exc:  # pragma: no cover - defensive
-                current_app.logger.warning('wishlist batch remove failed: %s', exc)
+                current_app.logger.warning(
+                    'wishlist batch remove failed (%s)', type(exc).__name__,
+                )
                 errors.append({'uuid': uid, 'error': 'delete_failed'})
         if updated:
             db.session.commit()
@@ -444,13 +452,16 @@ def games_batch_wishlist():
                 'status': row.status,
             })
         except Exception as exc:
-            errors.append({'uuid': uid, 'error': str(exc)})
+            current_app.logger.warning(
+                'wishlist batch create failed (%s)', type(exc).__name__,
+            )
+            errors.append({'uuid': uid, 'error': 'Could not create request'})
 
     try:
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        current_app.logger.warning('batch commit failed: %s', exc)
+        current_app.logger.warning('wishlist batch commit failed (%s)', type(exc).__name__)
         return api_error(
             'Could not save the change', code='internal',
             updated=[], skipped=skipped, errors=errors, limit=BATCH_WISHLIST_MAX,
@@ -566,13 +577,19 @@ def games_batch_freshness_check():
                 'confidence': public.get('confidence'),
             })
         except Exception as exc:
-            errors.append({'uuid': uid, 'name': getattr(game, 'name', None), 'error': str(exc)})
+            current_app.logger.warning(
+                'batch freshness item check failed (%s)', type(exc).__name__,
+            )
+            errors.append({
+                'uuid': uid, 'name': getattr(game, 'name', None),
+                'error': 'Could not check this title',
+            })
 
     try:
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        current_app.logger.warning('batch commit failed: %s', exc)
+        current_app.logger.warning('batch freshness commit failed (%s)', type(exc).__name__)
         return api_error(
             'Could not save the change', code='internal',
             updated=[], skipped=skipped, errors=errors, limit=BATCH_FRESHNESS_MAX,
@@ -655,7 +672,13 @@ def games_batch_refresh_images():
             )
             queued.append({'uuid': uid, 'name': game.name, 'status': 'queued'})
         except Exception as exc:
-            errors.append({'uuid': uid, 'name': getattr(game, 'name', None), 'error': str(exc)})
+            current_app.logger.warning(
+                'batch image refresh queue failed (%s)', type(exc).__name__,
+            )
+            errors.append({
+                'uuid': uid, 'name': getattr(game, 'name', None),
+                'error': 'Could not queue the image refresh',
+            })
 
     # Deliberately not api_ok: `ok` here answers "did every item succeed",
     # not "did the request succeed". The SPA reads `data.ok !== false`

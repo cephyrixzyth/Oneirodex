@@ -568,6 +568,8 @@ class FakeBatchWishlistData:
 class FakeBatchRefreshData:
     def __init__(self):
         self.calls = []
+        self.freshness_error = None
+        self.enqueue_error = None
 
     def state(self, uuids):
         self.calls.append(('state', list(uuids)))
@@ -595,10 +597,14 @@ class FakeBatchRefreshData:
 
     def check_freshness(self, game):
         self.calls.append(('freshness', game.uuid))
+        if self.freshness_error:
+            raise RuntimeError(self.freshness_error)
         return {'status': 'current', 'confidence': 0.8}
 
     def enqueue_images(self, app, uuid):
         self.calls.append(('enqueue', uuid))
+        if self.enqueue_error:
+            raise RuntimeError(self.enqueue_error)
 
     def commit(self):
         self.calls.append(('commit',))
@@ -3982,6 +3988,46 @@ def test_native_batch_image_refresh_requires_librarian_and_queues(monkeypatch):
         ],
         'errors': [], 'limit': 20, 'requested': 3, 'count': 1,
     }
+
+
+def test_native_batch_freshness_and_image_errors_redact_database_details(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    asyncio.run(runtime._ensure_flask())
+    cookie, csrf = _signed_session_with_csrf()
+    runtime._fake_batch_refresh.freshness_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    runtime._fake_batch_refresh.enqueue_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    flask_app._fake_user.role = 'librarian'
+
+    async def send(path, payload):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, json=payload, headers={'X-CSRFToken': csrf},
+            )
+
+    freshness = asyncio.run(send(
+        '/api/games/batch/freshness/check', {'uuids': ['stale']},
+    ))
+    images = asyncio.run(send(
+        '/api/games/batch/refresh_images', {'uuids': ['game-a']},
+    ))
+
+    assert freshness.status_code == 200
+    assert freshness.json()['errors'] == [
+        {'uuid': 'stale', 'name': 'Stale', 'error': 'Could not check this title'},
+    ]
+    assert images.status_code == 202
+    assert images.json()['errors'] == [
+        {'uuid': 'game-a', 'name': 'Game-A', 'error': 'Could not queue the image refresh'},
+    ]
+    assert 'private-password' not in freshness.text + images.text
+    assert 'postgres://' not in freshness.text + images.text
 
 
 def test_native_member_library_write_apis_require_write_scope(monkeypatch):
