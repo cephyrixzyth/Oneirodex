@@ -550,6 +550,8 @@
                                   "server_key",
                                   "opt_in",
                                   "client_package",
+                                  "credential_keyring",
+                                  "credential_migration",
                                   null
                                 ]
                               }
@@ -565,7 +567,9 @@
                                   "household",
                                   "unknown",
                                   "none",
-                                  "not_required"
+                                  "not_required",
+                                  "unavailable",
+                                  "migration_required"
                                 ],
                                 "description": "Which sign-in a sync would use. `unknown`: saved before LIB-04 on a server that has a household sign-in for this store, so it may be a household copy; reconnecting settles it."
                               },

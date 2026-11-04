@@ -571,7 +571,7 @@ test('key-ring and migration setup states explain the operator action and keep o
         connection('epic', {
           state: 'not_configured',
           setup: { ready: false, missing: 'credential_migration' },
-          credential: { source: 'unavailable', household_available: false },
+          credential: { source: 'migration_required', household_available: false },
           account: { connected: true, linked_at: null, updated_at: null },
           actions: ['import_csv', 'disconnect'],
         }),

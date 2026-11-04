@@ -70,7 +70,14 @@ export interface StoreConnection {
   }
   /** `unknown`: saved before LIB-04 on a server with a household sign-in, so it may be one. */
   credential: {
-    source: 'member' | 'household' | 'unknown' | 'none' | 'not_required' | 'unavailable'
+    source:
+      | 'member'
+      | 'household'
+      | 'unknown'
+      | 'none'
+      | 'not_required'
+      | 'unavailable'
+      | 'migration_required'
     household_available: boolean
     /** Present on current servers; optional for older server responses. */
     keyring_available?: boolean
