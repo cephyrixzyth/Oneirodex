@@ -168,7 +168,7 @@ def test_child_profile_total_excludes_games_outside_their_library_allowlist(
     assert [game['game_uuid'] for game in payload['recent_games']] == [visible_game.uuid]
 
 
-def test_child_playtime_summary_hides_games_outside_library_allowlist(
+def test_child_playtime_summary_requires_library_scope_and_hides_unshared_games(
     client, db_session,
 ):
     suffix = uuid4().hex[:8]
@@ -198,7 +198,10 @@ def test_child_playtime_summary_hides_games_outside_library_allowlist(
     ])
     db_session.commit()
 
-    response = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
+    denied = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
+    assert denied.status_code == 403
+
+    response = client.get('/api/playtime/me', headers=bearer(child, ['read:library']))
 
     assert response.status_code == 200
     payload = response.get_json()
