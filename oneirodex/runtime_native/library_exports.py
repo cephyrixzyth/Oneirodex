@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .query_compat import first_query_value
 
 
@@ -109,6 +109,8 @@ async def _export(
         if auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         else:
+            response = require_bearer_scope(auth, 'read:library')
+        if auth.user is not None and response is None:
             try:
                 if format_name == 'esde':
                     content = data.esde(auth.user, platform, flask_app)

@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 MEDIA_KINDS = {
     'film': 'Film', 'series': 'TV series', 'anime': 'Anime', 'book': 'Book',
@@ -107,6 +107,8 @@ def create_related_media_router(
             auth = _auth(request, flask_app, find_user, find_token, commit_token_touch,
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 game = data.game(game_uuid)
                 if game is None:

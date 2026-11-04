@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class WantedUpdateData:
@@ -77,7 +77,9 @@ def create_wanted_updates_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                response = JSONResponse({'items': data.list(auth.user.id)})
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse({'items': data.list(auth.user.id)})
             _finish(response, flask_app, request, auth)
             return response
 

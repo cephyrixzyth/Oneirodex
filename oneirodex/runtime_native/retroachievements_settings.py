@@ -154,6 +154,12 @@ def create_retroachievements_settings_router(
                 elif admin_only and auth.token is not None and not auth.has_scope('admin'):
                     payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
+                elif operation == 'member' and request.method == 'GET' and auth.token is not None and not auth.has_scope('read:library'):
+                    payload, status = api_error_payload(
+                        'Missing scope: read:library', code='forbidden',
+                        detail={'required_scope': 'read:library'},
+                    )
+                    response = JSONResponse(payload, status_code=status)
                 elif request.method == 'PUT':
                     body = await _read_json(request, object_only=operation != 'member')
                     try:
@@ -307,6 +313,12 @@ def _game_achievements(request, flask_app, data, find_user, find_token,
                 category=getattr(login_manager, 'login_message_category', 'message'),
                 include_next=True,
             )
+        elif auth.token is not None and not auth.has_scope('read:library'):
+            payload, status = api_error_payload(
+                'Missing scope: read:library', code='forbidden',
+                detail={'required_scope': 'read:library'},
+            )
+            response = JSONResponse(payload, status_code=status)
         else:
             game = data.game(game_uuid)
             if game is None:

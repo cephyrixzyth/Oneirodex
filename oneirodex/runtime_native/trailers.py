@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
-from .request_auth import RequestAuthContext, request_auth_context
+from .request_auth import RequestAuthContext, request_auth_context, require_bearer_scope
 from .response_compat import add_vary_header, flask_redirect_response
 from .query_compat import first_query_value
 
@@ -152,6 +152,9 @@ def create_trailers_router(
                 return decorate_response(
                     _login_redirect(flask_app, request, auth.login_manager, context), request
                 )
+            response = require_bearer_scope(context, 'read:library')
+            if response is not None:
+                return decorate_response(response, request)
             try:
                 return decorate_response(_api_ok(data.filters(context.user)), request)
             except Exception:
@@ -169,6 +172,9 @@ def create_trailers_router(
                 return decorate_response(
                     _login_redirect(flask_app, request, auth.login_manager, context), request
                 )
+            response = require_bearer_scope(context, 'read:library')
+            if response is not None:
+                return decorate_response(response, request)
             try:
                 # Validate comma-separated IDs at the HTTP boundary, matching the
                 # legacy handler's ValueError-to-safe-internal-envelope behavior.

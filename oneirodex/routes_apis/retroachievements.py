@@ -14,6 +14,7 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game, UserPreference
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.retroachievements import (
@@ -113,6 +114,7 @@ def retroachievements_match(body: MatchBody):
 
 @apis_bp.route('/games/<game_uuid>/achievements', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_achievements(game_uuid):
     """The matched set for a game, plus this member's progress when they gave a username."""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
@@ -142,6 +144,7 @@ class RaUsernameBody(BaseModel, extra='forbid'):
 
 @apis_bp.route('/me/retroachievements', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def me_retroachievements_get():
     """This member's RetroAchievements username (public handle, never a key)."""
     prefs = getattr(current_user, 'preferences', None)

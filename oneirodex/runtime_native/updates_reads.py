@@ -189,6 +189,8 @@ def create_update_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
+                response = require_bearer_scope(auth, 'read:library')
+            if auth.user is not None and response is None:
                 name = (_first(request, 'q') or _first(request, 'name') or '').strip()
                 source = (_first(request, 'source') or 'all').strip().lower()
                 limit_value = _first(request, 'limit')

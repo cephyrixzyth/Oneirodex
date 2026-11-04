@@ -81,6 +81,12 @@ these write routes. Bounded update scans, store ownership links/imports/syncs,
 launcher imports, and owned-title matching use the same bearer scope. Free-game
 ownership assistance, which may update ownership data and start a store sync,
 also uses this scope.
+Member-specific library reads—including Discover feeds, library filters,
+exports, game health, wanted/update search, mod state, related media,
+RetroAchievements progress, trailer picks, and assist packs—require
+`read:library` for Bearer tokens. Shared taxonomy and provider capability
+metadata remain available without it; signed browser sessions keep their
+existing access.
 Registration invite management requires a signed-in browser session, including
 the classic invite page. API tokens cannot list, create or delete these invites.
 Private account summaries and support report reads also require the signed-in

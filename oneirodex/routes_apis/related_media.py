@@ -18,6 +18,7 @@ from oneirodex.schemas.related_media import CreateRelatedMediaBody
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.utils.rbac import librarian_required
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.api_tokens import require_api_token_scope
 
 from . import apis_bp
 
@@ -58,6 +59,7 @@ def _clean_url(raw: str | None) -> str | None:
 
 @apis_bp.route('/games/<game_uuid>/related_media', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def related_media_list(game_uuid: str):
     """Media attached to this game, plus the vocabularies for the editor."""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()

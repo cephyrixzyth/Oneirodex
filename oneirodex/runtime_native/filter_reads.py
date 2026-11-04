@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class FilterReadData:
@@ -92,6 +92,8 @@ def create_filter_reads_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
+                response = require_bearer_scope(auth, 'read:library')
+            if response is None:
                 try:
                     response = JSONResponse(data.bundle(auth.user))
                 except Exception:  # noqa: BLE001 — keep filter failures private
@@ -106,6 +108,8 @@ def create_filter_reads_router(
             auth = _auth(request, flask_app, find_user, find_token, commit_token_touch,
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 raw = _first_query_value(request, 'include_completion') or '0'
                 include_completion = raw in ('1', 'true', 'yes')

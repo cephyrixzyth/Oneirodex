@@ -22,7 +22,7 @@ from oneirodex.utils.library_acl import apply_game_access_filters
 from oneirodex.utils.plugins import get_plugin, list_plugins
 from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.security import get_allowed_base_directories
-from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.api_tokens import require_api_scope, require_api_token_scope
 
 from . import apis_bp
 
@@ -64,6 +64,7 @@ def _game_rows(games: list[Game]) -> list[dict]:
 
 @apis_bp.route('/export/esde', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def export_esde():
     platform = (request.args.get('platform') or '').strip()
     games = _games_for_platform(platform or None)
@@ -82,6 +83,7 @@ def export_esde():
 
 @apis_bp.route('/export/pegasus', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def export_pegasus():
     platform = (request.args.get('platform') or '').strip() or 'Library'
     games = _games_for_platform(platform if platform != 'Library' else None)

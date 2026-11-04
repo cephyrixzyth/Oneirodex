@@ -2336,6 +2336,44 @@ def test_lazy_asgi_acquire_search_requires_read_library_scope(monkeypatch, metho
     assert runtime._fake_acquire_actions.calls == []
 
 
+@pytest.mark.parametrize('path', [
+    '/api/discover/sections',
+    '/api/discover/rows/recent',
+    '/api/discover/zones/era',
+    '/api/discover/hubs/genre/Puzzle',
+    '/api/discover/surprise',
+    '/api/discover/pins',
+    '/api/filters/bundle',
+    '/api/library_platforms',
+    '/api/export/esde',
+    '/api/export/pegasus',
+    '/api/health/games/game-1',
+    '/api/updates/store_search?q=Fixture',
+    '/api/updates/wanted',
+    '/api/mods/summary',
+    '/api/games/game-1/mods',
+    '/api/games/game-1/mods/catalog',
+    '/api/games/game-1/mods/profiles',
+    '/api/games/game-1/mods/profiles/default/export',
+    '/api/games/game-1/related_media',
+    '/api/games/game-1/achievements',
+    '/api/me/retroachievements',
+    '/api/trailers/filters',
+    '/api/trailers/random',
+    '/api/games/game-1/assists',
+    '/api/playtime/share/game-1.svg',
+])
+def test_lazy_asgi_personal_library_reads_require_read_library_scope(monkeypatch, path):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
+
+    response = _run(
+        runtime, path, headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == {'required_scope': 'read:library'}
+
+
 def test_lazy_asgi_acquire_search_accepts_read_library_token(monkeypatch):
     runtime, authorization = _bearer_runtime(monkeypatch, ['read:library'])
     response = _run(

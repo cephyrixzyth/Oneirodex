@@ -9,7 +9,7 @@ from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _MAX_JSON_BODY_BYTES = 64 * 1024
 
@@ -170,8 +170,10 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
             else:
-                response = _native_json_response(flask_app, data.sections(auth.user))
-            return secure(response, request)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _native_json_response(flask_app, data.sections(auth.user))
+            return secure(response, request, auth)
 
     @router.api_route('/api/discover/rows/{identifier}', methods=['GET', 'HEAD'])
     def discover_row(identifier: str, request: Request):
@@ -180,6 +182,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             args = MultiDict(request.query_params.multi_items())
             try:
@@ -213,6 +218,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             payload = data.zone(auth.user, slug)
             if payload is None:
@@ -234,6 +242,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             payload = data.genre_hub(auth.user, genre)
             if payload is None:
@@ -251,6 +262,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             args = MultiDict(request.query_params.multi_items())
             genre = None
@@ -285,6 +299,10 @@ def create_discover_reads_router(
                 return secure(_api_error_response(
                     flask_app, 'Forbidden', 'forbidden',
                 ), request, auth)
+            if request.method in ('GET', 'HEAD'):
+                response = require_bearer_scope(auth, 'read:library')
+                if response is not None:
+                    return secure(response, request, auth)
             if request.method == 'PUT' and auth.token is None:
                 from .csrf_compat import csrf_error_response
 
