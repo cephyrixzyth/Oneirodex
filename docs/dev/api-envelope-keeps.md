@@ -25,11 +25,13 @@ exception: with no per-item results to report, it retains the established
 responses keep `ok` as the all-items-succeeded flag so partial outcomes remain
 visible to callers.
 
-Per-item failures in batch favorite, play-status, wishlist, freshness-check, and
-image-refresh responses must use fixed user-facing messages. Do not serialize
-`str(exc)` into an `error` field: database and transport exceptions can include
-internal connection, query, or filesystem details. Log only the exception class
-for these expected recovery paths.
+Per-item failures in batch favorite, play-status, wishlist, freshness-check,
+image-refresh, and unmatched-folder clear, kind, duplicate-fix, and amend
+responses must use fixed user-facing messages. Do not serialize `str(exc)` into
+an `error` field: database and transport exceptions can include internal
+connection, query, or filesystem details. Log only the exception class for
+these expected recovery paths. Defined domain validation errors may use their
+user-facing messages when produced before database work.
 
 ## The crash path is covered too
 
