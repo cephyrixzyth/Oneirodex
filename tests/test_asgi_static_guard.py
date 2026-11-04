@@ -134,6 +134,35 @@ def test_static_file_get_and_head_keep_legacy_body_and_cache_behavior(
     assert actual_headers[b'cache-control'] == b'public, max-age=3600'
 
 
+@pytest.mark.parametrize('suffix', ['html', 'svg', 'xhtml', 'xml', 'xsl'])
+def test_uploaded_theme_documents_are_sandboxed_when_served_directly(tmp_path, suffix):
+    path = f'/static/library/themes/rogue/preview.{suffix}'
+    status, headers, _ = _serve_response(
+        tmp_path,
+        path,
+        files={f'library/themes/rogue/preview.{suffix}': b'<svg/>'},
+    )
+    assert status == 200
+    assert b'sandbox' in headers[b'content-security-policy']
+    assert b"default-src 'none'" in headers[b'content-security-policy']
+    assert headers[b'x-content-type-options'] == b'nosniff'
+
+
+def test_theme_css_and_regular_svg_artwork_keep_normal_static_headers(tmp_path):
+    _, css_headers, _ = _serve_response(
+        tmp_path,
+        '/static/library/themes/rogue/css/theme.css',
+        files={'library/themes/rogue/css/theme.css': b'body{color:green}'},
+    )
+    _, svg_headers, _ = _serve_response(
+        tmp_path,
+        '/static/newstyle/mark.svg',
+        files={'newstyle/mark.svg': b'<svg/>'},
+    )
+    assert b'content-security-policy' not in css_headers
+    assert b'content-security-policy' not in svg_headers
+
+
 def test_static_file_conditional_and_range_support_is_retained(tmp_path):
     files = {'parity.txt': b'0123456789abcdef'}
     static_root = tmp_path / 'enhanced-static'

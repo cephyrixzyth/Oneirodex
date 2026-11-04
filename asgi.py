@@ -115,6 +115,9 @@ resolve_static_path = _lazy_callable(
     'oneirodex.utils.static_files', 'resolve_static_path'
 )
 static_access = _lazy_callable('oneirodex.utils.static_files', 'static_access')
+theme_document_security_headers = _lazy_callable(
+    'oneirodex.utils.static_files', 'theme_document_security_headers'
+)
 
 
 #: How much of a served file each ``http.response.body`` message carries.
@@ -5046,6 +5049,7 @@ class LazyASGIApp:
             max_age=3600 if cache_control == b'public, max-age=3600' else None,
             additional_headers={
                 **baseline,
+                **theme_document_security_headers(path),
                 'Cache-Control': cache_control.decode('ascii'),
             },
             security_headers=baseline,

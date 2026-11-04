@@ -125,6 +125,12 @@ Icon-pack fallback is unchanged: when a theme is selected and no pack is named, 
 `theme.json` `default_icon_pack` applies when present; otherwise the existing preference pack stands
 (new rows still default to `outline`).
 
+Uploaded theme assets share the app's static origin so their CSS, fonts, and artwork can load normally.
+If an uploaded HTML, SVG, or XML-family document is opened directly, the static response applies a
+restrictive CSP sandbox: scripts, forms, popups, and same-origin privileges are disabled. Theme
+JavaScript is not selected by member or admin shells; their scripts come from the shipped default
+theme. CSS, fonts, and SVG artwork embedded as images keep their normal asset behavior.
+
 Never edit `oneirodex/static/library/themes/` in git — it is runtime output. Change `oneirodex/setup/default_theme/` and bump generator version when output format changes.
 
 ## Icon packs (separate from color themes)
