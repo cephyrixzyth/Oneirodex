@@ -8892,6 +8892,131 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     ] * 2
 
 
+def test_native_scan_job_status_projects_scheduled_active_and_terminal_states(monkeypatch):
+    now = datetime.now(timezone.utc)
+    from oneirodex.utils import scan_job_timing
+    from oneirodex.routes_apis import scan as legacy_scan
+
+    compute_timing = scan_job_timing.compute_scan_job_timing
+
+    def fixed_timing(job):
+        return compute_timing(job, now=now)
+
+    monkeypatch.setattr(scan_job_timing, 'compute_scan_job_timing', fixed_timing)
+    monkeypatch.setattr(legacy_scan, 'compute_scan_job_timing', fixed_timing)
+    active_start = now - timedelta(seconds=30)
+    progress_time = now - timedelta(seconds=3)
+    terminal_start = now - timedelta(seconds=60)
+    terminal_end = now - timedelta(seconds=5)
+    statuses = (
+        'Scheduled', 'Running', 'Stopping', 'Completed', 'Failed', 'Cancelled',
+    )
+    jobs = [
+        SimpleNamespace(
+            id=f'scan-{status.lower()}', library=None, library_uuid=None,
+            folders=['A', 'B'], status=status, total_folders=10,
+            folders_success=2, folders_failed=1, removed_count=0,
+            scan_folder='/safe/root', setting_remove=False,
+            setting_filefolder=True, setting_download_missing_images=False,
+            current_processing=None, error_message=None,
+            last_run=(terminal_start if status in {'Completed', 'Failed', 'Cancelled'} else active_start),
+            last_progress_update=(terminal_end if status in {'Completed', 'Failed', 'Cancelled'} else progress_time),
+            next_run=None,
+        )
+        for status in statuses
+    ]
+    jobs.append(SimpleNamespace(
+        id='scan-running-stalled', library=None, library_uuid=None,
+        folders=['A', 'B'], status='Running', total_folders=10,
+        folders_success=2, folders_failed=1, removed_count=0,
+        scan_folder='/safe/root', setting_remove=False,
+        setting_filefolder=True, setting_download_missing_images=False,
+        current_processing=None, error_message=None,
+        last_run=now - timedelta(minutes=5),
+        last_progress_update=now - timedelta(seconds=121), next_run=None,
+    ))
+    calls = []
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: None,
+        list_jobs=lambda filters: calls.append(filters) or jobs,
+        queue_position=lambda job_id: (_ for _ in ()).throw(
+            AssertionError(f'queue position queried for non-queued {job_id}')
+        ),
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 200
+    rows = response.json()
+    _scan_job_status_row = legacy_scan._scan_job_status_row
+    native_by_id = {row['id']: row for row in rows}
+    for job in jobs:
+        legacy_row = _scan_job_status_row(job)
+        assert native_by_id[job.id] == legacy_row, {
+            key: (native_by_id[job.id].get(key), legacy_row.get(key))
+            for key in native_by_id[job.id].keys() | legacy_row.keys()
+            if native_by_id[job.id].get(key) != legacy_row.get(key)
+        }
+    state_rows = {row['status']: row for row in rows if row['id'] != 'scan-running-stalled'}
+    assert set(state_rows) == set(statuses)
+    assert len(rows) == len(statuses) + 1
+    assert calls == [{'statuses': [], 'library_uuid': '', 'q': ''}]
+    for status, row in state_rows.items():
+        assert row['folders_processed'] == 3
+        assert row['progress_percentage'] == 30.0
+        assert row['created_at'] is None
+        assert row['library_name'] == 'No Library Assigned'
+        assert 'queue_position' not in row
+        assert row['stalled'] is False
+    for status in ('Scheduled', 'Completed', 'Failed', 'Cancelled'):
+        assert state_rows[status]['eta_seconds'] is None
+    assert state_rows['Running']['eta_seconds'] is not None
+    assert state_rows['Stopping']['eta_seconds'] is not None
+    assert state_rows['Completed']['elapsed_seconds'] == 55
+    assert state_rows['Failed']['elapsed_seconds'] == 55
+    assert state_rows['Cancelled']['elapsed_seconds'] == 55
+    stalled = next(row for row in rows if row['id'] == 'scan-running-stalled')
+    assert stalled['stalled'] is True
+    assert stalled['eta_seconds'] is None
+
+
+def test_native_scan_job_status_denies_member_before_reading_jobs(monkeypatch):
+    calls = []
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: calls.append('drain'),
+        list_jobs=lambda _filters: calls.append('list') or [],
+        queue_position=lambda _job_id: calls.append('position'),
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
+    assert calls == []
+
+
+def test_native_scan_job_status_hides_database_errors(monkeypatch):
+    private_error = RuntimeError('postgres://private-user:private-password@db/private-db')
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: None,
+        list_jobs=lambda _filters: (_ for _ in ()).throw(private_error),
+        queue_position=lambda _job_id: None,
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 500
+    assert response.json()['error'] == 'Scan status is unavailable'
+    assert 'private-password' not in response.text
+    assert 'postgres://' not in response.text
+
+
 def test_lazy_asgi_dispatches_admin_path_info_without_opening_path(monkeypatch):
     calls = []
     data = SimpleNamespace(path_info=lambda value: calls.append(value) or {
