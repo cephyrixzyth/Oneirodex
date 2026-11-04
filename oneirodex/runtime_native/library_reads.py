@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class LibraryReadData:
@@ -313,10 +313,12 @@ def create_library_reads_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            response = (
-                _login_redirect(flask_app, request, login_manager, auth)
-                if auth.user is None else JSONResponse(data.list_for_user(auth.user))
-            )
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            else:
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse(data.list_for_user(auth.user))
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -338,6 +340,8 @@ def create_library_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None and not data.can_access(auth.user, library_uuid):
                 from oneirodex.utils.api_contract import api_error_payload
 

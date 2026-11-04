@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _MAX_JSON_BODY_BYTES = 64 * 1024
 
@@ -152,14 +152,16 @@ def create_wishlist_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                all_values = request.query_params.getlist('all')
-                include_all = (
-                    bool(all_values) and all_values[0] == '1'
-                    and _librarian(auth.user, auth.token)
-                )
-                response = JSONResponse({'requests': data.list(auth.user, include_all=include_all)})
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    all_values = request.query_params.getlist('all')
+                    include_all = (
+                        bool(all_values) and all_values[0] == '1'
+                        and _librarian(auth.user, auth.token)
+                    )
+                    response = JSONResponse({'requests': data.list(auth.user, include_all=include_all)})
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 

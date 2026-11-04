@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _MAX_JSON_BODY_BYTES = 64 * 1024
 
@@ -272,7 +272,9 @@ def create_playtime_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
-                response = _json_response(flask_app, data.me(auth.user))
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _json_response(flask_app, data.me(auth.user))
             _finish(response, flask_app, auth)
             if request.method == 'HEAD':
                 response.body = b''
@@ -285,6 +287,8 @@ def create_playtime_router(
             auth = _auth(request, flask_app, find_user, find_token, commit_token_touch,
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 _row, payload = data.game(auth.user, game_uuid)
                 response = (
@@ -305,11 +309,13 @@ def create_playtime_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                svg, error = data.share_svg(auth.user, game_uuid)
-                response = (
-                    _api_error(error[0], error[1]) if error
-                    else Response(content=svg, media_type='image/svg+xml')
-                )
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    svg, error = data.share_svg(auth.user, game_uuid)
+                    response = (
+                        _api_error(error[0], error[1]) if error
+                        else Response(content=svg, media_type='image/svg+xml')
+                    )
             _finish(response, flask_app, auth)
             if request.method == 'HEAD':
                 response.body = b''

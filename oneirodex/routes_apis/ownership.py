@@ -56,7 +56,7 @@ from oneirodex.utils.store_sync_jobs import (
     request_cancel,
     run_store_sync,
 )
-from oneirodex.utils.api_tokens import user_has_scope
+from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 from oneirodex.utils.ownership_review import (
     REVIEW_FILTERS,
     ReviewError,
@@ -69,6 +69,7 @@ from oneirodex import db
 
 @apis_bp.route('/ownership/titles', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_review_titles():
     raw = request.args.get('after_id', '0')
     if not raw.isascii() or not raw.isdigit() or len(raw) > 10 or int(raw) > 2147483647:
@@ -81,6 +82,7 @@ def ownership_review_titles():
 
 @apis_bp.route('/ownership/titles/<int:title_id>/candidates', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_match_candidates(title_id):
     try:
         return api_ok(match_candidates(current_user, title_id))
@@ -131,6 +133,7 @@ def ownership_providers():
 
 @apis_bp.route('/ownership/connections', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_connections():
     """The current member's status per provider (LIB-04). Stored facts only:
     no provider call, no credential. Poll while a sync runs to show progress."""
@@ -314,6 +317,7 @@ def _csv_response(import_csv, **extra):
 
 @apis_bp.route('/ownership', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_status():
     return api_ok(get_ownership_summary(current_user.id))
 

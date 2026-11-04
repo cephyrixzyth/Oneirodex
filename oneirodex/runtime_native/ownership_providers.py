@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .query_compat import first_query_value
 
 _OWNERSHIP_DECISION_BODY_MAX_BYTES = 64 * 1024
@@ -149,11 +149,13 @@ def create_ownership_provider_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.connections(auth.user)))
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                    response = JSONResponse(api_ok_payload(data.connections(auth.user)))
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
 
             for key, value in security_header_values(flask_app.config).items():
@@ -177,11 +179,13 @@ def create_ownership_provider_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.summary(auth.user)))
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                    response = JSONResponse(api_ok_payload(data.summary(auth.user)))
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
 
             for key, value in security_header_values(flask_app.config).items():
@@ -202,9 +206,11 @@ def create_ownership_provider_router(
                 load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(flask_app, request, login_manager, auth)
-            else:
+            response = (
+                _login_redirect(flask_app, request, login_manager, auth)
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
                 raw = first_query_value(request.query_params, 'after_id', '0')
                 status = first_query_value(request.query_params, 'status') or None
                 if (
@@ -244,9 +250,11 @@ def create_ownership_provider_router(
                 load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(flask_app, request, login_manager, auth)
-            else:
+            response = (
+                _login_redirect(flask_app, request, login_manager, auth)
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
                 from oneirodex.utils.ownership_review import ReviewError
 
                 try:

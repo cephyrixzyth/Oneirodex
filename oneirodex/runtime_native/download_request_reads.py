@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .response_compat import flask_redirect_response
 
 
@@ -229,10 +229,12 @@ def create_download_request_read_router(
             elif csrf_response is None and is_admin_route:
                 response = JSONResponse(api_ok_payload({'requests': data.admin_requests()}))
             elif csrf_response is None:
-                response = JSONResponse(data.my_downloads(user))
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
-                    _set_session_cookie(response, flask_app, auth)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse(data.my_downloads(user))
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
+                        _set_session_cookie(response, flask_app, auth)
 
         from oneirodex.utils.security_headers import security_header_values
         response.headers.setdefault('Cache-Control', 'no-store')
@@ -256,14 +258,16 @@ def create_download_request_read_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(
+            response = (
+                _login_redirect(
                     flask_app, request, login_manager, auth,
                     message=getattr(login_manager, 'login_message', None),
                     category=getattr(login_manager, 'login_message_category', 'message'),
                     include_next=True,
                 )
-            else:
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
                 try:
                     request_id = int(download_id)
                 except (ValueError, TypeError):

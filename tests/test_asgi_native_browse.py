@@ -1165,6 +1165,7 @@ class FakeAnnouncementData:
 class FakeOwnershipProviderData:
     def __init__(self):
         self.decisions = []
+        self.reads = []
 
     def capabilities(self):
         return {
@@ -1176,18 +1177,22 @@ class FakeOwnershipProviderData:
         }
 
     def connections(self, user):
+        self.reads.append(('connections', user.id))
         assert user.id == 7
         return {'connections': [{'store': 'steam', 'status': 'connected'}]}
 
     def summary(self, user):
+        self.reads.append(('summary', user.id))
         assert user.id == 7
         return {'connected': ['steam'], 'titles': 1}
 
     def titles(self, user, after_id, status):
+        self.reads.append(('titles', user.id, after_id, status))
         assert (user.id, after_id, status) == (7, 4, 'needs_review')
         return {'titles': [{'id': 5, 'name': 'Fixture title'}], 'next_after_id': None}
 
     def candidates(self, user, title_id):
+        self.reads.append(('candidates', user.id, title_id))
         assert (user.id, title_id) == (7, 5)
         return {'title_id': 5, 'candidates': [{'game_uuid': 'visible-game'}]}
 
@@ -1376,7 +1381,11 @@ class FakeCollectionReadData:
 
 
 class FakeWishlistData:
+    def __init__(self):
+        self.calls = []
+
     def list(self, user, *, include_all):
+        self.calls.append(('list', user.id, include_all))
         assert user.id == 7
         return [{'id': 23, 'title': 'Fixture request', 'all': include_all}]
 
@@ -1391,6 +1400,19 @@ class FakeWishlistData:
     def resolve(self, user, request_id, body):
         assert (user.id, request_id, body.status) == (7, 23, 'fulfilled')
         return {'id': request_id, 'status': body.status}, None
+
+
+class FakeDownloadRequestReadData:
+    def __init__(self):
+        self.calls = []
+
+    def my_downloads(self, user):
+        self.calls.append(('list', user.id))
+        return []
+
+    def my_download_status(self, user, request_id):
+        self.calls.append(('status', user.id, request_id))
+        return SimpleNamespace(id=request_id, status='active')
 
 
 class FakeNotificationData:
@@ -1900,7 +1922,8 @@ def _runtime(monkeypatch, *, admin=False):
     monkeypatch.setattr(
         collection_reads, 'CollectionReadData', lambda: fake_collections,
     )
-    monkeypatch.setattr(wishlist, 'WishlistData', lambda: FakeWishlistData())
+    fake_wishlist = FakeWishlistData()
+    monkeypatch.setattr(wishlist, 'WishlistData', lambda: fake_wishlist)
     fake_notifications = FakeNotificationData()
     monkeypatch.setattr(notifications, 'NotificationData', lambda: fake_notifications)
     fake_wanted = FakeWantedUpdateData()
@@ -1942,6 +1965,7 @@ def _runtime(monkeypatch, *, admin=False):
     runtime._fake_news = fake_news
     runtime._fake_browse = fake_browse
     runtime._fake_collections = fake_collections
+    runtime._fake_wishlist = fake_wishlist
     return flask_app, runtime
 
 
@@ -4100,6 +4124,85 @@ def test_native_library_reads_keep_read_library_and_browser_session_access(monke
         browser_runtime, '/browse_games?page=3', cookie=_signed_session(),
     )
     assert session_response.status_code == 200
+
+
+def test_native_personal_reads_require_read_library_for_bearer(monkeypatch):
+    paths = [
+        '/api/get_libraries',
+        '/api/library/lib-1',
+        '/api/library/lib-1/watch',
+        '/api/ownership/connections',
+        '/api/ownership',
+        '/api/ownership/titles?after_id=4&status=needs_review',
+        '/api/ownership/titles/5/candidates',
+        '/api/playtime/me',
+        '/api/playtime/games/game-1',
+        '/api/playtime/share/game-1.svg',
+        '/api/filters/saved',
+        '/api/requests',
+        '/api/my_downloads',
+        '/check_download_status/1',
+    ]
+    fake_downloads = FakeDownloadRequestReadData()
+    monkeypatch.setattr(
+        native_download_request_reads,
+        'DownloadRequestReadData',
+        lambda: fake_downloads,
+    )
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_library_reads.calls == []
+    assert runtime._fake_ownership.reads == []
+    assert runtime._fake_playtime.calls == []
+    assert runtime._fake_saved_filters.calls == []
+    assert runtime._fake_wishlist.calls == []
+    assert fake_downloads.calls == []
+
+
+def test_native_personal_reads_keep_read_library_access(monkeypatch):
+    paths = [
+        '/api/get_libraries',
+        '/api/library/lib-1',
+        '/api/library/lib-1/watch',
+        '/api/ownership/connections',
+        '/api/ownership',
+        '/api/ownership/titles?after_id=4&status=needs_review',
+        '/api/ownership/titles/5/candidates',
+        '/api/playtime/me',
+        '/api/playtime/games/game-1',
+        '/api/playtime/share/game-1.svg',
+        '/api/filters/saved',
+        '/api/requests',
+        '/api/my_downloads',
+        '/check_download_status/1',
+    ]
+    fake_downloads = FakeDownloadRequestReadData()
+    monkeypatch.setattr(
+        native_download_request_reads,
+        'DownloadRequestReadData',
+        lambda: fake_downloads,
+    )
+    runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+
+    for path in paths:
+        response = _run(
+            runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
 
 
 def test_native_single_game_status_body_is_bounded_before_json_parse(monkeypatch):

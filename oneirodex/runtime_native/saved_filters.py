@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 _SAVED_FILTER_BODY_MAX_BYTES = 64 * 1024
 
@@ -141,7 +141,9 @@ def create_saved_filter_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
-                response = _success({'filters': [row.to_dict() for row in data.list(auth.user)]})
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _success({'filters': [row.to_dict() for row in data.list(auth.user)]})
             return _finish(response, flask_app, request, auth)
 
     @router.post('/api/filters/saved')

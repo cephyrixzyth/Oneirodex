@@ -28,6 +28,7 @@ _TITLE_MAX = 255
 
 @apis_bp.route('/requests', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def list_requests():
     if is_librarian(current_user) and request.args.get('all') == '1':
         rows = db.session.execute(

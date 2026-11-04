@@ -1,7 +1,7 @@
 # /oneirodex/routes_apis/library.py
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.validation import read_json_body
-from flask import current_app, jsonify, request, url_for
+from flask import current_app, g, jsonify, request, url_for
 from flask_login import login_required, current_user
 from oneirodex import db
 from oneirodex.models import Game, IgdbPlatformRelease, Library, ReferenceSet, UnmatchedFolder
@@ -22,6 +22,7 @@ from oneirodex.utils.library_watch import (
     is_library_watch_enabled,
     library_watch_effective,
 )
+from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
     LIBRARY_IMAGE_MAX_PIXELS,
@@ -315,6 +316,7 @@ def _start_library_delete_job(library: Library) -> str:
 
 @apis_bp.route('/get_libraries')
 @login_required
+@require_api_token_scope('read:library')
 def get_libraries():
     # Direct query to the Library model, ordered alphabetically by name
     libraries_query = filter_libraries(
@@ -378,6 +380,7 @@ def reorder_libraries():
 
 @apis_bp.route('/library/<string:library_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_library(library_uuid):
     """Return information about a specific library"""
     if not user_can_access_library(current_user, library_uuid):
@@ -401,6 +404,13 @@ def library_watch(library_uuid):
 
     Librarian or admin required for PUT.
     """
+    if request.method == 'GET':
+        if getattr(g, 'api_token', None) is not None and not user_has_scope('read:library'):
+            return api_error(
+                'Missing scope: read:library', code='forbidden',
+                detail={'required_scope': 'read:library'},
+            )
+
     if not user_can_access_library(current_user, library_uuid):
         return api_error('Forbidden', code='forbidden')
     library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalars().first()

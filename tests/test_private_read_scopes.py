@@ -206,7 +206,7 @@ def test_child_playtime_summary_hides_games_outside_library_allowlist(
     assert [game['game_uuid'] for game in payload['games']] == [visible_game.uuid]
 
 
-def test_child_download_history_hides_games_outside_library_allowlist(
+def test_child_download_history_requires_library_scope_and_hides_unshared_games(
     client, db_session,
 ):
     suffix = uuid4().hex[:8]
@@ -235,7 +235,10 @@ def test_child_download_history_hides_games_outside_library_allowlist(
     ])
     db_session.commit()
 
-    response = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
+    denied = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
+    assert denied.status_code == 403
+
+    response = client.get('/api/my_downloads', headers=bearer(child, ['read:library']))
 
     assert response.status_code == 200
     payload = response.get_json()
