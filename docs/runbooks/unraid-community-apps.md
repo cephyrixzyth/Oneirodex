@@ -88,9 +88,12 @@ path so covers, themes, and uploads remain in place. A standalone desktop instal
 ## Publishing the image
 
 `.github/workflows/docker-publish.yml` builds `linux/amd64` + `linux/arm64` on every `v*` tag
-or when manually run from `main`, then pushes to GHCR using the built-in token. Manual runs
-from other refs do not publish. To also push to Docker Hub, set the
-repository variable `DOCKERHUB_USERNAME=cephyrixzyth` and the `DOCKERHUB_TOKEN` secret in the
+or when manually run from the repository's default branch, then pushes to GHCR using the
+built-in token. A version tag
+must match `VERSION`, point to the commit used by the workflow, and be reachable from the
+repository's default branch. Manual runs from other refs do not publish. To also push to
+Docker Hub, set the repository variable `DOCKERHUB_USERNAME=cephyrixzyth` and the
+`DOCKERHUB_TOKEN` secret in the
 GitHub Actions environment named `DOCKERHUB`. The secret must be a Docker Hub access token with
 write scope. The workflow publish job selects that environment and pushes to Hub when both
 settings exist. Do not paste the token into the repository or chat. The template points at
