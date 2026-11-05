@@ -535,7 +535,8 @@ def theme_font_upload():
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     except OSError as exc:
-        return api_error(f'Could not write to the font folder: {exc}', code='unavailable')
+        _logger.warning('Theme font upload write failed (%s)', type(exc).__name__)
+        return api_error('Could not write the font file.', code='unavailable')
     return api_ok(stored, status=201)
 
 

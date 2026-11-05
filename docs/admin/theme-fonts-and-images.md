@@ -97,6 +97,9 @@ every member's browser:
 - **Magic-byte check** — the leading bytes must match a real font container
   (`\x00\x01\x00\x00`, `true`, `ttcf`, `OTTO`, `wOFF`, `wOF2`). An extension on
   its own is not evidence.
+- **Storage errors** — a failed write returns a generic message rather than a
+  server path. Check that the configured `FONT_PATH` is writable and has free
+  space; the application log records the error class without the path.
 
 Anything you upload appears in the picker alongside the built-ins, labelled
 `(operator)`. If you hold a licence for a face closer to what you want, this is
