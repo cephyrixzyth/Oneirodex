@@ -8,6 +8,7 @@ from oneirodex.models import UserPreference
 from oneirodex.runtime_native.db_session import native_db as db
 from sqlalchemy import update
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.theme_validation import WINDOWS_RESERVED_NAMES
 
 
 MAX_THEME_ZIP_MEMBERS = 1024
@@ -99,6 +100,25 @@ class ThemeManager:
                         raise ValueError(f"Unsafe absolute path in zip: {member_name}")
                     if '..' in member_name.replace('\\', '/').split('/'):
                         raise ValueError(f"Unsafe path in zip (traversal): {member_name}")
+                    # Win32 normalizes trailing dots/spaces in path components.
+                    # Reject those aliases, device names, alternate data stream
+                    # syntax, and control characters before checking containment
+                    # or passing names to ZipFile.extractall().
+                    for component in member_name.replace('\\', '/').split('/'):
+                        if not component or component == '.':
+                            continue
+                        if component.endswith(('.', ' ')) or any(
+                            ord(char) < 32 or char in '<>:"|?*'
+                            for char in component
+                        ):
+                            raise ValueError(
+                                f"Unsafe Windows path component in zip: {component}"
+                            )
+                        device_stem = component.split('.', 1)[0].rstrip(' .').upper()
+                        if device_stem in WINDOWS_RESERVED_NAMES:
+                            raise ValueError(
+                                f"Unsafe Windows device name in zip: {component}"
+                            )
                     target_path = os.path.realpath(os.path.join(temp_dir, member_name))
                     if target_path != temp_dir_real and not target_path.startswith(temp_dir_real + os.sep):
                         raise ValueError(f"Unsafe path in zip (traversal): {member_name}")

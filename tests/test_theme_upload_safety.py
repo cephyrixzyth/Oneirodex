@@ -88,6 +88,34 @@ def test_upload_rejects_traversal_before_extracting(manager, monkeypatch):
     assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
 
 
+def test_upload_rejects_windows_ambiguous_members_before_extracting(manager, monkeypatch):
+    original_extractall = zipfile.ZipFile.extractall
+    extracted = []
+
+    def track_extractall(self, *args, **kwargs):
+        extracted.append(True)
+        return original_extractall(self, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, 'extractall', track_extractall)
+    unsafe_members = (
+        'css/.. /outside.css',
+        'css/.../outside.css',
+        'css/CON.txt',
+        'css/COM¹.txt',
+        'css/CONOUT$.txt',
+        'css/style.css:alternate',
+        'css/bad\x01name.css',
+    )
+
+    for index, member in enumerate(unsafe_members):
+        archive = _theme_zip(f'Unsafe {index}', extra={member: b'bad'})
+        with manager.app.test_request_context():
+            assert manager.upload_theme(archive) is None
+
+    assert not extracted
+    assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
+
+
 def test_upload_rejects_invalid_theme_name_before_install(manager):
     archive = _theme_zip('CON')
     with manager.app.test_request_context():
