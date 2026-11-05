@@ -53,17 +53,29 @@ function checkbox(name: string, label: string, checked = true): ReactNode {
 }
 
 function validationMessages(cause: unknown): string[] {
+  const messageFor = (field: string, value: unknown) => {
+    const message = String(value || 'Invalid value')
+    if (/passwords do not match/i.test(message)) return 'Passwords must match'
+    if (!field || field === 'root') return message.replace(/^Value error,\s*/i, '')
+    return `${field.replaceAll('_', ' ')}: ${message}`
+  }
   const detail = (cause as { data?: { detail?: unknown } })?.data?.detail
   if (Array.isArray(detail)) {
     return detail.map((item) => {
       const row = item as { loc?: unknown[]; msg?: unknown }
-      return `${Array.isArray(row.loc) ? row.loc.slice(1).join('.') : 'Setup'}: ${String(row.msg || 'Invalid value')}`
+      const field = Array.isArray(row.loc)
+        ? row.loc
+            .slice(1)
+            .filter((part) => part !== 'root')
+            .join('.')
+        : 'Setup'
+      return messageFor(field, row.msg)
     })
   }
   if (detail && typeof detail === 'object') {
     return Object.entries(detail as Record<string, unknown>).flatMap(([field, messages]) =>
-      (Array.isArray(messages) ? messages : [messages]).map(
-        (message) => `${field.replaceAll('_', ' ')}: ${String(message)}`,
+      (Array.isArray(messages) ? messages : [messages]).map((message) =>
+        messageFor(field, message),
       ),
     )
   }
@@ -114,8 +126,20 @@ export function SetupWizard({
       if (result.complete) navigate(result.next_url || '/libraries')
       else if (result.next_url) navigate(result.next_url)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'This setup step could not be saved.')
-      setDetails(validationMessages(cause))
+      const messages = validationMessages(cause)
+      const passwordMismatch = messages.includes('Passwords must match')
+      setError(
+        passwordMismatch
+          ? 'Passwords must match'
+          : cause instanceof Error
+            ? cause.message
+            : 'This setup step could not be saved.',
+      )
+      setDetails(
+        passwordMismatch
+          ? messages.filter((message) => message !== 'Passwords must match')
+          : messages,
+      )
     } finally {
       setBusy(false)
     }

@@ -386,6 +386,49 @@ test('first-run direct entry loads the active step and submits it to the transit
   expect(navigate).toHaveBeenCalledWith('/setup/smtp')
 })
 
+test('first-run password mismatch uses the legacy form validation copy', async () => {
+  window.history.replaceState({}, '', '/setup')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 1,
+    platforms: [],
+    settings: {},
+  })
+  api.submitSetupStep.mockRejectedValue(
+    Object.assign(new Error('Invalid setup transition.'), {
+      data: {
+        detail: [
+          {
+            loc: ['body', 'root'],
+            msg: 'Value error, Passwords do not match.',
+            type: 'value_error',
+          },
+        ],
+      },
+    }),
+  )
+  render(<AuthApp />)
+
+  await screen.findByRole('heading', { name: 'Create your admin account' })
+  fireEvent.change(screen.getByLabelText('Admin Username'), { target: { value: 'setup_admin' } })
+  fireEvent.change(screen.getByLabelText('Admin Email'), {
+    target: { value: 'setup@example.com' },
+  })
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: 'correct horse battery' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm Password'), {
+    target: { value: 'different horse battery' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Next Step' }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Passwords must match')
+  expect(alert).not.toHaveTextContent('Invalid setup transition')
+  expect(alert).not.toHaveTextContent('root')
+})
+
 test('the IGDB skip action bypasses required credential fields and advances setup', async () => {
   window.history.replaceState({}, '', '/setup/igdb')
   api.loadSetupState.mockResolvedValue({
