@@ -414,8 +414,9 @@ def create_batch_refresh_router(
                         }))
                     else:
                         flashes = list(auth.session_data.get('_flashes') or [])
-                        flashes.append(('info', message))
+                        flashes.append(('image-refresh', message))
                         auth.session_data['_flashes'] = flashes
+                        auth.session_data['image_refresh_game_uuid'] = str(game_uuid)
                         response = flask_redirect_response('/library', status_code=302)
                 except Exception:
                     flask_app.logger.warning('legacy image refresh queue failed', exc_info=True)

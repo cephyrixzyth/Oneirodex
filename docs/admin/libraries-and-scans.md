@@ -308,7 +308,7 @@ Skip-dir is **defense-in-depth only** — still create per-leaf libraries; do no
 
 **Batch refresh images:** Librarian+ Library sticky **More → Refresh covers** · `POST /api/games/batch/refresh_images` `{ uuids }` (max **20**, 202 `{ queued, skipped, errors }`) enqueues the same IGDB refresh path as single-game refresh; ACL per title; skips missing / forbidden / no `igdb_id`.
 
-**Single-game refresh:** Open the game tile’s **More** menu and choose **Refresh Images**. The action uses the signed-in session’s CSRF token and returns to Library with a start notice; the image work then runs in the background.
+**Single-game refresh:** Open the game tile’s **More** menu and choose **Refresh Images**. The action uses the signed-in session’s CSRF token and returns to Library with a progress toast that reports completion or failure while the image work runs in the background.
 
 ## After A0–A14 ship — Library A PCWIN rescan
 
