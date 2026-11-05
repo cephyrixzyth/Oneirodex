@@ -71,6 +71,48 @@ describe('createBrowserRequester', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
 
+  it('treats a followed same-origin login redirect as unauthorized', async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      redirected: true,
+      url: 'https://app.example/login?next=%2Fapi%2Ftokens',
+      headers: new Headers({ 'content-type': 'text/html' }),
+    } as Response
+    const onUnauthorized = vi.fn()
+    const request = createBrowserRequester({
+      baseUrl: 'https://app.example',
+      fetchImpl: vi.fn(async () => response) as unknown as typeof fetch,
+      onUnauthorized,
+    })
+
+    await expect(request('/api/tokens')).rejects.toMatchObject({
+      name: 'OneirodexApiError',
+      status: 401,
+      error_code: 'unauthorized',
+    })
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not classify a cross-origin login page as the app login redirect', async () => {
+    const response = {
+      ok: true,
+      status: 200,
+      redirected: true,
+      url: 'https://identity.example/login',
+      headers: new Headers({ 'content-type': 'text/html' }),
+    } as Response
+    const onUnauthorized = vi.fn()
+    const request = createBrowserRequester({
+      baseUrl: 'https://app.example',
+      fetchImpl: vi.fn(async () => response) as unknown as typeof fetch,
+      onUnauthorized,
+    })
+
+    await expect(request('/api/tokens')).resolves.toBeUndefined()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
   it('does not fire onUnauthorized on a 403', async () => {
     const { fetchImpl } = recordingFetch(403, {
       ok: false,
