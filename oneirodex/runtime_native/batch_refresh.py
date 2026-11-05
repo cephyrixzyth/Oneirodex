@@ -378,7 +378,13 @@ def create_batch_refresh_router(
             if auth.token is None:
                 response = csrf_error_response(request, auth.session_data, flask_app.config)
                 if response is not None:
-                    response = csrf_html_error_response(response)
+                    # Flask's shared HTTPException handler returns the API
+                    # envelope for XHR/JSON callers, even on this legacy path.
+                    # Keep normal form submissions on Werkzeug's HTML page.
+                    from oneirodex.utils.error_envelope import wants_json_error
+
+                    if not wants_json_error(request):
+                        response = csrf_html_error_response(response)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None and normalize_role(getattr(auth.user, 'role', '') or '') != 'admin':

@@ -12349,6 +12349,21 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
     assert b'<p>The CSRF token is missing.</p>' in denied.content
     assert not any(call[0] == 'enqueue' for call in data.calls)
 
+    ajax_denied = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        headers={'X-Requested-With': 'XMLHttpRequest'},
+    )
+    assert ajax_denied.status_code == 400
+    assert ajax_denied.headers['content-type'] == 'application/json'
+    assert ajax_denied.json() == {
+        'ok': False,
+        'success': False,
+        'error': 'The CSRF token is missing.',
+        'message': 'The CSRF token is missing.',
+        'error_code': 'bad_request',
+    }
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
     response = _run(
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf},

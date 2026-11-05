@@ -43,5 +43,8 @@ page. `create_app` now registers catch-all `HTTPException` / `Exception` handler
 return `api_error(...)` for any request `wants_json_error()` recognises (an
 `/api/` path, `Accept: application/json`, or an XHR header). The HTTP status is
 preserved; only the body shape changes. HTML routes keep Flask's default pages.
+Native ASGI routes that handle equivalent errors before Flask must use the same
+`wants_json_error()` negotiation; converting every rejection to HTML breaks
+XHR callers on legacy page-action routes.
 The uncaught-`Exception` message is fixed text — `str(exc)` can carry paths, SQL,
 or secrets — and the real error is logged with a traceback server-side.
