@@ -3023,6 +3023,10 @@ class LazyASGIApp:
                 await self._handle_get_head_method_not_allowed(scope, send)
                 return
 
+            if path == '/manifest.webmanifest' and scope.get('method') == 'OPTIONS':
+                if await self._send_setup_redirect_if_required(scope, send):
+                    return
+
             if await self._send_legacy_setup_gate_if_required(scope, send):
                 return
 

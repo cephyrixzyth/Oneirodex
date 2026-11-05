@@ -442,9 +442,10 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
         ) as client:
             get_response = await client.get('/manifest.webmanifest')
             head_response = await client.head('/manifest.webmanifest')
-        return get_response, head_response
+            options_response = await client.options('/manifest.webmanifest')
+        return get_response, head_response, options_response
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.json()['name'] == 'Household Shelf'
     assert get_response.json()['short_name'] == 'Household Sh'
@@ -491,9 +492,10 @@ def test_install_manifest_follows_legacy_setup_redirect_when_setup_is_incomplete
         ) as client:
             get_response = await client.get('/manifest.webmanifest')
             head_response = await client.head('/manifest.webmanifest')
-        return get_response, head_response
+            options_response = await client.options('/manifest.webmanifest')
+        return get_response, head_response, options_response
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response = asyncio.run(run())
     assert get_response.status_code == 302
     assert get_response.headers['location'] == '/setup/integrations'
     assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
@@ -503,6 +505,9 @@ def test_install_manifest_follows_legacy_setup_redirect_when_setup_is_incomplete
     assert head_response.headers['location'] == '/setup/integrations'
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 302
+    assert options_response.headers['location'] == '/setup/integrations'
+    assert options_response.headers['content-type'] == 'text/html; charset=utf-8'
 
 
 def test_pwa_assets_follow_legacy_setup_redirect_when_setup_is_incomplete(monkeypatch, tmp_path):
