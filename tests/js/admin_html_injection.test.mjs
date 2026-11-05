@@ -414,4 +414,46 @@ for (const payload of PAYLOADS) {
     assert.ok(sandbox.imageRowHtml({ id: 42, status: 'failed' }).includes('data-od-arg="42"'));
 }
 
+// Stage E provider URLs are HTML-escaped and must also pass scheme and host
+// validation before becoming clickable links.
+{
+    const source = fs.readFileSync(SCANJOBS, 'utf8');
+    const sandbox = {
+        URL,
+        escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+            })[char]);
+        },
+        hasStageEHints: () => true,
+        normalizeStageECandidates: (folder) => folder.candidates,
+        normalizeStageEMeta: () => null,
+        stageEChipSources: () => [],
+        stageESourceLabel: (value) => value,
+        stageEMatchModeLabel: () => '',
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(
+        `${extractTopLevelFunction(source, 'safeStageECandidateUrl')}\n${extractTopLevelFunction(source, 'buildStageEHtml')}`,
+        sandbox,
+        { filename: SCANJOBS },
+    );
+
+    const hostile = sandbox.buildStageEHtml({ candidates: [{
+        source: 'mobygames', name: 'Doom', url: 'javascript:alert(document.domain)',
+    }] });
+    assert.ok(!hostile.includes('<a '), 'unsafe scheme is rendered as plain text');
+    assert.ok(hostile.includes('<span class="unmatched-stage-e__name">Doom</span>'));
+
+    const wrongHost = sandbox.buildStageEHtml({ candidates: [{
+        source: 'mobygames', name: 'Doom', url: 'https://attacker.example/path',
+    }] });
+    assert.ok(!wrongHost.includes('<a '), 'unexpected provider host is rendered as plain text');
+
+    const valid = sandbox.buildStageEHtml({ candidates: [{
+        source: 'mobygames', name: 'Doom', url: 'https://www.mobygames.com/game/15/doom/',
+    }] });
+    assert.ok(valid.includes('href="https://www.mobygames.com/game/15/doom/"'));
+}
+
 console.log('admin_html_injection: all assertions passed');
