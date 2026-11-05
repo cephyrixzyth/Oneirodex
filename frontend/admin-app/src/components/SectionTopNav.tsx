@@ -53,14 +53,15 @@ export function SectionTopNav() {
       : pathname === '/admin/scan-jobs'
         ? 'jobs'
         : pathname.startsWith('/scan_management')
-          ? new URLSearchParams(search).get('active_tab') === 'jobs'
-            ? 'jobs'
-            : new URLSearchParams(search).get('active_tab') === 'manual' ||
-                hash === '#manual-identify'
-              ? 'manual'
-              : 'auto'
+          ? (() => {
+              const tab = new URLSearchParams(search).get('active_tab') || 'auto'
+              if (tab === 'jobs') return 'jobs'
+              if (tab === 'unmatched') return 'unmatched'
+              if (tab === 'manual' || hash === '#manual-identify') return 'manual'
+              return 'auto'
+            })()
           : ''
-  if (['auto', 'manual', 'jobs'].includes(scanView)) {
+  if (['auto', 'manual', 'jobs', 'unmatched'].includes(scanView)) {
     const scanPages = [
       {
         id: 'auto',
@@ -73,12 +74,14 @@ export function SectionTopNav() {
         label: 'Manual identify',
       },
       { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
+      { id: 'unmatched', href: '/scan_management?active_tab=unmatched', label: 'Unmatched' },
     ]
     return (
       <AdminPageActions label="Scan pages">
         {scanPages.map((item) => (
           <AdminLink
             key={item.id}
+            ref={item.id === scanView ? setActiveLink : undefined}
             className={`od-cbtn od-cbtn--section${scanView === item.id ? ' is-active' : ''}`}
             to={item.href}
             aria-current={

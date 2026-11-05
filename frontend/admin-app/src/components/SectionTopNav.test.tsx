@@ -68,6 +68,7 @@ test.each([
   ['/scan_management?active_tab=manual', 'Manual identify'],
   ['/scan_management?active_tab=auto#manual-identify', 'Manual identify'],
   ['/scan_management?active_tab=jobs', 'Scan jobs'],
+  ['/scan_management?active_tab=unmatched', 'Unmatched'],
 ])(
   'scan view %s has one in-app switcher with the current view or section active',
   (path, active) => {
@@ -77,6 +78,7 @@ test.each([
       'Scanning',
       'Manual identify',
       'Scan jobs',
+      'Unmatched',
     ])
     expect(screen.getByRole('link', { name: active })).toHaveAttribute(
       'aria-current',
@@ -94,6 +96,10 @@ test.each([
     expect(screen.getByRole('link', { name: 'Scan jobs' })).toHaveAttribute(
       'href',
       '/scan_management?active_tab=jobs',
+    )
+    expect(screen.getByRole('link', { name: 'Unmatched' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=unmatched',
     )
   },
 )

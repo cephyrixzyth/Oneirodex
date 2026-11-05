@@ -521,13 +521,17 @@
   #od-admin-topbar-slot > .od-cbtn-group[aria-label='Unmatched folder actions'] {
     width: 100%;
     justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    touch-action: pan-x;
   }
 }
 
 @media (max-width: 900px) {
   #od-admin-topbar-slot > .od-cbtn-group[aria-label='Unmatched folder actions'] {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-start;
   }
 }
