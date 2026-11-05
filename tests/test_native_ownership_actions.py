@@ -12,6 +12,9 @@ from flask import Flask
 from oneirodex.runtime_native.ownership_actions import (
     create_ownership_actions_router,
 )
+from oneirodex.runtime_native.ownership_providers import (
+    create_ownership_provider_router,
+)
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token,
 )
@@ -59,6 +62,17 @@ class FakeOwnershipActions:
         self.calls.append(('summary', user_id))
         return {'stores': []}
 
+    def cancel_sync(self, user_id, store):
+        self.calls.append(('cancel_sync', user_id, store))
+        return {'job': {'status': 'cancelled'}}, None
+
+    def decide(self, user, title_id, expected_revision, game_uuid, *, undo=False):
+        self.calls.append(('decide', user.id, title_id, expected_revision, game_uuid, undo))
+        return {'updated': True}
+
+    def rollback(self):
+        self.calls.append(('rollback',))
+
 
 @pytest.fixture
 def native_client():
@@ -83,7 +97,16 @@ def native_client():
         load_user_id=lambda user_id: user if user_id == '7:fp' else None,
         data_access=data,
     ))
+    runtime.include_router(create_ownership_provider_router(
+        flask_app,
+        find_user=lambda _user_id: user,
+        find_token=lambda _prefix: bearer['token'],
+        commit_token_touch=lambda _token: None,
+        load_user_id=lambda user_id: user if user_id == '7:fp' else None,
+        data_access=data,
+    ))
     runtime._test_bearer = bearer
+    runtime._test_user = user
     return runtime, data
 
 
@@ -208,6 +231,76 @@ def test_read_only_bearer_cannot_connect_ownership(native_client):
     assert data.calls == []
 
 
+def test_write_bearer_can_connect_ownership(native_client):
+    runtime, data = native_client
+    runtime._test_bearer['token'] = SimpleNamespace(
+        user_id=7, scopes=['read:library', 'write:library'],
+        token_hash=hashlib.sha256(b'secret').hexdigest(),
+        has_scope=lambda scope: scope in ['read:library', 'write:library'],
+        is_expired=lambda _now=None: False, revoked_at=None,
+    )
+
+    response = _request(
+        runtime, 'POST', '/api/ownership/steam', json={'steam_id': '123'},
+        headers={'Authorization': 'Bearer gt_deadbeef_secret'}, cookie=False,
+    )
+
+    assert response.status_code == 201
+    assert data.calls[0][0:3] == ('connect', 7, 'steam')
+
+
+def test_child_bearer_with_write_scope_cannot_connect_ownership(native_client):
+    runtime, data = native_client
+    runtime._test_bearer['token'] = SimpleNamespace(
+        user_id=7, scopes=['read:library', 'write:library'],
+        token_hash=hashlib.sha256(b'secret').hexdigest(),
+        has_scope=lambda scope: scope in ['read:library', 'write:library'],
+        is_expired=lambda _now=None: False, revoked_at=None,
+    )
+    runtime._test_user.role = 'child'
+
+    response = _request(
+        runtime, 'POST', '/api/ownership/steam', json={'steam_id': '123'},
+        headers={'Authorization': 'Bearer gt_deadbeef_secret'}, cookie=False,
+    )
+
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
+    assert data.calls == []
+
+
+def test_child_session_cannot_connect_ownership(native_client):
+    runtime, data = native_client
+    runtime._test_user.role = 'child'
+
+    response = _request(
+        runtime, 'POST', '/api/ownership/steam', json={'steam_id': '123'},
+    )
+
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
+    assert data.calls == []
+
+
+@pytest.mark.parametrize(
+    ('path', 'payload'),
+    [
+        ('/api/ownership/gog/sync/cancel', {}),
+        ('/api/ownership/titles/1/match', {'game_uuid': 'game-1'}),
+        ('/api/ownership/titles/1/match/undo', {}),
+    ],
+)
+def test_child_session_cannot_cancel_or_review_ownership(native_client, path, payload):
+    runtime, data = native_client
+    runtime._test_user.role = 'child'
+
+    response = _request(runtime, 'POST', path, json=payload)
+
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
+    assert data.calls == []
+
+
 def test_sync_failure_is_redacted_and_sync_all_is_not_shadowed(native_client):
     runtime, data = native_client
     data.sync_error = SyncOutcomeError('network_error')
@@ -315,9 +408,10 @@ def test_ownership_action_routes_are_limited_to_supported_store_slugs(native_cli
     runtime, data = native_client
 
     reserved = (
-        ('POST', '/api/ownership/connections', 404),
-        ('DELETE', '/api/ownership/providers', 404),
-        ('POST', '/api/ownership/titles', 404),
+            # The provider router exposes these paths for their read methods.
+        ('POST', '/api/ownership/connections', 405),
+        ('DELETE', '/api/ownership/providers', 405),
+            ('POST', '/api/ownership/titles', 405),
         ('DELETE', '/api/ownership/sync-all', 405),
     )
     for method, path, expected_status in reserved:

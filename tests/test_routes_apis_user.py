@@ -419,6 +419,39 @@ def test_read_only_bearer_cannot_connect_store_ownership(client, regular_user):
     assert denied.get_json()['error_code'] == 'forbidden'
 
 
+def test_child_session_cannot_connect_store_ownership(client, regular_user, db_session):
+    regular_user.role = 'child'
+    db_session.commit()
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(regular_user.id)
+        sess['_fresh'] = True
+
+    denied = client.post(
+        '/api/ownership/steam', json={'steam_id': '123'},
+    )
+
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+
+def test_child_bearer_with_write_scope_cannot_connect_store_ownership(
+    client, regular_user, db_session,
+):
+    _, write_token = generate_api_token(
+        regular_user, 'child-ownership-write', ['read:library', 'write:library'],
+    )
+    regular_user.role = 'child'
+    db_session.commit()
+
+    denied = client.post(
+        '/api/ownership/steam', json={'steam_id': '123'},
+        headers={'Authorization': f'Bearer {write_token}'},
+    )
+
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+
 def test_read_only_bearer_cannot_import_launcher_library_data(client, regular_user):
     _, read_token = generate_api_token(
         regular_user, 'read-only-import-write', ['read:library'],

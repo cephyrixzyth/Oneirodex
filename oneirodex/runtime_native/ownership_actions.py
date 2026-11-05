@@ -156,8 +156,13 @@ async def _handle_action(
         # Bearer writes need an explicit scope. Cookie writes retain CSRF.
         from .csrf_compat import csrf_error_response
 
-        if auth.token is not None and not auth.has_scope('write:library'):
-            response = _error(403, 'forbidden', 'Bearer token requires write:library scope')
+        if auth.user is not None and not auth.has_scope('write:library'):
+            message = (
+                'Bearer token requires write:library scope'
+                if auth.token is not None
+                else 'Missing scope: write:library'
+            )
+            response = _error(403, 'forbidden', message)
         else:
             response = (
                 None if auth.token is not None

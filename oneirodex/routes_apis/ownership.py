@@ -1,7 +1,7 @@
 """Register-only store ownership sync APIs (never downloads from stores)."""
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import g, request
+from flask import request
 from flask_login import current_user, login_required
 
 from oneirodex.schemas.ownership import (
@@ -110,7 +110,7 @@ def undo_ownership_match(title_id):
 
 
 def _match_decision(title_id, *, undo=False):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -161,7 +161,7 @@ def _outcome_error(store, reason, job=None):
 
 def _sync_response(store):
     """Run one member-triggered live sync as a recorded job."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -183,7 +183,7 @@ def _sync_response(store):
 
 
 def _disconnect_response(store, disconnect):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -203,7 +203,7 @@ def _disconnect_response(store, disconnect):
 def _connect_response(store, connect):
     """Save a link or reconnect while no sync for it runs; a sync finishing
     later would otherwise write back the old token over the new one."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -232,7 +232,7 @@ def sync_all_ownership():
     One store failing does not stop the others; each result carries its own
     status and redacted reason. Unlinked stores come back as ``skipped``.
     """
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -251,7 +251,7 @@ def sync_all_ownership():
 def cancel_ownership_sync(store):
     """Ask a running GOG / Epic / Amazon sync to stop at its next page. Steam,
     Xbox and PlayStation make one provider call and are refused, not faked."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -279,7 +279,7 @@ def _read_csv_payload() -> str:
 
 
 def _csv_response(import_csv, **extra):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},

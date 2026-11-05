@@ -305,9 +305,11 @@ def create_ownership_provider_router(
             )
             from .csrf_compat import csrf_error_response
 
-            if auth.token is not None and not auth.has_scope('write:library'):
+            if auth.user is not None and not auth.has_scope('write:library'):
                 response = _error_response(
-                    403, 'forbidden', 'Bearer token requires write:library scope',
+                    403, 'forbidden',
+                    'Bearer token requires write:library scope'
+                    if auth.token is not None else 'Missing scope: write:library',
                 )
             else:
                 response = (
@@ -378,9 +380,11 @@ async def _decide_match(
         )
         from .csrf_compat import csrf_error_response
 
-        if auth.token is not None and not auth.has_scope('write:library'):
+        if auth.user is not None and not auth.has_scope('write:library'):
             response = _error_response(
-                403, 'forbidden', 'Bearer token requires write:library scope',
+                403, 'forbidden',
+                'Bearer token requires write:library scope'
+                if auth.token is not None else 'Missing scope: write:library',
             )
         else:
             response = (
