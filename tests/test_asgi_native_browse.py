@@ -9019,6 +9019,9 @@ def test_native_scan_job_status_hides_database_errors(monkeypatch):
 
 def test_lazy_asgi_dispatches_admin_path_info_without_opening_path(monkeypatch):
     calls = []
+    monkeypatch.setattr(
+        'oneirodex.utils.client_commands.validate_open_path_target', lambda value: value,
+    )
     data = SimpleNamespace(path_info=lambda value: calls.append(value) or {
         'path': value, 'exists': True, 'is_dir': True, 'basename': 'library',
         'open_via': 'desktop',

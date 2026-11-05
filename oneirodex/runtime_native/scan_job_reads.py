@@ -208,7 +208,19 @@ def create_scan_job_reads_router(
                     body, status = api_error_payload('path too long', code='bad_request')
                     response = JSONResponse(body, status_code=status)
                 else:
-                    response = JSONResponse(data.path_info(raw))
+                    from oneirodex.utils.client_commands import validate_open_path_target
+
+                    try:
+                        raw = validate_open_path_target(raw)
+                    except ValueError:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'path is outside configured library roots', code='forbidden'
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    else:
+                        response = JSONResponse(data.path_info(raw))
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 

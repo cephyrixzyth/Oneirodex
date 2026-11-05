@@ -96,7 +96,9 @@ outside it cannot list its channels, read its messages, or join its voice.
   the selected space appear beside it.
 - Create a space, then add channels to it with a `text` or `voice` kind.
 - **Invites** are codes you generate and share. Redeem one to join; an owner can
-  revoke a code, and revoking does not remove people who already joined.
+  revoke a code, and revoking does not remove people who already joined. Redeeming
+  again as a current member is idempotent and does not use another slot; a use is
+  counted only when a new member joins.
 - Voice channels get a room of their own — joining one requires membership of
   that space, checked server-side every time a token is minted.
 

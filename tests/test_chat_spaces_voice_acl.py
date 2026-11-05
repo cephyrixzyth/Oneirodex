@@ -144,6 +144,30 @@ class TestSpaceInvites:
             assert second_error is not None
             assert user_is_space_member(other, space) is False
 
+    def test_existing_member_redemption_does_not_consume_invite_use(self, app, db_session, alice, bob):
+        with app.app_context():
+            space = create_space(name='Private', visibility='invite', created_by_user_id=alice.id)
+            invite = create_space_invite(space=space, created_by_user_id=alice.id, max_uses=2)
+
+            joined, repeat_error = redeem_space_invite(invite.token, alice)
+            assert repeat_error is None
+            assert joined.id == space.id
+            assert invite.uses == 0
+
+            _, first_new_member_error = redeem_space_invite(invite.token, bob)
+            assert first_new_member_error is None
+            assert invite.uses == 1
+
+            other = _user(db_session)
+            _, second_new_member_error = redeem_space_invite(invite.token, other)
+            assert second_new_member_error is None
+            assert invite.uses == 2
+
+            final_user = _user(db_session)
+            _, exhausted_error = redeem_space_invite(invite.token, final_user)
+            assert exhausted_error is not None
+            assert user_is_space_member(final_user, space) is False
+
     def test_unknown_token_refused(self, app, db_session, bob):
         with app.app_context():
             _, error = redeem_space_invite('not-a-real-token', bob)

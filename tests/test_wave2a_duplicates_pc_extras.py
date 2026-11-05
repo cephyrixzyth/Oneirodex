@@ -206,9 +206,15 @@ def test_fix_merge_clears_row(client, app, db_session, admin, lib):
     ).scalars().first() is not None
 
 
-def test_path_open_returns_string_only(client, app, admin, tmp_path):
-    target = tmp_path / 'reveal_me'
+def test_path_open_returns_string_only_within_configured_roots(client, app, admin, tmp_path, monkeypatch):
+    allowed_root = tmp_path / 'library'
+    allowed_root.mkdir()
+    target = allowed_root / 'reveal_me'
     target.mkdir()
+    monkeypatch.setattr(
+        'oneirodex.utils.client_commands._open_path_allowed_bases',
+        lambda: [str(allowed_root)],
+    )
     _login(client, app, admin)
     resp = client.get('/api/path/open', query_string={'path': str(target)})
     assert resp.status_code == 200
@@ -217,3 +223,9 @@ def test_path_open_returns_string_only(client, app, admin, tmp_path):
     assert data['exists'] is True
     assert data['is_dir'] is True
     assert data['open_via'] == 'desktop'
+
+    outside_path = tmp_path / 'outside'
+    outside_path.mkdir()
+    denied = client.get('/api/path/open', query_string={'path': str(outside_path)})
+    assert denied.status_code == 403
+    assert str(outside_path) not in denied.get_data(as_text=True)
