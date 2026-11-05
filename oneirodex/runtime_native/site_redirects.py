@@ -124,7 +124,9 @@ def create_site_redirect_router(
                     # now means first-run store setup, so sending every legacy visit
                     # there changes the route's purpose. Discover is the current
                     # member landing page and preserves the original entry intent.
-                    response = RedirectResponse('/discover', status_code=302)
+                    from .response_compat import flask_redirect_response
+
+                    response = flask_redirect_response('/discover', status_code=302)
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, runtime_app, auth)
 
