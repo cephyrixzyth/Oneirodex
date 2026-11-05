@@ -390,6 +390,11 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
     assert get_response.status_code == 200
     assert get_response.json()['name'] == 'Household Shelf'
     assert get_response.json()['short_name'] == 'Household Sh'
+    assert get_response.content == (
+        json.dumps(
+            get_response.json(), separators=(',', ':'), sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/manifest+json'
     assert get_response.headers['cache-control'] == 'public, max-age=3600'
     assert get_response.headers['content-security-policy']

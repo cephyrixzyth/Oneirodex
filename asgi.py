@@ -4451,8 +4451,8 @@ class LazyASGIApp:
             settings = get_global_settings() or {}
         manifest = build_app_manifest(settings.get('site_name'))
         payload = json.dumps(
-            manifest, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
-        ).encode('utf-8')
+            manifest, separators=(',', ':'), ensure_ascii=True, sort_keys=True,
+        ).encode('utf-8') + b'\n'
         headers = {
             'Content-Type': 'application/manifest+json',
             'Content-Length': str(len(payload)),
