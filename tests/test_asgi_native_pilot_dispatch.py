@@ -190,16 +190,50 @@ def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch
         ) as client:
             get_response = await client.get('/awake')
             head_response = await client.head('/awake')
-        return get_response, head_response
+            options_response = await client.options('/awake')
+            unsupported = [
+                await client.request(method, '/awake')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 503
     assert get_response.json()['checks']['database']['error'] == 'OperationalError'
+    expected_body = {
+        'status': 'not_ready',
+        'probe': 'readiness',
+        'version': 'test',
+        'checks': {
+            'database': {'ok': False, 'error': 'OperationalError'},
+            'initialization': {'ok': True, 'complete': True, 'testing_bypass': False},
+        },
+    }
+    assert get_response.content == (
+        json.dumps(
+            expected_body,
+            separators=(',', ':'),
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/json'
     assert get_response.headers['content-security-policy']
     assert head_response.status_code == 503
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
+        'OPTIONS', 'GET', 'HEAD',
+    }
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(
+        set(response.headers['allow'].replace(' ', '').split(','))
+        == {'OPTIONS', 'GET', 'HEAD'}
+        for response in unsupported
+    )
+    assert all(response.content == unsupported[0].content for response in unsupported)
 
 
 def test_readiness_builder_accepts_framework_free_dependencies():

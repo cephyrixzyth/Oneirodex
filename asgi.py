@@ -3019,6 +3019,10 @@ class LazyASGIApp:
                 await self._handle_readiness(scope, send)
                 return
 
+            if path == '/awake' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if await self._send_legacy_setup_gate_if_required(scope, send):
                 return
 
@@ -4395,7 +4399,9 @@ class LazyASGIApp:
             body, status = build_readiness(
                 config=config, database=native_db,
             )
-        payload = json.dumps(body, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
+        payload = json.dumps(
+            body, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8') + b'\n'
         header_values = {
             'Content-Type': 'application/json',
             'Content-Length': str(len(payload)),
