@@ -4242,7 +4242,15 @@ class LazyASGIApp:
                 # explicit API/admin method handlers above win first, then
                 # preserve Flask's 405 for unsupported methods instead of
                 # letting the native API fallback turn them into 404s.
-                await self._handle_get_head_method_not_allowed(scope, send)
+                # The invites document retains its legacy browser form POST,
+                # which is dispatched before this fallback. Keep POST in the
+                # 405 Allow header for other methods on that same path.
+                if path == '/user/invites':
+                    await self._send_method_not_allowed(
+                        scope, send, {'GET', 'HEAD', 'OPTIONS', 'POST'},
+                    )
+                else:
+                    await self._handle_get_head_method_not_allowed(scope, send)
                 return
             if (
                 self._native_admin_pilot is not None

@@ -10843,6 +10843,19 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
     assert origins == ['http://testserver']
 
 
+def test_lazy_asgi_invite_page_405_allow_keeps_legacy_post(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    response = _run(runtime, '/user/invites', method='PUT')
+
+    assert response.status_code == 405
+    assert set(response.headers['allow'].upper().replace(' ', '').split(',')) == {
+        'GET', 'HEAD', 'OPTIONS', 'POST',
+    }
+
+
 def test_invite_management_forms_keep_first_run_setup_redirect(monkeypatch):
     from oneirodex.utils import setup
 
