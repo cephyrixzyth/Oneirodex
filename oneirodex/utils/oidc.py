@@ -465,12 +465,11 @@ def provision_or_update_user(
     if user is None and email and db_session.execute(
         select(User.id).filter(func.lower(User.email) == email)
     ).first() is not None:
-        # The address belongs to a local account we may not link (the provider
-        # did not verify it, or it is already linked elsewhere). A second
-        # account cannot share it either.
+        # Do not disclose whether an email belongs to a local account through
+        # the OIDC callback's user-visible error message.
         raise ValueError(
-            'An account with this email already exists. Sign in with its password, '
-            'or ask an administrator to review its SSO binding and verified email.'
+            'Unable to sign in with this SSO identity. Please contact an '
+            'administrator if the problem continues.'
         )
 
     if user is None and db_session.execute(select(User.id).filter(
@@ -538,7 +537,15 @@ def provision_or_update_user(
                     if active_admins <= 1:
                         raise ValueError('Cannot change the role of the last active administrator.')
                 user.role = new_role
-        if not user.is_email_verified:
+        # A verified assertion only vouches for the email it names. This local
+        # account's email is intentionally not overwritten from OIDC claims, so
+        # an IdP email change must not verify the account's older local address.
+        if (
+            not user.is_email_verified
+            and email
+            and email == str(user.email or '').strip().lower()
+            and _email_verified(claims, trust_provider_email=trust_provider_email)
+        ):
             user.is_email_verified = True
 
     user.lastlogin = datetime.now(timezone.utc)
