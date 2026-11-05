@@ -12364,6 +12364,18 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
     }
     assert not any(call[0] == 'enqueue' for call in data.calls)
 
+    invalid_form = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        form_body={'csrf_token': 'invalid-token'},
+    )
+    assert invalid_form.status_code == 400
+    assert b'CSRF token is invalid' in invalid_form.content
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
+    form_response = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        form_body={'csrf_token': csrf},
+    )
     response = _run(
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf},
@@ -12373,11 +12385,13 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
         headers={'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'},
     )
 
+    assert form_response.status_code == 302, form_response.text
+    assert form_response.headers['location'] == '/library'
     assert response.status_code == 302, response.text
     assert response.headers['location'] == '/library'
     assert ajax.status_code == 200
     assert ajax.json()['message'] == 'Game images refresh process started for Fixture game.'
-    assert data.calls.count(('enqueue', 'game-1')) == 2
+    assert data.calls.count(('enqueue', 'game-1')) == 3
 
 
 def test_lazy_asgi_dispatches_legacy_single_game_image_upload(monkeypatch):

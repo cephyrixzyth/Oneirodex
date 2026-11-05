@@ -308,6 +308,8 @@ Skip-dir is **defense-in-depth only** — still create per-leaf libraries; do no
 
 **Batch refresh images:** Librarian+ Library sticky **More → Refresh covers** · `POST /api/games/batch/refresh_images` `{ uuids }` (max **20**, 202 `{ queued, skipped, errors }`) enqueues the same IGDB refresh path as single-game refresh; ACL per title; skips missing / forbidden / no `igdb_id`.
 
+**Single-game refresh:** Open the game tile’s **More** menu and choose **Refresh Images**. The action uses the signed-in session’s CSRF token and returns to Library with a start notice; the image work then runs in the background.
+
 ## After A0–A14 ship — Library A PCWIN rescan
 
 **When:** Stage A0–A14 name-resolution is on **origin** and the Unraid image is rebuilt from that commit (human ship). Do **not** run a live full rescan from an agent Task alone.

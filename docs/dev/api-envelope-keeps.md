@@ -48,3 +48,9 @@ Native ASGI routes that handle equivalent errors before Flask must use the same
 XHR callers on legacy page-action routes.
 The uncaught-`Exception` message is fixed text — `str(exc)` can carry paths, SQL,
 or secrets — and the real error is logged with a traceback server-side.
+
+Native routes that keep a classic URL-encoded form must validate its submitted
+`csrf_token` field as well as the `X-CSRFToken` / `X-CSRF-Token` headers. Read
+only URL-encoded bodies within the configured size limit (capped at 1 MiB for
+CSRF extraction); missing, invalid, or oversized form tokens must fail before
+the action runs. The single-game image-refresh form follows this contract.

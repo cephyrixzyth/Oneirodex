@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
@@ -376,7 +377,15 @@ def create_batch_refresh_router(
             )
             response = None
             if auth.token is None:
-                response = csrf_error_response(request, auth.session_data, flask_app.config)
+                csrf_token = (
+                    request.headers.get('X-CSRFToken')
+                    or request.headers.get('X-CSRF-Token')
+                )
+                if not csrf_token and flask_app.config.get('WTF_CSRF_ENABLED', True):
+                    csrf_token = await _legacy_urlencoded_csrf_token(request, flask_app.config)
+                response = csrf_error_response(
+                    request, auth.session_data, flask_app.config, token=csrf_token,
+                )
                 if response is not None:
                     # Flask's shared HTTPException handler returns the API
                     # envelope for XHR/JSON callers, even on this legacy path.
@@ -420,6 +429,33 @@ def create_batch_refresh_router(
             return response
 
     return router
+
+
+async def _legacy_urlencoded_csrf_token(request: Request, config) -> str | None:
+    """Read the bounded CSRF field from a classic browser form submission."""
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/x-www-form-urlencoded':
+        return None
+    try:
+        body_limit = min(max(int(config.get('MAX_CONTENT_LENGTH') or 1024 * 1024), 0), 1024 * 1024)
+    except (TypeError, ValueError):
+        body_limit = 1024 * 1024
+    raw_length = request.headers.get('content-length')
+    if raw_length:
+        try:
+            if int(raw_length) > body_limit:
+                return None
+        except ValueError:
+            return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > body_limit:
+            return None
+    field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+    values = parse_qs(bytes(body).decode('utf-8', 'replace'), keep_blank_values=True)
+    token = values.get(field_name, [''])
+    return token[0] or None
 
 
 def mount_batch_refresh_routes(app: FastAPI, flask_app, **kwargs):
