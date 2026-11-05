@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { buildAdminCommands, filterAdminCommands } from './adminCommands'
 import { AdminLink } from './AdminLink'
@@ -22,6 +23,7 @@ import './AdminCommandPalette.css'
  * Admin destinations stay inside the React shell through the shared AdminLink.
  */
 export default function AdminCommandPalette() {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -82,7 +84,10 @@ export default function AdminCommandPalette() {
     } else if (event.key === 'Enter') {
       event.preventDefault()
       const target = results[active]
-      if (target) window.location.assign(target.href)
+      if (target) {
+        close()
+        navigate(target.href)
+      }
     }
   }
 
