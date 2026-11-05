@@ -542,12 +542,14 @@ def test_pwa_assets_follow_legacy_setup_redirect_when_setup_is_incomplete(monkey
                 '/manifest.webmanifest', '/offline', '/sw.js', '/vr/sw.js',
             ):
                 responses[path] = (
-                    await client.get(path), await client.head(path),
+                    await client.get(path),
+                    await client.head(path),
+                    await client.options(path),
                 )
         return responses
 
     responses = asyncio.run(run())
-    for get_response, head_response in responses.values():
+    for get_response, head_response, options_response in responses.values():
         assert get_response.status_code == 302
         assert get_response.headers['location'] == '/setup/integrations'
         assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
@@ -557,6 +559,10 @@ def test_pwa_assets_follow_legacy_setup_redirect_when_setup_is_incomplete(monkey
         assert head_response.headers['location'] == '/setup/integrations'
         assert head_response.content == b''
         assert head_response.headers['content-length'] == str(len(get_response.content))
+        assert options_response.status_code == 302
+        assert options_response.headers['location'] == '/setup/integrations'
+        assert options_response.headers['content-type'] == 'text/html; charset=utf-8'
+        assert options_response.content == get_response.content
 
 
 def test_loading_icon_bootstrap_uses_request_local_scope_without_flask_dispatch(monkeypatch, tmp_path):
