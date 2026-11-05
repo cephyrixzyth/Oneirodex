@@ -4377,16 +4377,38 @@ class LazyASGIApp:
 
         methods: set[str] = set()
         matched_shell_path = False
+
+        def partial_route_methods(routes, route_scope):
+            """Walk FastAPI routers, including their lazily included routers."""
+            for route in routes:
+                original_router = getattr(route, 'original_router', None)
+                if original_router is not None:
+                    context = getattr(route, 'include_context', None)
+                    prefix = str(getattr(context, 'prefix', '') or '').rstrip('/')
+                    nested_scope = route_scope
+                    if prefix:
+                        path = str(route_scope.get('path') or '')
+                        if path != prefix and not path.startswith(prefix + '/'):
+                            continue
+                        nested_scope = dict(route_scope)
+                        nested_scope['path'] = path[len(prefix):] or '/'
+                    yield from partial_route_methods(
+                        getattr(original_router, 'routes', ()), nested_scope,
+                    )
+                    continue
+
+                match, _child_scope = route.matches(route_scope)
+                if match is Match.PARTIAL:
+                    yield from (getattr(route, 'methods', None) or ())
+
         for native_app in (self._native_admin_pilot, self._native_read_api_app):
             router = getattr(native_app, 'router', None)
-            for route in getattr(router, 'routes', ()):
-                match, _child_scope = route.matches(scope)
-                if match is not Match.PARTIAL:
-                    continue
-                route_methods = getattr(route, 'methods', None) or ()
+            for method in partial_route_methods(
+                getattr(router, 'routes', ()), scope,
+            ):
                 if native_app is self._native_admin_pilot:
                     matched_shell_path = True
-                methods.update(str(method).upper() for method in route_methods)
+                methods.add(str(method).upper())
 
         if not matched_shell_path:
             return False

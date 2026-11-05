@@ -4,7 +4,7 @@ from contextlib import nullcontext
 import json
 import httpx
 from flask import Flask
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from starlette.responses import PlainTextResponse
 import asgi
 from oneirodex import app_version
@@ -113,9 +113,9 @@ def test_unsupported_admin_shell_method_returns_405_with_combined_allow():
         '/admin/settings', lambda: None, methods=['GET', 'HEAD'],
     )
     api_app = FastAPI()
-    api_app.add_api_route(
-        '/admin/settings', lambda: None, methods=['POST'],
-    )
+    api_router = APIRouter()
+    api_router.add_api_route('/settings', lambda: None, methods=['POST'])
+    api_app.include_router(api_router, prefix='/admin')
     runtime._native_admin_pilot = admin_app
     runtime._native_read_api_app = api_app
 
