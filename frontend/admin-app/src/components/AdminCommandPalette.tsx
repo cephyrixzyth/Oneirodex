@@ -125,6 +125,7 @@ export default function AdminCommandPalette() {
               <AdminLink
                 className="od-admin-palette__row"
                 to={command.href}
+                onClick={close}
                 role="option"
                 aria-selected={index === active}
                 data-active={index === active}

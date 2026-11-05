@@ -26,4 +26,23 @@ describe('AdminCommandPalette', () => {
     )
     expect(screen.queryByRole('dialog', { name: 'Search admin' })).toBeNull()
   })
+
+  test('click navigates within the admin app and closes the palette', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/dashboard']}>
+        <AdminCommandPalette />
+        <CurrentRoute />
+      </MemoryRouter>,
+    )
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    const search = screen.getByRole('textbox', { name: 'Search admin' })
+    fireEvent.change(search, { target: { value: 'smtp' } })
+    fireEvent.click(screen.getAllByRole('option')[0])
+
+    await waitFor(() =>
+      expect(screen.getByTestId('current-route')).toHaveTextContent('/admin/smtp_settings'),
+    )
+    expect(screen.queryByRole('dialog', { name: 'Search admin' })).toBeNull()
+  })
 })
