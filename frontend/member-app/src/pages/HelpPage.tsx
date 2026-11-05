@@ -58,7 +58,7 @@ const FAQ_SECTIONS = [
       'A greyed-out Play button still opens: it explains why (missing BIOS, companion-only, catalog-only) instead of sitting dead.',
       'Game Catalog multi-select: checkbox / long-press / Shift+click → Select page · Favorite · Unfavorite · Add to wishlist · Play status · Refresh freshness / Refresh covers (More; librarian+ · max 20) · Clear; Esc clears. Batch toasts report updated/queued / skipped / failed counts.',
       'Discover is split into zones \u2014 For you \u00b7 New & updated \u00b7 Popular here \u00b7 Elsewhere \u00b7 Curated. The strip above the feed opens each one on its own page; the full feed stays below it. A zone only shows up when it has shelves with something in them.',
-      'Grid and Discover take arrow keys and a controller D-pad: the whole shelf stack is one tab stop, Left/Right move along a shelf, Up/Down between shelves, Home/End jump to the ends of a shelf and Ctrl+Home/End to the ends of the stack. Arrows only move — Enter opens a title and Space toggles its selection.',
+      'On Grid and Discover, focus a tile to enter keyboard navigation: Left/Right move along a shelf, Up/Down between shelves, Home/End jump to the ends of a shelf and Ctrl+Home/End to the ends of the stack. Arrows only move — Enter opens a title and Space toggles its selection.',
       'Kind views on the catalog bar: All · Games · Soft titles · Emulators · Utilities — one at a time (All shows every kind). Tile badges EXP / TOOL stay short; tooltips Soft title / Utility.',
       'Filters open from the Filters button on the catalog bar (Apply · Clear · Done). Narrow screens use the same popover.',
       'Signals chips: UPDATE · MISSING · NEW · LANG.',

@@ -75,6 +75,8 @@ Game Catalog **page size** options go up through **200–1000** (full allowlist 
 
 **Discover shelves** can be pinned or hidden per account (**Rows** in the top bar) — the buttons take effect immediately. News **See all** opens the News page. A shelf with nothing honest to show is hidden rather than padded. **Game Catalog** shows one tile per title, not per copy — Preview → Available on lists the other systems. A grey Play button still opens and explains why.
 
+**Keyboard on Discover:** Focus a tile, then use Left/Right to move across that shelf; Up/Down move between shelves; Home/End jump within a shelf, and Ctrl+Home/End jump to the first or last shelf tile. Enter opens the tile. The row arrows and horizontal touch swipes also wrap at the first and last tile.
+
 If Discover/Game Catalog look unstyled, the deploy is missing **`member-app.css`** — ask an admin to rebuild the image.
 
 On phones and narrow tablets (≤900px), the top nav becomes a **hamburger** menu, Game Catalog **filters** open as a left drawer/sheet (desktop collapse rail does not apply), Chat slide-out goes full-width with channels stacked above messages, library tiles clamp denser, and pagination wraps full-width (your saved tile preference still applies on desktop).
