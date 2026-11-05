@@ -23,8 +23,10 @@ redistributing them without the licence text is not permitted.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
+import tempfile
 
 import requests
 
@@ -163,11 +165,27 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
         if not payload or not _looks_like_font(payload[:4]):
             continue
 
+        temporary_path = None
         try:
-            with open(dest, 'wb') as handle:
+            # Publish atomically so a short write or full volume cannot leave a
+            # partial file that the next boot mistakes for an installed face.
+            with tempfile.NamedTemporaryFile(
+                mode='wb', dir=root, prefix=f'.{name}.', suffix='.tmp', delete=False
+            ) as handle:
+                temporary_path = handle.name
                 handle.write(payload)
-        except OSError:
+            os.replace(temporary_path, dest)
+        except OSError as exc:
             # One unwritable face must not abort the remaining fallbacks or boot.
+            if temporary_path:
+                try:
+                    os.unlink(temporary_path)
+                except OSError:
+                    pass
+            logging.getLogger(__name__).warning(
+                'Skipping built-in font %s after filesystem write failure (%s)',
+                name, type(exc).__name__,
+            )
             continue
         written += 1
 

@@ -145,22 +145,47 @@ def test_install_writes_a_real_font(tmp_path, monkeypatch, without_the_bundle):
 
 
 def test_install_continues_after_font_write_failure(
-    tmp_path, monkeypatch, without_the_bundle
+    tmp_path, monkeypatch, without_the_bundle, caplog
 ):
     """An unwritable destination must not abort later fallback faces or boot."""
     font_install = without_the_bundle
     fetcher = _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64)
 
-    def deny_write(path, mode='r', *args, **kwargs):
-        if mode == 'wb':
-            raise PermissionError('test destination is read-only')
-        raise AssertionError(f'unexpected file access: {path!r} ({mode})')
+    temporary_paths = []
+
+    class PartialWriter:
+        def __init__(self, path):
+            self.name = str(path)
+            self.path = path
+
+        def __enter__(self):
+            self.path.write_bytes(b'partial')
+            return self
+
+        def write(self, _payload):
+            raise OSError('test volume filled during write')
+
+        def __exit__(self, *exc):
+            return False
+
+    def fail_during_write(*args, **kwargs):
+        path = tmp_path / f'partial-{len(temporary_paths)}.tmp'
+        temporary_paths.append(path)
+        return PartialWriter(path)
 
     monkeypatch.setattr(font_install, 'safe_get', fetcher)
-    monkeypatch.setattr(font_install, 'open', deny_write, raising=False)
+    monkeypatch.setattr(font_install.tempfile, 'NamedTemporaryFile', fail_during_write)
 
     assert font_install.install_builtin_fonts(str(tmp_path)) == 0
     assert fetcher.calls == len(font_install.FONT_SOURCES)
+    assert list(tmp_path.iterdir()) == []
+    assert len(temporary_paths) == len(font_install.FONT_SOURCES)
+    assert 'filesystem write failure (OSError)' in caplog.text
+    assert str(tmp_path) not in caplog.text
+
+    # The absent destination remains eligible for retry on the next boot.
+    assert font_install.install_builtin_fonts(str(tmp_path)) == 0
+    assert fetcher.calls == 2 * len(font_install.FONT_SOURCES)
     assert list(tmp_path.iterdir()) == []
 
 
