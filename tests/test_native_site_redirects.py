@@ -224,26 +224,33 @@ def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monk
 
 
 @pytest.mark.parametrize('path', ['/', '/index'])
-@pytest.mark.parametrize('setup_required', [False, True])
+@pytest.mark.parametrize(
+    ('setup_required', 'setup_in_progress'),
+    [(False, False), (False, True), (True, False)],
+)
 def test_entry_options_matches_flask_setup_gate_and_allow_header(
-    monkeypatch, path, setup_required,
+    monkeypatch, path, setup_required, setup_in_progress,
 ):
     from flask import redirect
     from oneirodex.utils import setup
 
-    native, _ = _client(monkeypatch, setup_required=setup_required)
+    native, _ = _client(
+        monkeypatch,
+        setup_required=setup_required,
+        setup_in_progress=setup_in_progress,
+    )
     legacy = Flask('legacy-site-options-test')
     legacy.config.update(SECRET_KEY='site-redirect-secret')
     legacy.register_blueprint(site_bp)
 
     @legacy.before_request
     def setup_gate():
-        if setup_required:
+        if setup_required or setup_in_progress:
             return redirect('/setup/features')
         return None
 
     monkeypatch.setattr(setup, 'is_setup_required', lambda: setup_required)
-    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: False)
+    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: setup_in_progress)
     monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup/features')
     native_response = _request(native, 'OPTIONS', path)
     legacy_response = legacy.test_client().options(path)
