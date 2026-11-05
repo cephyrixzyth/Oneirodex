@@ -332,6 +332,24 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     assert response.status_code == 200
     assert 'id="member-app-root"' in response.text
 
+    async def unsupported_favorites_method_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+        ) as http:
+            return await http.post('/favorites')
+
+    unsupported_favorites_method = asyncio.run(unsupported_favorites_method_request())
+    assert unsupported_favorites_method.status_code == 405
+    assert unsupported_favorites_method.headers['allow'] == 'HEAD, OPTIONS, GET'
+    assert unsupported_favorites_method.headers['content-type'] == 'text/html; charset=utf-8'
+    assert unsupported_favorites_method.content == (
+        b'<!doctype html>\n<html lang=en>\n'
+        b'<title>405 Method Not Allowed</title>\n'
+        b'<h1>Method Not Allowed</h1>\n'
+        b'<p>The method is not allowed for the requested URL.</p>\n'
+    )
+
     async def downloads_request():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime),

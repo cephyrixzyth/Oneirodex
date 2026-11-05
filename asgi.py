@@ -3234,6 +3234,15 @@ class LazyASGIApp:
                 await self._native_member_shell_app(scope, receive, send)
                 return
             if (
+                path == '/favorites'
+                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
+            ):
+                # The legacy Flask page route is GET/HEAD-only and returns
+                # Werkzeug's 405 for unsupported verbs. Keep that contract
+                # even though the native member shell dispatches only reads.
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+            if (
                 self._native_read_api_app is not None
                 and path in {'/admin/integrations/igdb/save', '/admin/integrations/igdb/test'}
                 and scope.get('method') == 'POST'
@@ -4337,7 +4346,7 @@ class LazyASGIApp:
             b'<p>The method is not allowed for the requested URL.</p>\n'
         )
         headers = {
-            'Allow': 'OPTIONS, GET, HEAD',
+            'Allow': 'HEAD, OPTIONS, GET',
             'Content-Type': 'text/html; charset=utf-8',
             'Content-Length': str(len(body)),
             **self._configured_security_headers(),
