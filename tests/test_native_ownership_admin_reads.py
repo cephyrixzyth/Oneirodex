@@ -136,6 +136,27 @@ def test_admin_bearer_without_admin_scope_is_forbidden(monkeypatch):
     assert data.calls == []
 
 
+def test_bearer_sync_without_csrf_is_rejected_before_auth_or_sync(monkeypatch):
+    from oneirodex.runtime_native import request_auth
+
+    def unexpected_auth(*_args, **_kwargs):
+        raise AssertionError('CSRF validation must precede bearer authentication')
+
+    monkeypatch.setattr(request_auth, 'request_auth_context', unexpected_auth)
+    data = FakeOwnershipAdminReadData()
+    client = make_client(data=data)
+    client.cookies.clear()
+    response = client.post(
+        '/api/admin/ownership/connections/31/steam/sync',
+        headers={'Authorization': 'Bearer synthetic-admin-token'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['message'] == 'The CSRF token is missing.'
+    assert data.calls == []
+
+
 def test_non_admin_redirects_and_does_not_read_member_connections():
     data = FakeOwnershipAdminReadData()
     response = make_client(role='user', data=data).get(
