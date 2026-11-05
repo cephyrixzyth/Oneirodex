@@ -4,10 +4,12 @@ import asyncio
 import hashlib
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import timedelta
 import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+from flask_login import LoginManager
 from werkzeug.utils import redirect as werkzeug_redirect
 
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -15,6 +17,7 @@ from oneirodex.runtime_native.session_compat import load_session_cookie
 from oneirodex.runtime_native.response_compat import flask_redirect_response
 from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 from oneirodex.runtime_native.site_redirects import create_site_redirect_router
+from oneirodex.routes_site import site_bp
 
 
 @dataclass
@@ -39,9 +42,10 @@ def _client(monkeypatch, *, user=None, setup_required=False, setup_in_progress=F
         {
             'SECRET_KEY': 'site-redirect-secret',
             'SESSION_COOKIE_NAME': 'session',
-            'PERMANENT_SESSION_LIFETIME': 3600,
+            'PERMANENT_SESSION_LIFETIME': timedelta(hours=1),
             'SESSION_PROTECTION': 'none',
             'SESSION_REFRESH_EACH_REQUEST': True,
+            'SESSION_COOKIE_SAMESITE': 'Lax',
             'CSP_ENABLED': False,
         },
         package_root='.',
@@ -144,6 +148,75 @@ def test_entry_redirects_to_login_or_discover_for_get_post_and_head(monkeypatch)
 def test_entry_redirects_to_current_setup_step_before_auth(monkeypatch):
     app, cookie = _client(monkeypatch, user=User(), setup_in_progress=True)
     assert _request(app, 'GET', '/', cookie).headers['location'] == '/setup/features'
+
+
+def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monkeypatch):
+    from oneirodex.utils import setup
+
+    user = User()
+    user_id = f'{user.id}:{user.session_fingerprint()}'
+    secret = 'site-redirect-secret'
+    session_data = {
+        '_user_id': user_id,
+        '_fresh': True,
+        '_permanent': True,
+    }
+    monkeypatch.setattr(setup, 'is_setup_required', lambda: False)
+    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: False)
+
+    native, _ = _client(monkeypatch, user=user)
+    native_response = _request(
+        native, 'GET', '/', dump_session_cookie(session_data, secret),
+    )
+
+    class FlaskUser(User):
+        @property
+        def is_authenticated(self):
+            return True
+
+        def get_id(self):
+            return user_id
+
+    legacy_user = FlaskUser()
+    legacy = Flask('legacy-site-entry-test')
+    legacy.config.update(
+        SECRET_KEY=secret,
+        SESSION_COOKIE_NAME='session',
+        PERMANENT_SESSION_LIFETIME=3600,
+        SESSION_PROTECTION='none',
+        SESSION_REFRESH_EACH_REQUEST=True,
+        SESSION_COOKIE_SECURE=False,
+        SESSION_COOKIE_SAMESITE='Lax',
+    )
+    login_manager = LoginManager(legacy)
+    login_manager.user_loader(
+        lambda identity: legacy_user if identity == legacy_user.get_id() else None
+    )
+    legacy.add_url_rule(
+        '/discover', endpoint='discover.discover', view_func=lambda: 'discover',
+    )
+    legacy.register_blueprint(site_bp)
+    with legacy.test_client() as client:
+        with client.session_transaction() as session:
+            session.update(session_data)
+        legacy_response = client.get('/')
+
+    assert native_response.status_code == legacy_response.status_code == 302
+    assert native_response.headers['location'] == legacy_response.headers['Location'] == '/discover'
+    assert native_response.headers['content-type'] == legacy_response.headers['Content-Type']
+    assert native_response.headers['content-length'] == legacy_response.headers['Content-Length']
+    assert native_response.content == legacy_response.get_data()
+    native_set_cookie = native_response.headers.get('set-cookie')
+    legacy_set_cookie = legacy_response.headers.get('Set-Cookie')
+    assert native_set_cookie and legacy_set_cookie
+    for attribute in ('HttpOnly', 'Path=/', 'SameSite=Lax'):
+        assert attribute.lower() in native_set_cookie.lower()
+        assert attribute.lower() in legacy_set_cookie.lower()
+    native_cookie_value = native_set_cookie.split(';', 1)[0].split('=', 1)[1]
+    legacy_cookie_value = legacy_set_cookie.split(';', 1)[0].split('=', 1)[1]
+    assert load_session_cookie(native_cookie_value, secret, max_age=3600) == (
+        load_session_cookie(legacy_cookie_value, secret, max_age=3600)
+    )
 
 
 def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monkeypatch):
