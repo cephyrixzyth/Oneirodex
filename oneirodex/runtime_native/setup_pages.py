@@ -90,7 +90,12 @@ def create_setup_pages_router(
                 step = data.current_step()
                 if step is None:
                     if page != '/setup/library':
-                        _flash(auth.session_data, 'warning', 'Setup already completed.')
+                        message = (
+                            'Setup has already been completed.'
+                            if page in {'/setup/igdb', '/setup/integrations'}
+                            else 'Setup already completed.'
+                        )
+                        _flash(auth.session_data, 'warning', message)
                         response = flask_redirect_response('/login', status_code=302)
                     else:
                         response = flask_redirect_response('/setup', status_code=302)

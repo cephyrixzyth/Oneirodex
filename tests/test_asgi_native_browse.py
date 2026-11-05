@@ -10041,9 +10041,7 @@ def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):
         session = load_session_cookie(
             response.cookies.get('session'), 'native-asgi-browse-secret', max_age=3600,
         )
-        assert session['_flashes'] == [
-            ('warning', 'Setup already completed.'),
-        ]
+        assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
 
 
 def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(monkeypatch):
