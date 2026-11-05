@@ -220,6 +220,45 @@ def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monk
     )
 
 
+@pytest.mark.parametrize('path', ['/', '/index'])
+@pytest.mark.parametrize('setup_required', [False, True])
+def test_entry_options_matches_flask_setup_gate_and_allow_header(
+    monkeypatch, path, setup_required,
+):
+    from flask import redirect
+    from oneirodex.utils import setup
+
+    native, _ = _client(monkeypatch, setup_required=setup_required)
+    legacy = Flask('legacy-site-options-test')
+    legacy.config.update(SECRET_KEY='site-redirect-secret')
+    legacy.register_blueprint(site_bp)
+
+    @legacy.before_request
+    def setup_gate():
+        if setup_required:
+            return redirect('/setup/features')
+        return None
+
+    monkeypatch.setattr(setup, 'is_setup_required', lambda: setup_required)
+    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: False)
+    monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup/features')
+    native_response = _request(native, 'OPTIONS', path)
+    legacy_response = legacy.test_client().options(path)
+
+    assert native_response.status_code == legacy_response.status_code
+    assert native_response.headers.get('location') == legacy_response.headers.get('Location')
+    assert native_response.headers.get('content-type') == legacy_response.headers.get('Content-Type')
+    assert native_response.headers.get('content-length') == legacy_response.headers.get('Content-Length')
+    assert native_response.content == legacy_response.get_data()
+    native_allow = native_response.headers.get('allow')
+    legacy_allow = legacy_response.headers.get('Allow')
+    assert (native_allow is None) == (legacy_allow is None)
+    if native_allow and legacy_allow:
+        assert {method.strip() for method in native_allow.split(',')} == {
+            method.strip() for method in legacy_allow.split(',')
+        }
+
+
 def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monkeypatch):
     anonymous, _ = _client(monkeypatch)
     response = _request(anonymous, 'GET', '/restricted')
