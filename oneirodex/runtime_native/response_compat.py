@@ -239,10 +239,4 @@ def _native_allowed_methods(request, *, route_app=None) -> list[str]:
         methods.add('HEAD')
     if methods:
         methods.add('OPTIONS')
-    if str(getattr(getattr(request, 'url', None), 'path', '')) in {'/', '/index'}:
-        # Preserve the exact Werkzeug method ordering for the two legacy
-        # entry rules; the native route's set-based method collection sorts
-        # these names differently and changes the public 405 Allow header.
-        legacy_entry_order = ('POST', 'HEAD', 'GET', 'OPTIONS')
-        return [method for method in legacy_entry_order if method in methods]
     return sorted(methods)

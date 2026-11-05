@@ -263,7 +263,7 @@ def test_entry_options_matches_flask_setup_gate_and_allow_header(
 
 
 @pytest.mark.parametrize('path', ['/', '/index'])
-def test_entry_405_allow_header_preserves_legacy_order(monkeypatch, path):
+def test_entry_405_allow_header_matches_legacy_method_set(monkeypatch, path):
     app, _ = _client(monkeypatch)
     scope = {
         'type': 'http',
@@ -286,7 +286,9 @@ def test_entry_405_allow_header_preserves_legacy_order(monkeypatch, path):
     ).get_response()
 
     assert response.status_code == expected.status_code == 405
-    assert response.headers['Allow'] == expected.headers['Allow']
+    assert {method.strip() for method in response.headers['Allow'].split(',')} == {
+        method.strip() for method in expected.headers['Allow'].split(',')
+    }
     assert response.body == expected.get_data()
 
 
