@@ -4244,6 +4244,15 @@ class LazyASGIApp:
                 # letting the native API fallback turn them into 404s.
                 await self._handle_get_head_method_not_allowed(scope, send)
                 return
+            if (
+                self._native_admin_pilot is not None
+                and path in self._native_admin_routes
+                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
+                and await self._handle_native_admin_method_not_allowed(
+                    scope, send,
+                )
+            ):
+                return
             await self._native_read_api_app(scope, receive, send)
 
     async def _handle_automatic_options(self, scope, receive, send) -> bool:
@@ -4351,14 +4360,55 @@ class LazyASGIApp:
 
     async def _handle_get_head_method_not_allowed(self, scope, send):
         """Match the shared GET/HEAD 405 contract without constructing Flask."""
+        await self._send_method_not_allowed(
+            scope, send, {'GET', 'HEAD', 'OPTIONS'},
+        )
+
+    async def _handle_native_admin_method_not_allowed(self, scope, send) -> bool:
+        """Preserve Flask's 405 when a native admin shell path has no handler.
+
+        Admin document shells live in a separate FastAPI app from their legacy
+        form/API handlers. The final ASGI fallback otherwise turns a path that
+        exists in the admin pilot into a 404 when its method is unsupported.
+        Collect methods from both native route tables so compatibility POSTs
+        such as SMTP settings remain represented in ``Allow``.
+        """
+        from starlette.routing import Match
+
+        methods: set[str] = set()
+        matched_shell_path = False
+        for native_app in (self._native_admin_pilot, self._native_read_api_app):
+            router = getattr(native_app, 'router', None)
+            for route in getattr(router, 'routes', ()):
+                match, _child_scope = route.matches(scope)
+                if match is not Match.PARTIAL:
+                    continue
+                route_methods = getattr(route, 'methods', None) or ()
+                if native_app is self._native_admin_pilot:
+                    matched_shell_path = True
+                methods.update(str(method).upper() for method in route_methods)
+
+        if not matched_shell_path:
+            return False
+        methods.add('OPTIONS')
+        await self._send_method_not_allowed(scope, send, methods)
+        return True
+
+    async def _send_method_not_allowed(self, scope, send, allowed_methods):
+        """Emit the common HTML 405 while retaining route-specific methods."""
         body = (
             b'<!doctype html>\n<html lang=en>\n'
             b'<title>405 Method Not Allowed</title>\n'
             b'<h1>Method Not Allowed</h1>\n'
             b'<p>The method is not allowed for the requested URL.</p>\n'
         )
+        allowed = {str(method).upper() for method in allowed_methods}
+        preferred_order = ('OPTIONS', 'GET', 'HEAD')
+        ordered = [method for method in preferred_order if method in allowed]
+        ordered.extend(sorted(allowed.difference(ordered)))
+        allow = ', '.join(ordered)
         headers = {
-            'Allow': 'OPTIONS, GET, HEAD',
+            'Allow': allow,
             'Content-Type': 'text/html; charset=utf-8',
             'Content-Length': str(len(body)),
             **self._configured_security_headers(),

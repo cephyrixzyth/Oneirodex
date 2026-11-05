@@ -4,6 +4,7 @@ from contextlib import nullcontext
 import json
 import httpx
 from flask import Flask
+from fastapi import FastAPI
 from starlette.responses import PlainTextResponse
 import asgi
 from oneirodex import app_version
@@ -100,6 +101,79 @@ def test_legacy_admin_paths_dispatch_to_native_router(monkeypatch):
         ('/api/get_company_role', 'GET'),
         ('/api/search_igdb_by_id', 'GET'),
     ]
+
+
+def test_unsupported_admin_shell_method_returns_405_with_combined_allow():
+    runtime = asgi.LazyASGIApp()
+    admin_app = FastAPI()
+    admin_app.add_api_route(
+        '/admin/support', lambda: None, methods=['GET', 'HEAD'],
+    )
+    admin_app.add_api_route(
+        '/admin/settings', lambda: None, methods=['GET', 'HEAD'],
+    )
+    api_app = FastAPI()
+    api_app.add_api_route(
+        '/admin/settings', lambda: None, methods=['POST'],
+    )
+    runtime._native_admin_pilot = admin_app
+    runtime._native_read_api_app = api_app
+
+    async def run(path):
+        messages = []
+
+        async def send(message):
+            messages.append(message)
+
+        raw_path = path.encode('ascii')
+        scope = {
+            'type': 'http',
+            'asgi': {'version': '3.0'},
+            'http_version': '1.1',
+            'method': 'PATCH',
+            'scheme': 'http',
+            'path': path,
+            'raw_path': raw_path,
+            'root_path': '',
+            'query_string': b'',
+            'headers': [],
+            'client': ('test', 123),
+            'server': ('test', 80),
+        }
+        handled = await runtime._handle_native_admin_method_not_allowed(
+            scope, send,
+        )
+        start = next(message for message in messages if message['type'] == 'http.response.start')
+        body = next(message['body'] for message in messages if message['type'] == 'http.response.body')
+        headers = {key.decode().lower(): value.decode() for key, value in start['headers']}
+        return handled, start['status'], headers, body
+
+    handled, status, headers, body = asyncio.run(run('/admin/support'))
+    assert handled is True
+    assert status == 405
+    assert set(headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+    assert headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<title>405 Method Not Allowed</title>' in body
+
+    handled, status, headers, _body = asyncio.run(run('/admin/settings'))
+    assert handled is True
+    assert status == 405
+    assert set(headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS', 'POST'}
+
+
+def test_native_dispatch_preserves_405_for_unsupported_admin_shell_method(monkeypatch, tmp_path):
+    flask_app = Flask(__name__, static_folder=str(tmp_path))
+    write_admin_shell(tmp_path)
+    flask_app.add_url_rule(
+        '/admin/support', view_func=lambda: 'legacy support shell',
+    )
+    monkeypatch.setattr(asgi, 'create_app', lambda: flask_app)
+
+    response = fetch(asgi.LazyASGIApp(), '/admin/support', method='PATCH')
+
+    assert response.status_code == 405
+    assert set(response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+    assert '<title>405 Method Not Allowed</title>' in response.text
 
 
 def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
