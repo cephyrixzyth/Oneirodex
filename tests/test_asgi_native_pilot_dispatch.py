@@ -233,7 +233,17 @@ def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch
         == {'OPTIONS', 'GET', 'HEAD'}
         for response in unsupported
     )
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        for response in unsupported
+    )
     assert all(response.content == unsupported[0].content for response in unsupported)
+    assert unsupported[0].content == (
+        b'<!doctype html>\n<html lang=en>\n'
+        b'<title>405 Method Not Allowed</title>\n'
+        b'<h1>Method Not Allowed</h1>\n'
+        b'<p>The method is not allowed for the requested URL.</p>\n'
+    )
 
 
 def test_readiness_builder_accepts_framework_free_dependencies():
@@ -253,6 +263,54 @@ def test_readiness_builder_accepts_framework_free_dependencies():
     assert status == 200
     assert body['checks']['database'] == {'ok': True, 'error': None}
     assert body['checks']['initialization']['complete'] is True
+
+
+def test_readiness_initialization_incomplete_and_testing_bypass_states():
+    from types import SimpleNamespace
+    from oneirodex.utils.health_probes import build_readiness
+
+    class HealthySession:
+        @staticmethod
+        def execute(_statement):
+            return 1
+
+    class FailedSession:
+        @staticmethod
+        def execute(_statement):
+            raise RuntimeError('details remain private')
+
+    healthy_db = SimpleNamespace(session=HealthySession())
+    failed_db = SimpleNamespace(session=FailedSession())
+    production_not_initialized, production_status = build_readiness(
+        config={'TESTING': False},
+        database=healthy_db,
+        initialization_check=lambda: False,
+    )
+    assert production_status == 503
+    assert production_not_initialized['checks']['initialization'] == {
+        'ok': False, 'complete': False, 'testing_bypass': False,
+    }
+
+    testing_bypass, testing_status = build_readiness(
+        config={'TESTING': True},
+        database=healthy_db,
+        initialization_check=lambda: False,
+    )
+    assert testing_status == 200
+    assert testing_bypass['checks']['initialization'] == {
+        'ok': True, 'complete': False, 'testing_bypass': True,
+    }
+
+    failed_testing_bypass, failed_status = build_readiness(
+        config={'TESTING': True},
+        database=failed_db,
+        initialization_check=lambda: False,
+    )
+    assert failed_status == 503
+    assert failed_testing_bypass['checks']['database'] == {
+        'ok': False, 'error': 'RuntimeError',
+    }
+    assert failed_testing_bypass['checks']['initialization']['testing_bypass'] is True
 
 
 def test_site_entry_redirects_bypass_wsgi_after_native_setup(monkeypatch):
