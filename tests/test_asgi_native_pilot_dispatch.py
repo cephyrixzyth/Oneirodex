@@ -176,6 +176,21 @@ def test_native_dispatch_preserves_405_for_unsupported_admin_shell_method(monkey
     assert '<title>405 Method Not Allowed</title>' in response.text
 
 
+def test_admin_whitelist_dispatch_respects_combined_page_and_action_methods():
+    cases = (
+        ('/admin/whitelist', 'GET', False),
+        ('/admin/whitelist', 'POST', True),
+        ('/admin/whitelist', 'DELETE', False),
+        ('/admin/whitelist/42', 'DELETE', True),
+        ('/admin/api/whitelist', 'GET', True),
+        ('/admin/api/whitelist', 'HEAD', True),
+        ('/admin/api/whitelist', 'POST', True),
+        ('/admin/api/whitelist', 'DELETE', False),
+    )
+    for path, method, expected in cases:
+        assert asgi._is_native_admin_whitelist_operation(path, method) is expected
+
+
 def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     def forbidden_create_app():
         raise AssertionError('liveness must not construct Flask')

@@ -503,6 +503,16 @@ def _is_native_admin_whitelist_path(path: str) -> bool:
     return len(parts) == 3 and parts[:2] == ['admin', 'whitelist'] and parts[2].isdigit()
 
 
+def _is_native_admin_whitelist_operation(path: str, method: str) -> bool:
+    """Dispatch only the whitelist methods that match a native action route."""
+    method = str(method or '').upper()
+    if path == '/admin/api/whitelist':
+        return method in {'GET', 'HEAD', 'POST'}
+    if path == '/admin/whitelist':
+        return method == 'POST'
+    return _is_native_admin_whitelist_path(path) and method == 'DELETE'
+
+
 def _is_native_admin_plugin_path(path: str) -> bool:
     if path == '/api/plugins':
         return True
@@ -3467,13 +3477,8 @@ class LazyASGIApp:
                         _is_native_admin_invites_path(path)
                         and (path != '/admin/manage_invites' or scope.get('method') == 'POST')
                     )
-                    or (
-                        _is_native_admin_whitelist_path(path)
-                        and (
-                            (path == '/admin/api/whitelist' and scope.get('method') in ('GET', 'HEAD', 'POST'))
-                            or (path == '/admin/whitelist' and scope.get('method') == 'POST')
-                            or (path != '/admin/api/whitelist' and scope.get('method') == 'DELETE')
-                        )
+                    or _is_native_admin_whitelist_operation(
+                        path, scope.get('method', ''),
                     )
                     or (
                         _is_native_admin_users_read_path(path)
@@ -3682,13 +3687,8 @@ class LazyASGIApp:
                         _is_native_admin_invites_path(path)
                         and (path != '/admin/manage_invites' or scope.get('method') == 'POST')
                     )
-                    or (
-                        _is_native_admin_whitelist_path(path)
-                        and (
-                            (path == '/admin/api/whitelist' and scope.get('method') in ('GET', 'HEAD', 'POST'))
-                            or (path == '/admin/whitelist' and scope.get('method') == 'POST')
-                            or (path != '/admin/api/whitelist' and scope.get('method') == 'DELETE')
-                        )
+                    or _is_native_admin_whitelist_operation(
+                        path, scope.get('method', ''),
                     )
                     or (
                         path == '/admin/api/system_logs/clear'
