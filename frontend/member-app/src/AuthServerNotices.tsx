@@ -17,7 +17,8 @@ function readServerNotices(): ServerNotice[] {
       if (
         (notice.role !== 'alert' && notice.role !== 'status') ||
         typeof notice.message !== 'string'
-      ) return []
+      )
+        return []
       return [{ role: notice.role, message: notice.message }]
     })
   } catch {
@@ -34,8 +35,10 @@ export function AuthServerNotices() {
       <button
         type="button"
         className="auth-pilot__server-notice-dismiss"
-        aria-label="Close"
-        onClick={() => setNotices((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+        aria-label="Dismiss notification"
+        onClick={() =>
+          setNotices((current) => current.filter((_, itemIndex) => itemIndex !== index))
+        }
       >
         ×
       </button>

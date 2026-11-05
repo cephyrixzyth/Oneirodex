@@ -89,7 +89,7 @@ test('server login notices follow account actions and can be dismissed', async (
   expect(
     Boolean(accountActions.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING),
   ).toBe(true)
-  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
   expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
 })
 
