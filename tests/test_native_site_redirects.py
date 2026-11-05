@@ -257,6 +257,8 @@ def test_entry_options_matches_flask_setup_gate_and_allow_header(
     legacy_allow = legacy_response.headers.get('Allow')
     assert (native_allow is None) == (legacy_allow is None)
     if native_allow and legacy_allow:
+        if not setup_required:
+            assert native_allow == 'GET, HEAD, OPTIONS, POST'
         assert {method.strip() for method in native_allow.split(',')} == {
             method.strip() for method in legacy_allow.split(',')
         }

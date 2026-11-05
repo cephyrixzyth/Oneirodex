@@ -50,7 +50,9 @@ def create_site_redirect_router(
                         content=b'',
                         status_code=200,
                         media_type='text/html',
-                        headers={'Allow': 'OPTIONS, HEAD, POST, GET'},
+                        # Keep Starlette's prior automatic-OPTIONS ordering;
+                        # Werkzeug's equivalent token order is process-dependent.
+                        headers={'Allow': 'GET, HEAD, OPTIONS, POST'},
                     )
             else:
                 csrf_response = None
