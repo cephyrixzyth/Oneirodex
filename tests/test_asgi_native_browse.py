@@ -12372,6 +12372,16 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
     assert b'CSRF token is invalid' in invalid_form.content
     assert not any(call[0] == 'enqueue' for call in data.calls)
 
+    from urllib.parse import urlencode
+    excessive_form = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        content=urlencode([('csrf_token', csrf)] + [(f'extra-{index}', 'x') for index in range(1000)]),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+    assert excessive_form.status_code == 400
+    assert b'CSRF token is missing' in excessive_form.content
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
     form_response = _run(
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
         form_body={'csrf_token': csrf},

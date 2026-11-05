@@ -453,7 +453,17 @@ async def _legacy_urlencoded_csrf_token(request: Request, config) -> str | None:
         if len(body) > body_limit:
             return None
     field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
-    values = parse_qs(bytes(body).decode('utf-8', 'replace'), keep_blank_values=True)
+    try:
+        field_limit = min(max(int(config.get('MAX_FORM_PARTS') or 1000), 1), 1000)
+    except (TypeError, ValueError):
+        field_limit = 1000
+    try:
+        values = parse_qs(
+            bytes(body).decode('utf-8', 'replace'), keep_blank_values=True,
+            max_num_fields=field_limit,
+        )
+    except ValueError:
+        return None
     token = values.get(field_name, [''])
     return token[0] or None
 
