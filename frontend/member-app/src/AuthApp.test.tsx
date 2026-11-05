@@ -401,11 +401,8 @@ test('first-run SMTP setup explains optional email without implying a saved pass
   expect(
     screen.getByText('Optional — enables invites, registration mail, and password reset.'),
   ).toBeInTheDocument()
-  expect(
-    screen.getByText(
-      'Configure SMTP if this server should send invitation, account, and password-reset emails. Skip SMTP to continue without email.',
-    ),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: 'Enable email delivery' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Skip SMTP' })).toBeInTheDocument()
   expect(screen.queryByText(/password blank to keep the saved one/i)).not.toBeInTheDocument()
 })
 

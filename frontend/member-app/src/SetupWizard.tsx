@@ -233,10 +233,6 @@ export function SetupWizard({
         ) : null}
         {step === 2 ? (
           <>
-            <p className="auth-pilot__message">
-              Configure SMTP if this server should send invitation, account, and password-reset
-              emails. Skip SMTP to continue without email.
-            </p>
             {input('smtp_server', 'SMTP server', 'text', false, String(settings.smtp_server || ''))}
             {input('smtp_port', 'SMTP port', 'number', false, String(settings.smtp_port || 587))}
             {input(
