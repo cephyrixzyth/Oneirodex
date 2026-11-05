@@ -150,7 +150,8 @@ def test_entry_redirects_to_current_setup_step_before_auth(monkeypatch):
     assert _request(app, 'GET', '/', cookie).headers['location'] == '/setup/features'
 
 
-def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monkeypatch):
+@pytest.mark.parametrize('path', ['/', '/index'])
+def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monkeypatch, path):
     from oneirodex.utils import setup
 
     user = User()
@@ -166,7 +167,7 @@ def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monk
 
     native, _ = _client(monkeypatch, user=user)
     native_response = _request(
-        native, 'GET', '/', dump_session_cookie(session_data, secret),
+        native, 'GET', path, dump_session_cookie(session_data, secret),
     )
 
     class FlaskUser(User):
