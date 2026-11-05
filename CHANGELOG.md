@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - Validate Stage E metadata links against provider-specific HTTPS hosts before rendering them as clickable admin links.
+- Validate game-detail YouTube demo links by scheme and hostname before rendering provider-supplied URLs.
 
 ## [1.1.9] — 2026-10-15
 

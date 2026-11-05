@@ -113,24 +113,44 @@ export function trailerEmbedUrls(game: any) {
  * @param {object} game
  * @returns {{ href: string, label: string } | null}
  */
+function safeYouTubeUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const raw = value.trim()
+  if (!raw || raw.length > 2048 || /[\u0000-\u001f\u007f]/.test(raw)) return null
+  try {
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase()
+    const isYouTubeHost =
+      host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.username ||
+      url.password ||
+      !isYouTubeHost
+    ) {
+      return null
+    }
+    return url.href
+  } catch {
+    return null
+  }
+}
+
 export function youtubeDemoLink(game: any) {
   if (!game) return null
-  if (game.youtube_demo_url && /youtu(\.be|be\.com)/i.test(game.youtube_demo_url)) {
-    return { href: game.youtube_demo_url, label: 'YouTube demo' }
-  }
-  if (game.demo_url && /youtu(\.be|be\.com)/i.test(game.demo_url)) {
-    return { href: game.demo_url, label: 'YouTube demo' }
-  }
+  const youtubeDemoUrl = safeYouTubeUrl(game.youtube_demo_url)
+  if (youtubeDemoUrl) return { href: youtubeDemoUrl, label: 'YouTube demo' }
+  const demoUrl = safeYouTubeUrl(game.demo_url)
+  if (demoUrl) return { href: demoUrl, label: 'YouTube demo' }
+
   const urls = Array.isArray(game.urls) ? game.urls : []
-  const yt = urls.find(
-    (row: any) =>
-      String(row?.type || '')
-        .toLowerCase()
-        .includes('youtube') || /youtu(\.be|be\.com)/i.test(String(row?.url || '')),
-  )
-  if (yt?.url) {
-    return { href: yt.url, label: 'YouTube' }
-  }
+  const yt = urls.find((row: any) => {
+    const typeMarksYoutube = String(row?.type || '').toLowerCase().includes('youtube')
+    const url = safeYouTubeUrl(row?.url)
+    return Boolean(url && (typeMarksYoutube || /youtu(\.be|be\.com)/i.test(url)))
+  })
+  const youtubeUrl = safeYouTubeUrl(yt?.url)
+  if (youtubeUrl) return { href: youtubeUrl, label: 'YouTube' }
   return null
 }
 
