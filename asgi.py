@@ -1,8 +1,9 @@
 """ASGI runtime for Oneirodex.
 
-FastAPI owns application route dispatch. Flask still initializes the shared
-configuration, extension registry, and mapped models during this migration;
-the WSGI fallback has been retired after the legacy method/path inventory
+FastAPI owns normal application route dispatch. Normal startup builds the
+framework-independent runtime configuration and native SQLAlchemy engine;
+Flask app injection remains available for compatibility tests and adapters.
+The WSGI fallback has been retired after the legacy method/path inventory
 reached full native coverage.
 """
 
