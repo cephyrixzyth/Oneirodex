@@ -146,6 +146,110 @@ class TestComfyUI:
             )
 
 
+@pytest.mark.parametrize('failure_stage', ['mkdir', 'open', 'write'])
+def test_generated_artwork_save_errors_do_not_expose_filesystem_path(
+    failure_stage, monkeypatch, caplog,
+):
+    import builtins
+    import os
+    from types import SimpleNamespace
+
+    import oneirodex.runtime_native.db_session as db_session
+    import oneirodex.utils.ai_artwork as ai_artwork
+
+    private_path = r'C:\private\oneirodex\covers'
+    game = SimpleNamespace(name='Test Game', library=None, genres=[])
+    query_result = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: game))
+    monkeypatch.setattr(
+        db_session, 'native_db',
+        SimpleNamespace(session=SimpleNamespace(execute=lambda _query: query_result)),
+    )
+    monkeypatch.setattr(ai_artwork, 'generate_cover_bytes', lambda **_kwargs: b'image')
+    monkeypatch.setattr(ai_artwork, 'artwork_engine', lambda _config: 'a1111')
+
+    def fail_with_path(*_args, **_kwargs):
+        raise OSError(13, 'Permission denied', private_path)
+
+    if failure_stage == 'mkdir':
+        monkeypatch.setattr(os, 'makedirs', fail_with_path)
+    else:
+        monkeypatch.setattr(os, 'makedirs', lambda *_args, **_kwargs: None)
+        if failure_stage == 'open':
+            monkeypatch.setattr(builtins, 'open', fail_with_path)
+        else:
+            class FailingFile:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+                def write(self, _data):
+                    fail_with_path()
+
+            monkeypatch.setattr(builtins, 'open', lambda *_args, **_kwargs: FailingFile())
+
+    with pytest.raises(ArtworkGenerationError, match='Could not save generated artwork') as error:
+        ai_artwork.generate_and_store_cover(
+            'game-1', config={'IMAGE_SAVE_PATH': private_path},
+        )
+
+    assert private_path not in str(error.value)
+    assert isinstance(error.value.__cause__, OSError)
+    assert private_path not in caplog.text
+    assert 'PermissionError' in caplog.text
+
+
+def test_generated_artwork_save_still_persists_when_filesystem_is_available(
+    tmp_path, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    import oneirodex.runtime_native.db_session as db_session
+    import oneirodex.utils.ai_artwork as ai_artwork
+
+    game = SimpleNamespace(name='Test Game', library=None, genres=[])
+    query_result = SimpleNamespace(
+        scalars=lambda: SimpleNamespace(
+            first=lambda: game,
+            all=lambda: [],
+        ),
+    )
+
+    class FakeSession:
+        committed = False
+        added = None
+
+        def execute(self, _query):
+            return query_result
+
+        def add(self, image):
+            image.id = 42
+            self.added = image
+
+        def delete(self, _image):
+            raise AssertionError('No previous generated image should be deleted')
+
+        def commit(self):
+            self.committed = True
+
+    session = FakeSession()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+    monkeypatch.setattr(ai_artwork, 'generate_cover_bytes', lambda **_kwargs: b'image')
+    monkeypatch.setattr(ai_artwork, 'artwork_engine', lambda _config: 'a1111')
+
+    result = ai_artwork.generate_and_store_cover(
+        'game-1', config={'IMAGE_SAVE_PATH': str(tmp_path)},
+    )
+
+    saved = tmp_path / result['filename']
+    assert saved.read_bytes() == b'image'
+    assert result['url'] == f"/static/library/images/{result['filename']}"
+    assert result['image_id'] == 42
+    assert session.added.is_generated is True
+    assert session.committed is True
+
+
 class TestGating:
     def test_disabled_by_default(self, app):
         with app.app_context():

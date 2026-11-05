@@ -213,6 +213,8 @@ talks to an endpoint outside the process, so it stays opt-in.
 - Generated rows are marked `is_generated` with `generated_by`. Regenerating
   replaces only the previous *generated* image, so hand-picked or scraped art is
   never clobbered.
+- Filesystem failures while saving generated art return a generic error; the API
+  does not include the configured image directory in the response.
 - Routes: `POST /admin/api/artwork/generate` (one game) ·
   `POST /admin/api/artwork/generate/batch` (fill missing covers).
 - Compose ships an SD.Next sidecar under the `artwork` profile
