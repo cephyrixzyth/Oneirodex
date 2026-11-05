@@ -10,11 +10,14 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 from flask_login import LoginManager
+from starlette.requests import Request
+from werkzeug.exceptions import MethodNotAllowed
 from werkzeug.utils import redirect as werkzeug_redirect
 
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 from oneirodex.runtime_native.session_compat import load_session_cookie
 from oneirodex.runtime_native.response_compat import flask_redirect_response
+from oneirodex.runtime_native.response_compat import flask_http_exception_response
 from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 from oneirodex.runtime_native.site_redirects import create_site_redirect_router
 from oneirodex.routes_site import site_bp
@@ -257,6 +260,34 @@ def test_entry_options_matches_flask_setup_gate_and_allow_header(
         assert {method.strip() for method in native_allow.split(',')} == {
             method.strip() for method in legacy_allow.split(',')
         }
+
+
+@pytest.mark.parametrize('path', ['/', '/index'])
+def test_entry_405_allow_header_preserves_legacy_order(monkeypatch, path):
+    app, _ = _client(monkeypatch)
+    scope = {
+        'type': 'http',
+        'asgi': {'version': '3.0'},
+        'http_version': '1.1',
+        'method': 'PUT',
+        'scheme': 'http',
+        'path': path,
+        'raw_path': path.encode(),
+        'query_string': b'',
+        'root_path': '',
+        'headers': [],
+        'server': ('localhost', 80),
+        'client': ('testclient', 50000),
+    }
+    request = Request(scope)
+    response = flask_http_exception_response({}, request, 405, route_app=app)
+    expected = MethodNotAllowed(
+        valid_methods=['POST', 'HEAD', 'GET', 'OPTIONS'],
+    ).get_response()
+
+    assert response.status_code == expected.status_code == 405
+    assert response.headers['Allow'] == expected.headers['Allow']
+    assert response.body == expected.get_data()
 
 
 def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monkeypatch):
