@@ -27,6 +27,11 @@ its [GitHub release asset](https://github.com/EmulatorJS/EmulatorJS/releases/tag
 When changing `EMULATORJS_VERSION`, update `EMULATORJS_SHA256` to the matching
 asset digest at the same time. Local fetches must pass both `--version` and
 `--sha256`.
+The install target is fixed to the app's bundled EmulatorJS data directory.
+Custom `EMULATORJS_DATA_DIR` targets are disabled so the script cannot
+recursively replace shared temporary paths or caller-selected directories.
+The script canonicalizes the bundled target and refuses it if it resolves
+outside the app tree before replacing files.
 The upstream release currently publishes a 7z archive rather than the old
 `EmulatorJS.zip` URL, so the fetch script extracts it with `7z` before locating
 `data/loader.js`.

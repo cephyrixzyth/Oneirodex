@@ -4,19 +4,19 @@
 #
 # Usage:
 #   ./scripts/fetch-emulatorjs.sh --version 4.2.3 --sha256 <64-hex-digest>
-#   EMULATORJS_DATA_DIR=/tmp/emulatorjs ./scripts/fetch-emulatorjs.sh --version 4.2.3 --sha256 <64-hex-digest>
 #
-# A SHA-256 is required before extraction. For local development,
-# EMULATORJS_DATA_DIR may point to a temporary data directory. Production
-# images pin both the release and digest during the Docker build.
+# A SHA-256 is required before extraction. The install destination is fixed to
+# the app's bundled data directory; production images pin both the release and
+# digest during the Docker build.
 # The app offers EmulatorJS only when <data dir>/loader.js exists; cores under
 # data/cores/ are fetched lazily by the loader itself from this directory.
 #
 # EmulatorJS is GPL-3 (https://github.com/EmulatorJS/EmulatorJS). You are
 # responsible for the licences of the libretro cores it bundles.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DATA_DIR="${EMULATORJS_DATA_DIR:-$ROOT/oneirodex/static/vendor/emulatorjs/data}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+DEFAULT_DATA_DIR="$ROOT/oneirodex/static/vendor/emulatorjs/data"
+DATA_DIR="$DEFAULT_DATA_DIR"
 VERSION="latest"
 EXPECTED_SHA256=""
 while [[ $# -gt 0 ]]; do
@@ -27,6 +27,23 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "${EMULATORJS_DATA_DIR:-}" ]]; then
+  REQUESTED_DATA_DIR="$(realpath -m -- "$EMULATORJS_DATA_DIR")"
+  if [[ "$REQUESTED_DATA_DIR" != "$(realpath -m -- "$DEFAULT_DATA_DIR")" ]]; then
+    echo "!! EMULATORJS_DATA_DIR overrides are disabled; use the bundled app data directory" >&2
+    exit 2
+  fi
+fi
+DATA_DIR="$(realpath -m -- "$DEFAULT_DATA_DIR")"
+ROOT="$(realpath -e -- "$ROOT")"
+case "$DATA_DIR" in
+  "$ROOT"/*) ;;
+  *)
+    echo "!! The default EmulatorJS data directory resolves outside the app tree" >&2
+    exit 2
+    ;;
+esac
 
 if [[ "$VERSION" == "latest" ]]; then
   VERSION="$(curl -fsSL https://api.github.com/repos/EmulatorJS/EmulatorJS/releases/latest | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"].removeprefix("v"))')"
@@ -61,7 +78,7 @@ if [[ -z "${SRC:-}" ]]; then
 fi
 mkdir -p "$DATA_DIR"
 echo "==> Installing into $DATA_DIR"
-rm -rf "$DATA_DIR"/*
+rm -rf -- "$DATA_DIR"/*
 cp -R "$SRC"/. "$DATA_DIR"/
 echo "==> $(ls "$DATA_DIR" | wc -l) entries; loader.js present: $([[ -f "$DATA_DIR/loader.js" ]] && echo yes || echo NO)"
 echo "    Admin -> Emulators now offers EmulatorJS as the browser engine."
