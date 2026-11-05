@@ -238,6 +238,19 @@ def propose_hardlinks(
         raw_path = item.get('content_path') or ''
         # Rewrite the client's view of the path into ours before touching disk.
         local_path = map_remote_path(raw_path, path_map, config=app.config)
+        ok_path, path_error = is_safe_path(local_path, bases)
+        if not ok_path:
+            proposals.append({
+                **item,
+                'source': local_path,
+                'dest': None,
+                'preview': {
+                    'ok': False,
+                    'would_succeed': False,
+                    'reasons': [path_error or 'Unsafe source path'],
+                },
+            })
+            continue
         source = _pick_source_file(local_path)
         if not source:
             reason = 'no source file found'

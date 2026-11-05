@@ -6,6 +6,7 @@ import os
 from uuid import uuid4
 
 import pytest
+from flask import Flask
 from flask_login import login_user
 
 from oneirodex.models import Game, Library, User
@@ -128,6 +129,41 @@ def test_propose_hardlinks_from_file(app, tmp_path, monkeypatch):
         applied = apply_proposals(result['proposals'])
     assert applied['applied_count'] == 1
     assert os.path.isfile(result['proposals'][0]['dest'])
+
+
+def test_propose_hardlinks_rejects_out_of_root_before_walking(tmp_path, monkeypatch):
+    app = Flask(__name__)
+    app.config.update(
+        ENABLE_ARR_HARDLINK_PIPELINE=True,
+        ENABLE_HARDLINK_HELPERS=True,
+        ALLOW_HARDLINK_APPLY=False,
+    )
+    allowed_root = tmp_path / 'library'
+    outside_root = tmp_path / 'outside'
+    allowed_root.mkdir()
+    outside_root.mkdir()
+
+    monkeypatch.setattr(
+        'oneirodex.utils.arr_hardlink_pipeline.get_allowed_base_directories',
+        lambda _app: [str(allowed_root)],
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.arr_hardlink_pipeline._pick_source_file',
+        lambda _path: pytest.fail('out-of-root source must be rejected before walking'),
+    )
+
+    with app.app_context():
+        result = propose_hardlinks(
+            str(allowed_root),
+            torrents=[{'name': 'Outside', 'content_path': str(outside_root)}],
+        )
+
+    proposal = result['proposals'][0]
+    assert proposal['dest'] is None
+    assert proposal['preview']['would_succeed'] is False
+    assert proposal['preview']['reasons'] == [
+        'Access denied - path outside allowed directories'
+    ]
 
 
 def test_oidc_status_local_optional(client, app, admin):
