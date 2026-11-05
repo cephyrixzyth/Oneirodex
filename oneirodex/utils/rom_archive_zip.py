@@ -28,6 +28,7 @@ from oneirodex.utils.zipstream import zip_date_time
 
 MAX_ROM_ZIP_MEMBERS = 100_000
 MAX_ROM_ZIP_CENTRAL_DIRECTORY_BYTES = 32 * 1024 * 1024
+_MAX_CUE_SHEET_BYTES = 8 * 1024 * 1024
 _ZIP_EOCD = b'PK\x05\x06'
 _ZIP64_EOCD = b'PK\x06\x06'
 _ZIP64_LOCATOR = b'PK\x06\x07'
@@ -541,18 +542,26 @@ def bundle_playable_rom_zip(
             return zip_path, 'play.zip'
 
     try:
-        with io.TextIOWrapper(
-            open_plain_file_within(real_root, path, base_is_resolved=True),
-            encoding='utf-8',
-            errors='replace',
-        ) as cue_file:
-            cue_text = cue_file.read()
+        with open_plain_file_within(real_root, path, base_is_resolved=True) as cue_file:
+            cue_bytes = cue_file.read(_MAX_CUE_SHEET_BYTES + 1)
     except OSError as exc:
         raise ArchiveRomError(
             'Failed to read .cue sheet for ROM bundling',
             code='extract_failed',
         ) from exc
 
+    if len(cue_bytes) > _MAX_CUE_SHEET_BYTES:
+        raise ArchiveRomError(
+            'CUE sheet exceeds the maximum supported size.',
+            status_code=413,
+            code='archive_too_large',
+        )
+
+    cue_text = io.TextIOWrapper(
+        io.BytesIO(cue_bytes),
+        encoding='utf-8',
+        errors='replace',
+    ).read()
     rewritten_cue = _rewrite_cue_file_paths(cue_text)
     cue_bytes = rewritten_cue.encode('utf-8')
 

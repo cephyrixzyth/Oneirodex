@@ -23,6 +23,7 @@ from oneirodex.utils.rom_archive import (
     resolve_playable_rom_path,
 )
 from oneirodex.utils.rom_archive_types import RomExpansionBudget
+from oneirodex.utils import rom_archive_zip
 from oneirodex.utils.rom_archive_zip import extract_rom_from_gz, open_bounded_zip
 
 
@@ -440,6 +441,40 @@ def test_bundle_reuses_fresh_zip(tmp_path):
     zip_path_2, _ = bundle_playable_rom_zip(str(cue_path), str(cache))
     assert zip_path_2 == zip_path_1
     assert os.path.getmtime(zip_path_2) == first_mtime
+
+
+def test_bundle_cue_at_input_size_limit_succeeds(tmp_path, monkeypatch):
+    monkeypatch.setattr(rom_archive_zip, '_MAX_CUE_SHEET_BYTES', 32)
+    disc_dir = tmp_path / 'disc'
+    disc_dir.mkdir()
+    cue_path = disc_dir / 'disc.cue'
+    cue_text = 'FILE "disc.bin" BINARY\n'
+    cue_text += ' ' * (32 - len(cue_text.encode('utf-8')))
+    assert len(cue_text.encode('utf-8')) == 32
+    cue_path.write_bytes(cue_text.encode('utf-8'))
+    (disc_dir / 'disc.bin').write_bytes(b'DATA')
+
+    zip_path, _ = bundle_playable_rom_zip(str(cue_path), str(tmp_path / 'cache'))
+
+    with zipfile.ZipFile(zip_path) as zf:
+        assert zf.read('disc.cue').decode('utf-8') == cue_text
+
+
+def test_bundle_rejects_cue_above_input_size_limit_before_zip_write(tmp_path, monkeypatch):
+    monkeypatch.setattr(rom_archive_zip, '_MAX_CUE_SHEET_BYTES', 32)
+    disc_dir = tmp_path / 'disc'
+    disc_dir.mkdir()
+    cue_path = disc_dir / 'disc.cue'
+    cue_path.write_bytes(b'X' * 33)
+    (disc_dir / 'disc.bin').write_bytes(b'DATA')
+    cache = tmp_path / 'cache'
+
+    with pytest.raises(ArchiveRomError) as exc:
+        bundle_playable_rom_zip(str(cue_path), str(cache))
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'play.zip').exists()
+    assert not list(cache.glob('play.zip.tmp-*'))
 
 
 def test_bundle_single_iso_unchanged(tmp_path):
