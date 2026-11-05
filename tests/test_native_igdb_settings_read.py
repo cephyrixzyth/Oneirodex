@@ -308,6 +308,23 @@ def test_legacy_igdb_test_path_preserves_v118_missing_and_invalid_results():
     assert response.json()['message'] == 'Invalid API response'
 
 
+def test_legacy_igdb_test_path_preserves_v118_exception_result(monkeypatch):
+    from oneirodex.runtime_native import db_session
+
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(
+        session=SimpleNamespace(rollback=lambda: None),
+    ))
+
+    def raise_provider_error():
+        raise RuntimeError('provider unavailable')
+
+    client = _client(legacy_test=raise_provider_error)
+    response = client.post('/admin/test_igdb', headers={'X-CSRFToken': client.csrf_token})
+
+    assert response.status_code == 500
+    assert response.json()['message'] == 'IGDB API test failed'
+
+
 def test_integrations_igdb_test_path_preserves_v118_unconfigured_message():
     client = _client(legacy_test=lambda: None)
     response = client.post(
