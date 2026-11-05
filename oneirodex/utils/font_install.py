@@ -163,8 +163,12 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
         if not payload or not _looks_like_font(payload[:4]):
             continue
 
-        with open(dest, 'wb') as handle:
-            handle.write(payload)
+        try:
+            with open(dest, 'wb') as handle:
+                handle.write(payload)
+        except OSError:
+            # One unwritable face must not abort the remaining fallbacks or boot.
+            continue
         written += 1
 
     return written

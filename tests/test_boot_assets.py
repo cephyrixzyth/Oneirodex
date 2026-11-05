@@ -144,6 +144,26 @@ def test_install_writes_a_real_font(tmp_path, monkeypatch, without_the_bundle):
     assert font_install.install_builtin_fonts(str(tmp_path)) == 0
 
 
+def test_install_continues_after_font_write_failure(
+    tmp_path, monkeypatch, without_the_bundle
+):
+    """An unwritable destination must not abort later fallback faces or boot."""
+    font_install = without_the_bundle
+    fetcher = _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64)
+
+    def deny_write(path, mode='r', *args, **kwargs):
+        if mode == 'wb':
+            raise PermissionError('test destination is read-only')
+        raise AssertionError(f'unexpected file access: {path!r} ({mode})')
+
+    monkeypatch.setattr(font_install, 'safe_get', fetcher)
+    monkeypatch.setattr(font_install, 'open', deny_write, raising=False)
+
+    assert font_install.install_builtin_fonts(str(tmp_path)) == 0
+    assert fetcher.calls == len(font_install.FONT_SOURCES)
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_install_rejects_oversized_font_response(tmp_path, monkeypatch, without_the_bundle):
     font_install = without_the_bundle
 
