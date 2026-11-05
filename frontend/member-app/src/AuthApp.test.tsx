@@ -386,6 +386,29 @@ test('first-run direct entry loads the active step and submits it to the transit
   expect(navigate).toHaveBeenCalledWith('/setup/smtp')
 })
 
+test('first-run SMTP setup explains optional email without implying a saved password', async () => {
+  window.history.replaceState({}, '', '/setup/smtp')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 2,
+    platforms: [],
+    settings: {},
+  })
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Email (SMTP)' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Optional — enables invites, registration mail, and password reset.'),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Configure SMTP if this server should send invitation, account, and password-reset emails. Skip SMTP to continue without email.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/password blank to keep the saved one/i)).not.toBeInTheDocument()
+})
+
 test('first-run password mismatch uses the legacy form validation copy', async () => {
   window.history.replaceState({}, '', '/setup')
   api.loadSetupState.mockResolvedValue({

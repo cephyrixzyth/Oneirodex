@@ -198,7 +198,9 @@ export function SetupWizard({
                 ? 'Optional. Add a library now and start its first scan, or finish setup and add it later. Use a path visible inside the server, such as /storage/nes, under an allowed library location. Game files remain read-only.'
                 : step === 1
                   ? 'Oneirodex initial setup — one household admin to get started.'
-                  : `Step ${step} of 6. You can change these choices later in settings.`}
+                  : step === 2
+                    ? 'Optional — enables invites, registration mail, and password reset.'
+                    : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
       {step === 3 ? (
         <p className="auth-pilot__lede auth-pilot__lede--muted">
@@ -232,8 +234,8 @@ export function SetupWizard({
         {step === 2 ? (
           <>
             <p className="auth-pilot__message">
-              Configure SMTP if this server should send invitation and account emails. Leave the
-              password blank to keep the saved one.
+              Configure SMTP if this server should send invitation, account, and password-reset
+              emails. Skip SMTP to continue without email.
             </p>
             {input('smtp_server', 'SMTP server', 'text', false, String(settings.smtp_server || ''))}
             {input('smtp_port', 'SMTP port', 'number', false, String(settings.smtp_port || 587))}
