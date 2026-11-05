@@ -3234,15 +3234,6 @@ class LazyASGIApp:
                 await self._native_member_shell_app(scope, receive, send)
                 return
             if (
-                path == '/favorites'
-                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
-            ):
-                # The legacy Flask page route is GET/HEAD-only and returns
-                # Werkzeug's 405 for unsupported verbs. Keep that contract
-                # even though the native member shell dispatches only reads.
-                await self._handle_get_head_method_not_allowed(scope, send)
-                return
-            if (
                 self._native_read_api_app is not None
                 and path in {'/admin/integrations/igdb/save', '/admin/integrations/igdb/test'}
                 and scope.get('method') == 'POST'
@@ -4231,6 +4222,16 @@ class LazyASGIApp:
                          or is_numeric_admin_detail(path)
                          or is_library_edit_route(path))):
                 await self._native_admin_pilot(scope, receive, send)
+                return
+            if (
+                member_shell_route(path)
+                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
+            ):
+                # Native member document routes are GET/HEAD-only. Let all
+                # explicit API/admin method handlers above win first, then
+                # preserve Flask's 405 for unsupported methods instead of
+                # letting the native API fallback turn them into 404s.
+                await self._handle_get_head_method_not_allowed(scope, send)
                 return
             await self._native_read_api_app(scope, receive, send)
 

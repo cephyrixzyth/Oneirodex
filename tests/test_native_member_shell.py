@@ -332,23 +332,29 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     assert response.status_code == 200
     assert 'id="member-app-root"' in response.text
 
-    async def unsupported_favorites_method_request():
+    async def unsupported_member_page_method_requests():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as http:
-            return await http.post('/favorites')
+            return [
+                await http.post('/favorites'),
+                await http.post('/discover/zone/popular'),
+                await http.post('/game_details/7de1040c-42d9-4f42-904b-f469e68a9673'),
+            ]
 
-    unsupported_favorites_method = asyncio.run(unsupported_favorites_method_request())
-    assert unsupported_favorites_method.status_code == 405
-    assert unsupported_favorites_method.headers['allow'] == 'HEAD, OPTIONS, GET'
-    assert unsupported_favorites_method.headers['content-type'] == 'text/html; charset=utf-8'
-    assert unsupported_favorites_method.content == (
+    unsupported_member_page_methods = asyncio.run(unsupported_member_page_method_requests())
+    expected_405_body = (
         b'<!doctype html>\n<html lang=en>\n'
         b'<title>405 Method Not Allowed</title>\n'
         b'<h1>Method Not Allowed</h1>\n'
         b'<p>The method is not allowed for the requested URL.</p>\n'
     )
+    for unsupported_method in unsupported_member_page_methods:
+        assert unsupported_method.status_code == 405
+        assert unsupported_method.headers['allow'] == 'HEAD, OPTIONS, GET'
+        assert unsupported_method.headers['content-type'] == 'text/html; charset=utf-8'
+        assert unsupported_method.content == expected_405_body
 
     async def downloads_request():
         async with httpx.AsyncClient(
