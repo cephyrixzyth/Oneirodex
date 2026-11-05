@@ -4266,7 +4266,7 @@ class LazyASGIApp:
                 content=b'',
                 status_code=200,
                 headers={
-                    'Allow': 'OPTIONS, HEAD, GET',
+                    'Allow': 'OPTIONS, GET, HEAD',
                     **self._configured_security_headers(),
                 },
                 media_type='text/html',
@@ -4358,7 +4358,7 @@ class LazyASGIApp:
             b'<p>The method is not allowed for the requested URL.</p>\n'
         )
         headers = {
-            'Allow': 'HEAD, OPTIONS, GET',
+            'Allow': 'OPTIONS, GET, HEAD',
             'Content-Type': 'text/html; charset=utf-8',
             'Content-Length': str(len(body)),
             **self._configured_security_headers(),

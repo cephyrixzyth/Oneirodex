@@ -140,16 +140,10 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
-        'OPTIONS', 'GET', 'HEAD',
-    }
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
-    assert all(
-        set(response.headers['allow'].replace(' ', '').split(','))
-        == {'OPTIONS', 'GET', 'HEAD'}
-        for response in unsupported
-    )
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
     assert all(
         response.headers['content-type'] == 'text/html; charset=utf-8'
         for response in unsupported
@@ -223,16 +217,10 @@ def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
-        'OPTIONS', 'GET', 'HEAD',
-    }
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
-    assert all(
-        set(response.headers['allow'].replace(' ', '').split(','))
-        == {'OPTIONS', 'GET', 'HEAD'}
-        for response in unsupported
-    )
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
     assert all(
         response.headers['content-type'] == 'text/html; charset=utf-8'
         for response in unsupported
@@ -401,9 +389,7 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
-        'OPTIONS', 'GET', 'HEAD',
-    }
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
     assert all(response.json() == unsupported[0].json() for response in unsupported)
@@ -1541,16 +1527,10 @@ def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatc
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert options_response.status_code == 200
-    assert set(options_response.headers['allow'].replace(' ', '').split(',')) == {
-        'OPTIONS', 'GET', 'HEAD',
-    }
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
     assert options_response.content == b''
     assert all(response.status_code == 405 for response in unsupported)
-    assert all(
-        set(response.headers['allow'].replace(' ', '').split(','))
-        == {'OPTIONS', 'GET', 'HEAD'}
-        for response in unsupported
-    )
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
     assert all(
         response.headers['content-type'] == 'text/html; charset=utf-8'
         and response.content == unsupported[0].content
@@ -1632,11 +1612,7 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     )
     assert 'service-worker-allowed' not in root_unsatisfiable.headers
     assert all(response.status_code == 405 for response in unsupported)
-    assert all(
-        set(response.headers['allow'].replace(' ', '').split(','))
-        == {'OPTIONS', 'GET', 'HEAD'}
-        for response in unsupported
-    )
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
     assert all(
         response.headers['content-type'] == 'text/html; charset=utf-8'
         and response.content == unsupported[0].content
@@ -1752,11 +1728,7 @@ def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
     assert 'cache-control' not in unsatisfiable.headers
     assert all(response.status_code == 405 for response in unsupported)
-    assert all(
-        set(response.headers['allow'].replace(' ', '').split(','))
-        == {'OPTIONS', 'GET', 'HEAD'}
-        for response in unsupported
-    )
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
     assert all(
         response.headers['content-type'] == 'text/html; charset=utf-8'
         and response.content == unsupported[0].content
