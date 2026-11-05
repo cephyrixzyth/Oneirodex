@@ -146,7 +146,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 ## Challenge solver (BYO sidecar)
 
 - Env: `ENABLE_CHALLENGE_SOLVER` (**off** by default), `CHALLENGE_SOLVER_URL`, `CHALLENGE_SOLVER_PROVIDER`, `CHALLENGE_SOLVER_TIMEOUT_MS`, `CHALLENGE_SOLVER_MAX_TIER` (default **5**; admin may raise).
-- Optional token CAPTCHA API: `CHALLENGE_TOKEN_API_URL`, `CHALLENGE_TOKEN_API_KEY` when `provider=token_api`.
+- Reserved token API fields (`CHALLENGE_TOKEN_API_URL`, `CHALLENGE_TOKEN_API_KEY`, `provider=token_api`) are not a working integration: `TokenCaptchaClient` has no production call site, and Test solver supports the FlareSolverr-compatible path only. Do not expect these settings to solve challenges. Any future activation needs safe outbound transport and bounded responses.
 - Compose: `docker compose --profile challenge up -d` (Ops) — FlareSolverr-compatible TRAWL sidecar on LAN only.
 - Admin → Features: enable, solver URL, provider, max tier, **Test solver**; status `GET /api/admin/challenge-solver/status?probe=1`.
 - Opt-in only — not bulk-enabled with OIDC/AI apply locks. Solver URL validated via `validate_connector_http_url` + `ALLOW_PRIVATE_LAN_URLS`.
