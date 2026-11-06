@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import os
 from uuid import uuid4
+from urllib.parse import quote
 
 import pytest
 from PIL import Image as PILImage
@@ -82,17 +83,34 @@ def _png(width: int, height: int, *, colour=(20, 140, 90)) -> bytes:
     return buf.getvalue()
 
 
-def _upload(client, admin_user, game, payload: bytes, *, kind='cover', name='art.png'):
+def _upload(
+    client, admin_user, game, payload: bytes, *, kind='cover', name='art.png',
+    game_uuid=None,
+):
     with client.session_transaction() as sess:
         sess['_user_id'] = str(admin_user.id)
     return client.post(
-        f'/upload_image/{game.uuid}',
+        f"/upload_image/{game_uuid or game.uuid}",
         data={'file': (io.BytesIO(payload), name), 'image_type': kind},
         content_type='multipart/form-data',
     )
 
 
 class TestUploadCeiling:
+    def test_encoded_windows_traversal_is_rejected_before_writing(
+        self, client, admin_user, sample_game, image_dir, tmp_path,
+    ):
+        malicious_uuid = quote(r'..\..\outside', safe='')
+        response = _upload(
+            client, admin_user, sample_game, _png(64, 64),
+            game_uuid=malicious_uuid,
+        )
+
+        assert response.status_code == 404
+        assert response.get_json()['error_code'] == 'not_found'
+        assert list(image_dir.iterdir()) == []
+        assert list(tmp_path.parent.glob('outside_cover_*.png')) == []
+
     def test_oversize_upload_is_rejected(self, client, admin_user, sample_game, image_dir):
         payload = b'\x89PNG\r\n\x1a\n' + os.urandom(MAX_IMAGE_UPLOAD_BYTES + 1024)
         response = _upload(client, admin_user, sample_game, payload)

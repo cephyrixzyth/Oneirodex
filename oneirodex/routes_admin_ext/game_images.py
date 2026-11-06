@@ -95,6 +95,12 @@ def upload_image(game_uuid):
         flash('A scan is running. Image uploads are available again as soon as it finishes.', 'error')
         return api_error('A scan is running. Image uploads are available again as soon as it finishes.', code='forbidden')
 
+    game_exists = db.session.execute(
+        select(Game.uuid).filter_by(uuid=game_uuid)
+    ).scalar_one_or_none()
+    if game_exists is None:
+        return api_error('Game not found', code='not_found', game_uuid=game_uuid)
+
     if 'file' not in request.files:
         return api_error('No file was included.', code='bad_request')
 
