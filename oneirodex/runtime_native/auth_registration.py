@@ -37,6 +37,7 @@ class AuthRegistrationData:
         from oneirodex.utils.event_logging import log_system_event
         from oneirodex.utils.smtp import send_email_quiet
         from oneirodex.runtime_native.password_reset_confirm import _trusted_public_origin
+        from oneirodex.utils.tokens import email_verification_token_digest
 
         if invite_token:
             invite = db.session.execute(
@@ -78,7 +79,7 @@ class AuthRegistrationData:
             email=email,
             role='user',
             is_email_verified=False,
-            email_verification_token=verification_token,
+            email_verification_token=email_verification_token_digest(verification_token),
             token_creation_time=now,
             created=now,
         )

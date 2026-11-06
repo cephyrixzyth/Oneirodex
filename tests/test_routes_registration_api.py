@@ -1,8 +1,10 @@
 """JSON registration retains invite and whitelist account rules."""
 
 from uuid import uuid4
+import re
 
 from oneirodex.models import InviteToken, User, Whitelist
+from oneirodex.utils.tokens import email_verification_token_digest
 
 
 def registration_payload(*, username=None, email=None):
@@ -48,11 +50,47 @@ def test_invite_registration_claims_link_and_sends_confirmation(client, db_sessi
     assert created.email == payload['email'].lower()
     assert created.is_email_verified is False
     assert sent and sent[0][0] == created.email
+    token_match = re.search(r'/confirm/([^\s<>"&]+)', sent[0][2])
+    assert token_match is not None
+    assert created.email_verification_token == email_verification_token_digest(token_match.group(1))
     db_session.refresh(invite)
     assert invite.used is True and invite.used_by == created.user_id
 
     duplicate = client.post(f'/api/auth/register?token={invite.token}', json=registration_payload())
     assert duplicate.status_code == 400
+
+
+def test_native_registration_persists_only_confirmation_token_digest(app, db_session, monkeypatch):
+    from starlette.requests import Request
+
+    from oneirodex.runtime_native.auth_registration import AuthRegistrationData
+    import oneirodex.utils.smtp as smtp
+
+    sent = []
+    monkeypatch.setattr(smtp, 'send_email_quiet', lambda *args, **kwargs: sent.append(args) or True)
+    owner = inviter(db_session)
+    invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=owner.user_id)
+    db_session.add(invite)
+    db_session.commit()
+    payload = registration_payload()
+    request = Request({
+        'type': 'http', 'method': 'POST', 'scheme': 'http',
+        'server': ('localhost', 5006), 'client': ('127.0.0.1', 12345),
+        'headers': [(b'host', b'localhost:5006')],
+        'path': '/api/auth/register', 'query_string': b'', 'root_path': '',
+    })
+
+    with app.app_context():
+        result, error = AuthRegistrationData().register(
+            payload, invite.token, request, app.config,
+        )
+
+    assert error is None
+    assert result['_account_created'] is True
+    created = db_session.query(User).filter_by(name=payload['username']).one()
+    token_match = re.search(r'/confirm/([^\s<>"&]+)', sent[0][2])
+    assert token_match is not None
+    assert created.email_verification_token == email_verification_token_digest(token_match.group(1))
 
 
 def test_allowlisted_email_can_register_without_invite(client, db_session, monkeypatch):

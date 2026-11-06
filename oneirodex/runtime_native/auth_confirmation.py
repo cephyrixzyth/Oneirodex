@@ -15,6 +15,7 @@ class AuthConfirmationData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import email_verification_token_matches
 
         serializer = URLSafeTimedSerializer(secret_key)
         try:
@@ -30,6 +31,8 @@ class AuthConfirmationData:
             return None, 'not_found'
         if user.is_email_verified:
             return user, 'already_confirmed'
+        if not email_verification_token_matches(user.email_verification_token, token):
+            return None, 'invalid'
         return user, 'confirmed'
 
     def inspect(self, token, secret_key):
@@ -47,6 +50,7 @@ class AuthConfirmationData:
         # that become usable when this account is activated.
         user.set_password(password)
         user.is_email_verified = True
+        user.email_verification_token = None
         db.session.add(user)
         db.session.commit()
         return 'confirmed'

@@ -52,7 +52,12 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import MultiDict
 
-from oneirodex.utils.tokens import get_serializer, password_reset_token_digest
+from oneirodex.utils.tokens import (
+    email_verification_token_digest,
+    email_verification_token_matches,
+    get_serializer,
+    password_reset_token_digest,
+)
 from oneirodex.utils.rbac import is_admin
 from oneirodex.utils.member_auth_spa import render_member_auth_spa
 from oneirodex.utils.member_spa import render_member_spa
@@ -304,13 +309,14 @@ def api_register(body: RegistrationBody):
         return _registration_ack()
 
     user_uuid = str(uuid4())
+    verification_token = get_serializer().dumps(email_address, salt='email-confirm')
     user = User(
         user_id=user_uuid,
         name=username,
         email=email_address,
         role='user',
         is_email_verified=False,
-        email_verification_token=get_serializer().dumps(email_address, salt='email-confirm'),
+        email_verification_token=email_verification_token_digest(verification_token),
         token_creation_time=datetime.now(timezone.utc),
         created=datetime.now(timezone.utc),
     )
@@ -337,7 +343,7 @@ def api_register(body: RegistrationBody):
         return _registration_ack()
 
     log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
-    confirm_path = url_for('login.confirm_email', token=user.email_verification_token)
+    confirm_path = url_for('login.confirm_email', token=verification_token)
     confirm_url = f'{public_origin()}{confirm_path}'
     html = _registration_confirmation_email(confirm_url)
     send_email(user.email, 'Please confirm your email', html)
@@ -610,13 +616,14 @@ def register():
                 flash('An error occurred while registering. Please try again.')
                 return redirect(url_for('login.register'))
 
+            verification_token = get_serializer().dumps(email_address, salt='email-confirm')
             user = User(
                 user_id=user_uuid,
                 name=form.username.data,
                 email=form.email.data.lower(),
                 role='user',
                 is_email_verified=False,
-                email_verification_token=get_serializer().dumps(email_address, salt='email-confirm'),
+                email_verification_token=email_verification_token_digest(verification_token),
                 token_creation_time=datetime.now(timezone.utc),
                 created=datetime.now(timezone.utc)
             )
@@ -643,7 +650,6 @@ def register():
             log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
 
             # Verification email
-            verification_token = user.email_verification_token
             confirm_path = url_for('login.confirm_email', token=verification_token)
             confirm_url = f'{public_origin()}{confirm_path}'
             html = _registration_confirmation_email(confirm_url)
@@ -682,10 +688,13 @@ def _confirm_email_token(token: str, *, password: str | None = None):
         return None, 'not_found'
     if user.is_email_verified:
         return user, 'already_confirmed'
+    if not email_verification_token_matches(user.email_verification_token, token):
+        return None, 'invalid'
     if password is None:
         return user, 'pending'
     user.set_password(password)
     user.is_email_verified = True
+    user.email_verification_token = None
     db.session.add(user)
     db.session.commit()
     return user, 'confirmed'

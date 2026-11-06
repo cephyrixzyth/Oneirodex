@@ -254,7 +254,8 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     from oneirodex.models import InviteToken
     import oneirodex.routes_login as routes_login
 
-    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: None)
+    sent = []
+    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: sent.append(a))
     inviter = _user(db_session, prefix='mixed_case_inviter')
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
     db_session.add(invite)
@@ -270,16 +271,23 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     user = db_session.query(User).filter_by(name=username).one()
     assert user.email == email.lower()
     assert user.is_email_verified is False
+    assert len(sent) == 1
+    import re
+    match = re.search(r'/confirm/([^\s<>"&]+)', sent[0][2])
+    assert match is not None
+    verification_token = match.group(1)
+    from oneirodex.utils.tokens import email_verification_token_digest
+    assert user.email_verification_token == email_verification_token_digest(verification_token)
 
     # /confirm/<token> now serves the static React shell. The API owns the
     # one-time state transition; Flask's test client does not execute the SPA.
     client = app.test_client()
-    inspected = client.get(f'/api/auth/confirm/{user.email_verification_token}')
+    inspected = client.get(f'/api/auth/confirm/{verification_token}')
     assert inspected.status_code == 200
     assert inspected.get_json()['confirmed'] is False
     db_session.expire_all()
     assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is False
-    confirmed = client.post(f'/api/auth/confirm/{user.email_verification_token}', json={
+    confirmed = client.post(f'/api/auth/confirm/{verification_token}', json={
         'password': 'mailbox-owner-password',
         'confirm_password': 'mailbox-owner-password',
     })
