@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import traceback
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from oneirodex.utils.providers import reset_provider_cache
+from oneirodex.utils.providers.giantbomb import GiantBombProvider
 from oneirodex.utils.providers.meta_quest import (
     META_QUEST_PLATFORM_IDS,
     MetaQuestProvider,
@@ -155,6 +158,23 @@ def test_search_giantbomb_games_mocked(mock_req, mock_key):
     results = search_giantbomb_games('Doom', limit=5)
     assert len(results) == 1
     assert results[0]['source'] == 'giantbomb'
+
+
+@patch('oneirodex.utils.providers.giantbomb.get_giantbomb_api_key', return_value='gb-secret-key')
+@patch('oneirodex.utils.providers.giantbomb.safe_request')
+def test_giantbomb_transport_error_does_not_preserve_key_in_exception(mock_request, _mock_key, monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.security.is_blocked_outbound_host', lambda *_a, **_k: False)
+    mock_request.side_effect = requests.ConnectionError(
+        'connection failed for https://www.giantbomb.com/api/search/?api_key=gb-secret-key'
+    )
+
+    with pytest.raises(RuntimeError, match='GiantBomb search request failed') as raised:
+        GiantBombProvider().search_covers('Doom')
+
+    assert 'gb-secret-key' not in str(raised.value)
+    assert raised.value.__suppress_context__ is True
+    assert 'gb-secret-key' not in ''.join(traceback.format_exception(raised.value))
+    assert mock_request.call_args.kwargs['validator']('http://api.example/path')[0] is False
 
 
 @patch('oneirodex.utils.providers.mobygames.get_mobygames_api_key', return_value=None)

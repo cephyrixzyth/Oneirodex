@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from functools import partial
 from urllib.parse import quote
 
 import requests
@@ -17,6 +18,8 @@ from oneirodex.utils.providers.base import (
     fetch_outbound_image,
     mask_api_key,
 )
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_outbound_http_url
 
 DEFAULT_TIMEOUT = 20
 
@@ -54,18 +57,24 @@ class GiantBombProvider(MetadataImageProvider):
         if not q:
             return []
         limit = max(1, min(int(limit or 20), 50))
-        resp = requests.get(
-            'https://www.giantbomb.com/api/search/',
-            params={
-                'api_key': key,
-                'format': 'json',
-                'query': q,
-                'resources': 'game',
-                'limit': limit,
-            },
-            headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
-            timeout=DEFAULT_TIMEOUT,
-        )
+        try:
+            resp = safe_request(
+                'GET',
+                'https://www.giantbomb.com/api/search/',
+                validator=partial(validate_outbound_http_url, allow_private_lan=False),
+                params={
+                    'api_key': key,
+                    'format': 'json',
+                    'query': q,
+                    'resources': 'game',
+                    'limit': limit,
+                },
+                headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except requests.RequestException:
+            # Transport exceptions can include the prepared URL and API key.
+            raise RuntimeError('GiantBomb search request failed') from None
         if resp.status_code >= 400:
             raise RuntimeError(f'GiantBomb search failed ({resp.status_code})')
         payload = resp.json() if resp.content else {}

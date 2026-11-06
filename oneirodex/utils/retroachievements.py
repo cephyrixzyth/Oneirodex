@@ -27,11 +27,15 @@ import os
 import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import requests
 from sqlalchemy import func, select
+
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_outbound_http_url
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry
@@ -339,14 +343,25 @@ def _api_get(endpoint: str, params: dict[str, Any]) -> Any:
     if not (user and key):
         raise RuntimeError('RetroAchievements is not configured')
     query = {'z': user, 'y': key, **params}
-    response = requests.get(
-        f'{API_BASE}/{endpoint}',
-        params=query,
-        timeout=HTTP_TIMEOUT,
-        headers={'User-Agent': 'Oneirodex (household game library)'},
-    )
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = safe_request(
+            'GET',
+            f'{API_BASE}/{endpoint}',
+            validator=partial(validate_outbound_http_url, allow_private_lan=False),
+            params=query,
+            timeout=HTTP_TIMEOUT,
+            headers={'User-Agent': 'Oneirodex (household game library)'},
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        # Requests exceptions may embed the full URL, including the shared API
+        # key. Keep a safe class/status diagnostic; never propagate that text.
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        detail = f' ({status})' if status else ''
+        raise RuntimeError(
+            f'RetroAchievements request failed ({type(exc).__name__}){detail}'
+        ) from None
 
 
 def fetch_console_index(console_id: int) -> list[dict[str, Any]]:

@@ -339,6 +339,8 @@ The React admin page provides the complete Attract mode form even while the feat
 
 The React admin page preserves the IGDB settings URL. Saved secrets are never returned; a blank secret field keeps the stored value. Show entered secret reveals only a new draft and resets after a successful save. Test connection requires saved credentials and no unsaved changes, then contacts IGDB explicitly. Failed loading offers Retry and blocks saving; failed saving keeps the draft. Provider setup instructions link to the official developer console.
 
+GiantBomb search and RetroAchievements progress use outbound HTTPS validation. Their transport failures are logged without request URL text, which can contain the API key in query parameters.
+
 ### Household chat emoji
 
 The React admin page preserves the custom emoji URL and upload constraints. Installed emoji appear in a sortable, filterable table with image previews. Deletion requires confirmation; cancelling preserves the emoji. Failed loading offers Retry and prevents upload. Invalid uploads retain entered values.
