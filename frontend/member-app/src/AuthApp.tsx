@@ -133,6 +133,7 @@ export function AuthApp({
     event: FormEvent<HTMLFormElement>,
     action: (data: FormData) => Promise<void>,
     clearOnError = false,
+    clearPasswordOnError = false,
   ) {
     event.preventDefault()
     const form = event.currentTarget
@@ -143,6 +144,10 @@ export function AuthApp({
       await action(new FormData(event.currentTarget))
     } catch (cause) {
       if (clearOnError) form.reset()
+      else if (clearPasswordOnError) {
+        const password = form.querySelector<HTMLInputElement>('input[type="password"]')
+        if (password) password.value = ''
+      }
       setError(cause instanceof Error ? cause.message : 'The request could not be completed.')
     } finally {
       setBusy(false)
@@ -257,18 +262,23 @@ export function AuthApp({
             className="auth-pilot__form auth-pilot__form--register"
             noValidate
             onSubmit={(event) =>
-              submit(event, async (data) => {
-                setRegistered(
-                  await registerAccount(
-                    {
-                      username: String(data.get('username') || ''),
-                      email: String(data.get('email') || ''),
-                      password: String(data.get('password') || ''),
-                    },
-                    { inviteToken },
-                  ),
-                )
-              })
+              submit(
+                event,
+                async (data) => {
+                  setRegistered(
+                    await registerAccount(
+                      {
+                        username: String(data.get('username') || ''),
+                        email: String(data.get('email') || ''),
+                        password: String(data.get('password') || ''),
+                      },
+                      { inviteToken },
+                    ),
+                  )
+                },
+                false,
+                true,
+              )
             }
           >
             <label className="auth-pilot__field">

@@ -225,7 +225,7 @@ test('explains when a whitespace-only title request is submitted', async () => {
     'No requests yet. Add a title above and your librarians will take a look.',
   )
   await user.type(screen.getByLabelText('Title'), '   ')
-  await user.click(screen.getByRole('button', { name: 'Request', exact: true }))
+  await user.click(screen.getByRole('button', { name: /^Request$/ }))
 
   expect(
     vi

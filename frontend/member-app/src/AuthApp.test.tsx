@@ -180,6 +180,25 @@ test('standard registration copy matches the v1.1.8 invitation guidance', async 
   expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
 })
 
+test('failed registration clears only the password and keeps the other entered details', async () => {
+  window.history.replaceState({}, '', '/register')
+  api.registerAccount.mockRejectedValue(new Error('Invalid registration details.'))
+  render(<AuthApp />)
+
+  const username = await screen.findByLabelText('Username')
+  const email = screen.getByLabelText('Email')
+  const password = screen.getByLabelText('Password')
+  fireEvent.change(username, { target: { value: 'parity-member' } })
+  fireEvent.change(email, { target: { value: 'member@example.com' } })
+  fireEvent.change(password, { target: { value: 'ValidPass123!' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Register' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid registration details.')
+  expect(username).toHaveValue('parity-member')
+  expect(email).toHaveValue('member@example.com')
+  expect(password).toHaveValue('')
+})
+
 test('reset request uses the generic recovery message', async () => {
   window.history.replaceState({}, '', '/reset_password_request')
   api.requestPasswordReset.mockResolvedValue({
