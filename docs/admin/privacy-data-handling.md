@@ -124,6 +124,12 @@ plaintext provider credentials and should remain protected accordingly. Backups 
 password-reset token hashing may also contain raw reset tokens; the application continues to
 enforce the 15-minute expiry when a token is used.
 Deleting a user cascades their progress, tokens, and chat authorship per schema `ON DELETE`.
+The current account-delete flow does not purge user-specific emulator save-state or chat
+attachment bytes from the server's storage. Their database metadata is removed, and the
+authenticated download routes require that metadata plus current owner/channel access, so
+the application no longer serves the orphaned files. Operators who need physical erasure
+must handle those files through a documented storage-retention procedure; automated cleanup
+is still open work.
 Deleting a game removes its play sessions and per-game progress; game requests, owned-title
 matches, and linked game-server records remain with their game reference cleared where the
 schema defines `SET NULL`.
