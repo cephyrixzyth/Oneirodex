@@ -35,9 +35,12 @@ class AuthPageData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued = user.token_creation_time if user else None
         if issued is None:

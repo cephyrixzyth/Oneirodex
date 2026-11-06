@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from oneirodex.models import User
+from oneirodex.runtime_native.auth_pages import AuthPageData
+from oneirodex.runtime_native.password_reset_confirm import PasswordResetConfirmData
+from oneirodex.utils.tokens import password_reset_token_digest
 
 
 def reset_user(db_session):
@@ -34,17 +37,19 @@ def test_reset_request_response_does_not_reveal_account_existence(client, db_ses
     assert known.get_json()['requested'] is True
     assert len(sent) == 1 and sent[0][0] == user.email
     db_session.refresh(user)
-    assert user.password_reset_token == sent[0][1]
+    assert user.password_reset_token == password_reset_token_digest(sent[0][1])
+    assert user.password_reset_token != sent[0][1]
     assert user.token_creation_time is not None
 
 
 def test_reset_confirmation_updates_password_clears_token_and_keeps_guest_logged_out(client, db_session):
     user = reset_user(db_session)
-    user.password_reset_token = f'reset-{uuid4().hex}'
+    raw_token = f'reset-{uuid4().hex}'
+    user.password_reset_token = password_reset_token_digest(raw_token)
     user.token_creation_time = datetime.now(timezone.utc)
     db_session.commit()
 
-    response = client.post(f'/api/auth/password-reset/{user.password_reset_token}', json={
+    response = client.post(f'/api/auth/password-reset/{raw_token}', json={
         'password': 'brand-new-password',
         'confirm_password': 'brand-new-password',
     })
@@ -74,14 +79,42 @@ def test_reset_confirmation_refuses_expired_token(client, db_session):
 
 def test_reset_confirmation_preserves_password_form_validation(client, db_session):
     user = reset_user(db_session)
-    user.password_reset_token = f'reset-{uuid4().hex}'
+    raw_token = f'reset-{uuid4().hex}'
+    user.password_reset_token = password_reset_token_digest(raw_token)
     user.token_creation_time = datetime.now(timezone.utc)
     db_session.commit()
 
-    response = client.post(f'/api/auth/password-reset/{user.password_reset_token}', json={
+    response = client.post(f'/api/auth/password-reset/{raw_token}', json={
         'password': 'short', 'confirm_password': 'different',
     })
 
     assert response.status_code == 422
     assert response.get_json()['error_code'] == 'unprocessable'
     assert {'password', 'confirm_password'} <= set(response.get_json()['detail'])
+
+
+def test_native_reset_handlers_accept_digest_and_legacy_token_storage(client, db_session):
+    user = reset_user(db_session)
+    raw_token = f'native-reset-{uuid4().hex}'
+    user.password_reset_token = password_reset_token_digest(raw_token)
+    user.token_creation_time = datetime.now(timezone.utc)
+    db_session.commit()
+
+    pages = AuthPageData()
+    reset = PasswordResetConfirmData()
+    assert pages.reset_token_active(raw_token) is True
+    assert reset.valid_reset_token(raw_token) is True
+    assert reset.reset(raw_token, 'native-new-password') is True
+    assert user.password_reset_token is None
+    assert user.check_password('native-new-password')
+
+    legacy_token = f'legacy-reset-{uuid4().hex}'
+    user.password_reset_token = legacy_token
+    user.token_creation_time = datetime.now(timezone.utc)
+    db_session.commit()
+
+    assert pages.reset_token_active(legacy_token) is True
+    assert reset.valid_reset_token(legacy_token) is True
+    assert reset.reset(legacy_token, 'legacy-new-password') is True
+    assert user.password_reset_token is None
+    assert user.check_password('legacy-new-password')

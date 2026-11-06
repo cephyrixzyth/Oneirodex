@@ -17,7 +17,7 @@ Related: [members-and-invites.md](members-and-invites.md) · [settings-modules.m
 
 | Kind | What | Notes |
 |---|---|---|
-| Accounts | Username, Argon2 password hash, role, optional email | Emailless accounts use an unroutable `.invalid` placeholder — [members-and-invites.md](members-and-invites.md) |
+| Accounts | Username, Argon2 password hash, role, optional email | Emailless accounts use an unroutable `.invalid` placeholder — [members-and-invites.md](members-and-invites.md). New password-reset tokens are stored as SHA-256 digests and expire after 15 minutes; tokens issued before this change remain accepted until their existing expiry. |
 | Sessions | Signed session cookie + CSRF token | Same-origin. API tokens are **hashed** (SHA-256); the raw `gt_…` secret is shown once |
 | Library | Game metadata, paths, artwork you stored | Paths point at disks you mounted (`DATA_FOLDER_GAMES`, `ONEIRODEX_LIBRARY_ROOTS`); member freshness responses omit absolute install paths |
 | Playtime | Per-user totals and session heartbeats | `share_activity` (default on) controls whether accepted friends see live play status in Discover. It does not hide historical playtime from profile or comparison views when those viewers already have access to the member's library/social data. |
@@ -120,7 +120,9 @@ Postgres holds accounts, chat, playtime, and the catalog. Game files live on the
 The store-credential key ring is required to decrypt linked provider credentials and must be
 backed up separately under protected access. A database backup without the matching key ring
 cannot restore store sync. Backups created before credential conversion may still contain
-plaintext provider credentials and should remain protected accordingly.
+plaintext provider credentials and should remain protected accordingly. Backups from before
+password-reset token hashing may also contain raw reset tokens; the application continues to
+enforce the 15-minute expiry when a token is used.
 Deleting a user cascades their progress, tokens, and chat authorship per schema `ON DELETE`.
 Deleting a game removes its play sessions and per-game progress; game requests, owned-title
 matches, and linked game-server records remain with their game reference cleared where the

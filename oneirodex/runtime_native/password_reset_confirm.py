@@ -21,7 +21,7 @@ class PasswordResetConfirmData:
         from oneirodex.utils.event_logging import log_system_event
         from oneirodex.utils.login_rate_limit import auth_endpoint_key, is_rate_limited, record_failure
         from oneirodex.utils.smtp import send_email_quiet
-        from oneirodex.utils.tokens import get_serializer
+        from oneirodex.utils.tokens import get_serializer, password_reset_token_digest
 
         reset_key = auth_endpoint_key('pwd_reset', ip)
         if is_rate_limited(reset_key):
@@ -32,7 +32,7 @@ class PasswordResetConfirmData:
         record_failure(reset_key)
         if user:
             token = get_serializer().dumps(user.email, salt='password-reset-salt')
-            user.password_reset_token = token
+            user.password_reset_token = password_reset_token_digest(token)
             user.token_creation_time = datetime.now(timezone.utc)
             log_system_event(
                 f"Password reset requested for user: {user.email}",
@@ -62,9 +62,12 @@ class PasswordResetConfirmData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued_at = user.token_creation_time if user else None
         if issued_at is not None and issued_at.tzinfo is None:
@@ -83,9 +86,12 @@ class PasswordResetConfirmData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued_at = user.token_creation_time if user else None
         if issued_at is not None and issued_at.tzinfo is None:

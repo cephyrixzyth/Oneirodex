@@ -51,7 +51,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import MultiDict
 
-from oneirodex.utils.tokens import get_serializer
+from oneirodex.utils.tokens import get_serializer, password_reset_token_digest
 from oneirodex.utils.rbac import is_admin
 from oneirodex.utils.member_auth_spa import render_member_auth_spa
 from oneirodex.utils.member_spa import render_member_spa
@@ -346,7 +346,9 @@ def api_register(body: RegistrationBody):
 def _password_reset_user(token: str):
     """Resolve a live reset token using the same 15-minute UTC rule everywhere."""
     user = db.session.execute(
-        select(User).filter_by(password_reset_token=token)
+        select(User).where(User.password_reset_token.in_(
+            (password_reset_token_digest(token), token),
+        ))
     ).scalar_one_or_none()
     issued_at = user.token_creation_time if user else None
     if issued_at is not None and issued_at.tzinfo is None:
@@ -387,7 +389,7 @@ def api_password_reset_request(body: PasswordResetRequestBody):
     record_failure(reset_key)
     if user:
         token = get_serializer().dumps(user.email, salt='password-reset-salt')
-        user.password_reset_token = token
+        user.password_reset_token = password_reset_token_digest(token)
         user.token_creation_time = datetime.now(timezone.utc)
         log_system_event(
             f"Password reset requested for user: {user.email}",
@@ -738,7 +740,7 @@ def reset_password_request():
         if user:
             # Generate a unique token
             token = get_serializer().dumps(user.email, salt='password-reset-salt')
-            user.password_reset_token = token
+            user.password_reset_token = password_reset_token_digest(token)
             user.token_creation_time = datetime.now(timezone.utc)
             
             log_system_event(f"Password reset requested for user: {user.email}", event_type='password_reset', event_level='information')
