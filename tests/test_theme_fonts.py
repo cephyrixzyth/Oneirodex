@@ -145,6 +145,7 @@ class TestFontsCssRoute:
         assert response.status_code == 200
         assert response.headers['Content-Type'].startswith('text/css')
         assert response.headers['Cache-Control'] == 'private, max-age=60'
+        assert response.headers['Vary'] == 'Cookie'
         body = response.get_data(as_text=True)
         assert '--od-font-family:' in body
         assert BUILT_IN_FONTS[DEFAULT_FONT_ID]['stack'] in body
@@ -158,6 +159,7 @@ class TestFontsCssRoute:
 
         assert response.status_code == 200
         assert response.headers['Cache-Control'] == 'private, max-age=60'
+        assert response.headers['Vary'] == 'Cookie'
         body = response.get_data(as_text=True)
         assert BUILT_IN_FONTS['vt323']['stack'] in body
 
@@ -201,3 +203,4 @@ def test_legacy_font_stylesheet_is_private_without_database(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers['Cache-Control'] == 'private, max-age=60'
+    assert response.headers['Vary'] == 'Cookie'

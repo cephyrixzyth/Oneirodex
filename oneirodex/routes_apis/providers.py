@@ -322,4 +322,5 @@ def theme_fonts_css():
     # Short cache: a font upload or preference change should show up promptly.
     # The default stylesheet varies by the signed-in user's preference.
     response.headers['Cache-Control'] = 'private, max-age=60'
+    response.headers['Vary'] = 'Cookie'
     return response

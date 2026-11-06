@@ -675,7 +675,7 @@ The native library-tools write slice now covers rename preview, proposal approva
 
 Admin library creation, batch scans, and batch deletion now use FastAPI routes with explicit admin/token authorization, CSRF checks, caps and typed deletion confirmation. Durable database, image, scan and deletion-job work remains behind adapters while route parity is established.
 
-Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font catalogue returns font metadata without disclosing the configured server filesystem path; custom-font placement remains an administrator task. The preference-specific font stylesheet uses private browser caching to prevent shared-cache cross-user replay.
+Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font catalogue returns font metadata without disclosing the configured server filesystem path; custom-font placement remains an administrator task. The preference-specific font stylesheet uses private caching and varies by session cookie to prevent cross-user cache replay.
 
 A source-level API route comparison is maintained as an estimate only: it cannot establish that each FastAPI router is mounted behind the correct ASGI method gate or that behavior matches. Runtime dispatch checks remain necessary for each migrated family.
 
