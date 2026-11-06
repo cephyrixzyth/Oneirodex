@@ -467,7 +467,6 @@ def _copy_checked(src: Path, dest: Path, sha256: str) -> None:
     flags = (os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
              | getattr(os, 'O_NONBLOCK', 0))
     digest = hashlib.sha256()
-    tmp = dest.with_name(dest.name + '.moving')
     fd = os.open(src, flags)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -476,16 +475,27 @@ def _copy_checked(src: Path, dest: Path, sha256: str) -> None:
     except BaseException:
         os.close(fd)
         raise
+    tmp = None
+    tmp_fd = None
     try:
-        with fin, open(tmp, 'wb') as fout:
-            while block := fin.read(CHUNK):
-                digest.update(block)
-                fout.write(block)
+        with fin:
+            tmp_fd, tmp_name = tempfile.mkstemp(
+                prefix=f'.{dest.name}.', suffix='.moving', dir=dest.parent,
+            )
+            tmp = Path(tmp_name)
+            with os.fdopen(tmp_fd, 'wb') as fout:
+                tmp_fd = None  # ownership transferred to the file object
+                while block := fin.read(CHUNK):
+                    digest.update(block)
+                    fout.write(block)
         if digest.hexdigest() != sha256:
             raise Refused(f'{src.name} changed in the move folder while it was being copied')
         os.replace(tmp, dest)
     finally:
-        tmp.unlink(missing_ok=True)
+        if tmp_fd is not None:
+            os.close(tmp_fd)
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------- export
@@ -638,9 +648,19 @@ def rekey_saves(library: Path, manifest: dict, target_key: str) -> int:
             continue
         path = _safe_join(library, entry['path'], 'server library')
         plain = _plain_save(path.read_bytes(), source_key)
-        tmp = path.with_name(path.name + '.rekey')
-        tmp.write_bytes(SAVE_MAGIC + _fernet(target_key).encrypt(plain))
-        os.replace(tmp, path)
+        tmp_fd, tmp_name = tempfile.mkstemp(
+            prefix=f'.{path.name}.', suffix='.rekey', dir=path.parent,
+        )
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(tmp_fd, 'wb') as fout:
+                tmp_fd = None
+                fout.write(SAVE_MAGIC + _fernet(target_key).encrypt(plain))
+            os.replace(tmp, path)
+        finally:
+            if tmp_fd is not None:
+                os.close(tmp_fd)
+            tmp.unlink(missing_ok=True)
         changed += 1
     return changed
 

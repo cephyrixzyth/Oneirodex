@@ -67,6 +67,10 @@ a regular file) after the check is refused as `not a regular file` instead of th
 import waiting on it. The copy needs free space equal to the dump in the server's
 temporary folder, and is removed when the import ends.
 
+Library files and re-encrypted saves are written through unique, exclusively
+created temporary files in their destination folders before atomic replacement.
+Pre-created `.moving` or `.rekey` paths are not used.
+
 The folder holds your members' data (password hashes, settings and API keys
 included), their saves and, if any saves are encrypted, the key that opens
 them. It is created readable only by you. Keep it private and delete it once

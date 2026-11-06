@@ -75,6 +75,34 @@ def test_encrypted_saves_are_recorded_by_content_and_rekeyed_for_the_server(tmp_
     assert move.rekey_saves(lib, {'files': files, 'save_key': server}, server) == 0, 'same key: nothing to do'
 
 
+def test_rekey_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
+    lib = _library(tmp_path)
+    source, server = move.save_key_for('standalone'), move.save_key_for('server')
+    save = lib / 'saves/1/g/slot1.sav'
+    _encrypt(save, source)
+    files = move.snapshot_files(lib, source)
+    victim = tmp_path / 'victim.txt'
+    victim.write_text('keep me', encoding='utf-8')
+    planted = save.with_name(save.name + '.rekey')
+    try:
+        planted.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        # Windows may deny symlink creation to non-elevated test processes.
+        # A planted regular file still proves the predictable name is ignored.
+        planted.write_text('pre-existing temp path', encoding='utf-8')
+        was_symlink = False
+    else:
+        was_symlink = True
+
+    assert move.rekey_saves(lib, {'files': files, 'save_key': source}, server) == 1
+    assert victim.read_text(encoding='utf-8') == 'keep me'
+    assert planted.is_symlink() is was_symlink
+    if not was_symlink:
+        assert planted.read_text(encoding='utf-8') == 'pre-existing temp path'
+    data = save.read_bytes()
+    assert Fernet(server.encode()).decrypt(data[len(SAVE_MAGIC):]) == b'plain-save'
+
+
 
 
 def _bundle(tmp_path):
@@ -200,6 +228,31 @@ def test_a_file_swapped_after_the_check_is_not_copied(tmp_path):
     src.write_bytes(b'checked')
     move._copy_checked(src, dest, expected)
     assert dest.read_bytes() == b'checked'
+
+
+def test_copy_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
+    src, dest = tmp_path / 'src.bin', tmp_path / 'dest.bin'
+    src.write_bytes(b'checked')
+    victim = tmp_path / 'victim.txt'
+    victim.write_text('keep me', encoding='utf-8')
+    planted = dest.with_name(dest.name + '.moving')
+    try:
+        planted.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        # Windows may deny symlink creation to non-elevated test processes.
+        # A planted regular file still proves the predictable name is ignored.
+        planted.write_text('pre-existing temp path', encoding='utf-8')
+        was_symlink = False
+    else:
+        was_symlink = True
+
+    move._copy_checked(src, dest, move._sha256(b'checked'))
+
+    assert dest.read_bytes() == b'checked'
+    assert victim.read_text(encoding='utf-8') == 'keep me'
+    assert planted.is_symlink() is was_symlink
+    if not was_symlink:
+        assert planted.read_text(encoding='utf-8') == 'pre-existing temp path'
 
 
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='no named pipes here')
