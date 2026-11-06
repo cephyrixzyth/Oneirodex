@@ -113,6 +113,7 @@ class TestUploadCeiling:
         assert response.status_code == 200
         written = list(image_dir.iterdir())
         assert len(written) == 1
+        assert sample_game.uuid not in written[0].name
         with PILImage.open(written[0]) as saved:
             assert saved.size == (600, 800)
 

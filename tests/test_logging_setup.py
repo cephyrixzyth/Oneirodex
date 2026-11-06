@@ -50,6 +50,10 @@ def test_configure_logging_installs_one_console_handler(monkeypatch):
     assert len(root.handlers) == 1
     assert root.level == logging.WARNING
     assert isinstance(root.handlers[0], logging.StreamHandler)
+    assert any(
+        isinstance(item, ls.UvicornAccessSecretFilter)
+        for item in logging.getLogger("uvicorn.access").filters
+    )
 
 
 def test_configure_logging_is_idempotent(monkeypatch):
@@ -67,6 +71,27 @@ def test_request_id_filter_outside_request_context_uses_dash():
     assert rec.request_path == "-"
 
 
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/reset_password/raw-secret-token", "/reset_password/[redacted]"),
+        ("/api/auth/confirm/one-time-code", "/api/auth/confirm/[redacted]"),
+        ("/register?token=invite-secret", "/register?token=%5Bredacted%5D"),
+    ],
+)
+def test_uvicorn_access_filter_redacts_auth_tokens(path, expected):
+    rec = logging.LogRecord(
+        "uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1", "GET", path, "1.1", 200), None,
+    )
+
+    assert ls.UvicornAccessSecretFilter().filter(rec) is True
+    assert rec.args[2] == expected
+    assert "raw-secret-token" not in rec.getMessage()
+    assert "one-time-code" not in rec.getMessage()
+    assert "invite-secret" not in rec.getMessage()
+
+
 def test_request_id_filter_inside_request_context_stamps_id():
     from flask import Flask, g
 
@@ -78,6 +103,17 @@ def test_request_id_filter_inside_request_context_stamps_id():
         assert rec.request_id == "abc123"
         assert rec.request_method == "POST"
         assert rec.request_path == "/probe"
+
+
+def test_request_id_filter_redacts_reset_token_path():
+    from flask import Flask
+
+    app = Flask(__name__)
+    with app.test_request_context("/reset_password/private-reset-token"):
+        rec = logging.LogRecord("x", logging.INFO, __file__, 1, "hi", (), None)
+        ls.RequestIdFilter().filter(rec)
+
+    assert rec.request_path == "/reset_password/[redacted]"
 
 
 def test_request_id_filter_mints_an_id_when_g_has_none():

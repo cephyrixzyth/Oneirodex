@@ -26,8 +26,10 @@ import json
 import logging
 import logging.config
 import os
+import re
 import sys
 import uuid
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 __all__ = ["configure_logging", "RequestIdFilter", "JsonFormatter", "new_request_id"]
 
@@ -39,6 +41,32 @@ _TRUTHY = {"1", "true", "yes", "on"}
 def new_request_id() -> str:
     """Short correlation id for one request."""
     return uuid.uuid4().hex[:12]
+
+
+_TOKEN_PATHS = (
+    re.compile(r"^/(?:api/auth/password-reset|reset_password|api/auth/confirm|confirm)/[^/]+/?$"),
+)
+_SECRET_QUERY_KEYS = frozenset({
+    "token", "code", "state", "secret", "client_secret", "api_key",
+    "access_token", "refresh_token", "id_token",
+})
+
+
+def _redact_request_target(raw_url: str) -> str:
+    """Remove known one-time tokens and credential query values from a URL."""
+    try:
+        parsed = urlsplit(raw_url)
+        path = parsed.path
+        if any(pattern.fullmatch(path) for pattern in _TOKEN_PATHS):
+            path = path.rsplit("/", 1)[0] + "/[redacted]"
+        query = urlencode([
+            (key, "[redacted]" if key.lower() in _SECRET_QUERY_KEYS else value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        ])
+        return urlunsplit(("", "", path, query, ""))
+    except (TypeError, ValueError):
+        # Omit an unparseable request target rather than risk logging a secret.
+        return "[redacted]"
 
 
 class RequestIdFilter(logging.Filter):
@@ -65,11 +93,28 @@ class RequestIdFilter(logging.Filter):
                     pass
             record.request_id = rid
             record.request_method = request.method
-            record.request_path = request.path
+            record.request_path = _redact_request_target(request.path)
         else:
             record.request_id = "-"
             record.request_method = "-"
             record.request_path = "-"
+        return True
+
+
+class UvicornAccessSecretFilter(logging.Filter):
+    """Redact one-time credentials from Uvicorn's access-log request line."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - stdlib name
+        if record.name != "uvicorn.access" or not isinstance(record.args, tuple):
+            return True
+        # Uvicorn's access format arguments are (client, method, full_path,
+        # http_version, status). Keep the normal request line while removing
+        # reset/confirmation path tokens and credential-like query values.
+        if len(record.args) < 3 or not isinstance(record.args[2], str):
+            return True
+        args = list(record.args)
+        args[2] = _redact_request_target(record.args[2])
+        record.args = tuple(args)
         return True
 
 
@@ -159,6 +204,10 @@ def configure_logging(app=None) -> None:
             },
         }
     )
+
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, UvicornAccessSecretFilter) for item in access_logger.filters):
+        access_logger.addFilter(UvicornAccessSecretFilter())
 
     # The console handler above is a plain ``logging.StreamHandler`` on stdout.
     # On a Windows console running code page cp1252 a record carrying non-Latin-1

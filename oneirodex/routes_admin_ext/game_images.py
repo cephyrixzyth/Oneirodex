@@ -21,6 +21,7 @@ Route bodies moved verbatim; the nine ``print()`` calls become module-level
 ``logger.{info,warning,error}``.
 """
 
+import hashlib
 import logging
 import os
 import uuid
@@ -77,6 +78,11 @@ MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024
 # any real cover or screenshot. verify() does not decode pixel data, so without
 # this the resize below is where a 40000x40000 PNG would land.
 MAX_IMAGE_PIXELS = 60_000_000
+
+
+def _game_filename_key(game_uuid: str) -> str:
+    """Return a fixed safe filename component independent of route syntax."""
+    return hashlib.sha256(str(game_uuid).encode('utf-8')).hexdigest()[:16]
 
 
 @admin2_bp.route('/upload_image/<game_uuid>', methods=['POST'])
@@ -173,13 +179,17 @@ def upload_image(game_uuid):
             db.session.delete(existing)
         db.session.commit()
     short_uuid = str(uuid.uuid4())[:8]
+    # game_uuid is a route parameter and must never become a filesystem path
+    # component directly. Hash it so encoded separators and Windows traversal
+    # syntax cannot escape IMAGE_SAVE_PATH.
+    game_file_key = _game_filename_key(game_uuid)
     if image_type in SINGULAR_IMAGE_KINDS:
         unique_identifier = str(uuid.uuid4())[:8]
-        filename = f"{game_uuid}_{image_type}_{unique_identifier}.{file_extension}"
+        filename = f"{game_file_key}_{image_type}_{unique_identifier}.{file_extension}"
     else:
         unique_identifier = datetime.now().strftime('%Y%m%d%H%M%S')
         short_uuid = str(uuid.uuid4())[:8]
-        filename = f"{game_uuid}_{unique_identifier}_{short_uuid}.{file_extension}"
+        filename = f"{game_file_key}_{unique_identifier}_{short_uuid}.{file_extension}"
     save_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], filename)
     if resized is not None:
         # Keep the uploaded format so a .png stays a PNG — inferring it from the
