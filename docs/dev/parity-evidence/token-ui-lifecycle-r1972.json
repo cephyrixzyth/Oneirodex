@@ -59,17 +59,18 @@
       "current": "Hidden off-canvas and aria-hidden.",
       "owner_disposition": "Keep current behavior, approved 2026-11-06."
     },
-    "account_dialog_size": {
-      "legacy_css_pixels": {
-        "width": 358,
-        "height": 484
+    "account_dialog_markup_and_visible_surface": {
+      "visible_surface_bounds_xywh": {
+        "legacy_v1_1_8": [16, 155, 358, 534],
+        "current": [16, 155, 358, 534]
       },
-      "current_css_pixels": {
-        "width": 390,
-        "height": 844
+      "bounds_source": "Pixel bounds of the green panel outline in the saved R1972 account-panel screenshots; right and bottom coordinates are exclusive.",
+      "role_dialog_element_bounds_xywh": {
+        "legacy_v1_1_8": [16, 155, 358, 534],
+        "current": [0, 0, 390, 844]
       },
-      "owner_disposition": "Pending independent review."
+      "interpretation": "The role query targets the visible panel in legacy and the full-screen scrim in current. The visible panel is the same size; the DOM role/focus semantics need independent review."
     }
   },
-  "parity_status": "Partial: lifecycle outcomes match; mobile dialog sizing remains an undisposed UI difference and other route states are unverified."
+  "parity_status": "Partial: lifecycle outcomes and visible panel bounds match; DOM dialog/focus semantics and other route states remain unverified."
 }

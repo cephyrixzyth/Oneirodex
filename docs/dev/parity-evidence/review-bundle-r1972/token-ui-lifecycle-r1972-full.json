@@ -1,0 +1,591 @@
+{
+  "review_id": "R1972",
+  "scope": "Exact-image fresh mobile-context replay of token create, one-time display, copy, dismissal, revoke, and resulting API/DB state at 390x844. Each image used a disposable cloned database; no secret is persisted.",
+  "images": {
+    "legacy": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1"
+    }
+  },
+  "results": {
+    "legacy": {
+      "direct": {
+        "status": 200,
+        "path": "/tokens",
+        "headings": [
+          "API tokens",
+          "Create token",
+          "Your tokens",
+          "Warning!"
+        ],
+        "metrics": {
+          "viewportWidth": 390,
+          "documentScrollWidth": 390,
+          "bodyScrollWidth": 390
+        }
+      },
+      "account": {
+        "button_found": true,
+        "link_count": 0,
+        "label_fallback_count": 1,
+        "control_clicked": true,
+        "dialog_count": 1,
+        "dialog_heading": "API tokens",
+        "dialog_metrics": {
+          "rect": {
+            "x": 16,
+            "y": 180.21875,
+            "width": 358,
+            "height": 483.546875
+          },
+          "scrollWidth": 356,
+          "clientWidth": 356
+        },
+        "tab_metrics": {
+          "rect": {
+            "x": 33,
+            "width": 324
+          },
+          "scrollWidth": 324,
+          "clientWidth": 324,
+          "buttons": [
+            {
+              "text": "Profile",
+              "rect": {
+                "x": 33,
+                "right": 90.265625,
+                "y": 289.09375,
+                "width": 57.265625
+              },
+              "visible": true
+            },
+            {
+              "text": "Avatar",
+              "rect": {
+                "x": 96.65625,
+                "right": 153.859375,
+                "y": 289.09375,
+                "width": 57.203125
+              },
+              "visible": true
+            },
+            {
+              "text": "Password",
+              "rect": {
+                "x": 160.25,
+                "right": 234.765625,
+                "y": 289.09375,
+                "width": 74.515625
+              },
+              "visible": true
+            },
+            {
+              "text": "Invites",
+              "rect": {
+                "x": 241.15625,
+                "right": 298.765625,
+                "y": 289.09375,
+                "width": 57.609375
+              },
+              "visible": true
+            },
+            {
+              "text": "API tokens",
+              "rect": {
+                "x": 33,
+                "right": 116.703125,
+                "y": 325.078125,
+                "width": 83.703125
+              },
+              "visible": true
+            }
+          ]
+        },
+        "rail": {
+          "display": "flex",
+          "visibility": "visible",
+          "position": "fixed",
+          "left": "0px",
+          "rect": {
+            "x": 0,
+            "width": 216
+          },
+          "ariaHidden": null,
+          "role": null
+        },
+        "page_errors": [],
+        "ui_actions": {
+          "create_status": 201,
+          "secret_shown": true,
+          "secret_format_valid": true,
+          "copy_worked": true,
+          "done_cleared_secret": true,
+          "row_visible_after_create": true,
+          "thin_scope_persisted": true,
+          "revoke_confirm_dialog_count": 0,
+          "revoke_confirm_heading": null,
+          "revoke_confirm_buttons": [],
+          "revoke_status": 200,
+          "revoke_db_state": "[\"read:library\", \"read:social\", \"write:presence\"]|true",
+          "rows_after_revoke": null,
+          "list_status": 200,
+          "list_keys": [
+            "scope_presets",
+            "tokens",
+            "valid_scopes"
+          ],
+          "list_token_count": 1,
+          "list_token_names": [
+            "Parity Mobile UI Token"
+          ],
+          "token_route_events": [
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 0,
+                "token_names": []
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 0,
+                "token_names": []
+              }
+            },
+            {
+              "method": "POST",
+              "path": "/api/tokens",
+              "status": 201,
+              "body": {
+                "keys": [
+                  "secret",
+                  "token",
+                  "warning"
+                ],
+                "ok": null,
+                "token_count": null,
+                "token_names": null
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 1,
+                "token_names": [
+                  "Parity Mobile UI Token"
+                ]
+              }
+            },
+            {
+              "method": "DELETE",
+              "path": "/api/tokens/12",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "error",
+                  "error_code",
+                  "ok",
+                  "success"
+                ],
+                "ok": true,
+                "token_count": null,
+                "token_names": null
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 1,
+                "token_names": [
+                  "Parity Mobile UI Token"
+                ]
+              }
+            }
+          ],
+          "native_dialogs": [],
+          "row_removed_after_revoke": false,
+          "database_revoked": true,
+          "list_empty_after_revoke": false
+        }
+      }
+    },
+    "current": {
+      "direct": {
+        "status": 200,
+        "path": "/tokens",
+        "headings": [
+          "API tokens",
+          "Create token",
+          "Your tokens",
+          "Warning!"
+        ],
+        "metrics": {
+          "viewportWidth": 390,
+          "documentScrollWidth": 390,
+          "bodyScrollWidth": 390
+        }
+      },
+      "account": {
+        "button_found": true,
+        "link_count": 1,
+        "label_fallback_count": 0,
+        "control_clicked": true,
+        "dialog_count": 1,
+        "dialog_heading": "API tokens",
+        "dialog_metrics": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844
+          },
+          "scrollWidth": 390,
+          "clientWidth": 390
+        },
+        "tab_metrics": {
+          "rect": {
+            "x": 33,
+            "width": 324
+          },
+          "scrollWidth": 324,
+          "clientWidth": 324,
+          "buttons": [
+            {
+              "text": "Profile",
+              "rect": {
+                "x": 33,
+                "right": 90.265625,
+                "y": 289.09375,
+                "width": 57.265625
+              },
+              "visible": true
+            },
+            {
+              "text": "Avatar",
+              "rect": {
+                "x": 96.65625,
+                "right": 153.859375,
+                "y": 289.09375,
+                "width": 57.203125
+              },
+              "visible": true
+            },
+            {
+              "text": "Password",
+              "rect": {
+                "x": 160.25,
+                "right": 234.765625,
+                "y": 289.09375,
+                "width": 74.515625
+              },
+              "visible": true
+            },
+            {
+              "text": "Invites",
+              "rect": {
+                "x": 241.15625,
+                "right": 298.765625,
+                "y": 289.09375,
+                "width": 57.609375
+              },
+              "visible": true
+            },
+            {
+              "text": "API tokens",
+              "rect": {
+                "x": 33,
+                "right": 116.703125,
+                "y": 325.078125,
+                "width": 83.703125
+              },
+              "visible": true
+            }
+          ]
+        },
+        "rail": {
+          "display": "flex",
+          "visibility": "hidden",
+          "position": "fixed",
+          "left": "0px",
+          "rect": {
+            "x": -216,
+            "width": 216
+          },
+          "ariaHidden": "true",
+          "role": null
+        },
+        "page_errors": [],
+        "ui_actions": {
+          "create_status": 201,
+          "secret_shown": true,
+          "secret_format_valid": true,
+          "copy_worked": true,
+          "done_cleared_secret": true,
+          "row_visible_after_create": true,
+          "thin_scope_persisted": true,
+          "revoke_confirm_dialog_count": 0,
+          "revoke_confirm_heading": null,
+          "revoke_confirm_buttons": [],
+          "revoke_status": 200,
+          "revoke_db_state": "[\"read:library\", \"read:social\", \"write:presence\"]|true",
+          "rows_after_revoke": null,
+          "list_status": 200,
+          "list_keys": [
+            "scope_presets",
+            "tokens",
+            "valid_scopes"
+          ],
+          "list_token_count": 1,
+          "list_token_names": [
+            "Parity Mobile UI Token"
+          ],
+          "token_route_events": [
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 0,
+                "token_names": []
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 0,
+                "token_names": []
+              }
+            },
+            {
+              "method": "POST",
+              "path": "/api/tokens",
+              "status": 201,
+              "body": {
+                "keys": [
+                  "secret",
+                  "token",
+                  "warning"
+                ],
+                "ok": null,
+                "token_count": null,
+                "token_names": null
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 1,
+                "token_names": [
+                  "Parity Mobile UI Token"
+                ]
+              }
+            },
+            {
+              "method": "DELETE",
+              "path": "/api/tokens/12",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "error",
+                  "error_code",
+                  "ok",
+                  "success"
+                ],
+                "ok": true,
+                "token_count": null,
+                "token_names": null
+              }
+            },
+            {
+              "method": "GET",
+              "path": "/api/tokens",
+              "status": 200,
+              "body": {
+                "keys": [
+                  "scope_presets",
+                  "tokens",
+                  "valid_scopes"
+                ],
+                "ok": null,
+                "token_count": 1,
+                "token_names": [
+                  "Parity Mobile UI Token"
+                ]
+              }
+            }
+          ],
+          "native_dialogs": [],
+          "row_removed_after_revoke": false,
+          "database_revoked": true,
+          "list_empty_after_revoke": false
+        }
+      }
+    }
+  },
+  "revoke_confirmation_ui": {
+    "legacy": {
+      "count": 0,
+      "heading": null,
+      "buttons": []
+    },
+    "current": {
+      "count": 0,
+      "heading": null,
+      "buttons": []
+    }
+  },
+  "revoke_confirmation_ui_matches": true,
+  "source_database_note": "pg_dump only read the shared source DB; all synthetic users and application activity were confined to per-image clones that cleanup dropped. No source content-hash claim is made.",
+  "source_database_written_by_harness": false,
+  "external_egress_blocked": true,
+  "provider_calls": false,
+  "production_or_unraid": false,
+  "cleanup": {
+    "apps_absent": true,
+    "proxies_absent": true,
+    "dbs_absent": true,
+    "volumes_absent": true,
+    "no_unexpected_volumes": true,
+    "source_db_present": true,
+    "network_absent": true
+  },
+  "error": null,
+  "functional_assertions_passed": true,
+  "behavior_parity_passed": true,
+  "assertions_passed": true,
+  "token_lifecycle_action_results": {
+    "legacy": {
+      "create_status": 201,
+      "secret_format_valid": true,
+      "copy_worked": true,
+      "done_cleared_secret": true,
+      "row_visible_after_create": true,
+      "thin_scope_persisted": true,
+      "revoke_confirm_dialog_count": 0,
+      "revoke_status": 200,
+      "row_removed_after_revoke": false,
+      "database_revoked": true,
+      "list_status": 200,
+      "list_token_count": 1,
+      "list_token_names": [
+        "Parity Mobile UI Token"
+      ],
+      "list_empty_after_revoke": false
+    },
+    "current": {
+      "create_status": 201,
+      "secret_format_valid": true,
+      "copy_worked": true,
+      "done_cleared_secret": true,
+      "row_visible_after_create": true,
+      "thin_scope_persisted": true,
+      "revoke_confirm_dialog_count": 0,
+      "revoke_status": 200,
+      "row_removed_after_revoke": false,
+      "database_revoked": true,
+      "list_status": 200,
+      "list_token_count": 1,
+      "list_token_names": [
+        "Parity Mobile UI Token"
+      ],
+      "list_empty_after_revoke": false
+    }
+  },
+  "token_lifecycle_actions_match": true,
+  "known_ui_differences": {
+    "mobile_navigation_rail": "Legacy remains visible over content; current hides it off-canvas and marks it aria-hidden; owner approved keeping current behavior on 2026-11-06.",
+    "account_dialog_markup_and_visible_surface": {
+      "visible_surface_bounds_xywh": {
+        "legacy": [
+          16,
+          155,
+          358,
+          534
+        ],
+        "current": [
+          16,
+          155,
+          358,
+          534
+        ]
+      },
+      "bounds_source": "Pixel bounds of the green panel outline in local R1972 screenshots; screenshot files are withheld.",
+      "role_dialog_element_bounds_xywh": {
+        "legacy": [
+          16,
+          155,
+          358,
+          534
+        ],
+        "current": [
+          0,
+          0,
+          390,
+          844
+        ]
+      },
+      "interpretation": "The accessible role query targeted the visible panel in legacy and the full-screen scrim in current. This is a DOM semantics difference, not a visual panel size difference; independent review should inspect dialog and focus semantics."
+    }
+  },
+  "assertion_note": "Lifecycle success means the revoke request returned 200 and the database row was revoked. Both images retain the revoked token in the account-panel list; this matched legacy behavior and is recorded as an observed result, not treated as failure.",
+  "parity_note": "Token lifecycle outcomes match between images. Role-wrapper bounds are not directly comparable; the visible panel bounds match. Other token route states remain partial."
+}
