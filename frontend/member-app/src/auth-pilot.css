@@ -712,7 +712,7 @@ body {
   inset-inline-end: var(--od-space-5);
   z-index: 10;
   box-sizing: border-box;
-  width: min(16.25rem, calc(100vw - var(--od-space-4) - var(--od-space-4)));
+  width: min(22rem, calc(100vw - var(--od-space-4) - var(--od-space-4)));
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -723,8 +723,8 @@ body {
   border-radius: var(--od-radius-sm);
   background: var(--od-surface-2);
   color: var(--od-text);
-  font-size: var(--od-font-sm);
-  line-height: var(--od-line-base);
+  font-size: var(--od-font-md);
+  line-height: 1.35;
   box-shadow: var(--od-shadow-lg);
 }
 

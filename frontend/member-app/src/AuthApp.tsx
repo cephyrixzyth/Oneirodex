@@ -577,9 +577,17 @@ export function AuthApp({
           </p>
         ) : null}
         {notice ? (
-          <p className="auth-pilot__notice" role="status">
-            {notice}
-          </p>
+          <div className="auth-pilot__server-notice" role="status">
+            <span>{notice}</span>
+            <button
+              type="button"
+              className="auth-pilot__server-notice-dismiss"
+              aria-label="Dismiss notification"
+              onClick={() => setNotice('')}
+            >
+              ×
+            </button>
+          </div>
         ) : null}
       </section>
     </main>

@@ -93,6 +93,18 @@ test('server login notices follow account actions and can be dismissed', async (
   expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
 })
 
+test('password reset request success uses the dismissible login notice', async () => {
+  window.history.replaceState({}, '', '/login?password_reset_requested=1')
+  render(<AuthApp />)
+
+  const message = await screen.findByText(
+    'If that email is registered, password reset instructions were sent.',
+  )
+  expect(message.closest('.auth-pilot__server-notice')).toHaveAttribute('role', 'status')
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
+  expect(message).not.toBeInTheDocument()
+})
+
 test('empty login credentials show accessible required-field feedback without an API request', async () => {
   render(<AuthApp />)
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
