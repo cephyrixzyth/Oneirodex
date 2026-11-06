@@ -113,6 +113,9 @@ collections.
 - Personal playtime and download history hide games outside the child's current library/content access
 
 Thin-client tokens (browse / social) still work.
+The social status `now_playing` list is empty for child accounts, matching the
+child restriction on `/api/activity` in both server runtimes. Friend presence
+continues to follow accepted-friend and game-access rules.
 
 ## Backups and deletion
 
