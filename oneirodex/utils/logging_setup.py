@@ -149,6 +149,18 @@ def _json_enabled() -> bool:
     return (os.getenv("ONEIRODEX_LOG_JSON") or "").strip().lower() in _TRUTHY
 
 
+def install_uvicorn_access_secret_filter() -> None:
+    """Ensure Uvicorn access lines redact credential-bearing request targets.
+
+    Normal ASGI startup does not construct the Flask compatibility app, so its
+    call to :func:`configure_logging` is not guaranteed to run. Keep this small
+    setup independently callable from the ASGI entry point.
+    """
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, UvicornAccessSecretFilter) for item in access_logger.filters):
+        access_logger.addFilter(UvicornAccessSecretFilter())
+
+
 def configure_logging(app=None) -> None:
     """Install the console logging config. Idempotent."""
     from flask import g
@@ -205,9 +217,7 @@ def configure_logging(app=None) -> None:
         }
     )
 
-    access_logger = logging.getLogger("uvicorn.access")
-    if not any(isinstance(item, UvicornAccessSecretFilter) for item in access_logger.filters):
-        access_logger.addFilter(UvicornAccessSecretFilter())
+    install_uvicorn_access_secret_filter()
 
     # The console handler above is a plain ``logging.StreamHandler`` on stdout.
     # On a Windows console running code page cp1252 a record carrying non-Latin-1

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from urllib.parse import quote
 
+import requests
 from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -55,20 +56,25 @@ class GiantBombProvider(MetadataImageProvider):
         if not q:
             return []
         limit = max(1, min(int(limit or 20), 50))
-        resp = safe_request(
-            'GET',
-            'https://www.giantbomb.com/api/search/',
-            validator=validate_user_outbound_http_url,
-            params={
-                'api_key': key,
-                'format': 'json',
-                'query': q,
-                'resources': 'game',
-                'limit': limit,
-            },
-            headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
-            timeout=DEFAULT_TIMEOUT,
-        )
+        try:
+            resp = safe_request(
+                'GET',
+                'https://www.giantbomb.com/api/search/',
+                validator=validate_user_outbound_http_url,
+                params={
+                    'api_key': key,
+                    'format': 'json',
+                    'query': q,
+                    'resources': 'game',
+                    'limit': limit,
+                },
+                headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except requests.RequestException:
+            # Requests transport exceptions may include the prepared URL, which
+            # contains the provider key. Never let that text reach ASGI/Flask logs.
+            raise RuntimeError('GiantBomb search request failed') from None
         if resp.status_code >= 400:
             raise RuntimeError(f'GiantBomb search failed ({resp.status_code})')
         payload = resp.json() if resp.content else {}

@@ -1019,6 +1019,11 @@ def _is_native_free_games_claim_path(path: str) -> bool:
 
 class LazyASGIApp:
     def __init__(self):
+        from oneirodex.utils.logging_setup import install_uvicorn_access_secret_filter
+
+        # Native ASGI startup intentionally avoids the Flask app factory, so
+        # install access-log redaction directly before Uvicorn handles requests.
+        install_uvicorn_access_secret_filter()
         self._app = None
         self._flask_app = None
         self._native_sqlalchemy_engine = None

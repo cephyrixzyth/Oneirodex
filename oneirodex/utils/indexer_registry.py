@@ -81,8 +81,8 @@ def _new_id() -> str:
 
 
 def _validate_indexer_url(url: str) -> str:
-    """Native indexer hosts — never LAN even when ALLOW_PRIVATE_LAN_URLS is on."""
-    ok, result = validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
+    """Native indexers are public and require TLS to protect API keys in transit."""
+    ok, result = validate_outbound_http_url(url, allow_private_lan=False)
     if not ok:
         raise ValueError(result)
     return result.rstrip('/')

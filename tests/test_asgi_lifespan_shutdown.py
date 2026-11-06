@@ -1,12 +1,33 @@
 """ASGI lifespan owns shutdown without replacing Uvicorn's signal handlers."""
 
 import asyncio
+import logging
 import signal
 from unittest.mock import AsyncMock, Mock, patch
 
 from asgi import LazyASGIApp
 from uvicorn.config import Config
 from uvicorn.lifespan.on import LifespanOn
+
+
+def test_lazy_asgi_app_installs_uvicorn_access_secret_filter_idempotently():
+    from oneirodex.utils.logging_setup import UvicornAccessSecretFilter
+
+    access_logger = logging.getLogger('uvicorn.access')
+    saved_filters = access_logger.filters[:]
+    access_logger.filters[:] = [
+        item for item in access_logger.filters
+        if not isinstance(item, UvicornAccessSecretFilter)
+    ]
+    try:
+        LazyASGIApp()
+        LazyASGIApp()
+        assert sum(
+            isinstance(item, UvicornAccessSecretFilter)
+            for item in access_logger.filters
+        ) == 1
+    finally:
+        access_logger.filters[:] = saved_filters
 
 
 def test_uvicorn_lifespan_stops_workers_on_shutdown_and_keeps_sigterm_handler():

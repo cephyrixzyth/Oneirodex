@@ -355,16 +355,25 @@ def _api_get(endpoint: str, params: dict[str, Any]) -> Any:
     if not (user and key):
         raise RuntimeError('RetroAchievements is not configured')
     query = {'z': user, 'y': key, **params}
-    response = safe_request(
-        'GET',
-        f'{API_BASE}/{endpoint}',
-        validator=validate_user_outbound_http_url,
-        params=query,
-        timeout=HTTP_TIMEOUT,
-        headers={'User-Agent': 'Oneirodex (household game library)'},
-    )
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = safe_request(
+            'GET',
+            f'{API_BASE}/{endpoint}',
+            validator=validate_user_outbound_http_url,
+            params=query,
+            timeout=HTTP_TIMEOUT,
+            headers={'User-Agent': 'Oneirodex (household game library)'},
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        # Requests exceptions may embed the full URL, including the shared API
+        # key. Keep a safe class/status diagnostic; never propagate that text.
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        detail = f' ({status})' if status else ''
+        raise RuntimeError(
+            f'RetroAchievements request failed ({type(exc).__name__}){detail}'
+        ) from None
 
 
 def fetch_console_index(console_id: int) -> list[dict[str, Any]]:

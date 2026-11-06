@@ -243,8 +243,8 @@ def test_admin_bearer_token_requires_admin_scope(runtime):
     token = SimpleNamespace(
         user_id=7, token_hash=hashlib.sha256(b'secret').hexdigest(),
         revoked_at=None, scopes=['read:library'], last_used_at=None,
-        has_scope=lambda scope: scope in ['read:library'],
     )
+    token.has_scope = lambda scope: scope in token.scopes
     tokens['prefix'] = token
     denied = _request(
         app, '/api/game-servers', method='POST',
@@ -254,14 +254,38 @@ def test_admin_bearer_token_requires_admin_scope(runtime):
     assert denied.status_code == 403
     assert not any(call[0] == 'create' for call in data.calls)
 
-    limited_read = _request(
-        app, '/api/game-servers',
-        headers={'Authorization': 'Bearer gt_prefix_secret'},
+    read_paths = (
+        '/api/game-servers',
+        '/api/game-servers/srv-1',
+        '/api/game-servers/srv-1/status',
+        '/api/game-servers/acl-check',
     )
-    assert limited_read.status_code == 200
-    assert 'health_url' not in limited_read.json()['servers'][0]
-    acl = _request(app, '/api/game-servers/acl-check',
-                   headers={'Authorization': 'Bearer gt_prefix_secret'})
+    for path in read_paths:
+        denied_read = _request(
+            app, path, headers={'Authorization': 'Bearer gt_prefix_secret'},
+        )
+        assert denied_read.status_code == 403
+        assert denied_read.json()['error'] == 'Missing scope: read:social'
+        assert denied_read.json()['detail'] == {'required_scope': 'read:social'}
+    assert data.calls == []
+
+    token.scopes.append('read:social')
+    listing = _request(
+        app, '/api/game-servers', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    detail = _request(
+        app, '/api/game-servers/srv-1', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    status = _request(
+        app, '/api/game-servers/srv-1/status', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    acl = _request(
+        app, '/api/game-servers/acl-check', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    assert listing.status_code == detail.status_code == status.status_code == acl.status_code == 200
+    assert 'health_url' not in listing.json()['servers'][0]
+    assert 'health_url' not in detail.json()
+    assert status.json()['reachable'] is True
     assert acl.json()['can_manage'] is False
 
 

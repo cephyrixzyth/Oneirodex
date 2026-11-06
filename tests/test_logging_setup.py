@@ -63,6 +63,24 @@ def test_configure_logging_is_idempotent(monkeypatch):
     assert len(logging.getLogger().handlers) == 1
 
 
+def test_uvicorn_access_filter_installation_is_idempotent():
+    access_logger = logging.getLogger("uvicorn.access")
+    saved_filters = access_logger.filters[:]
+    access_logger.filters[:] = [
+        item for item in access_logger.filters
+        if not isinstance(item, ls.UvicornAccessSecretFilter)
+    ]
+    try:
+        ls.install_uvicorn_access_secret_filter()
+        ls.install_uvicorn_access_secret_filter()
+        assert sum(
+            isinstance(item, ls.UvicornAccessSecretFilter)
+            for item in access_logger.filters
+        ) == 1
+    finally:
+        access_logger.filters[:] = saved_filters
+
+
 def test_request_id_filter_outside_request_context_uses_dash():
     rec = logging.LogRecord("x", logging.INFO, __file__, 1, "hi", (), None)
     assert ls.RequestIdFilter().filter(rec) is True

@@ -322,8 +322,8 @@ def _torznab_api_url(base_url: str) -> str:
 
 
 def _never_lan_indexer_url(url: str) -> tuple[bool, str]:
-    """Indexer hosts are public — never LAN, even with the homelab flag on."""
-    return validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
+    """Native indexers require public HTTPS, including for every redirect hop."""
+    return validate_outbound_http_url(url, allow_private_lan=False)
 
 
 def _fetch_indexer_response(method: str, url: str, **kwargs) -> requests.Response:
@@ -343,7 +343,7 @@ def _search_native_indexer(indexer: dict[str, Any], query: str, *, limit: int) -
     api_key = (indexer.get('api_key') or '').strip()
     if not base or not api_key:
         return []
-    ok, cleaned = validate_outbound_http_url(base, allow_http=True, allow_private_lan=False)
+    ok, cleaned = _never_lan_indexer_url(base)
     if not ok:
         raise ValueError(cleaned)
     api_url = _torznab_api_url(cleaned)

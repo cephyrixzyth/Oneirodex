@@ -18,6 +18,7 @@ from oneirodex.utils.indexer_registry import (
     enable_presets,
     list_indexers,
     load_indexer_presets,
+    normalize_indexer,
     presets_path,
 )
 
@@ -171,6 +172,31 @@ def test_all_indexer_searches_use_the_bounded_response_fetch(monkeypatch):
     assert all(kwargs['max_response_bytes'] == arr_connectors.MAX_INDEXER_RESPONSE_BYTES
                for _method, _url, kwargs in calls)
     assert all(kwargs['session'] is not None for _method, _url, kwargs in calls)
+
+
+def test_native_indexer_http_is_rejected_at_save_and_use(monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.security.is_blocked_outbound_host', lambda *_a, **_k: False)
+    with pytest.raises(ValueError, match='scheme not allowed'):
+        normalize_indexer({
+            'name': 'Plaintext',
+            'protocol': 'torznab',
+            'url': 'http://indexer.example/api',
+            'api_key': 'synthetic-key',
+        })
+
+    calls = []
+    monkeypatch.setattr(
+        arr_connectors, 'fetch_with_challenge_retry',
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    with pytest.raises(ValueError, match='scheme not allowed'):
+        arr_connectors._search_native_indexer(
+            {'name': 'Legacy plaintext', 'url': 'http://indexer.example/api', 'api_key': 'synthetic-key'},
+            'Doom', limit=5,
+        )
+    assert calls == []
+    assert arr_connectors._never_lan_indexer_url('http://indexer.example/api')[0] is False
+    assert arr_connectors._never_lan_indexer_url('https://indexer.example/api')[0] is True
 
 
 def test_bulk_import_json_and_csv(app, db_session):

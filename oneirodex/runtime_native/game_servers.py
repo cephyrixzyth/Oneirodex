@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class GameServersData:
@@ -166,6 +166,11 @@ async def _dispatch(
                 response = _error(403, 'forbidden', 'Admin required')
             else:
                 response = await _write_request(request, flask_app, data, method, server_uuid)
+        elif (
+            response is None and method in ('GET', 'HEAD')
+            and auth.token is not None and not auth.has_scope('read:social')
+        ):
+            response = require_bearer_scope(auth, 'read:social')
         elif response is None and acl:
             response = JSONResponse(_acl_payload(auth.user, auth))
         elif response is None:
