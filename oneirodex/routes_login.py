@@ -41,6 +41,7 @@ from oneirodex.utils.login_rate_limit import (
     client_ip_from_request,
     is_rate_limited,
     login_rate_key,
+    password_reset_email_key,
     record_failure,
 )
 from datetime import datetime, timedelta, timezone
@@ -381,12 +382,21 @@ def api_password_reset_request(body: PasswordResetRequestBody):
             'Too many password reset requests. Please wait and try again.',
             code='rate_limited',
         )
+    record_failure(reset_key)
+    recipient_key = password_reset_email_key(
+        form.email.data, current_app.config.get('SECRET_KEY', ''),
+    )
+    if is_rate_limited(recipient_key):
+        return api_ok({
+            'requested': True,
+            'message': 'If that email is registered, password reset instructions were sent.',
+        })
+    record_failure(recipient_key)
     user = db.session.execute(
         select(User).filter_by(email=form.email.data.lower())
     ).scalar_one_or_none()
     # Count requests for both known and unknown accounts; the response body is
     # intentionally identical to prevent email-address enumeration.
-    record_failure(reset_key)
     if user:
         token = get_serializer().dumps(user.email, salt='password-reset-salt')
         user.password_reset_token = password_reset_token_digest(token)
@@ -734,9 +744,16 @@ def reset_password_request():
         if is_rate_limited(reset_key):
             flash('Too many password reset requests. Please wait and try again.', 'error')
             return redirect(url_for('login.reset_password_request'))
+        record_failure(reset_key)
+        recipient_key = password_reset_email_key(
+            form.email.data, current_app.config.get('SECRET_KEY', ''),
+        )
+        if is_rate_limited(recipient_key):
+            flash('If that email is registered, password reset instructions were sent.')
+            return redirect(url_for('login.login'))
+        record_failure(recipient_key)
         user = db.session.execute(select(User).filter_by(email=form.email.data.lower())).scalar_one_or_none()
         # Always record attempt (even unknown email) to slow enumeration
-        record_failure(reset_key)
         if user:
             # Generate a unique token
             token = get_serializer().dumps(user.email, salt='password-reset-salt')

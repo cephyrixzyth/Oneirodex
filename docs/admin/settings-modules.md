@@ -73,7 +73,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 | `NEXUS_API_KEY` | unset | Personal key from your Nexus account page; turns on the Nexus tab (trending + latest for the game). Browse only — Nexus's terms forbid third-party download automation, and nothing here downloads |
 | `ENABLE_ANTICHEAT_COMPAT` | on | Community anti-cheat compatibility list, one keyless fetch a day into `static/library/anticheat/`; downloads are streamed with a 16 MiB decoded-body and 100,000-row limit. Details show the status as *community reports*. `ANTICHEAT_FEED_URL` / `ANTICHEAT_CACHE_PATH` override the source and the file. Integrations lists it as **Anti-cheat reports**, configured once the first fetch has landed |
 | `ENABLE_EMAIL_DIGEST` | on | Scheduler on; members still opt in |
-| `ENABLE_LOGIN_RATE_LIMIT` | on | In-process login / password-reset rate limit |
+| `ENABLE_LOGIN_RATE_LIMIT` | on | In-process login and password-reset rate limits; reset email requests are limited by source IP and by an HMAC-keyed recipient bucket |
 | `OIDC_ENABLED` | **off** | Also requires Admin → Integrations toggle |
 | `BIOS_IMPORT_SOURCE` | unset | Folder of dumps you already own. Boot copies missing names (never overwrites). Admin → Emulators **Scan collection** uses the same path. [emulator-bios.md](../runbooks/emulator-bios.md) |
 
