@@ -174,7 +174,11 @@ export function AdminSideRail({
       <button type="button" className="od-rail__close" onClick={onCloseDrawer}>
         Close
       </button>
-      <AdminLink className="od-rail__brand od-rail__brand--mark-only" to="/admin/dashboard">
+      <AdminLink
+        className="od-rail__brand od-rail__brand--mark-only"
+        to="/admin/dashboard"
+        onClick={onCloseDrawer}
+      >
         <span className="od-rail__mark od-brand-mark" aria-hidden="true" />
         <span className="od-rail__brand-text">Oneirodex Admin</span>
       </AdminLink>

@@ -61,10 +61,14 @@ function renderTopBar({
   )
 }
 
-function renderRail({ at = '/admin/ops', railState = 'expanded' } = {}) {
+function renderRail({
+  at = '/admin/ops',
+  railState = 'expanded',
+  onCloseDrawer,
+}: { at?: string; railState?: string; onCloseDrawer?: () => void } = {}) {
   return render(
     <MemoryRouter initialEntries={[at]}>
-      <AdminSideRail railState={railState} />
+      <AdminSideRail railState={railState} onCloseDrawer={onCloseDrawer} />
     </MemoryRouter>,
   )
 }
@@ -301,6 +305,15 @@ test('the rail brand is the mark only', () => {
   const brand = container.querySelector('.od-rail__brand')
   expect(brand).toHaveClass('od-rail__brand--mark-only')
   expect(brand!.querySelector('.od-rail__brand-role')).toBeNull()
+})
+
+test('the rail brand closes the mobile drawer when navigating home', () => {
+  const onCloseDrawer = vi.fn()
+  renderRail({ at: '/admin/ops', railState: 'open', onCloseDrawer })
+
+  fireEvent.click(screen.getByRole('link', { name: 'Oneirodex Admin' }))
+
+  expect(onCloseDrawer).toHaveBeenCalledOnce()
 })
 
 test('collapsed rail keeps accessible names', () => {
