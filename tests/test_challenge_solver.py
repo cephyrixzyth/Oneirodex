@@ -51,7 +51,7 @@ def test_is_challenge_response_403_single_marker_not_enough():
 
 def test_challenge_solver_client_parses_flaresolverr_solution():
     session = MagicMock()
-    session.post.return_value = MagicMock(
+    response = MagicMock(
         status_code=200,
         content=b'{"status":"ok","solution":{"url":"https://idx.test/results","status":200,"response":"[{\\"title\\":\\"Ok\\"}]","cookies":[{"name":"cf_clearance","value":"abc"}],"userAgent":"Mozilla/5.0"}}',
         json=lambda: {
@@ -66,31 +66,38 @@ def test_challenge_solver_client_parses_flaresolverr_solution():
         },
     )
     client = ChallengeSolverClient('http://solver:8191', session=session)
-    solution = client.request_get('https://idx.test/results')
+    with patch('oneirodex.utils.challenge_solver.safe_request_limited', return_value=response) as safe_post:
+        solution = client.request_get('https://idx.test/results')
     assert isinstance(solution, SolverSolution)
     assert solution.status_code == 200
     assert solution.body == '[{"title":"Ok"}]'
     assert solution.cookie_header() == 'cf_clearance=abc'
     assert solution.user_agent == 'Mozilla/5.0 Test'
-    session.post.assert_called_once()
-    call_args = session.post.call_args
-    assert call_args[0][0] == 'http://solver:8191/v1'
+    safe_post.assert_called_once()
+    call_args = safe_post.call_args
+    assert call_args[0] == ('POST', 'http://solver:8191/v1')
     assert call_args[1]['json']['cmd'] == 'request.get'
-    assert call_args[1]['allow_redirects'] is False
+    assert call_args[1]['validator'].__name__ == 'validate_connector_http_url'
+    assert call_args[1]['max_redirects'] == 0
+    assert call_args[1]['max_response_bytes'] == 16 * 1024 * 1024
+    assert call_args[1]['session'] is session
 
 
 def test_challenge_solver_rejects_redirects():
     session = MagicMock()
-    session.post.return_value = MagicMock(status_code=307)
     client = ChallengeSolverClient('http://solver:8191', session=session)
-    with pytest.raises(RuntimeError, match='redirect refused'):
-        client.request_get('https://idx.test/results')
-    assert session.post.call_args.kwargs['allow_redirects'] is False
+    with patch(
+        'oneirodex.utils.challenge_solver.safe_request_limited',
+        side_effect=requests.TooManyRedirects,
+    ) as safe_post:
+        with pytest.raises(RuntimeError, match='redirect refused'):
+            client.request_get('https://idx.test/results')
+    assert safe_post.call_args.kwargs['max_redirects'] == 0
 
 
 def test_challenge_solver_client_trawl_scrape():
     session = MagicMock()
-    session.post.return_value = MagicMock(
+    response = MagicMock(
         status_code=200,
         content=b'{}',
         json=lambda: {
@@ -105,17 +112,17 @@ def test_challenge_solver_client_trawl_scrape():
         },
     )
     client = ChallengeSolverClient('http://trawl:8191', provider='trawl', max_tier=5, session=session)
-    solution = client.request_get('https://idx.test/x')
+    with patch('oneirodex.utils.challenge_solver.safe_request_limited', return_value=response) as safe_post:
+        solution = client.request_get('https://idx.test/x')
     assert solution.body == 'ok'
-    assert session.post.call_args[0][0] == 'http://trawl:8191/scrape'
-    assert session.post.call_args[1]['json']['maxTier'] == 4
-    assert session.post.call_args.kwargs['allow_redirects'] is False
+    assert safe_post.call_args[0][1] == 'http://trawl:8191/scrape'
+    assert safe_post.call_args.kwargs['json']['maxTier'] == 4
 
 
 def test_challenge_solver_trawl_fallback_does_not_log_remote_error_text(caplog):
     secret_url = 'https://indexer.example/search?passkey=private-passkey'
     session = MagicMock()
-    session.post.side_effect = [
+    responses = [
         MagicMock(
             status_code=200,
             content=b'{"status":"error"}',
@@ -138,7 +145,11 @@ def test_challenge_solver_trawl_fallback_does_not_log_remote_error_text(caplog):
     client = ChallengeSolverClient('http://solver:8191', provider='trawl', session=session)
 
     with caplog.at_level('DEBUG', logger='oneirodex.utils.challenge_solver'):
-        solution = client.request_get(secret_url)
+        with patch(
+            'oneirodex.utils.challenge_solver.safe_request_limited',
+            side_effect=responses,
+        ):
+            solution = client.request_get(secret_url)
 
     assert solution.body == 'ok'
     assert 'private-passkey' not in caplog.text

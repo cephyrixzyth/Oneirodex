@@ -14,11 +14,13 @@ from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
+from oneirodex.utils.http_safe import safe_request_limited
 from oneirodex.utils.security import validate_connector_http_url
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SEC = 20
+MAX_SOLVER_RESPONSE_BYTES = 16 * 1024 * 1024
 _LAST_ERROR: str | None = None
 
 _CHALLENGE_MARKERS = (
@@ -243,6 +245,26 @@ class ChallengeSolverClient:
         self.max_tier = max(1, int(max_tier))
         self._session = session or requests.Session()
 
+    def _post_json(self, endpoint: str, payload: dict[str, Any], timeout: float, label: str):
+        try:
+            response = safe_request_limited(
+                'POST',
+                endpoint,
+                validator=validate_connector_http_url,
+                max_response_bytes=MAX_SOLVER_RESPONSE_BYTES,
+                session=self._session,
+                max_redirects=0,
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.TooManyRedirects as exc:
+            raise RuntimeError('Challenge solver redirect refused') from exc
+        if 300 <= response.status_code < 400:
+            raise RuntimeError('Challenge solver redirect refused')
+        if response.status_code >= 400:
+            raise RuntimeError(f'{label} HTTP {response.status_code}')
+        return response
+
     def request_get(self, url: str, *, max_timeout_ms: int | None = None) -> SolverSolution:
         if self.provider == 'trawl':
             try:
@@ -263,13 +285,7 @@ class ChallengeSolverClient:
             'maxTimeout': timeout,
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(
-            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
-        )
-        if 300 <= resp.status_code < 400:
-            raise RuntimeError('Challenge solver redirect refused')
-        if resp.status_code >= 400:
-            raise RuntimeError(f'Challenge solver HTTP {resp.status_code}')
+        resp = self._post_json(endpoint, payload, http_timeout, 'Challenge solver')
         data = resp.json() if resp.content else {}
         if data.get('status') != 'ok':
             message = str(data.get('message') or 'solver error')
@@ -286,13 +302,7 @@ class ChallengeSolverClient:
             'maxTier': min(self.max_tier, 4),
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(
-            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
-        )
-        if 300 <= resp.status_code < 400:
-            raise RuntimeError('Challenge solver redirect refused')
-        if resp.status_code >= 400:
-            raise RuntimeError(f'TRAWL scrape HTTP {resp.status_code}')
+        resp = self._post_json(endpoint, payload, http_timeout, 'TRAWL scrape')
         data = resp.json() if resp.content else {}
         tier = data.get('tier')
         timings = data.get('timings')
