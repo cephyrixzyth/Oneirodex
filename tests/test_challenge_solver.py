@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -93,6 +94,43 @@ def test_challenge_solver_rejects_redirects():
         with pytest.raises(RuntimeError, match='redirect refused'):
             client.request_get('https://idx.test/results')
     assert safe_post.call_args.kwargs['max_redirects'] == 0
+
+
+def test_challenge_solver_transport_pins_the_resolved_destination(monkeypatch):
+    solver_body = b'{"status":"ok","solution":{"url":"https://idx.test/x","status":200,"response":"ok"}}'
+
+    class NoNetworkSession(requests.Session):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def request(self, method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            response = requests.Response()
+            response.status_code = 200
+            response.url = url
+            response.raw = BytesIO(solver_body)
+            response._content = False
+            return response
+
+    monkeypatch.setattr(
+        'oneirodex.utils.security._resolve_host',
+        lambda _host: [ipaddress.ip_address('93.184.216.34')],
+    )
+    session = NoNetworkSession()
+    client = ChallengeSolverClient('http://solver.example:8191', session=session)
+
+    solution = client.request_get('https://idx.test/x')
+
+    assert solution.body == 'ok'
+    assert len(session.calls) == 1
+    method, url, kwargs = session.calls[0]
+    assert method == 'POST'
+    assert url == 'http://93.184.216.34:8191/v1'
+    assert kwargs['headers']['Host'] == 'solver.example:8191'
+    assert kwargs['stream'] is True
+    assert kwargs['json']['cmd'] == 'request.get'
+    session.close()
 
 
 def test_challenge_solver_client_trawl_scrape():
