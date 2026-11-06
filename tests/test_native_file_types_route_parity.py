@@ -118,4 +118,3 @@ def test_file_types_head_uses_read_result():
 
 def test_file_type_value_dot_only_is_rejected():
     assert validate_file_type_value('.') is None
-

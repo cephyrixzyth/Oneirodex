@@ -280,4 +280,3 @@ def _finish(response, flask_app, request, auth):
 
     for key, value in security_header_values(flask_app.config).items():
         response.headers.setdefault(key, value)
-

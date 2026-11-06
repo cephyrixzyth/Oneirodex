@@ -404,5 +404,3 @@ def _native_error(message, code, *, detail=None, config):
 
     payload, status = api_error_payload(message, code=code, detail=detail)
     return _native_json_response(payload, status=status, config=config)
-
-

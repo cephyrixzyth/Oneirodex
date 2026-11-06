@@ -82,4 +82,3 @@ def delete_admin_theme(theme_name: str):
 @admin_required
 def admin_theme_loading_icons():
     return api_ok(get_loading_icon_settings(admin=True))
-

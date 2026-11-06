@@ -657,4 +657,3 @@ async def _check_freshness(request, app, data):
     result = data.check_freshness(app, body.library_uuid, limit=limit,
                                   only_missing=bool(body.only_missing))
     return _ok(result)
-

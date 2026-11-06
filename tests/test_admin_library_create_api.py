@@ -233,4 +233,3 @@ def test_admin_library_editor_rejects_bad_fields_and_missing_library(client, db_
     assert bad.status_code == 400
     assert db_session.get(Library, library.uuid).name == 'Keep'
     assert client.get('/api/admin/libraries/missing').status_code == 404
-

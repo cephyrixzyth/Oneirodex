@@ -156,5 +156,3 @@ def _json_mapping(raw_body: bytes) -> dict:
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
-
-

@@ -277,4 +277,3 @@ def test_child_scope_denylist_applies_even_when_token_has_scope():
     assert not token_has_scope(child, token, "admin")
     assert not token_has_scope(child, token, "write:library")
     assert token_has_scope(child, token, "read:library")
-

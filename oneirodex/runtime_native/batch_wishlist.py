@@ -253,5 +253,3 @@ def mount_batch_wishlist_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _json_object(request):
     return await bounded_json_object(request)
-
-

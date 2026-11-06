@@ -376,7 +376,7 @@ def _error(message, code, *, detail=None, status=None):
 
 
 def _success(payload, *, status=200):
-    from oneirodex.utils.api_contract import api_ok_payload 
+    from oneirodex.utils.api_contract import api_ok_payload
 
     return JSONResponse(api_ok_payload(payload), status_code=status)
 

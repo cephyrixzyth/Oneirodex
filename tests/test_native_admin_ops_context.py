@@ -400,4 +400,3 @@ def test_clear_system_logs_requires_csrf_audits_actor_and_matches_failure_contra
     assert all(key not in persisted for key in (
         'permission_check_failed', 'permission_errors', 'permission_check_path',
     ))
-

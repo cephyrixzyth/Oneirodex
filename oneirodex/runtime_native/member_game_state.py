@@ -283,4 +283,3 @@ def _api_error(message, code, *, status=None):
 
     payload, resolved_status = api_error_payload(message, code=code, status=status)
     return JSONResponse(payload, status_code=resolved_status)
-

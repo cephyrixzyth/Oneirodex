@@ -66,7 +66,7 @@ def create_app(config_object=None):
         if app.config.get('SQLALCHEMY_DATABASE_URI') != test_db_url:
             raise RuntimeError('CRITICAL: App test database configuration mismatch; connection details withheld.')
         logger.info('PYTEST MODE: validated test database configuration')
-    
+
     csrf.init_app(app)
     apply_proxy_fix(app)
     apply_security_headers(app)
@@ -192,7 +192,7 @@ def create_app(config_object=None):
         """Check if setup is required and redirect accordingly."""
         from flask import request, redirect
         from oneirodex.utils.setup import should_redirect_to_setup, get_setup_redirect_url
-        
+
         # Skip setup checks for certain endpoints
         exempt_endpoints = {
             'setup.setup', 'setup.setup_submit', 'setup.setup_smtp', 'setup.setup_igdb',
@@ -202,7 +202,7 @@ def create_app(config_object=None):
             'static', 'favicon', 'site.favicon',
             'info.pulse', 'info.awake',
         }
-        
+
         # Skip setup checks for API endpoints (they should handle their own authentication)
         # and for unauthenticated health probes used by Docker / Unraid.
         if request.endpoint and (
@@ -212,7 +212,7 @@ def create_app(config_object=None):
             request.path in ('/pulse', '/awake')
         ):
             return
-        
+
         # Check if we need to redirect to setup
         if should_redirect_to_setup():
             setup_url = get_setup_redirect_url()

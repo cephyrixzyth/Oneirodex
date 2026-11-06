@@ -91,5 +91,3 @@ def create_library_health_router(
 def mount_library_health_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_library_health_router(flask_app, **kwargs))
     return app
-
-

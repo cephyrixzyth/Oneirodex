@@ -487,4 +487,3 @@ def test_native_library_helpers_use_explicit_config_without_app_context(tmp_path
         monkeypatch.setattr(gamenames, 'get_game_names_from_folder', lambda *args, **kwargs: ['Folder'])
         assert data.games_in_files(flask_app, str(tmp_path), ['.iso']) == ['Disc']
         assert data.games_in_folder(flask_app, str(tmp_path), SimpleNamespace(scan_depth=1)) == ['Folder']
-

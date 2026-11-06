@@ -40,7 +40,7 @@ class IGDBCompanyRoleData:
 
         query_fields = '''fields id, name, cover, summary, url, release_dates.date, platforms.name, genres.name, themes.name, game_modes.name,
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
-                          aggregated_rating_count, rating, rating_count, slug, status, category, total_rating, 
+                          aggregated_rating_count, rating, rating_count, slug, status, category, total_rating,
                           total_rating_count, storyline;'''
         query_filter = f'search "{game_name}";'
         if platform_id and platform_id.isdigit():

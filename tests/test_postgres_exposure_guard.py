@@ -239,4 +239,3 @@ def test_probe_server_stop_failure_refuses_publication_and_retries_cleanup(tmp_p
     assert "did not stop cleanly" in result.stderr
     assert secret not in result.stdout + result.stderr
     assert sum(line.endswith("stop") for line in log.read_text(encoding="utf-8").splitlines()) == 2
-

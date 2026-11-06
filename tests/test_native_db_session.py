@@ -139,4 +139,3 @@ def test_member_oidc_bootstrap_fields_do_not_push_flask_context(database_app, mo
 
     assert fields == {'oidc_enabled': True, 'oidc_display_name': 'Household SSO'}
     assert not has_app_context()
-

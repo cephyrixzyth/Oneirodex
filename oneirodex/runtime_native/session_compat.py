@@ -205,4 +205,3 @@ def validate_csrf_token(
         raise CsrfTokenError("The CSRF token is invalid.") from None
     if not hmac.compare_digest(session_data[field_name], decoded):
         raise CsrfTokenError("The CSRF tokens do not match.")
-

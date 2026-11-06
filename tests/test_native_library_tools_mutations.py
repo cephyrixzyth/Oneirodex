@@ -577,4 +577,3 @@ def test_backfill_rejects_malformed_or_non_object_json_without_invoking_backfill
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
     assert 'backfill' not in [call[0] for call in data.calls]
-

@@ -194,4 +194,3 @@ def test_vary_header_merge_supports_starlette_and_werkzeug_responses():
     wildcard_response = Response(headers={'Vary': '*'})
     add_vary_header(wildcard_response, 'Cookie')
     assert wildcard_response.headers['Vary'] == '*'
-
