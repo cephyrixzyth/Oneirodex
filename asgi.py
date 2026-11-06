@@ -3750,6 +3750,15 @@ class LazyASGIApp:
                         and scope.get('method') == 'PUT'
                     )
                     or (
+                        path in {
+                            '/admin/igdb_settings',
+                            '/admin/test_igdb',
+                            '/admin/integrations/igdb/save',
+                            '/admin/integrations/igdb/test',
+                        }
+                        and scope.get('method') == 'POST'
+                    )
+                    or (
                         path == '/api/arr/config'
                         and scope.get('method') == 'PUT'
                     )

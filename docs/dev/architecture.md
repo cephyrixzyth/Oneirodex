@@ -196,7 +196,10 @@ secret value. The FastAPI `PUT` path also preserves CSRF-before-auth,
 validation, blank-secret retention, session refresh, and cache invalidation;
 the FastAPI `POST /api/admin/igdb/test` route preserves CSRF, safe result/error
 payloads, and the last-tested timestamp while using the existing provider
-adapter.
+adapter. The React settings form keeps the legacy `POST /admin/igdb_settings`
+and `POST /admin/test_igdb` paths; the outer ASGI dispatcher explicitly routes
+those POSTs to their native handlers, and the form save response never includes
+the client secret.
 The custom chat emoji catalogue `GET`/`HEAD` is native as well; it preserves
 the admin gate, limits metadata, no-store response, and generic storage-error
 contract. Its DELETE action also uses FastAPI and validates CSRF before auth;

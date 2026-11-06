@@ -905,12 +905,25 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             'secret_present': bool(payload['igdb_client_secret']),
         }},
     )
+    legacy_igdb_saves = []
+    monkeypatch.setattr(
+        igdb_settings_read.IgdbSettingsData,
+        'save_legacy',
+        lambda _self, payload: legacy_igdb_saves.append(payload),
+    )
     monkeypatch.setattr(
         igdb_settings_read.IgdbSettingsData,
         'test_connection',
         lambda _self: {'settings': {
             'igdb_client_id': 'client-id', 'secret_present': True,
         }},
+    )
+    monkeypatch.setattr(
+        igdb_settings_read.IgdbSettingsData,
+        'test_connection_legacy',
+        lambda _self: {
+            'status': 'success', 'message': 'IGDB API test successful',
+        },
     )
     monkeypatch.setattr(
         arr_indexers_read.ArrIndexersData,
@@ -1268,6 +1281,14 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             igdb_test = await client.post(
                 '/api/admin/igdb/test', headers={'X-CSRFToken': csrf}
             )
+            igdb_legacy_save = await client.post(
+                '/admin/igdb_settings',
+                json={'igdb_client_id': 'legacy-client', 'igdb_client_secret': 'legacy-secret'},
+                headers={'X-CSRFToken': csrf},
+            )
+            igdb_legacy_test = await client.post(
+                '/admin/test_igdb', headers={'X-CSRFToken': csrf},
+            )
             reference_sets = await client.get('/api/admin/reference-sets')
             reference_sets_head = await client.head('/api/admin/reference-sets')
             reference_sets_member = await client.get('/api/reference-sets')
@@ -1361,6 +1382,15 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             assert user_create.status_code == 200
             assert user_update.status_code == 200
             assert user_delete.status_code == 200
+            assert igdb_legacy_save.status_code == 200
+            assert igdb_legacy_save.json()['status'] == 'success'
+            assert 'legacy-secret' not in igdb_legacy_save.text
+            assert legacy_igdb_saves == [{
+                'igdb_client_id': 'legacy-client',
+                'igdb_client_secret': 'legacy-secret',
+            }]
+            assert igdb_legacy_test.status_code == 200
+            assert 'igdb_client_secret' not in igdb_legacy_test.text
             assert emulator_core_health.status_code == 200
             assert emulator_core_health.json()['installed_cores'] == ['snes9x']
             assert art_studio_stock.status_code == 200
