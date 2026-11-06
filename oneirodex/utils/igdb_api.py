@@ -9,8 +9,11 @@ from oneirodex.models import GlobalSettings
 from oneirodex.utils.global_settings import global_settings_row
 from sqlalchemy import select
 
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import safe_request_limited
 from oneirodex.utils.security import validate_outbound_http_url
+
+MAX_IGDB_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_TWITCH_TOKEN_RESPONSE_BYTES = 64 * 1024
 
 
 def _validate_igdb_url(url):
@@ -41,10 +44,12 @@ def make_igdb_api_request(endpoint_url, query_params):
 
     try:
         # print(f"make_igdb_api_request Attempting to make a request to {endpoint_url} with headers: {headers} and query: {query_params}")
-        response = safe_request(
-            'POST', endpoint_url, validator=_validate_igdb_url,
-            headers=headers, data=query_params, timeout=20,
-        )
+        with requests.Session() as session:
+            response = safe_request_limited(
+                'POST', endpoint_url, validator=_validate_igdb_url,
+                max_response_bytes=MAX_IGDB_RESPONSE_BYTES, session=session,
+                headers=headers, data=query_params, timeout=20,
+            )
         response.raise_for_status()
         # print(f"make_igdb_api_request Response from IGDB API: {data}")
         return response.json()
@@ -85,10 +90,12 @@ def get_access_token(client_id, client_secret):
         'grant_type': 'client_credentials'
     }
     try:
-        response = safe_request(
-            'POST', url, validator=_validate_twitch_url,
-            data=params, timeout=15,
-        )
+        with requests.Session() as session:
+            response = safe_request_limited(
+                'POST', url, validator=_validate_twitch_url,
+                max_response_bytes=MAX_TWITCH_TOKEN_RESPONSE_BYTES, session=session,
+                data=params, timeout=15,
+            )
     except requests.RequestException:
         # Keep transport exception text out of the request-level traceback log.
         print('Failed to obtain access token')

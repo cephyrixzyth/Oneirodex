@@ -175,7 +175,7 @@ def check_favorite(game_uuid):
     if not game:
         return api_error('Game not found', code='not_found')
     if not user_can_access_game(current_user, game):
-        return api_error('Forbidden', code='forbidden')
+        return api_error('Game not found', code='not_found')
     is_favorite = game in current_user.favorites
     return jsonify({'is_favorite': is_favorite})
 
@@ -187,7 +187,7 @@ def toggle_favorite(game_uuid):
     if not game:
         return api_error('Game not found', code='not_found')
     if not user_can_access_game(current_user, game):
-        return api_error('Forbidden', code='forbidden')
+        return api_error('Game not found', code='not_found')
     
     if game in current_user.favorites:
         current_user.favorites.remove(game)

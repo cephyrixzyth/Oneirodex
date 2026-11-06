@@ -4825,7 +4825,8 @@ def test_native_vr_profile_routes_keep_librarian_csrf_and_validation(monkeypatch
 @pytest.mark.parametrize(
     ('path', 'method', 'expected'),
     [('/api/check_favorite/missing', 'GET', 'Game not found'),
-     ('/api/check_favorite/blocked', 'GET', 'Forbidden'),
+     ('/api/check_favorite/blocked', 'GET', 'Game not found'),
+     ('/api/toggle_favorite/blocked', 'POST', 'Game not found'),
      ('/api/get_game_status/blocked', 'GET', 'Game not found'),
      ('/api/set_game_status/game-a', 'POST', 'Invalid status value')],
 )

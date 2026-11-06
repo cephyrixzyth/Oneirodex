@@ -141,7 +141,7 @@ def create_member_game_state_router(
                 if game is None:
                     response = _api_error('Game not found', 'not_found')
                 elif not data.can_access(auth.user, game):
-                    response = _api_error('Forbidden', 'forbidden')
+                    response = _api_error('Game not found', 'not_found')
                 else:
                     from starlette.responses import JSONResponse
 
@@ -160,7 +160,7 @@ def create_member_game_state_router(
                 if game is None:
                     response = _api_error('Game not found', 'not_found')
                 elif not data.can_access(auth.user, game):
-                    response = _api_error('Forbidden', 'forbidden')
+                    response = _api_error('Game not found', 'not_found')
                 else:
                     from starlette.responses import JSONResponse
 

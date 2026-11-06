@@ -242,6 +242,29 @@ class TestCheckFavoriteEndpoint:
         
         data = json.loads(response.data)
         assert data['is_favorite'] is False
+
+    def test_check_favorite_hides_child_inaccessible_game(
+        self, client, db_session, sample_game,
+    ):
+        from oneirodex.utils.library_acl import set_user_library_allowlist
+
+        child = User(
+            name=f'fav-child-{uuid4().hex[:8]}',
+            email=f'fav-child-{uuid4().hex[:8]}@example.com',
+            password_hash='unused', role='child', user_id=str(uuid4()),
+            avatarpath='newstyle/avatar_default.jpg', state=True,
+        )
+        db_session.add(child)
+        db_session.commit()
+        set_user_library_allowlist(child.id, [])
+        db_session.commit()
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(child.id)
+            sess['_fresh'] = True
+
+        response = client.get(f'/api/check_favorite/{sample_game.uuid}')
+        assert response.status_code == 404
+        assert response.get_json()['error'] == 'Game not found'
     
     def test_check_favorite_is_favorited(self, client, regular_user, sample_game, db_session):
         """Test check_favorite when game is in user's favorites."""
@@ -281,6 +304,31 @@ class TestToggleFavoriteEndpoint:
         data = json.loads(response.data)
         assert 'error' in data
         assert data['error'] == 'Game not found'
+
+    def test_toggle_favorite_hides_child_inaccessible_game(
+        self, client, db_session, sample_game,
+    ):
+        from oneirodex.utils.library_acl import set_user_library_allowlist
+
+        child = User(
+            name=f'fav-child-{uuid4().hex[:8]}',
+            email=f'fav-child-{uuid4().hex[:8]}@example.com',
+            password_hash='unused', role='child', user_id=str(uuid4()),
+            avatarpath='newstyle/avatar_default.jpg', state=True,
+        )
+        db_session.add(child)
+        db_session.commit()
+        set_user_library_allowlist(child.id, [])
+        db_session.commit()
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(child.id)
+            sess['_fresh'] = True
+
+        response = client.post(f'/api/toggle_favorite/{sample_game.uuid}')
+        assert response.status_code == 404
+        assert response.get_json()['error'] == 'Game not found'
+        db_session.refresh(child)
+        assert sample_game not in child.favorites
     
     def test_toggle_favorite_add_to_favorites(self, client, regular_user, sample_game, db_session):
         """Test toggle_favorite adding a game to favorites."""
