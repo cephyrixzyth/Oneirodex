@@ -11300,7 +11300,7 @@ def test_lazy_asgi_dispatches_support_ticket_reads_natively(monkeypatch):
 
 def test_lazy_asgi_dispatches_theme_font_catalogue_natively(monkeypatch):
     data = SimpleNamespace(catalogue=lambda: {
-        'fonts': [{'id': 'fixture'}], 'platform_hints': {}, 'fonts_dir': '/fonts', 'note': 'fixture',
+        'fonts': [{'id': 'fixture'}], 'platform_hints': {}, 'note': 'fixture',
     })
     monkeypatch.setattr(native_theme_fonts_read, 'ThemeFontsData', lambda *_args: data)
     flask_app, runtime = _runtime(monkeypatch)
@@ -11309,6 +11309,7 @@ def test_lazy_asgi_dispatches_theme_font_catalogue_natively(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['fonts'][0]['id'] == 'fixture'
+    assert 'fonts_dir' not in response.json()
 
 
 def test_lazy_asgi_dispatches_admin_provider_catalogs_natively(monkeypatch):

@@ -675,11 +675,11 @@ The native library-tools write slice now covers rename preview, proposal approva
 
 Admin library creation, batch scans, and batch deletion now use FastAPI routes with explicit admin/token authorization, CSRF checks, caps and typed deletion confirmation. Durable database, image, scan and deletion-job work remains behind adapters while route parity is established.
 
-Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font inventory keeps its existing `fonts_dir` response field pending later exposure review.
+Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font catalogue returns font metadata without disclosing the configured server filesystem path; custom-font placement remains an administrator task.
 
 A source-level API route comparison is maintained as an estimate only: it cannot establish that each FastAPI router is mounted behind the correct ASGI method gate or that behavior matches. Runtime dispatch checks remain necessary for each migrated family.
 
-Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The server-local path fields remain for parity and need review in the planned security scrub.
+Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The patch-catalog registry's `catalog_path` field remains for parity and needs a separate exposure review.
 
 Artwork-provider searches and the admin artwork-apply action now dispatch through native FastAPI routes. Artwork writes retain signed-session CSRF and admin/token-scope checks, bounded input validation, provider and image-kind restrictions, and the existing artwork service behind an adapter. Launcher import writes are also native and remain upload-bounded and feature-gated. Flask startup and ORM ownership remain active while semantic parity and dependency retirement continue.
 

@@ -266,7 +266,6 @@ def theme_fonts_list():
     from oneirodex.utils.theme_fonts import (
         PLATFORM_FONT_HINTS,
         available_fonts,
-        fonts_dir,
     )
 
     catalogue = available_fonts()
@@ -276,11 +275,10 @@ def theme_fonts_list():
             for key, entry in sorted(catalogue.items())
         ],
         'platform_hints': PLATFORM_FONT_HINTS,
-        'fonts_dir': fonts_dir(),
         'note': (
             'Console manufacturers\' typefaces are not bundled — these are '
-            'OFL/public-domain faces chosen to evoke each era. Drop your own '
-            'licensed fonts in fonts_dir to have them offered here.'
+            'OFL/public-domain faces chosen to evoke each era. Custom licensed '
+            'fonts are managed by your server administrator.'
         ),
     })
 

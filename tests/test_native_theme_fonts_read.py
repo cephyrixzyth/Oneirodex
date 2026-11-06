@@ -23,7 +23,6 @@ class FakeFonts:
         return {
             'fonts': [{'id': 'system-ui', 'label': 'System UI', 'installed': True}],
             'platform_hints': {'NES': 'press-start'},
-            'fonts_dir': '/fonts',
             'note': 'Operator fonts are supported.',
         }
 
@@ -75,7 +74,7 @@ def test_theme_font_catalogue_preserves_member_payload_and_head_contract():
         {'id': 'system-ui', 'label': 'System UI', 'installed': True},
     ]
     assert payload['platform_hints'] == {'NES': 'press-start'}
-    assert payload['fonts_dir'] == '/fonts'
+    assert 'fonts_dir' not in payload
     assert head.status_code == 200 and head.content == b''
     assert head.headers['content-length'] == str(len(get.content))
     assert data.calls == 2
@@ -97,4 +96,5 @@ def test_theme_font_catalogue_data_uses_explicit_path_without_flask_context(monk
     assert payload['fonts'] == [
         {'id': 'system-ui', 'label': 'System UI', 'stack': 'sans-serif'},
     ]
-    assert payload['fonts_dir'] == str(tmp_path)
+    assert 'fonts_dir' not in payload
+    assert str(tmp_path) not in repr(payload)
