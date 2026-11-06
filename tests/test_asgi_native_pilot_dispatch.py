@@ -1851,7 +1851,7 @@ def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch,
     get_response, head_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.headers['content-type'] == 'text/css; charset=utf-8'
-    assert get_response.headers['cache-control'] == 'public, max-age=60'
+    assert get_response.headers['cache-control'] == 'private, max-age=60'
     assert "font-family: 'Cabinet-Test'" in get_response.text
     assert '/static/library/fonts/Cabinet-Test.woff2' in get_response.text
     assert '--od-font-family: "Cabinet-Test", sans-serif' in get_response.text
@@ -1890,8 +1890,10 @@ def test_credentialed_theme_font_request_uses_native_user_preference(monkeypatch
 
     response, override = asyncio.run(run())
     assert response.status_code == 200
+    assert response.headers['cache-control'] == 'private, max-age=60'
     assert '"VT323", "Courier New", monospace' in response.text
     assert '"Orbitron", "Arial Black", sans-serif' in override.text
+    assert override.headers['cache-control'] == 'private, max-age=60'
 
 
 def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monkeypatch, tmp_path):

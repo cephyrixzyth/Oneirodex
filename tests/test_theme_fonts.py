@@ -144,6 +144,7 @@ class TestFontsCssRoute:
 
         assert response.status_code == 200
         assert response.headers['Content-Type'].startswith('text/css')
+        assert response.headers['Cache-Control'] == 'private, max-age=60'
         body = response.get_data(as_text=True)
         assert '--od-font-family:' in body
         assert BUILT_IN_FONTS[DEFAULT_FONT_ID]['stack'] in body
@@ -156,6 +157,7 @@ class TestFontsCssRoute:
         response = client.get('/api/theme/fonts.css')
 
         assert response.status_code == 200
+        assert response.headers['Cache-Control'] == 'private, max-age=60'
         body = response.get_data(as_text=True)
         assert BUILT_IN_FONTS['vt323']['stack'] in body
 
@@ -178,3 +180,24 @@ class TestFontsCssRoute:
 
         assert '@font-face' in body
         assert "src: url('/static/library/fonts/VT323-Regular.ttf')" in body
+
+
+def test_legacy_font_stylesheet_is_private_without_database(monkeypatch):
+    from flask import Flask
+    from flask_login import LoginManager
+
+    from oneirodex.routes_apis.providers import theme_fonts_css
+    from oneirodex.utils import theme_fonts
+
+    monkeypatch.setattr(theme_fonts, 'font_face_css', lambda: '')
+    app = Flask(__name__)
+    app.config.update(SECRET_KEY='legacy-font-cache-test')
+    login_manager = LoginManager()
+    login_manager.user_loader(lambda _user_id: None)
+    login_manager.init_app(app)
+    app.add_url_rule('/api/theme/fonts.css', view_func=theme_fonts_css)
+
+    response = app.test_client().get('/api/theme/fonts.css')
+
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'private, max-age=60'

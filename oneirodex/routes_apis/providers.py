@@ -320,5 +320,6 @@ def theme_fonts_css():
     response = make_response(css)
     response.headers['Content-Type'] = 'text/css; charset=utf-8'
     # Short cache: a font upload or preference change should show up promptly.
-    response.headers['Cache-Control'] = 'public, max-age=60'
+    # The default stylesheet varies by the signed-in user's preference.
+    response.headers['Cache-Control'] = 'private, max-age=60'
     return response
