@@ -18,6 +18,7 @@ from oneirodex.utils.indexer_registry import (
     enable_presets,
     list_indexers,
     load_indexer_presets,
+    normalize_indexer,
     presets_path,
 )
 
@@ -49,6 +50,66 @@ class _FakeResp:
     def json(self):
         import json
         return json.loads(self.text)
+
+
+def test_native_indexer_http_is_rejected_at_save_and_use(monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.security.is_blocked_outbound_host', lambda *_a, **_k: False)
+    with pytest.raises(ValueError, match='scheme not allowed'):
+        normalize_indexer({
+            'name': 'Plaintext',
+            'protocol': 'torznab',
+            'url': 'http://indexer.example/api',
+            'api_key': 'synthetic-key',
+        })
+
+    calls = []
+    monkeypatch.setattr(
+        arr_connectors, 'fetch_with_challenge_retry',
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    with pytest.raises(ValueError, match='scheme not allowed'):
+        arr_connectors._search_native_indexer(
+            {'name': 'Legacy plaintext', 'url': 'http://indexer.example/api', 'api_key': 'synthetic-key'},
+            'Doom', limit=5,
+        )
+    assert calls == []
+    assert arr_connectors._never_lan_indexer_url('http://indexer.example/api')[0] is False
+    assert arr_connectors._never_lan_indexer_url('https://indexer.example/api')[0] is True
+
+
+def test_native_indexer_redirect_to_http_is_rejected(monkeypatch):
+    from types import SimpleNamespace
+
+    from oneirodex.utils import http_safe
+
+    monkeypatch.setattr('oneirodex.utils.security.is_blocked_outbound_host', lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        http_safe, '_plan_hop',
+        lambda url, _validator, _rules, _explicit: (url, None, None),
+    )
+
+    class RedirectingCaller:
+        def __init__(self):
+            self.calls = []
+
+        def request(self, method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            return SimpleNamespace(
+                is_redirect=True,
+                status_code=302,
+                headers={'Location': 'http://indexer.example/api'},
+            )
+
+    caller = RedirectingCaller()
+    with pytest.raises(http_safe.BlockedOutboundUrl, match='scheme not allowed'):
+        http_safe.safe_request(
+            'GET',
+            'https://indexer.example/api',
+            validator=arr_connectors._never_lan_indexer_url,
+            session=caller,
+        )
+
+    assert len(caller.calls) == 1
 
 
 @pytest.fixture
