@@ -679,7 +679,7 @@ Manual-identify preview/queue, support-ticket list/detail reads, and the theme-f
 
 A source-level API route comparison is maintained as an estimate only: it cannot establish that each FastAPI router is mounted behind the correct ASGI method gate or that behavior matches. Runtime dispatch checks remain necessary for each migrated family.
 
-Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The patch-catalog registry's `catalog_path` field remains for parity and needs a separate exposure review.
+Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The patch-catalog registry keeps its `catalog_path` field for parity; the route requires an admin session and an admin-scoped token, so this field is limited to trusted administrators.
 
 Artwork-provider searches and the admin artwork-apply action now dispatch through native FastAPI routes. Artwork writes retain signed-session CSRF and admin/token-scope checks, bounded input validation, provider and image-kind restrictions, and the existing artwork service behind an adapter. Launcher import writes are also native and remain upload-bounded and feature-gated. Flask startup and ORM ownership remain active while semantic parity and dependency retirement continue.
 
