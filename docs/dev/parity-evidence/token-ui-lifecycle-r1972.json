@@ -1,0 +1,75 @@
+{
+  "review_id": "R1972",
+  "scope": "Exact-image token lifecycle in the signed-in account panel at 390x844.",
+  "images": {
+    "legacy_v1_1_8": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "sha256": "19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "source_revision": "00b0bf2ab06b531938476d9d765c4c4e99a706b3",
+      "sha256": "17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1"
+    }
+  },
+  "environment": {
+    "headless_browser": true,
+    "external_egress_blocked": true,
+    "provider_calls": false,
+    "source_database_written_by_harness": false,
+    "per_image_database_clone": true,
+    "one_time_secret_persisted": false,
+    "production_or_unraid": false,
+    "cleanup_passed": true
+  },
+  "lifecycle_results": {
+    "legacy_v1_1_8": {
+      "page_status": 200,
+      "create_status": 201,
+      "secret_shown_once_and_format_valid": true,
+      "copy_succeeded": true,
+      "done_cleared_secret": true,
+      "thin_scope_persisted": true,
+      "revoke_confirmation_dialog_count": 0,
+      "revoke_status": 200,
+      "database_row_revoked": true,
+      "revoked_token_still_listed_in_account_panel": true,
+      "revoked_token_count_in_api_list": 1,
+      "page_errors": []
+    },
+    "current": {
+      "page_status": 200,
+      "create_status": 201,
+      "secret_shown_once_and_format_valid": true,
+      "copy_succeeded": true,
+      "done_cleared_secret": true,
+      "thin_scope_persisted": true,
+      "revoke_confirmation_dialog_count": 0,
+      "revoke_status": 200,
+      "database_row_revoked": true,
+      "revoked_token_still_listed_in_account_panel": true,
+      "revoked_token_count_in_api_list": 1,
+      "page_errors": []
+    },
+    "lifecycle_outcomes_match": true
+  },
+  "ui_differences": {
+    "mobile_navigation_rail": {
+      "legacy": "Visible over page content.",
+      "current": "Hidden off-canvas and aria-hidden.",
+      "owner_disposition": "Keep current behavior, approved 2026-11-06."
+    },
+    "account_dialog_size": {
+      "legacy_css_pixels": {
+        "width": 358,
+        "height": 484
+      },
+      "current_css_pixels": {
+        "width": 390,
+        "height": 844
+      },
+      "owner_disposition": "Pending independent review."
+    }
+  },
+  "parity_status": "Partial: lifecycle outcomes match; mobile dialog sizing remains an undisposed UI difference and other route states are unverified."
+}
