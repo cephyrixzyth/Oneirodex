@@ -211,6 +211,32 @@ test('surfaces a failed create request to the user', async () => {
   ).toBeInTheDocument()
 })
 
+test('explains when a whitespace-only title request is submitted', async () => {
+  const user = userEvent.setup()
+  vi.mocked(global.fetch).mockReturnValue(jsonResponse({ requests: [] }))
+
+  render(
+    <ShellHarness shell={{}}>
+      <WishlistPage />
+    </ShellHarness>,
+  )
+
+  await screen.findByText(
+    'No requests yet. Add a title above and your librarians will take a look.',
+  )
+  await user.type(screen.getByLabelText('Title'), '   ')
+  await user.click(screen.getByRole('button', { name: 'Request', exact: true }))
+
+  expect(
+    vi
+      .mocked(global.fetch)
+      .mock.calls.filter((call: any) => call[0] === '/api/requests' && call[1]?.method === 'POST'),
+  ).toHaveLength(0)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Enter a title before sending your request.',
+  )
+})
+
 test('new chrome moves the request form and the librarian toggle into bar two', async () => {
   const user = userEvent.setup()
   vi.mocked(global.fetch).mockReturnValue(jsonResponse({ requests: [] }))
