@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ScanControlsPage } from './ScanControlsPage'
 import { getJson, postJson } from '../api/adminApi'
@@ -115,6 +115,37 @@ test('automatic scan workspace includes manual identification alongside scan con
     'href',
     '/libraries',
   )
+})
+
+test('manual deep link scrolls after scan controls finish loading', async () => {
+  let resolveLibraries!: (value: unknown) => void
+  let resolveRoots!: (value: unknown) => void
+  const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+  const scrollIntoView = vi.fn()
+  HTMLElement.prototype.scrollIntoView = scrollIntoView
+  vi.mocked(getJson).mockImplementation((url) => {
+    if (url === '/api/get_libraries') return new Promise((resolve) => (resolveLibraries = resolve))
+    if (url === '/api/library_roots') return new Promise((resolve) => (resolveRoots = resolve))
+    return Promise.resolve({ games: [] })
+  })
+
+  try {
+    renderPage('/scan_management?active_tab=manual')
+    expect(await screen.findByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveLibraries([])
+      resolveRoots({ roots: [] })
+    })
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'smooth',
+    }))
+  } finally {
+    HTMLElement.prototype.scrollIntoView = originalScrollIntoView
+  }
 })
 
 test('hides first-library onboarding once a library is available', async () => {

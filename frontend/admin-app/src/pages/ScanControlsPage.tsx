@@ -90,6 +90,10 @@ export function ScanControlsPage() {
     browseParts,
   } = useScanControls()
   useEffect(() => {
+    // Wait for the scan controls data to settle before scrolling. The admin
+    // shell is its own scroll container; while the loading state is active its
+    // maximum scroll range is too short to bring Manual Identify into view.
+    if (loading) return
     const sectionId = hash.slice(1) || (activeTab === 'manual' ? 'manual-identify' : '')
     if (!['automatic-scan', 'manual-identify'].includes(sectionId)) return
     const target = document.getElementById(sectionId)
@@ -103,7 +107,7 @@ export function ScanControlsPage() {
       target.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [activeTab, hash])
+  }, [activeTab, hash, loading])
 
   return (
     <Page
