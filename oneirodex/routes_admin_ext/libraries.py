@@ -18,7 +18,6 @@ from oneirodex.utils.image_upload_limits import (
 )
 from PIL import Image as PILImage
 from uuid import uuid4
-from werkzeug.utils import secure_filename
 import os
 import base64
 from . import admin2_bp
@@ -55,7 +54,6 @@ def _process_library_image(file, library):
     if not os.path.exists(upload_folder):
         os.makedirs(upload_folder, exist_ok=True)
 
-    filename = secure_filename(file.filename)
     uuid_filename = str(uuid4()) + '.png'  # Always save as PNG
     image_folder = os.path.join(upload_folder, 'images')
     if not os.path.exists(image_folder):
