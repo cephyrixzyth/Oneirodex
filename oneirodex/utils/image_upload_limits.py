@@ -93,6 +93,30 @@ def library_image_header_error(image) -> str | None:
     return None
 
 
+def normalize_library_image(content: bytes) -> bytes:
+    """Decode a bounded library image and return normalized PNG bytes."""
+    if len(content) > LIBRARY_IMAGE_MAX_BYTES:
+        raise ValueError('Library image must be 10 MB or smaller.')
+
+    from PIL import Image as PILImage
+
+    with image_decode_work_slot():
+        with PILImage.open(BytesIO(content)) as opened:
+            error = library_image_header_error(opened)
+            if error:
+                raise ValueError(error)
+            image = opened.convert('RGBA')
+            output = BytesIO()
+            try:
+                if image.width > 1024 or image.height > 1024:
+                    image.thumbnail((1024, 1024), PILImage.LANCZOS)
+                image.save(output, format='PNG')
+                return output.getvalue()
+            finally:
+                image.close()
+                output.close()
+
+
 def game_image_header_error(image) -> str | None:
     """Validate game artwork from the decoder header, independent of filename."""
     image_format = str(getattr(image, 'format', '') or '').upper()

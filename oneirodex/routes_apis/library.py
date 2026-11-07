@@ -25,7 +25,8 @@ from oneirodex.utils.library_watch import (
 from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
-    library_image_header_error,
+    ImageWorkBusy,
+    normalize_library_image,
 )
 from oneirodex.utils.rbac import is_librarian
 from sqlalchemy import func, select
@@ -69,19 +70,16 @@ def create_library():
         if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
-            with PILImage.open(image.stream) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    return api_error(error, code='bad_request')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_image_path = os.path.join(image_dir, image_name)
-                converted.save(saved_image_path, 'PNG')
-                image_url = url_for('static', filename=f'library/images/{image_name}')
+            normalized = normalize_library_image(image.stream.read(LIBRARY_IMAGE_MAX_BYTES + 1))
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_image_path = os.path.join(image_dir, image_name)
+            with open(saved_image_path, 'xb') as output:
+                output.write(normalized)
+            image_url = url_for('static', filename=f'library/images/{image_name}')
+        except ImageWorkBusy:
+            return api_error('Image processing is busy. Try again shortly.', code='unavailable')
         except (UnidentifiedImageError, OSError, ValueError):
             if saved_image_path and os.path.exists(saved_image_path):
                 os.remove(saved_image_path)
@@ -220,19 +218,16 @@ def admin_library_detail(library_uuid):
         if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
-            with PILImage.open(image.stream) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    return api_error(error, code='bad_request')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_image_path = os.path.join(image_dir, image_name)
-                converted.save(saved_image_path, 'PNG')
-                image_url = url_for('static', filename=f'library/images/{image_name}')
+            normalized = normalize_library_image(image.stream.read(LIBRARY_IMAGE_MAX_BYTES + 1))
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_image_path = os.path.join(image_dir, image_name)
+            with open(saved_image_path, 'xb') as output:
+                output.write(normalized)
+            image_url = url_for('static', filename=f'library/images/{image_name}')
+        except ImageWorkBusy:
+            return api_error('Image processing is busy. Try again shortly.', code='unavailable')
         except (UnidentifiedImageError, OSError, ValueError):
             if saved_image_path and os.path.exists(saved_image_path):
                 os.remove(saved_image_path)

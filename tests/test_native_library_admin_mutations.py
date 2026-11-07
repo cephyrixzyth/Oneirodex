@@ -49,15 +49,26 @@ class FakeLibraryAdminMutations:
             LIBRARY_UUID: SimpleNamespace(uuid=LIBRARY_UUID, name='Library One', last_scan_folder='/safe/root/one'),
         }
         self.calls = []
+        self.adapter_had_running_loop = None
+
+    def _record_worker_context(self):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.adapter_had_running_loop = False
+        else:
+            self.adapter_had_running_loop = True
 
     def library(self, library_uuid):
         return self.items.get(library_uuid)
 
     def create(self, **values):
+        self._record_worker_context()
         self.calls.append(('create', values))
         return {'library_uuid': 'new-lib', 'name': values['name']}
 
     def update(self, library, **values):
+        self._record_worker_context()
         self.calls.append(('update', library.uuid, values))
         return {
             'uuid': library.uuid, 'name': values['name'],
@@ -186,6 +197,7 @@ def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
     assert data.calls[0][1]['name'] == 'New Library'
     assert data.calls[0][1]['scan_depth'] == 2
     assert data.calls[0][1]['watch_enabled'] is False
+    assert data.adapter_had_running_loop is False
 
 
 @pytest.mark.parametrize(

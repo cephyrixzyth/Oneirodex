@@ -13,14 +13,14 @@ from oneirodex.utils.validation import validate_body
 from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
     LIBRARY_PREVIEW_MAX_BODY_BYTES,
-    library_image_header_error,
+    ImageWorkBusy,
+    normalize_library_image,
 )
 from PIL import Image as PILImage
 from uuid import uuid4
 from werkzeug.utils import secure_filename
 import os
 import base64
-import io
 from . import admin2_bp
 
 
@@ -52,38 +52,33 @@ def _process_library_image(file, library):
     file.seek(0)
 
     upload_folder = current_app.config['UPLOAD_FOLDER']
-    print(f"Upload folder now: {upload_folder}")
     if not os.path.exists(upload_folder):
         os.makedirs(upload_folder, exist_ok=True)
 
     filename = secure_filename(file.filename)
     uuid_filename = str(uuid4()) + '.png'  # Always save as PNG
     image_folder = os.path.join(upload_folder, 'images')
-    print(f"Image folder: {image_folder}")
     if not os.path.exists(image_folder):
         os.makedirs(image_folder, exist_ok=True)
     image_path = os.path.join(image_folder, uuid_filename)
-    print(f"Image path: {image_path}")
 
-    # Sniff the actual format and dimensions before any pixel conversion. The
-    # filename suffix does not select a decoder; output is always normalized PNG.
+    # The filename suffix does not select a decoder; output is always normalized PNG.
     try:
-        with PILImage.open(file) as opened:
-            error = library_image_header_error(opened)
-            if error:
-                flash(error, 'error')
-                return False
-            img = opened.convert('RGBA')
-            if img.width > 1024 or img.height > 1024:
-                img.thumbnail((1024, 1024), PILImage.LANCZOS)
-            img.save(image_path, 'PNG')
+        normalized = normalize_library_image(file.read(LIBRARY_IMAGE_MAX_BYTES + 1))
+        with open(image_path, 'xb') as output:
+            output.write(normalized)
+    except ImageWorkBusy:
+        flash('Image processing is busy. Try again shortly.', 'error')
+        return False
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return False
     except (PILImage.UnidentifiedImageError, PILImage.DecompressionBombError,
             OSError, SyntaxError, ValueError):
         flash('The library image could not be read safely.', 'error')
         return False
 
     image_url = url_for('static', filename=os.path.join('library/images/', uuid_filename))
-    print(f"Image URL: {image_url}")
     library.image_url = image_url
     return True
 
@@ -217,29 +212,18 @@ def preview_cropped_image(body: PreviewCroppedImageBody):
             return api_error('Library image must be 10 MB or smaller.', code='payload_too_large')
 
         # Process image
-        with PILImage.open(io.BytesIO(image_bytes)) as img:
-            error = library_image_header_error(img)
-            if error:
-                return api_error(error, code='bad_request')
-            img = img.convert('RGBA')
+        normalized = normalize_library_image(image_bytes)
+        processed_image_data = base64.b64encode(normalized).decode()
+        preview_url = f"data:image/png;base64,{processed_image_data}"
 
-            # Resize if necessary (same logic as _process_library_image)
-            if img.width > 1024 or img.height > 1024:
-                img.thumbnail((1024, 1024), PILImage.LANCZOS)
+        return api_ok({
+            'status': 'success',
+            'preview_url': preview_url,
+            'message': 'Image processed successfully',
+        })
 
-            # Convert back to base64 for preview
-            output_buffer = io.BytesIO()
-            img.save(output_buffer, 'PNG')
-            output_buffer.seek(0)
-
-            processed_image_data = base64.b64encode(output_buffer.getvalue()).decode()
-            preview_url = f"data:image/png;base64,{processed_image_data}"
-
-            return api_ok({
-                'status': 'success',
-                'preview_url': preview_url,
-                'message': 'Image processed successfully',
-            })
+    except ImageWorkBusy:
+        return api_error('Image processing is busy. Try again shortly.', code='unavailable')
 
     except (ValueError, PILImage.UnidentifiedImageError, PILImage.DecompressionBombError,
             OSError, SyntaxError):

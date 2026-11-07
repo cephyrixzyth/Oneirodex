@@ -25,7 +25,9 @@ from .query_compat import first_query_value
 from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
     LIBRARY_PREVIEW_MAX_BODY_BYTES,
+    ImageWorkBusy,
     library_image_header_error,
+    normalize_library_image,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,8 +37,6 @@ class LibraryAdminMutationData:
     """Production adapter; tests replace it to prevent every real side effect."""
 
     def preview_image(self, image_data: str) -> str:
-        from PIL import Image as PILImage
-
         if image_data.startswith('data:image'):
             image_data = image_data.split(',', 1)[1]
         max_encoded_bytes = ((LIBRARY_IMAGE_MAX_BYTES + 2) // 3) * 4
@@ -48,16 +48,8 @@ class LibraryAdminMutationData:
             raise ValueError('The library image data is invalid.') from exc
         if len(image_bytes) > LIBRARY_IMAGE_MAX_BYTES:
             raise ValueError('Library image must be 10 MB or smaller.')
-        with PILImage.open(BytesIO(image_bytes)) as opened:
-            error = library_image_header_error(opened)
-            if error:
-                raise ValueError(error)
-            image = opened.convert('RGBA')
-            if image.width > 1024 or image.height > 1024:
-                image.thumbnail((1024, 1024), PILImage.LANCZOS)
-            output = BytesIO()
-            image.save(output, 'PNG')
-            return 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode()
+        normalized = normalize_library_image(image_bytes)
+        return 'data:image/png;base64,' + base64.b64encode(normalized).decode()
 
     def library(self, library_uuid: str):
         from sqlalchemy import select
@@ -69,8 +61,6 @@ class LibraryAdminMutationData:
 
     def create(self, *, name: str, platform, scan_depth: int, watch_enabled,
                image_bytes: bytes | None, user, config, root_path: str = ''):
-        from PIL import Image as PILImage
-
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Library
         from oneirodex.utils.event_logging import log_system_event
@@ -78,19 +68,14 @@ class LibraryAdminMutationData:
         image_url = _static_url('newstyle/default_library.jpg', root_path)
         saved_path = None
         if image_bytes:
-            with PILImage.open(BytesIO(image_bytes)) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    raise ValueError(error)
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_path = os.path.join(image_dir, image_name)
-                converted.save(saved_path, 'PNG')
-                image_url = _static_url(f'library/images/{image_name}', root_path)
+            normalized = normalize_library_image(image_bytes)
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_path = os.path.join(image_dir, image_name)
+            with open(saved_path, 'xb') as image_file:
+                image_file.write(normalized)
+            image_url = _static_url(f'library/images/{image_name}', root_path)
 
         library = Library(
             uuid=str(uuid4()), name=name, platform=platform, scan_depth=scan_depth,
@@ -112,28 +97,21 @@ class LibraryAdminMutationData:
 
     def update(self, library, *, name: str, platform, scan_depth: int,
                watch_enabled, image, app, user):
-        from PIL import Image as PILImage
-
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.runtime_native.library_reads import LibraryReadData
         from oneirodex.utils.event_logging import log_system_event
 
         saved_path = None
         if image:
-            filename, content = image
-            with PILImage.open(BytesIO(content)) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    raise ValueError(error)
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_path = os.path.join(image_dir, image_name)
-                converted.save(saved_path, 'PNG')
-                library.image_url = f'/static/library/images/{image_name}'
+            _, content = image
+            normalized = normalize_library_image(content)
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_path = os.path.join(image_dir, image_name)
+            with open(saved_path, 'xb') as image_file:
+                image_file.write(normalized)
+            library.image_url = f'/static/library/images/{image_name}'
         library.name = name
         library.platform = platform
         library.scan_depth = scan_depth
@@ -555,8 +533,10 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     response_status = 500
                             if message is None:
                                 try:
+                                    from starlette.concurrency import run_in_threadpool
+
                                     if action == 'create':
-                                        data.create(
+                                        await run_in_threadpool(data.create,
                                             name=name, platform=platform, scan_depth=depth,
                                             watch_enabled=watch, image_bytes=image,
                                             user=auth.user, config=app.config,
@@ -575,7 +555,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                                 status_code=404,
                                             )
                                         else:
-                                            data.update(
+                                            await run_in_threadpool(data.update,
                                                 library, name=name, platform=platform,
                                                 scan_depth=depth, watch_enabled=watch,
                                                 image=(filename, image) if image is not None else None,
@@ -583,6 +563,12 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                             )
                                     if message is None and response is None:
                                         message, category = 'Library saved successfully!', 'success'
+                                except ImageWorkBusy:
+                                    from oneirodex.runtime_native.db_session import native_db as db
+
+                                    db.session.rollback()
+                                    message = 'Image processing is busy. Try again shortly.'
+                                    response_status = 503
                                 except Exception:
                                     from oneirodex.runtime_native.db_session import native_db as db
 
@@ -774,7 +760,11 @@ async def _preview_cropped_image(request, data):
         )
         return JSONResponse(payload, status_code=status)
     try:
-        preview_url = data.preview_image(model.image_data)
+        from starlette.concurrency import run_in_threadpool
+
+        preview_url = await run_in_threadpool(data.preview_image, model.image_data)
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:
         return _error('Failed to process image', 'internal', 500)
     return JSONResponse(api_ok_payload({
@@ -817,10 +807,14 @@ async def _create(request, app, data, user):
         except (UnidentifiedImageError, OSError, ValueError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        result = data.create(name=name, platform=platform, scan_depth=depth,
+        from starlette.concurrency import run_in_threadpool
+
+        result = await run_in_threadpool(data.create, name=name, platform=platform, scan_depth=depth,
                              watch_enabled=watch, image_bytes=image[1] if image else None,
                              user=user, config=app.config,
                              root_path=request.scope.get('root_path', ''))
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:  # noqa: BLE001 — do not expose storage/database details
         return _error('Library could not be created.', 'internal', 500)
     from oneirodex.utils.api_contract import api_ok_payload
@@ -860,10 +854,14 @@ async def _update(request, app, data, user, library_uuid):
         except (UnidentifiedImageError, OSError, ValueError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        result = data.update(
+        from starlette.concurrency import run_in_threadpool
+
+        result = await run_in_threadpool(data.update,
             library, name=name, platform=platform, scan_depth=depth,
             watch_enabled=watch, image=image, app=app, user=user,
         )
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:  # noqa: BLE001 — do not expose storage/database details
         return _error('Library could not be saved.', 'internal', 500)
     from oneirodex.utils.api_contract import api_ok_payload
