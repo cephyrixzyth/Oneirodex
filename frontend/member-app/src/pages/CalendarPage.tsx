@@ -91,6 +91,13 @@ export function monthLabel(year: any, monthIndex: any) {
   })
 }
 
+function shiftDateKey(dateKey: string | null, days: number) {
+  const date = parseReleaseDate(dateKey)
+  if (!date) return null
+  date.setDate(date.getDate() + days)
+  return toDateKey(date)
+}
+
 /** Build a 6×7 month grid; each cell is { dateKey, day, inMonth, releases }. */
 export function buildMonthCells(year: any, monthIndex: any, byDate: any) {
   const first = new Date(year, monthIndex, 1, 12)
@@ -212,7 +219,16 @@ function DayArt({ releases }: LooseProps) {
   )
 }
 
-function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason }: LooseProps) {
+function MonthView({
+  releases,
+  focusYear,
+  focusMonth,
+  onFocusChange,
+  emptyReason,
+  daysAhead = DEFAULT_AHEAD,
+  daysBehind = DEFAULT_BEHIND,
+  limit = 60,
+}: LooseProps) {
   const byDate = useMemo(() => indexByDate(releases), [releases])
   const cells = useMemo(
     () => buildMonthCells(focusYear, focusMonth, byDate),
@@ -225,15 +241,26 @@ function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason
   // was the one date this one did not — on a month with no releases there was
   // nothing at all to say where in the year you were standing.
   const todayKey = toDateKey(new Date())
+  const coverageStart = shiftDateKey(todayKey, -Number(daysBehind || 0))
+  const coverageEnd = shiftDateKey(todayKey, Number(daysAhead || 0))
+  const isInWindow = (dateKey: string | null) =>
+    Boolean(dateKey && coverageStart && coverageEnd && dateKey >= coverageStart && dateKey <= coverageEnd)
 
   useEffect(() => {
     const withReleases = cells.filter((c) => c.inMonth && c.releases.length > 0)
     const preferToday = withReleases.find((c) => c.dateKey === todayKey)
-    setSelectedKey(preferToday?.dateKey || withReleases[0]?.dateKey || null)
-  }, [focusYear, focusMonth, cells, todayKey])
+    const firstCovered = cells.find(
+      (c) => c.inMonth && c.dateKey && isInWindow(c.dateKey),
+    )
+    setSelectedKey(
+      preferToday?.dateKey || withReleases[0]?.dateKey ||
+      (!emptyReason ? firstCovered?.dateKey : null) || null,
+    )
+  }, [focusYear, focusMonth, cells, todayKey, coverageStart, coverageEnd, emptyReason])
 
   const selected = cells.find((c) => c.dateKey === selectedKey && c.inMonth)
   const selectedReleases = selected?.releases || []
+  const monthHasCoverage = cells.some((c) => c.inMonth && c.dateKey && isInWindow(c.dateKey))
 
   return (
     <div className="od-calendar__month">
@@ -274,6 +301,7 @@ function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason
         <div className="od-calendar__day-grid" role="rowgroup">
           {cells.map((cell) => {
             const count = cell.releases.length
+            const inWindow = cell.inMonth && isInWindow(cell.dateKey)
             const isSelected = cell.inMonth && cell.dateKey === selectedKey
             const isToday = cell.inMonth && cell.dateKey === todayKey
             return (
@@ -290,11 +318,12 @@ function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                disabled={!cell.inMonth}
+                disabled={!inWindow}
                 aria-label={
                   cell.inMonth
                     ? `${cell.day}${isToday ? ', today' : ''}${
-                        count ? `, ${count} release${count === 1 ? '' : 's'}` : ''
+                        !inWindow ? ', outside loaded window' :
+                          count ? `, ${count} release${count === 1 ? '' : 's'}` : ', no releases loaded'
                       }`
                     : undefined
                 }
@@ -321,13 +350,22 @@ function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason
       </div>
 
       <div className="od-calendar__day-panel" aria-live="polite">
-        {selected ? (
+        {!monthHasCoverage ? (
+          <p className="od-calendar__empty">
+            {monthLabel(focusYear, focusMonth)} is outside the loaded calendar window. Adjust the
+            Ahead or Behind setting to load dates in this month.
+          </p>
+        ) : selected ? (
           <>
             <h4 className="od-calendar__day-panel-title">
               {formatLocaleDate(selected.dateKey, { fallback: selected.dateKey })}
             </h4>
             {selectedReleases.length === 0 ? (
-              <p className="od-calendar__empty">No releases on this day.</p>
+              <p className="od-calendar__empty">
+                {emptyReason
+                  ? calendarEmptyMessage(emptyReason)
+                  : 'No releases loaded for this day.'}
+              </p>
             ) : (
               <ul className="od-calendar__day-list">
                 {selectedReleases.map((item: any, index: any) => (
@@ -347,6 +385,11 @@ function MonthView({ releases, focusYear, focusMonth, onFocusChange, emptyReason
           </p>
         )}
       </div>
+      {releases.length >= Number(limit) ? (
+        <p className="od-calendar__empty" role="note">
+          Showing up to {limit} releases in this window; the provider may have more.
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -500,6 +543,9 @@ export function CalendarPage() {
               <MonthView
                 releases={releases}
                 emptyReason={payload?.empty_reason}
+                daysAhead={payload?.days_ahead ?? daysAhead}
+                daysBehind={payload?.days_behind ?? daysBehind}
+                limit={payload?.limit ?? 60}
                 focusYear={focusYear}
                 focusMonth={focusMonth}
                 onFocusChange={(y: any, m: any) => {

@@ -168,6 +168,8 @@ test('month view renders a rotating cover tile per busy day', async () => {
   const user = userEvent.setup()
   vi.mocked(calendarApi.fetchCalendar).mockResolvedValue({
     count: 2,
+    days_ahead: 180,
+    days_behind: 90,
     releases: [
       {
         igdb_id: 1,
@@ -253,6 +255,54 @@ test('month view survives an empty window and explains why', async () => {
   // which is the whole point of threading empty_reason through.
   expect(screen.getByRole('heading', { level: 3 })).toBeInTheDocument()
   expect(screen.getAllByText(/IGDB is not set up/i).length).toBeGreaterThan(0)
+})
+
+test('month view labels dates beyond the fetched window as unknown', async () => {
+  const user = userEvent.setup()
+  vi.mocked(calendarApi.fetchCalendar).mockResolvedValue({
+    count: 0,
+    days_ahead: 30,
+    days_behind: 0,
+    limit: 60,
+    releases: [],
+  })
+  render(
+    <ShellHarness>
+      <CalendarPage />
+    </ShellHarness>,
+  )
+  await screen.findByText('No releases in this window.')
+  await user.click(screen.getByRole('button', { name: 'Month' }))
+  await user.click(screen.getByRole('button', { name: 'Previous month' }))
+
+  expect(screen.getByText(/is outside the loaded calendar window/i)).toBeInTheDocument()
+  const outsideDates = screen.getAllByRole('gridcell', { name: /outside loaded window/i })
+  expect(outsideDates.length).toBeGreaterThan(0)
+  expect(outsideDates[0]).toBeDisabled()
+})
+
+test('month view discloses when the provider result limit is reached', async () => {
+  const today = new Date()
+  const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  vi.mocked(calendarApi.fetchCalendar).mockResolvedValue({
+    count: 60,
+    days_ahead: 60,
+    days_behind: 14,
+    limit: 60,
+    releases: Array.from({ length: 60 }, (_, index) => ({
+      igdb_id: index + 1,
+      name: `Release ${index + 1}`,
+      first_release_date: date,
+    })),
+  })
+  render(
+    <ShellHarness>
+      <CalendarPage />
+    </ShellHarness>,
+  )
+  await screen.findByText('Release 1')
+  await userEvent.click(screen.getByRole('button', { name: 'Month' }))
+  expect(screen.getByRole('note')).toHaveTextContent(/provider may have more/i)
 })
 
 test('buildMonthCells indexes markers by date key', () => {
