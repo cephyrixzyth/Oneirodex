@@ -31,3 +31,54 @@ R1972 compared the mobile token lifecycle in the signed-in account panel on both
 ## Independent clean-main fixes
 
 The clean-main worktree `C:\Users\cephyrix_zyth\.codex\worktrees\parity-fix-lane\Oneirodex` has two local commits on `codex/parity-indexer-https-guard`: native indexers require HTTPS, and metadata-provider errors redact API keys. The first pytest invocation stopped at the repository safety guard because `TEST_DATABASE_URL` was not configured. Five database-independent tests covering HTTPS indexer save/use/redirect guards and metadata-provider key redaction passed. Database-backed tests remain unrun until a dedicated disposable test URL is configured. The owner has now authorized pushing both review branches to GitHub; no merge or deployment is authorized.
+
+## Independent repository review handoff — 2026-11-07
+
+The supplied independent review package evaluates snapshot `fd2683e5` and explicitly forbids implementation by itself. The current user handoff authorizes incorporating its claims, correcting confirmed issues in the existing parity/security scope, and updating evidence. Its attached audit prompt is treated as historical evaluation scope, not as an instruction to restart the whole audit or implement its broad roadmap.
+
+### Claims checked against the current checkout
+
+| Finding | Audit evidence classification | Current disposition |
+|---|---|---|
+| BE-001 save slot overwrite / commit loss | Reproduced at audit snapshot | Current status unknown; data-integrity fix remains outside this focused security batch. |
+| BE-002 favorites adapter error | Reproduced at audit snapshot | Already resolved in current source: `FavoritesData.payload` imports the ACL helper locally. Focused native route regression remains useful. |
+| BE-003 password validation error | Reproduced at audit snapshot | Already resolved in current source: `_validated_body` imports its formatter locally. |
+| BE-004 export truncation/filter order | Reproduced with 501 fixtures at audit snapshot | Current status unknown. |
+| BE-005 missing-image scan repair | Reproduced at audit snapshot | Current status unknown. |
+| BE-006 blocking cover search / skipped cleanup | Reproduced in an isolated test at audit snapshot | Current status unknown. |
+| BE-007 reusable credentials in database fields | Storage observation confirmed; disclosure impact conditional | Current status unknown; no secret values were inspected. |
+| BE-008 persistent remember cookie age/revocation | Reproduced with synthetic clock at audit snapshot | Current status unknown. |
+| BE-009 user deletion foreign-key failure | Reproduced on SQLite; PostgreSQL pending | Current status unknown; backend-specific behavior remains unverified. |
+| BE-010 delegated bearer scopes | Reproduced at audit snapshot | Already resolved in current source: exports and VR catalogue/detail require `read:library`. |
+| BE-011 child save entitlement | Product policy observation; desired behavior undecided | Still unknown pending product decision. |
+| BE-012 undefined-name branches | Static branch observations | Still unknown; reachability and current source were not rechecked. |
+| BE-013 native theme upload Flask-only call | Reproduced with actual adapter and temporary files at audit snapshot | Current status unknown. |
+| FE-001 VR service-worker private cache | Synthetic exact-worker reproduction; browser exploit not demonstrated | Confirmed and fixed in this checkout; real-browser/headset cleanup remains unverified. |
+| FE-002 librarian version cleanup control | Source/API permission mismatch at audit snapshot | Current status unknown. |
+| FE-003 mods error state disappears | Deterministic source control-flow defect at audit snapshot | Current status unknown. |
+| FE-004 profile navigation stale identity/error | Source state-transition defect at audit snapshot | Current status unknown. |
+| FE-005 related-media modal focus handling | Source accessibility gap at audit snapshot | Current status unknown. |
+| FE-006 calendar query/display window mismatch | Source/data-window mismatch at audit snapshot | Current status unknown. |
+| FE-007 shared-browser recent titles | Synthetic localStorage reproduction at audit snapshot | Current status unknown; retain as an open privacy follow-up. |
+| FE-008 missing React error boundary | Absence confirmed by source search; crash impact inferred | Current status unknown. |
+| DT-001 concurrent install record loss | Forced interleaving reproduced at audit snapshot | Current status unknown. |
+| DT-002 cold offline launch limitation | Source-based; runtime journey pending | Current status unknown. |
+| DT-003 lifecycle write non-atomicity | Source-based; crash/disk failure pending | Current status unknown. |
+| DT-004 nested patch/mod staging failure | Source contract mismatch at audit snapshot | Current status unknown. |
+| DT-005 archive resource/destination risk | Source-based; hostile archive not run | Current status unknown. |
+| DT-006 child-process reaping | Source/Rust contract; OS test pending | Current status unknown. |
+| DT-007 twelve-title companion preview | Documented product limitation | Current status unknown; no product change authorized. |
+| OP-001 native installer/factory mismatch | Source plus factory import reproduced at audit snapshot | Current status unknown. |
+| OP-002 Windows worker count | Source-based; multiworker test pending | Current status unknown. |
+| OP-003 container root privilege | Compose/Docker source observation; runtime pending | Current status unknown. |
+| OP-004 incomplete build pinning/integrity | Source/build trust observation; no compromise found | Current status unknown. |
+| OP-005 Pillow/Authlib advisory matches | Version/advisory matches reported; applicability conditional | Current status unknown/current triage needed; not 47 proven exploits. Recheck current resolved versions and advisory applicability before changing pins. |
+| OP-006 docs/validation lag | Source/docs/link checks at audit snapshot | Current status unknown. |
+| OP-007 template sync failure | Historical workflow job failure | Current status unknown; historical result is not current release status. |
+| UC-001–UC-004 validation candidates | Follow-up validation questions, not confirmed findings | Still unknown; retain as validation work. |
+
+The independent report's 35 finding rows and four validation candidates remain distinct from the parity matrix's 1,545 shared route/action pairs. Neither structural route dispatch nor this triage closes parity. The existing GitHub Dependabot alert count remains untriaged because individual records were unavailable; the independent package's advisory ledger is version evidence only and does not disposition GitHub alerts.
+
+### FE-001 correction
+
+The VR page still registers `/vr/sw.js` so existing installations can receive the retirement worker. On activation it removes `oneirodex-vr-v1`, claims clients, and unregisters; it has no fetch handler, cache-write path, or offline fallback. Its logout message also clears the retired cache. `tests/test_pwa_install.py` guards these properties. The user guide now describes the online update requirement. No live headset/browser account-switch test was run, so do not claim practical cross-account exposure is eliminated in already-offline clients until their worker updates.

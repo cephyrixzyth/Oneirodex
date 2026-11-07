@@ -38,6 +38,8 @@ A PSVR2 is a SteamVR headset once the PlayStation VR2 PC adapter and the *PlaySt
 
 Android APK is a spike only.
 
+The VR PWA does not keep signed-in pages or catalogue responses for offline use. An older VR worker may remain until the browser checks for its update; its replacement removes the former `oneirodex-vr-v1` cache and unregisters itself. Reopen `/vr` online after an update so the browser can retire that worker.
+
 ### How a title plays in VR (`vr_compat`)
 
 Beside the **VR** badge, every card and details payload carries `vr_compat`: `native_vr` (the title ships VR — derived from its IGDB perspective unless a librarian set otherwise), `injector_profile` (a community injector profile exists for it — Oneirodex links to the profile page and **never ships, installs or points at a shim**), `flat` (plays flat; use Moonlight to the household PC from a headset seat), or unknown. Librarians set it from the details page (`PATCH /api/games/<uuid>/vr_compat`); Library filters accept `?vr_compat=`. **Ways to play → In a headset** shows the three rows; the `/vr` hub filters by them (*Native VR* / *Community profile*); the details page carries the line under the play row.

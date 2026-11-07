@@ -156,3 +156,15 @@ def test_worker_drops_superseded_caches_on_activate():
     assert 'caches.delete(name)' in SW
     assert "name.startsWith('oneirodex-')" in SW
     assert '!name.endsWith(VERSION)' in SW
+
+
+def test_vr_worker_retires_authenticated_cache_without_caching_requests():
+    worker = (STATIC / 'vr-sw.js').read_text(encoding='utf-8')
+    assert "caches.delete(RETIRED_CACHE)" in worker
+    assert "'oneirodex-vr-v1'" in worker
+    assert 'self.registration.unregister()' in worker
+    assert "event.data?.type === 'od-clear-caches'" in worker
+    # The retired worker must not intercept navigations or VR API reads.
+    assert "addEventListener('fetch'" not in worker
+    assert 'cache.put(' not in worker
+    assert 'caches.match(' not in worker
