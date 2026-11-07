@@ -175,17 +175,28 @@ fn canonicalize_path(path: &Path, root: &Path) -> Result<PathBuf, String> {
         return path.canonicalize().map_err(|error| error.to_string());
     }
 
-    if let Some(parent) = path.parent() {
-        if parent.as_os_str().is_empty() {
+    // Staging paths commonly have multiple missing levels (for example,
+    // patches/<game>/<file>). Canonicalize the closest existing ancestor so
+    // existing symlinks/reparse points are resolved, then append the missing
+    // components for the containment check before the caller creates them.
+    let mut missing = Vec::new();
+    let mut ancestor = path;
+    while !ancestor.exists() {
+        let Some(name) = ancestor.file_name() else {
             return Ok(path.to_path_buf());
-        }
-        let canonical_parent = parent.canonicalize().map_err(|error| error.to_string())?;
-        if let Some(file_name) = path.file_name() {
-            return Ok(canonical_parent.join(file_name));
-        }
+        };
+        missing.push(name.to_os_string());
+        let Some(parent) = ancestor.parent() else {
+            return Ok(path.to_path_buf());
+        };
+        ancestor = parent;
     }
 
-    Ok(path.to_path_buf())
+    let mut canonical = ancestor.canonicalize().map_err(|error| error.to_string())?;
+    for component in missing.into_iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
 }
 
 /// Canonicalize `path` and `root` and require `path` to sit inside `root`.
@@ -1750,6 +1761,33 @@ mod tests {
         let root = tempdir().unwrap();
         let target = root.path().join("archive.zip");
         assert!(ensure_path_under_root(&target, root.path()).is_ok());
+    }
+
+    #[test]
+    fn under_root_accepts_multiple_missing_staging_directories() {
+        let root = tempdir().unwrap();
+        let target = root.path().join("patches/game-1/nested/fix.bps");
+
+        assert!(ensure_path_under_root(&target, root.path()).is_ok());
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, b"patch").unwrap();
+        assert!(ensure_path_under_root(&target, root.path()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn under_root_rejects_missing_path_below_existing_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let base = tempdir().unwrap();
+        let root = base.path().join("patches");
+        let outside = base.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("linked-game")).unwrap();
+        let target = root.join("linked-game/nested/fix.bps");
+
+        assert!(ensure_path_under_root(&target, &root).is_err());
     }
 
     #[test]
