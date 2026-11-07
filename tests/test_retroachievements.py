@@ -15,6 +15,11 @@ from uuid import uuid4
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import retroachievements as ra

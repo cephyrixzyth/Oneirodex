@@ -20,20 +20,22 @@ class IgdbSettingsData:
 
     def existing_secret_length(self) -> int:
         from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.secret_store import read_global_secret
 
         settings = global_settings_row()
-        return len((settings.igdb_client_secret or '') if settings else '')
+        return len((read_global_secret(settings, 'igdb_client_secret') or '') if settings else '')
 
     def save(self, payload: dict) -> dict:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.cache import cache
         from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
         from oneirodex.utils.igdb_settings import igdb_public_state
+        from oneirodex.utils.secret_store import write_global_secret
 
         settings = global_settings_row() or global_settings_row_or_create()
         settings.igdb_client_id = payload['igdb_client_id']
         if payload['igdb_client_secret']:
-            settings.igdb_client_secret = payload['igdb_client_secret']
+            write_global_secret(settings, 'igdb_client_secret', payload['igdb_client_secret'])
         db.session.commit()
         cache.delete('global_settings')
         return {'settings': igdb_public_state(settings)}
@@ -42,11 +44,12 @@ class IgdbSettingsData:
         """Preserve the v1.1.8 admin form POST while the JSON API stays strict."""
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import write_global_secret
 
         settings = global_settings_row_or_create()
         settings.igdb_client_id = payload.get('igdb_client_id')
         if payload.get('igdb_client_secret'):
-            settings.igdb_client_secret = payload.get('igdb_client_secret')
+            write_global_secret(settings, 'igdb_client_secret', payload.get('igdb_client_secret'))
         db.session.commit()
 
     def test_connection(self) -> dict | bool | None:
@@ -56,9 +59,10 @@ class IgdbSettingsData:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.igdb_api import make_igdb_api_request
         from oneirodex.utils.igdb_settings import igdb_public_state
+        from oneirodex.utils.secret_store import has_global_secret
 
         settings = global_settings_row()
-        if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+        if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
             return None
         result = make_igdb_api_request(
             'https://api.igdb.com/v4/games', 'fields name; limit 1;'
@@ -76,9 +80,10 @@ class IgdbSettingsData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.igdb_api import make_igdb_api_request
+        from oneirodex.utils.secret_store import has_global_secret
 
         settings = global_settings_row()
-        if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+        if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
             return None
         result = make_igdb_api_request(
             'https://api.igdb.com/v4/games', 'fields name; limit 1;'

@@ -1,4 +1,5 @@
 import pytest
+from cryptography.fernet import Fernet
 from flask import url_for
 from oneirodex.models import GlobalSettings, User
 from oneirodex import db
@@ -9,6 +10,17 @@ from unittest.mock import patch, Mock
 from datetime import datetime, timezone
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB admin provider surface.
+
+
+@pytest.fixture(autouse=True)
+def reusable_secret_keyring(monkeypatch, tmp_path):
+    import json
+
+    path = tmp_path / 'test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 
 @pytest.fixture
@@ -141,7 +153,8 @@ class TestIGDBSettingsRoute:
         settings = db.session.execute(db.select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
         assert settings is not None
         assert settings.igdb_client_id == 'new_client_id'
-        assert settings.igdb_client_secret == 'new_client_secret'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'igdb_client_secret') == 'new_client_secret'
     
     def test_igdb_settings_post_update_existing_settings(self, client, admin_user, clean_global_settings):
         """Test POST request updates existing settings."""
@@ -165,7 +178,8 @@ class TestIGDBSettingsRoute:
         # Verify settings were updated in database
         db.session.refresh(clean_global_settings)
         assert clean_global_settings.igdb_client_id == 'updated_client_id'
-        assert clean_global_settings.igdb_client_secret == 'updated_client_secret'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(clean_global_settings, 'igdb_client_secret') == 'updated_client_secret'
     
     def test_igdb_settings_post_partial_data(self, client, admin_user, clean_db):
         """Test POST request with partial data."""
@@ -448,4 +462,5 @@ class TestIGDBIntegration:
         # Verify settings are still in database
         settings = db.session.execute(db.select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
         assert settings.igdb_client_id == 'persist_client_id'
-        assert settings.igdb_client_secret == 'persist_client_secret'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'igdb_client_secret') == 'persist_client_secret'

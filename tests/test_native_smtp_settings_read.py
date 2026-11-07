@@ -15,7 +15,7 @@ from oneirodex.utils.smtp_settings import smtp_public_state
 
 def _client(*, role='admin', test_result=True, legacy_save=None):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-smtp-read-secret', CSP_ENABLED=False)
+    flask_app.config.update(SECRET_KEY='native-smtp-read-secret', CSP_ENABLED=False, TESTING=True)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=71, user_id='smtp-user', role=role,

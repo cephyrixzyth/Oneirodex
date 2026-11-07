@@ -11,13 +11,14 @@ from oneirodex.utils.smtp_transport import open_smtp_connection, upgrade_smtp_co
 def get_smtp_settings():
     """Get SMTP settings from database."""
     settings = global_settings_row()
+    from oneirodex.utils.secret_store import read_global_secret
     
     if settings and settings.smtp_enabled:
         return {
             'MAIL_SERVER': settings.smtp_server,
             'MAIL_PORT': settings.smtp_port,
             'MAIL_USERNAME': settings.smtp_username,
-            'MAIL_PASSWORD': settings.smtp_password,
+            'MAIL_PASSWORD': read_global_secret(settings, 'smtp_password'),
             'MAIL_USE_TLS': settings.smtp_use_tls,
             'MAIL_DEFAULT_SENDER': settings.smtp_default_sender,
             'SMTP_ENABLED': settings.smtp_enabled,

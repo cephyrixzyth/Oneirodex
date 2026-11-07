@@ -30,8 +30,9 @@ def get_steamgriddb_api_key() -> str | None:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
-    if settings and settings.steamgriddb_api_key:
-        return settings.steamgriddb_api_key.strip()
+    from oneirodex.utils.secret_store import read_global_secret
+    if settings:
+        return (read_global_secret(settings, 'steamgriddb_api_key') or '').strip() or None
     return None
 
 

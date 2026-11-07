@@ -30,7 +30,8 @@ def get_giantbomb_api_key() -> str | None:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
-    key = getattr(settings, 'giantbomb_api_key', None) if settings else None
+    from oneirodex.utils.secret_store import read_global_secret
+    key = read_global_secret(settings, 'giantbomb_api_key') if settings else None
     return (key or '').strip() or None
 
 

@@ -3,6 +3,11 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
+
 def test_first_run_setup_advances_with_existing_session_without_returning_secrets(client, db_session):
     state = client.get('/api/setup/state')
     assert state.status_code == 200
@@ -102,6 +107,7 @@ def test_integrations_json_transition_respects_provider_configure_checkboxes(cli
     from sqlalchemy import select
 
     from oneirodex.models import GlobalSettings
+    from oneirodex.utils.secret_store import read_global_secret
 
     created = client.post('/api/setup/step', json={
         'step': 1, 'username': 'provider_admin', 'email': 'provider@example.com',
@@ -131,9 +137,9 @@ def test_integrations_json_transition_respects_provider_configure_checkboxes(cli
     assert response.status_code == 200
     assert response.get_json()['step'] == 6
     db_session.refresh(settings)
-    assert settings.steam_web_api_key == 'existing-steam-key'
-    assert settings.steamgriddb_api_key == 'selected-replacement'
-    assert settings.giantbomb_api_key == 'existing-giantbomb-key'
+    assert read_global_secret(settings, 'steam_web_api_key') == 'existing-steam-key'
+    assert read_global_secret(settings, 'steamgriddb_api_key') == 'selected-replacement'
+    assert read_global_secret(settings, 'giantbomb_api_key') == 'existing-giantbomb-key'
 
 
 @pytest.mark.parametrize('key_field', (
@@ -178,6 +184,7 @@ def test_integrations_accept_provider_key_at_storage_column_limit(client, db_ses
     from sqlalchemy import select
 
     from oneirodex.models import GlobalSettings
+    from oneirodex.utils.secret_store import read_global_secret
 
     created = client.post('/api/setup/step', json={
         'step': 1, 'username': 'provider_boundary_admin',
@@ -199,5 +206,5 @@ def test_integrations_accept_provider_key_at_storage_column_limit(client, db_ses
 
     assert response.status_code == 200
     settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    assert getattr(settings, key_field) == key
+    assert read_global_secret(settings, key_field) == key
     assert settings.setup_current_step == 6

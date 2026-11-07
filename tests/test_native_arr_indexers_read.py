@@ -14,7 +14,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 def _client(*, role='admin', enabled=True, pipeline=True):
     flask_app = Flask(__name__)
     flask_app.config.update(
-        SECRET_KEY='native-arr-indexers-secret', CSP_ENABLED=False,
+        SECRET_KEY='native-arr-indexers-secret', CSP_ENABLED=False, TESTING=True,
         ENABLE_ARR_HARDLINK_PIPELINE=pipeline,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')

@@ -5,11 +5,17 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+import pytest
 
 from oneirodex.runtime_native.integrations_inventory import (
     create_integrations_inventory_router,
 )
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
 
 
 class FakeInventory:
@@ -75,6 +81,7 @@ def test_get_preserves_plain_legacy_payload_and_safe_inventory_projection():
         'integrations': data.rows,
         'count': 1,
         'hub_href': '/admin/integrations',
+        'credential_storage': {'available': True, 'message': None},
     }
     assert not {'client_secret', 'api_key', 'token', 'password'} & set(data.rows[0])
     assert data.calls == 1

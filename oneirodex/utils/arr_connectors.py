@@ -131,10 +131,10 @@ def _settings() -> GlobalSettings | None:
 
 
 def get_arr_config(*, config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     row = _settings()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    if not isinstance(cfg, dict):
-        cfg = {}
+    cfg = read_arr_settings(row)
     app_config = config if config is not None else get_runtime_config()
     return {
         'prowlarr_url': (cfg.get('prowlarr_url') or app_config.get('PROWLARR_URL') or '').rstrip('/'),
@@ -181,11 +181,13 @@ def public_arr_config(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def save_arr_config(payload: dict[str, Any], *, config=None) -> dict[str, Any]:
     """Update hub connector fields without wiping indexers / challenge / debrid keys."""
+    from oneirodex.utils.secret_store import read_arr_settings, write_arr_settings
+
     row = _settings()
     if not row:
         row = GlobalSettings()
         db.session.add(row)
-    current = dict(getattr(row, 'arr_settings', None) or {})
+    current = read_arr_settings(row)
     # Seed hub defaults from env when keys are absent so validation sees effective values.
     hub_view = get_arr_config(config=config)
     for key in _HUB_KEYS:
@@ -204,7 +206,7 @@ def save_arr_config(payload: dict[str, Any], *, config=None) -> dict[str, Any]:
             hint = ' (set ALLOW_PRIVATE_LAN_URLS=true for RFC1918 *arr hosts)' if result == 'URL host is not allowed' else ''
             raise ValueError(f'{key}: {result}{hint}')
         current[key] = result.rstrip('/')
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return {
         **{k: current.get(k) or '' for k in _HUB_KEYS},

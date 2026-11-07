@@ -101,7 +101,8 @@ class SetupTransitionData:
                 settings.smtp_port = body['smtp_port']
                 settings.smtp_username = body['smtp_username'] or None
                 if body['smtp_password']:
-                    settings.smtp_password = body['smtp_password']
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'smtp_password', body['smtp_password'])
                 settings.smtp_use_tls = body['smtp_use_tls']
                 settings.smtp_default_sender = body['smtp_default_sender'] or None
                 settings.smtp_enabled = body['smtp_enabled']
@@ -132,7 +133,8 @@ class SetupTransitionData:
                 settings = global_settings_row_or_create()
                 settings.igdb_client_id = body['igdb_client_id']
                 if body['igdb_client_secret']:
-                    settings.igdb_client_secret = body['igdb_client_secret']
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'igdb_client_secret', body['igdb_client_secret'])
                 try:
                     db.session.commit()
                 except Exception as exc:  # noqa: BLE001
@@ -151,7 +153,8 @@ class SetupTransitionData:
                 ):
                     value = body[key].strip()
                     if body['configure_' + key] and value:
-                        setattr(settings, key, value)
+                        from oneirodex.utils.secret_store import write_global_secret
+                        write_global_secret(settings, key, value)
                 if body['configure_oidc']:
                     for field, max_length in (
                         ('oidc_issuer_url', 512), ('oidc_client_id', 255),
@@ -176,7 +179,8 @@ class SetupTransitionData:
                                     ), None
                             setattr(settings, field, value[:max_length])
                     if body['oidc_client_secret']:
-                        settings.oidc_client_secret = body['oidc_client_secret']
+                        from oneirodex.utils.secret_store import write_global_secret
+                        write_global_secret(settings, 'oidc_client_secret', body['oidc_client_secret'])
                 settings.enable_hltb_integration = body['enable_hltb_integration']
                 settings.oidc_enabled = False
                 if not _commit_step(db, set_setup_step, 6, flask_app, 'Setup integration transition'):

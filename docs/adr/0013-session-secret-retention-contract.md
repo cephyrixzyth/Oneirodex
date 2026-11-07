@@ -8,17 +8,19 @@
 
 ## Context
 
-The repository review confirmed that the legacy remember cookie has no server-
-enforced age, inactivity limit or per-device revocation. Reusable integration
-credentials do not yet share one encrypted storage contract, and account
-deletion does not yet inventory and clean every user-owned database row and
-file. These changes share key custody, backup and retained-record decisions;
-implementing them independently could strand integrations or retain data in a
-way the owner did not select.
+At the review snapshot, the legacy remember cookie had no server-enforced age,
+inactivity limit or per-device revocation, reusable integration credentials
+did not share one encrypted storage contract, and account deletion did not
+inventory and clean every user-owned database row and file. These changes
+share key custody, backup and retained-record decisions; implementing them
+independently could strand integrations or retain data in a way the owner did
+not select.
 
 This record captures the owner's selected policies. The persistent browser
-session implementation is now present in the current review branch and is
-under independent postpatch review. Reusable-credential and account-deletion
+session implementation is present in the current review branch. The reusable-
+credential envelope and conversion tooling are implemented in the candidate;
+focused tests and an independent source review passed. Operator database
+conversion and restore qualification remain pending. Account-deletion
 migrations remain planned work.
 
 ## Decision
@@ -89,7 +91,8 @@ migrations remain planned work.
    **Implemented in review branch; independent candidate review finding fixed and focused verification passed; release qualification remains pending.**
 3. Introduce versioned reusable-secret envelopes, then migrate and rotate
    credentials in restartable batches while retaining old ciphertext until
-   decryptability is verified.
+   decryptability is verified. **Implementation and focused source review
+   passed; operator conversion and restore qualification remain pending.**
 4. Inventory every user relation and managed file, then implement resumable
    deletion using the decisions above.
 5. Include key identifiers and restore checks in backup/restore work. Keep

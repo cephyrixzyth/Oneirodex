@@ -132,13 +132,14 @@ Do **not** conflate games (scan root) with library/uploads. Compose header has a
 
 If app loops on `no pg_hba.conf entry … no encryption`, recreate `db` with current Compose or use the one-liner in [container-wont-start.md](container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption).
 
-### Store credential key ring
+### Credential key ring
 
-Store-provider credentials use a dedicated Fernet key ring, separate from
-`SECRET_KEY` and database credentials. Create a JSON file outside the database
+Store-provider and admin integration credentials use an authenticated key ring,
+separate from `SECRET_KEY` and database credentials. Create a JSON file outside the database
 and library backup payloads, restrict host access, then mount it read-only at
 `/run/secrets/oneirodex-store-credential-keyring.json`. Configure
-`ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` to that in-container path. The JSON
+`ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to that in-container path. The old
+`ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` name remains a compatibility alias. The JSON
 shape is `{ "active_key_id": "key-a", "keys": { "key-a": "<Fernet key>" } }`;
 keep prior key IDs in `keys` while data encrypted under them remains.
 On Linux, keep the containing directory private and set the key-ring file to
@@ -148,13 +149,14 @@ service account and administrators; Python cannot validate those ACLs with its
 portable POSIX-mode check.
 
 Back up the key ring separately under protected access. Database backups without
-the key ring cannot restore encrypted store sync; the key ring itself must not be
+the key ring cannot restore encrypted store sync or admin integrations; the key ring itself must not be
 placed in the database or library backup payload. Losing it leaves encrypted
 credentials unreadable.
 
 The key ring is optional at install time. Without it, saving member sign-in
-tokens is unavailable and token-backed paths that need to persist refreshed
-credentials are marked not configured. Members can still save an account
+tokens and saving reusable admin integration credentials are unavailable;
+existing encrypted values cannot be used until their matching key is restored.
+Members can still save an account
 identifier without a token, import a list, or disconnect; existing links and
 title history are retained. Some operator household-token paths that do not
 persist refreshed credentials remain usable.
@@ -170,6 +172,7 @@ complete, stop the app and run:
 
 ```bash
 docker compose stop app
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_reusable_secrets.py
 docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_store_credentials.py
 docker compose up -d app
 ```
@@ -183,10 +186,12 @@ database conflict, or row failure exits nonzero; investigate the redacted count
 and rerun after fixing the cause. Do not leave the app stopped until the
 conversion succeeds and new app is started.
 
+The reusable-secret converter handles scalar GlobalSettings values and the
+enumerated *arr, debrid, challenge-solver, lighting, and indexer JSON credentials.
 For key rotation, add a new key ID to `keys`, set `active_key_id` to it, then run
-the same converter while the new app is stopped. It re-encrypts values under the
-active key and verifies before commit. Keep the previous key IDs until the run
-reports `rotated=0` with no failures and no retained database backups require
+both converters while the app is stopped. They re-encrypt values under the
+active key and verify before commit. Keep previous key IDs until both runs
+report `rotated=0` with no failures and no retained database backups require
 those keys. Never remove keys based only on the current database if older
 backups still contain ciphertext encrypted under them.
 

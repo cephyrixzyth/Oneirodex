@@ -1,4 +1,9 @@
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
 import json
 from unittest.mock import patch, Mock, MagicMock
 from datetime import datetime, timezone
@@ -678,7 +683,8 @@ class TestSetupWorkflow:
         settings = db.session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
         assert settings is not None
         assert settings.igdb_client_id == 'test_client_id_12345'
-        assert settings.igdb_client_secret == 'test_client_secret_12345'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'igdb_client_secret') == 'test_client_secret_12345'
 
         response = client.post('/setup/integrations', data={'skip_integrations': '1'})
         assert response.status_code == 302
@@ -855,12 +861,13 @@ class TestSetupApiConnections:
         saved = db_session.execute(
             select(GlobalSettings).filter_by(id=settings.id)
         ).scalars().first()
-        assert saved.steam_web_api_key == 'new-steam-api-key'
-        assert saved.steamgriddb_api_key == 'existing-secret-value'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(saved, 'steam_web_api_key') == 'new-steam-api-key'
+        assert read_global_secret(saved, 'steamgriddb_api_key') == 'existing-secret-value'
         assert saved.enable_hltb_integration is False
         assert saved.oidc_issuer_url == 'https://sso.example.test'
         assert saved.oidc_client_id == 'oneirodex-stage'
-        assert saved.oidc_client_secret == 'oidc-stage-secret'
+        assert read_global_secret(saved, 'oidc_client_secret') == 'oidc-stage-secret'
         assert saved.oidc_enabled is False
         assert get_current_setup_step() == 6
 

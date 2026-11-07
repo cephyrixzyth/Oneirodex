@@ -14,7 +14,7 @@ from oneirodex.utils.igdb_settings import igdb_public_state
 
 def _client(*, role='admin', legacy_save=None, legacy_test=None, existing_secret_length=20):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-igdb-read-secret', CSP_ENABLED=False)
+    flask_app.config.update(SECRET_KEY='native-igdb-read-secret', CSP_ENABLED=False, TESTING=True)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=71, user_id='igdb-user', role=role,

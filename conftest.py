@@ -1,7 +1,20 @@
 import pytest
 import os
+import json
+from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from database_test_guard import validate_test_database_url as _validate_test_database_url
+
+
+@pytest.fixture
+def reusable_secret_keyring(tmp_path, monkeypatch):
+    """Give tests exercising secret writes an ephemeral key, never an operator key."""
+    path = tmp_path / 'reusable-secret-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'pytest',
+        'keys': {'pytest': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 # Load .env file to ensure TEST_DATABASE_URL is available
 load_dotenv()

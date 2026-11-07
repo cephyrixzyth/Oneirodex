@@ -158,7 +158,8 @@ def setup_smtp():
         settings.smtp_server = request.form.get('smtp_server')
         settings.smtp_port = int(request.form.get('smtp_port', 587))
         settings.smtp_username = request.form.get('smtp_username')
-        settings.smtp_password = request.form.get('smtp_password')
+        from oneirodex.utils.secret_store import write_global_secret
+        write_global_secret(settings, 'smtp_password', request.form.get('smtp_password'))
         settings.smtp_use_tls = request.form.get('smtp_use_tls') == 'true'
         settings.smtp_default_sender = request.form.get('smtp_default_sender')
         settings.smtp_enabled = request.form.get('smtp_enabled') == 'true'
@@ -246,7 +247,8 @@ def setup_igdb():
         settings = global_settings_row_or_create()
         
         settings.igdb_client_id = form.igdb_client_id.data
-        settings.igdb_client_secret = form.igdb_client_secret.data
+        from oneirodex.utils.secret_store import write_global_secret
+        write_global_secret(settings, 'igdb_client_secret', form.igdb_client_secret.data)
         
         try:
             set_setup_step(5)
@@ -293,7 +295,8 @@ def setup_integrations():
                 if request.form.get(f'configure_{field}') == 'on':
                     value = (request.form.get(field) or '').strip()
                     if value:
-                        setattr(settings, setting_name, value[:512])
+                        from oneirodex.utils.secret_store import write_global_secret
+                        write_global_secret(settings, setting_name, value[:512])
 
             if request.form.get('configure_oidc') == 'on':
                 for field, max_length in (
@@ -314,7 +317,8 @@ def setup_integrations():
                         setattr(settings, field, value[:max_length])
                 oidc_secret = (request.form.get('oidc_client_secret') or '').strip()
                 if oidc_secret:
-                    settings.oidc_client_secret = oidc_secret[:512]
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'oidc_client_secret', oidc_secret[:512])
 
             settings.enable_hltb_integration = request.form.get('enable_hltb_integration') == 'on'
             settings.oidc_enabled = False  # Auth provider activation remains an explicit post-setup action.

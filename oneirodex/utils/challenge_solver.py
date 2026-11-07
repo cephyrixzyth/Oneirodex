@@ -70,9 +70,10 @@ def _settings_row() -> GlobalSettings | None:
 
 
 def _arr_cfg() -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     row = _settings_row()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    return dict(cfg) if isinstance(cfg, dict) else {}
+    return read_arr_settings(row)
 
 
 def _set_last_error(message: str | None) -> None:
@@ -158,6 +159,8 @@ def get_challenge_config(config=None) -> dict[str, Any]:
 
 
 def save_challenge_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import write_arr_settings
+
     row = _settings_row()
     if row is None:
         row = GlobalSettings()
@@ -205,7 +208,7 @@ def save_challenge_config(payload: dict[str, Any], config=None) -> dict[str, Any
         key = str(payload.get('token_api_key', payload.get('challenge_token_api_key')) or '').strip()
         if key and key != '***':
             current['challenge_token_api_key'] = key
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return get_challenge_config(config)
 

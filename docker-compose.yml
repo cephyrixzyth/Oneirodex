@@ -66,7 +66,7 @@ services:
       - ONEIRODEX_LIBRARY_ROOTS=${ONEIRODEX_LIBRARY_ROOTS:-}
       - UPLOAD_FOLDER=/app/oneirodex/static/library
       - SECRET_KEY=${SECRET_KEY}
-      - ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE=${ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE:-/run/secrets/oneirodex-store-credential-keyring.json}
+      - ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE=${ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE:-${ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE:-/run/secrets/oneirodex-store-credential-keyring.json}}
       - DEV_MODE=${DEV_MODE:-false}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}

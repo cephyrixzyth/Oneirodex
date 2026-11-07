@@ -38,11 +38,11 @@ def debrid_enabled(*, config=None) -> bool:
 
 
 def get_debrid_config(*, config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     config = config if config is not None else get_runtime_config()
     row = _settings()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    if not isinstance(cfg, dict):
-        cfg = {}
+    cfg = read_arr_settings(row)
     return {
         'real_debrid_token': cfg.get('real_debrid_token') or config.get('REAL_DEBRID_TOKEN') or '',
         'alldebrid_api_key': cfg.get('alldebrid_api_key') or config.get('ALLDEBRID_API_KEY') or '',
@@ -52,15 +52,17 @@ def get_debrid_config(*, config=None) -> dict[str, Any]:
 
 
 def save_debrid_config(payload: dict[str, Any]) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings, write_arr_settings
+
     row = _settings()
     if not row:
         row = GlobalSettings()
         db.session.add(row)
-    current = dict(getattr(row, 'arr_settings', None) or {})
+    current = read_arr_settings(row)
     for key in ('real_debrid_token', 'alldebrid_api_key', 'premiumize_api_key', 'torbox_api_key'):
         if key in payload and payload[key] is not None:
             current[key] = str(payload[key]).strip()
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return {
         'real_debrid_token': '***' if current.get('real_debrid_token') else '',

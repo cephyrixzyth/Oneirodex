@@ -92,9 +92,10 @@ def _settings_row() -> GlobalSettings | None:
 
 
 def _lighting_cfg() -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     row = _settings_row()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    return dict(cfg) if isinstance(cfg, dict) else {}
+    return read_arr_settings(row)
 
 
 def _config_values(config=None):
@@ -233,6 +234,8 @@ def get_ambient_config(config=None) -> dict[str, Any]:
 
 
 def save_ambient_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import write_arr_settings
+
     row = _settings_row()
     if row is None:
         row = GlobalSettings()
@@ -290,7 +293,7 @@ def save_ambient_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
         current['ha_play_scene'] = str(payload.get('ha_play_scene') or '').strip()
     if 'ha_stop_scene' in payload:
         current['ha_stop_scene'] = str(payload.get('ha_stop_scene') or '').strip()
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return get_ambient_config(config)
 

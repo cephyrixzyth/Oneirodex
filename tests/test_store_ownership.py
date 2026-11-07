@@ -40,7 +40,7 @@ def _store_credential_test_keyring(tmp_path, monkeypatch):
     }), encoding='utf-8')
     if os.name != 'nt':
         path.chmod(0o600)
-    monkeypatch.setenv('ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE', str(path))
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 
 @pytest.fixture

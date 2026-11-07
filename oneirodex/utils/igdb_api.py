@@ -29,10 +29,12 @@ def _validate_twitch_url(url):
 def make_igdb_api_request(endpoint_url, query_params):
     # Get IGDB settings from database
     settings = global_settings_row()
-    if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+    from oneirodex.utils.secret_store import read_global_secret
+    secret = read_global_secret(settings, 'igdb_client_secret') if settings else None
+    if not settings or not settings.igdb_client_id or not secret:
         return {"error": "IGDB settings not configured in database"}
 
-    access_token = get_access_token(settings.igdb_client_id, settings.igdb_client_secret) 
+    access_token = get_access_token(settings.igdb_client_id, secret)
 
     if not access_token:
         return {"error": "Failed to retrieve access token"}

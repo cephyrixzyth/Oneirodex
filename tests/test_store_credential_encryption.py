@@ -105,7 +105,7 @@ def test_store_account_reader_never_falls_back_to_legacy_plaintext(tmp_path):
 
 def test_store_account_writer_encrypts_and_clears_plaintext(tmp_path, monkeypatch):
     path = keyring_file(tmp_path)
-    monkeypatch.setenv('ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE', str(path))
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
     account = SimpleNamespace(credential='old-value', credential_ciphertext=None)
 
     write_store_credential(account, 'new-value')

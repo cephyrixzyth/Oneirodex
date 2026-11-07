@@ -98,6 +98,7 @@ def credentials() -> tuple[str, str]:
     except RuntimeError:
         # Hash helpers can be used without an application context in tooling.
         pass
+    from oneirodex.utils.secret_store import read_global_secret
     return (
         (
             os.getenv('RETROACHIEVEMENTS_USERNAME')
@@ -106,7 +107,7 @@ def credentials() -> tuple[str, str]:
         ).strip(),
         (
             os.getenv('RETROACHIEVEMENTS_API_KEY')
-            or getattr(settings, 'retroachievements_api_key', None)
+            or read_global_secret(settings, 'retroachievements_api_key')
             or ''
         ).strip(),
     )
@@ -117,8 +118,9 @@ def settings_summary() -> dict[str, Any]:
     settings = global_settings_row()
     env_username = (os.getenv('RETROACHIEVEMENTS_USERNAME') or '').strip()
     env_key = (os.getenv('RETROACHIEVEMENTS_API_KEY') or '').strip()
+    from oneirodex.utils.secret_store import has_global_secret
     db_username = (getattr(settings, 'retroachievements_username', None) or '').strip()
-    db_key = (getattr(settings, 'retroachievements_api_key', None) or '').strip()
+    db_key = has_global_secret(settings, 'retroachievements_api_key')
     username, key = credentials()
     return {
         'username': username or None,
@@ -140,12 +142,13 @@ def save_settings(
     from oneirodex.utils.global_settings import global_settings_row_or_create
 
     settings = global_settings_row_or_create()
+    from oneirodex.utils.secret_store import write_global_secret
     if username is not None:
         settings.retroachievements_username = username.strip() or None
     if clear_api_key:
-        settings.retroachievements_api_key = None
+        write_global_secret(settings, 'retroachievements_api_key', None)
     elif api_key:
-        settings.retroachievements_api_key = api_key.strip()
+        write_global_secret(settings, 'retroachievements_api_key', api_key.strip())
     db.session.commit()
     return settings_summary()
 

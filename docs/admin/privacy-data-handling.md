@@ -124,12 +124,13 @@ continues to follow accepted-friend and game-access rules.
 ## Backups and deletion
 
 Postgres holds accounts, chat, playtime, and the catalog. Game files live on the library mounts.
-The linked-store credential key ring is required to decrypt provider credentials and must be
-backed up separately under protected access. A database backup without the matching key ring
-cannot restore store sync. Other integration settings still include credential fields that are
-not yet covered by the shared encrypted-secret contract. Backups created before linked-store
-credential conversion may contain plaintext provider credentials and should remain protected
-accordingly. Backups from before password-reset token hashing may also contain raw reset tokens;
+The operator-managed credential key ring is required to decrypt linked-store and reusable
+integration credentials. Keep it outside database/library backups and maintain a protected
+independent backup. A database backup without the matching key ring cannot restore those
+integrations; when a key is unavailable, preserve ciphertext and restore the matching key ID or
+reconnect the affected integration. Backups created before the credential conversions may
+contain plaintext provider or integration credentials and should remain protected accordingly.
+Backups from before password-reset token hashing may also contain raw reset tokens;
 the application continues to enforce the 15-minute expiry when a token is used.
 Account deletion is in progress: the current route removes the user and several inventoried
 no-action relation rows, and retained audit events have direct account identifiers cleared.

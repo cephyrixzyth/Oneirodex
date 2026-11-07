@@ -231,8 +231,9 @@ def build_oidc_config(settings_record=None) -> OidcConfig | None:
         getattr(settings_record, 'oidc_client_id', None)
         or os.getenv('OIDC_CLIENT_ID', '')
     ).strip()
+    from oneirodex.utils.secret_store import read_global_secret
     client_secret = (
-        getattr(settings_record, 'oidc_client_secret', None)
+        read_global_secret(settings_record, 'oidc_client_secret')
         or os.getenv('OIDC_CLIENT_SECRET', '')
     ).strip()
     redirect_uri = (

@@ -23,12 +23,16 @@ class SmtpSettingsData:
         from oneirodex.utils.cache import cache
         from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
         from oneirodex.utils.smtp_settings import smtp_public_state, validate_smtp_data
+        from oneirodex.utils.secret_store import write_global_secret
 
         settings = global_settings_row()
         values = validate_smtp_data(payload, settings)
         settings = settings or global_settings_row_or_create()
         for key, value in values.items():
-            if key != 'smtp_password' or value:
+            if key == 'smtp_password':
+                if value:
+                    write_global_secret(settings, key, value)
+            else:
                 setattr(settings, key, value)
         db.session.commit()
         cache.delete('global_settings')
@@ -44,6 +48,7 @@ class SmtpSettingsData:
         """
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import has_global_secret, write_global_secret
 
         values = payload or {}
         settings = global_settings_row_or_create()
@@ -55,7 +60,7 @@ class SmtpSettingsData:
             ):
                 if not values.get(key):
                     raise ValueError(message)
-            if not values.get('smtp_password') and not settings.smtp_password:
+            if not values.get('smtp_password') and not has_global_secret(settings, 'smtp_password'):
                 raise ValueError('SMTP password is required when SMTP is enabled')
             if not values.get('smtp_default_sender'):
                 raise ValueError('Default sender email is required when SMTP is enabled')
@@ -71,7 +76,7 @@ class SmtpSettingsData:
         settings.smtp_server = values.get('smtp_server')
         settings.smtp_username = values.get('smtp_username')
         if values.get('smtp_password'):
-            settings.smtp_password = values.get('smtp_password')
+            write_global_secret(settings, 'smtp_password', values.get('smtp_password'))
         settings.smtp_use_tls = values.get('smtp_use_tls', True)
         settings.smtp_default_sender = values.get('smtp_default_sender')
         db.session.commit()
@@ -79,6 +84,7 @@ class SmtpSettingsData:
     def test_connection(self) -> bool | None:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.smtp_test import SMTPTester
+        from oneirodex.utils.secret_store import read_global_secret
 
         settings = global_settings_row()
         if not settings or not settings.smtp_enabled:
@@ -87,7 +93,7 @@ class SmtpSettingsData:
             host=settings.smtp_server,
             port=settings.smtp_port,
             username=settings.smtp_username,
-            password=settings.smtp_password,
+            password=read_global_secret(settings, 'smtp_password'),
             use_tls=settings.smtp_use_tls,
             timeout=10,
         )
@@ -97,6 +103,7 @@ class SmtpSettingsData:
         """Preserve the v1.1.8 SMTP form test result while redacting secrets."""
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.smtp_test import SMTPTester
+        from oneirodex.utils.secret_store import read_global_secret
 
         settings = global_settings_row()
         if not settings:
@@ -105,11 +112,11 @@ class SmtpSettingsData:
             host=settings.smtp_server,
             port=settings.smtp_port,
             username=settings.smtp_username,
-            password=settings.smtp_password,
+            password=read_global_secret(settings, 'smtp_password'),
             use_tls=settings.smtp_use_tls,
             timeout=10,
         )
-        return bool(success), _redact_smtp_result(result, settings.smtp_password)
+        return bool(success), _redact_smtp_result(result, read_global_secret(settings, 'smtp_password'))
 
 
 def _redact_smtp_result(value, secret):

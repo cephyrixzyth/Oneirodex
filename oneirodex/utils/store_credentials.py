@@ -5,7 +5,8 @@ and its backups. It is deliberately independent of Flask's SECRET_KEY.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import base64
+from dataclasses import dataclass, field
 import json
 import os
 import re
@@ -35,6 +36,7 @@ class StoreCredentialMigrationRequired(StoreCredentialError):
 class StoreCredentialKeyring:
     active_key_id: str
     keys: Mapping[str, Fernet]
+    key_material: Mapping[str, bytes] = field(default_factory=dict, repr=False, compare=False)
 
 
 def _keyring_path() -> str:
@@ -46,10 +48,16 @@ def _keyring_path() -> str:
         config = None
     path = None
     if config is not None:
-        path = config.get("STORE_CREDENTIAL_KEYRING_FILE")
-    path = path or os.environ.get("ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE")
+        path = config.get("REUSABLE_SECRET_KEYRING_FILE") or config.get("STORE_CREDENTIAL_KEYRING_FILE")
+    path = (
+        path
+        or os.environ.get("ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE")
+        or os.environ.get("ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE")
+    )
     if not isinstance(path, str) or not path.strip():
-        raise StoreCredentialKeyUnavailable("Store credential key ring is not configured")
+        raise StoreCredentialKeyUnavailable(
+            'Credential key ring is not configured; restore the operator-managed backup or configure the key ring'
+        )
     return path.strip()
 
 
@@ -59,17 +67,19 @@ def load_store_credential_keyring(path: str | None = None) -> StoreCredentialKey
     try:
         if os.name != 'nt' and stat.S_IMODE(os.stat(keyring_path).st_mode) & 0o077:
             raise StoreCredentialKeyUnavailable(
-                "Store credential key ring permissions are unsafe"
+                "Credential key ring permissions are unsafe"
             )
         with open(keyring_path, "r", encoding="utf-8") as source:
             payload = json.load(source)
     except StoreCredentialKeyUnavailable:
         raise
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise StoreCredentialKeyUnavailable("Store credential key ring is unreadable or invalid") from exc
+        raise StoreCredentialKeyUnavailable(
+            'Credential key ring is unreadable or invalid; restore the operator-managed backup'
+        ) from exc
 
     if not isinstance(payload, dict):
-        raise StoreCredentialKeyUnavailable("Store credential key ring is invalid")
+        raise StoreCredentialKeyUnavailable("Credential key ring is invalid")
     active_key_id = payload.get("active_key_id")
     raw_keys = payload.get("keys")
     if (
@@ -82,6 +92,7 @@ def load_store_credential_keyring(path: str | None = None) -> StoreCredentialKey
         raise StoreCredentialKeyUnavailable("Store credential key ring is invalid")
 
     keys: dict[str, Fernet] = {}
+    key_material: dict[str, bytes] = {}
     try:
         for key_id, encoded_key in raw_keys.items():
             if (
@@ -91,10 +102,13 @@ def load_store_credential_keyring(path: str | None = None) -> StoreCredentialKey
             ):
                 raise ValueError
             keys[key_id] = Fernet(encoded_key.encode("ascii"))
+            key_material[key_id] = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
     except (ValueError, UnicodeError, TypeError) as exc:
-        raise StoreCredentialKeyUnavailable("Store credential key ring contains an invalid key") from exc
+        raise StoreCredentialKeyUnavailable("Credential key ring contains an invalid key") from exc
 
-    return StoreCredentialKeyring(active_key_id=active_key_id, keys=keys)
+    return StoreCredentialKeyring(
+        active_key_id=active_key_id, keys=keys, key_material=key_material,
+    )
 
 
 def encrypt_store_credential(value: str, *, keyring: StoreCredentialKeyring | None = None) -> str:
@@ -104,7 +118,7 @@ def encrypt_store_credential(value: str, *, keyring: StoreCredentialKeyring | No
     ring = keyring or load_store_credential_keyring()
     fernet = ring.keys.get(ring.active_key_id)
     if fernet is None:
-        raise StoreCredentialKeyUnavailable("Active store credential key is unavailable")
+        raise StoreCredentialKeyUnavailable("Active credential key is unavailable")
     token = fernet.encrypt(value.encode("utf-8")).decode("ascii")
     return f"{_ENVELOPE_PREFIX}{ring.active_key_id}:{token}"
 
@@ -120,7 +134,9 @@ def decrypt_store_credential(value: str, *, keyring: StoreCredentialKeyring | No
     ring = keyring or load_store_credential_keyring()
     fernet = ring.keys.get(key_id)
     if fernet is None:
-        raise StoreCredentialKeyUnavailable("Store credential decryption key is unavailable")
+        raise StoreCredentialKeyUnavailable(
+            'Credential decryption key is unavailable; restore matching key IDs from the operator backup'
+        )
     try:
         return fernet.decrypt(token.encode("ascii")).decode("utf-8")
     except (InvalidToken, UnicodeError, ValueError) as exc:

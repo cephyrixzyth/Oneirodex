@@ -3,6 +3,7 @@
 
 def smtp_public_state(settings):
     """Safe form state: the saved credential never leaves the server."""
+    from oneirodex.utils.secret_store import has_global_secret
     return {
         'smtp_enabled': bool(settings and settings.smtp_enabled),
         'smtp_server': settings.smtp_server or '' if settings else '',
@@ -10,7 +11,7 @@ def smtp_public_state(settings):
         'smtp_username': settings.smtp_username or '' if settings else '',
         'smtp_use_tls': bool(settings.smtp_use_tls) if settings else True,
         'smtp_default_sender': settings.smtp_default_sender or '' if settings else '',
-        'password_saved': bool(settings and settings.smtp_password),
+        'password_saved': has_global_secret(settings, 'smtp_password'),
         'last_tested': settings.smtp_last_tested.isoformat() if settings and settings.smtp_last_tested else None,
     }
 
@@ -50,6 +51,7 @@ def validate_smtp_data(data, settings):
                            ('smtp_default_sender', 'Default sender email')):
             if not result[key]:
                 raise ValueError(f'{label} is required when SMTP is enabled')
-        if not result['smtp_password'] and not (settings and settings.smtp_password):
+        from oneirodex.utils.secret_store import has_global_secret
+        if not result['smtp_password'] and not has_global_secret(settings, 'smtp_password'):
             raise ValueError('SMTP password is required when SMTP is enabled')
     return result

@@ -184,10 +184,12 @@ def is_smtp_configured():
     settings = global_settings_row()
     if not settings:
         return False
-    return bool(settings.smtp_server and 
-                settings.smtp_port and 
-                settings.smtp_username and 
-                settings.smtp_password)
+    from oneirodex.utils.secret_store import has_global_secret
+
+    return bool(
+        settings.smtp_server and settings.smtp_port and settings.smtp_username
+        and has_global_secret(settings, 'smtp_password')
+    )
 
 @login_bp.route('/login', methods=['GET', 'POST'])
 def login():

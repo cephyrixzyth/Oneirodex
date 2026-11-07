@@ -95,8 +95,9 @@ def get_steam_web_api_key() -> str | None:
     if key:
         return key
     settings = global_settings_row()
-    if settings and settings.steam_web_api_key:
-        return settings.steam_web_api_key.strip()
+    if settings:
+        from oneirodex.utils.secret_store import read_global_secret
+        return (read_global_secret(settings, 'steam_web_api_key') or '').strip() or None
     return None
 
 

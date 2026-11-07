@@ -34,6 +34,7 @@ class IntegrationSettingsData:
     def oidc_read(self) -> dict:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.oidc import oidc_readiness_report
+        from oneirodex.utils.secret_store import write_global_secret
 
         row = global_settings_row()
         return {'settings': _oidc_public_settings(row), 'readiness': oidc_readiness_report(row)}
@@ -51,7 +52,7 @@ class IntegrationSettingsData:
         row.oidc_issuer_url = payload['oidc_issuer_url'].strip() or None
         row.oidc_client_id = payload['oidc_client_id'].strip() or None
         if payload['oidc_client_secret'].strip():
-            row.oidc_client_secret = payload['oidc_client_secret'].strip()
+            write_global_secret(row, 'oidc_client_secret', payload['oidc_client_secret'].strip())
         row.oidc_redirect_uri = payload['oidc_redirect_uri'].strip() or None
         row.oidc_scopes = payload['oidc_scopes'].strip() or 'openid email profile'
         row.oidc_role_claim = payload['oidc_role_claim'].strip() or 'groups'
@@ -91,6 +92,7 @@ class IntegrationSettingsData:
 
 def _oidc_public_settings(row) -> dict:
     from oneirodex.utils.oidc import oidc_readiness_report
+    from oneirodex.utils.secret_store import has_global_secret
 
     return {
         'oidc_enabled': bool(row and row.oidc_enabled),
@@ -98,7 +100,7 @@ def _oidc_public_settings(row) -> dict:
         'oidc_issuer_url': (getattr(row, 'oidc_issuer_url', None) if row else None) or '',
         'oidc_client_id': (getattr(row, 'oidc_client_id', None) if row else None) or '',
         'oidc_client_secret_configured': bool(
-            (getattr(row, 'oidc_client_secret', None) if row else None) or os.getenv('OIDC_CLIENT_SECRET')
+            has_global_secret(row, 'oidc_client_secret') or os.getenv('OIDC_CLIENT_SECRET')
         ),
         'oidc_redirect_uri': (getattr(row, 'oidc_redirect_uri', None) if row else None) or '',
         'oidc_scopes': (getattr(row, 'oidc_scopes', None) if row else None) or 'openid email profile',
