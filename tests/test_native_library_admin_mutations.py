@@ -260,6 +260,36 @@ def test_library_update_rejects_oversized_image_before_decode_or_adapter_call(
     assert data.calls == []
 
 
+def test_library_create_uses_decoded_format_instead_of_filename_suffix(native_client):
+    runtime, data = native_client
+    png = _png_header(10, 10)
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'PNG with a JPEG suffix', 'platform': 'PCWIN'},
+        files={'image': ('cover.jpeg', png, 'image/jpeg')},
+    )
+
+    assert response.status_code == 200, response.text
+    assert data.calls[0][0] == 'create'
+    assert data.calls[0][1]['image_bytes'] == png
+
+
+def test_library_create_rejects_unsupported_decoded_format_before_adapter_call(native_client):
+    runtime, data = native_client
+    image = Image.new('RGB', (2, 2), 'green')
+    payload = BytesIO()
+    image.save(payload, format='TIFF')
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Unsupported image', 'platform': 'PCWIN'},
+        files={'image': ('image.png', payload.getvalue(), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'supported library image format' in response.json()['message']
+    assert data.calls == []
+
+
 def test_library_preview_rejects_oversized_body_before_processing(native_client):
     from oneirodex.utils.image_upload_limits import LIBRARY_PREVIEW_MAX_BODY_BYTES
 

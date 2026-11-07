@@ -25,7 +25,7 @@ from oneirodex.utils.library_watch import (
 from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
-    LIBRARY_IMAGE_MAX_PIXELS,
+    library_image_header_error,
 )
 from oneirodex.utils.rbac import is_librarian
 from sqlalchemy import func, select
@@ -35,7 +35,6 @@ from PIL import Image as PILImage, UnidentifiedImageError
 from . import apis_bp
 
 _DEFAULT_LIBRARY_IMAGE = 'newstyle/default_library.jpg'
-_LIBRARY_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 
 
 @apis_bp.route('/admin/libraries', methods=['POST'])
@@ -64,9 +63,6 @@ def create_library():
     saved_image_path = None
     image = request.files.get('image')
     if image and image.filename:
-        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
-        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
-            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
@@ -74,8 +70,9 @@ def create_library():
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
             with PILImage.open(image.stream) as opened:
-                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
-                    return api_error('Library image dimensions are too large.', code='bad_request')
+                error = library_image_header_error(opened)
+                if error:
+                    return api_error(error, code='bad_request')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:
                     converted.thumbnail((1024, 1024), PILImage.LANCZOS)
@@ -217,9 +214,6 @@ def admin_library_detail(library_uuid):
     image = request.files.get('image')
     saved_image_path = None
     if image and image.filename:
-        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
-        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
-            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
@@ -227,8 +221,9 @@ def admin_library_detail(library_uuid):
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
             with PILImage.open(image.stream) as opened:
-                if opened.width <= 0 or opened.height <= 0 or opened.width * opened.height > LIBRARY_IMAGE_MAX_PIXELS:
-                    return api_error('Library image dimensions are too large.', code='bad_request')
+                error = library_image_header_error(opened)
+                if error:
+                    return api_error(error, code='bad_request')
                 converted = opened.convert('RGBA')
                 if converted.width > 1024 or converted.height > 1024:
                     converted.thumbnail((1024, 1024), PILImage.LANCZOS)

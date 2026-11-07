@@ -10,6 +10,11 @@ from oneirodex.forms import LibraryForm, coerce_library_watch_enabled, library_w
 from oneirodex.schemas.admin_libraries import PreviewCroppedImageBody
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.validation import validate_body
+from oneirodex.utils.image_upload_limits import (
+    LIBRARY_IMAGE_MAX_BYTES,
+    LIBRARY_PREVIEW_MAX_BODY_BYTES,
+    library_image_header_error,
+)
 from PIL import Image as PILImage
 from uuid import uuid4
 from werkzeug.utils import secure_filename
@@ -36,10 +41,10 @@ def _process_library_image(file, library):
             library.image_url = url_for('static', filename='newstyle/default_library.jpg')
         return
 
-    # Validate file size (< 10 MB)
+    # Validate encoded size before letting Pillow inspect image metadata.
     file.seek(0, os.SEEK_END)
     file_length = file.tell()
-    if file_length > 10 * 1024 * 1024:  # 10MB limit
+    if file_length > LIBRARY_IMAGE_MAX_BYTES:
         flash('File size is too large. Maximum allowed is 10 MB.', 'error')
         return False
 
@@ -60,12 +65,22 @@ def _process_library_image(file, library):
     image_path = os.path.join(image_folder, uuid_filename)
     print(f"Image path: {image_path}")
 
-    # Open, convert to PNG, and resize if necessary
-    with PILImage.open(file) as img:
-        img = img.convert('RGBA')
-        if img.width > 1024 or img.height > 1024:
-            img.thumbnail((1024, 1024), PILImage.LANCZOS)
-        img.save(image_path, 'PNG')
+    # Sniff the actual format and dimensions before any pixel conversion. The
+    # filename suffix does not select a decoder; output is always normalized PNG.
+    try:
+        with PILImage.open(file) as opened:
+            error = library_image_header_error(opened)
+            if error:
+                flash(error, 'error')
+                return False
+            img = opened.convert('RGBA')
+            if img.width > 1024 or img.height > 1024:
+                img.thumbnail((1024, 1024), PILImage.LANCZOS)
+            img.save(image_path, 'PNG')
+    except (PILImage.UnidentifiedImageError, PILImage.DecompressionBombError,
+            OSError, SyntaxError, ValueError):
+        flash('The library image could not be read safely.', 'error')
+        return False
 
     image_url = url_for('static', filename=os.path.join('library/images/', uuid_filename))
     print(f"Image URL: {image_url}")
@@ -187,7 +202,7 @@ def edit_library(library_uuid):
 @admin2_bp.route('/api/library/preview-cropped-image', methods=['POST'])
 @login_required
 @admin_required
-@validate_body(PreviewCroppedImageBody)
+@validate_body(PreviewCroppedImageBody, max_body_bytes=LIBRARY_PREVIEW_MAX_BODY_BYTES)
 def preview_cropped_image(body: PreviewCroppedImageBody):
     """Process cropped image and return preview URL for immediate feedback."""
     try:
@@ -197,10 +212,15 @@ def preview_cropped_image(body: PreviewCroppedImageBody):
             image_data = image_data.split(',')[1]
 
         # Decode base64 image
-        image_bytes = base64.b64decode(image_data)
+        image_bytes = base64.b64decode(image_data, validate=True)
+        if len(image_bytes) > LIBRARY_IMAGE_MAX_BYTES:
+            return api_error('Library image must be 10 MB or smaller.', code='payload_too_large')
 
         # Process image
         with PILImage.open(io.BytesIO(image_bytes)) as img:
+            error = library_image_header_error(img)
+            if error:
+                return api_error(error, code='bad_request')
             img = img.convert('RGBA')
 
             # Resize if necessary (same logic as _process_library_image)
@@ -221,7 +241,9 @@ def preview_cropped_image(body: PreviewCroppedImageBody):
                 'message': 'Image processed successfully',
             })
 
-    except Exception as e:
-        print(f"Error processing cropped image: {e}")
+    except (ValueError, PILImage.UnidentifiedImageError, PILImage.DecompressionBombError,
+            OSError, SyntaxError):
+        return api_error('The library image could not be read safely.', code='bad_request')
+    except Exception:
         return api_error('Failed to process image', code='internal')
 

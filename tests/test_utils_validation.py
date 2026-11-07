@@ -7,10 +7,12 @@ in isolation from any real API surface.
 from __future__ import annotations
 
 import json
+from io import BytesIO
 
 import pytest
 from flask import Flask
 from pydantic import BaseModel, ConfigDict, Field
+from werkzeug.test import EnvironBuilder
 
 from oneirodex.utils.validation import (
     format_validation_errors,
@@ -105,6 +107,41 @@ def test_absent_body_is_422_for_required_model(client):
     resp = client.post('/echo')
     assert resp.status_code == 422
     assert 'name' in resp.get_json()['detail']
+
+
+def test_validate_body_reads_only_the_configured_byte_ceiling():
+    app = Flask(__name__)
+    app.config.update(TESTING=True)
+
+    class TinyBody(BaseModel):
+        value: int
+
+    @app.post('/bounded')
+    @validate_body(TinyBody, max_body_bytes=12)
+    def bounded(body: TinyBody):
+        return {'value': body.value}
+
+    client = app.test_client()
+    accepted = client.post('/bounded', data='{"value":1}', content_type='application/json')
+    assert accepted.status_code == 200
+    assert accepted.get_json() == {'value': 1}
+
+    rejected = client.post('/bounded', data='{"value":123456}', content_type='application/json')
+    assert rejected.status_code == 413
+    assert rejected.get_json()['error_code'] == 'payload_too_large'
+
+    builder = EnvironBuilder(
+        path='/bounded', method='POST',
+        input_stream=BytesIO(b'{"value":123456}'), content_type='application/json',
+    )
+    environ = builder.get_environ()
+    environ.pop('CONTENT_LENGTH', None)
+    environ['wsgi.input_terminated'] = True
+    with app.request_context(environ):
+        streamed = app.full_dispatch_request()
+    builder.close()
+    assert streamed.status_code == 413
+    assert streamed.get_json()['error_code'] == 'payload_too_large'
 
 
 def test_read_json_body_preserves_missing_and_non_object_values():

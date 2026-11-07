@@ -32,6 +32,8 @@ There is no Oneirodex cloud account, no product analytics SaaS, and no Discord.
 
 Native member JSON write APIs stream request bodies with a 64 KiB limit for saved filters and previews, collection updates, wanted-update entries, ownership match decisions, notification preferences, chat writes, and batch freshness checks. Oversized bodies receive HTTP 413 before these writes reach persistence.
 
+Administrator supplied library artwork is limited to 10 MiB compressed and 16 megapixels, accepts decoder-identified GIF/JPEG/PNG/WebP content regardless of the filename suffix, and is normalized to PNG for storage. The cropped-image preview reads no more than its configured streamed JSON ceiling before parsing. Member avatars are limited to 5 MiB and 16 megapixels per frame, with a 200-frame and 32-megapixel total-frame ceiling for animations. Custom chat emoji are limited to 256 KiB and 4 megapixels. These per-input limits do not yet establish a measured whole-process memory ceiling under simultaneous uploads.
+
 The admin RetroAchievements match API also stops reading JSON once its 8 KiB request limit is exceeded.
 
 Container startup passes parsed database connection settings to its probe as environment data rather than interpolating them into Python source.

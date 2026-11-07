@@ -47,3 +47,34 @@ def test_preview_cropped_image_requires_image_data(client, app, admin_user):
     _login(client, app, admin_user)
     response = client.post('/api/library/preview-cropped-image', json={})
     _assert_unprocessable(response, 'image_data')
+
+
+def test_preview_cropped_image_rejects_oversized_dimensions_before_conversion(
+    client, app, admin_user, monkeypatch,
+):
+    import base64
+
+    from PIL import Image as PILImage
+
+    _login(client, app, admin_user)
+
+    class OversizedHeader:
+        format = 'PNG'
+        size = (5000, 5000)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def convert(self, *_args):
+            raise AssertionError('oversized preview must be rejected before conversion')
+
+    monkeypatch.setattr(PILImage, 'open', lambda _file: OversizedHeader())
+    response = client.post('/api/library/preview-cropped-image', json={
+        'image_data': 'data:image/png;base64,' + base64.b64encode(b'header').decode('ascii'),
+    })
+
+    assert response.status_code == 400
+    assert response.get_json()['error_code'] == 'bad_request'
