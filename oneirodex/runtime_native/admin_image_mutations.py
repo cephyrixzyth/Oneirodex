@@ -81,19 +81,16 @@ class ImageMutationsData:
     def upload_single(self, app, game_uuid, filename, image_type, content):
         from datetime import datetime
         import uuid
-        from io import BytesIO
         from pathlib import Path
 
-        from PIL import Image as PILImage
         from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, Image
         from oneirodex.utils.image_kinds import SINGULAR_IMAGE_KINDS
         from oneirodex.utils.image_upload_limits import (
-            GAME_IMAGE_FORMAT_EXTENSIONS,
             GAME_IMAGE_MAX_BYTES,
-            game_image_header_error,
+            prepare_game_image,
         )
 
         game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
@@ -101,29 +98,7 @@ class ImageMutationsData:
             return None
         if len(content) > GAME_IMAGE_MAX_BYTES:
             raise ValueError('File size exceeds the 3MB limit')
-        try:
-            with PILImage.open(BytesIO(content)) as opened:
-                opened.verify()
-            with PILImage.open(BytesIO(content)) as opened:
-                header_error = game_image_header_error(opened)
-                if header_error:
-                    raise ValueError(header_error)
-                source_format = opened.format
-                extension = GAME_IMAGE_FORMAT_EXTENSIONS[str(source_format).upper()]
-                needs_resize = image_type == 'cover' and (
-                    opened.width > 1200 or opened.height > 1600
-                )
-                image = opened.copy() if needs_resize else None
-        except ValueError:
-            raise
-        except Exception as exc:
-            from PIL import Image as PIL
-            if isinstance(exc, PIL.DecompressionBombError):
-                raise ValueError('Invalid image data') from None
-            raise ValueError('Invalid image data') from None
-
-        if image is not None:
-            image.thumbnail((1200, 1600), PILImage.LANCZOS)
+        image_content, extension = prepare_game_image(content, image_type)
         root = Path(app.config['IMAGE_SAVE_PATH']).resolve()
         root.mkdir(parents=True, exist_ok=True)
         staged_old_files = []
@@ -154,11 +129,7 @@ class ImageMutationsData:
             target = (root / name).resolve()
             if root not in target.parents:
                 raise ValueError('Image target is invalid')
-            if image is not None:
-                with target.open('wb') as output:
-                    image.save(output, format=source_format or None)
-            else:
-                target.write_bytes(content)
+            target.write_bytes(image_content)
             row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
             db.session.add(row)
             db.session.commit()
@@ -338,6 +309,7 @@ def create_admin_image_mutation_router(
     async def upload_single_image(game_uuid: str, request: Request):
         from .acquire_status import _login_redirect
         from oneirodex.utils.image_kinds import image_kinds_error_message, parse_image_kind
+        from oneirodex.utils.image_upload_limits import ImageWorkBusy
         from oneirodex.utils.scanning import is_scan_job_running
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
@@ -419,7 +391,10 @@ def create_admin_image_mutation_router(
                                 response = JSONResponse(payload, status_code=status)
                             else:
                                 try:
-                                    result = data.upload_single(
+                                    from starlette.concurrency import run_in_threadpool
+
+                                    result = await run_in_threadpool(
+                                        data.upload_single,
                                         flask_app, game_uuid, upload.filename or '', image_type, raw,
                                     )
                                     if result is None:
@@ -428,6 +403,9 @@ def create_admin_image_mutation_router(
                                     else:
                                         from oneirodex.utils.api_contract import api_ok_payload
                                         response = JSONResponse(api_ok_payload(result))
+                                except ImageWorkBusy as exc:
+                                    payload, status = _error(str(exc), 'unavailable')
+                                    response = JSONResponse(payload, status_code=status)
                                 except ValueError as exc:
                                     payload, status = _error(str(exc), 'bad_request')
                                     response = JSONResponse(payload, status_code=status)

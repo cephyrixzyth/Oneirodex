@@ -214,6 +214,12 @@ class TestDecompressionBomb:
             height = 20000
             format = 'PNG'
 
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
             def verify(self):
                 return None
 
@@ -228,7 +234,7 @@ class TestDecompressionBomb:
                 return _Huge()
             return real_open(fp, *args, **kwargs)
 
-        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.PILImage.open', fake_open)
+        monkeypatch.setattr('PIL.Image.open', fake_open)
         response = _upload(client, admin_user, sample_game, _png(10, 10))
 
         assert response.status_code == 400

@@ -34,7 +34,7 @@ Native member JSON write APIs stream request bodies with a 64 KiB limit for save
 
 Administrator supplied library artwork is limited to 10 MiB compressed and 16 megapixels, accepts decoder-identified GIF/JPEG/PNG/WebP content regardless of the filename suffix, and is normalized to PNG for storage. The cropped-image preview reads no more than its configured streamed JSON ceiling before parsing. Member avatars are limited to 5 MiB and 16 megapixels per frame, with a 200-frame and 32-megapixel total-frame ceiling for animations. Custom chat emoji are limited to 256 KiB and 4 megapixels. These per-input limits do not yet establish a measured whole-process memory ceiling under simultaneous uploads.
 
-Game artwork uploads are limited to 3 MiB compressed and 60 megapixels, and the saved suffix follows the decoded JPG, PNG, or GIF format rather than the client filename. The 60-megapixel ceiling is a provisional existing limit; supported NAS peak-work and concurrent-upload measurements are still pending.
+Game artwork uploads are limited to 3 MiB compressed and 60 megapixels, and the saved suffix follows the decoded JPG, PNG, or GIF format rather than the client filename. One game-art validation/resize runs per server process; overlapping uploads receive a retryable unavailable response. Multiple server workers each have their own slot. The 60-megapixel ceiling and per-worker slot count remain provisional until supported NAS peak-work measurements are complete.
 
 The admin RetroAchievements match API also stops reading JSON once its 8 KiB request limit is exceeded.
 

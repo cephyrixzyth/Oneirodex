@@ -33,7 +33,6 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import select
-from PIL import Image as PILImage
 
 from oneirodex import cache, db
 from oneirodex.models import Game, Image
@@ -51,10 +50,10 @@ from oneirodex.utils.image_kinds import (
 )
 from oneirodex.utils.image_paths import image_path_under_save_dir
 from oneirodex.utils.image_upload_limits import (
-    GAME_IMAGE_FORMAT_EXTENSIONS,
     GAME_IMAGE_MAX_BYTES,
     GAME_IMAGE_MAX_PIXELS,
-    game_image_header_error,
+    ImageWorkBusy,
+    prepare_game_image,
 )
 from oneirodex.utils.scanning import refresh_images_in_background, is_scan_job_running
 from oneirodex.utils.validation import validate_body
@@ -135,35 +134,15 @@ def upload_image(game_uuid):
         limit_mb = MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)
         return api_error(f'File size exceeds the {limit_mb}MB limit', code='bad_request')
 
-    # Further validate the file's data to ensure it's a valid image
+    # Decode under the shared per-process work slot. The helper validates the
+    # actual format/dimensions and only materializes pixels for a cover resize.
     try:
-        img = PILImage.open(file)
-        img.verify()  # Verify that it is, in fact, an image
         file.seek(0)
-        img = PILImage.open(file)
-        header_error = game_image_header_error(img)
-        if header_error:
-            return api_error(header_error, code='bad_request')
-    except (IOError, SyntaxError, PILImage.DecompressionBombError):
-        return api_error('Invalid image data', code='bad_request')
-
-    # A few hundred KB of PNG can declare a 40000x40000 canvas; verify() does not
-    # decode it, but the resize below would.
-    file_extension = GAME_IMAGE_FORMAT_EXTENSIONS[str(img.format).upper()]
-
-    # Resized output has to be *saved*, which is what was missing: thumbnail()
-    # mutates `img` in place and the code then wrote the original bytes back
-    # out, so oversized covers were stored at full size and the resize was dead.
-    resized = None
-    source_format = img.format
-    max_width, max_height = 1200, 1600
-    if image_type == 'cover' and (img.width > max_width or img.height > max_height):
-        # LANCZOS, not ANTIALIAS: the latter was deprecated in Pillow 9.1
-        # and removed in 10, so this line raised AttributeError on every
-        # oversized cover upload. Same filter every other resize here uses.
-        img.thumbnail((max_width, max_height), PILImage.LANCZOS)
-        resized = img
-    file.seek(0)
+        image_content, file_extension = prepare_game_image(file.read(upload_bytes), image_type)
+    except ImageWorkBusy as exc:
+        return api_error(str(exc), code='unavailable')
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
 
     # Singular kinds: replace existing primary of that kind
     if image_type in SINGULAR_IMAGE_KINDS:
@@ -196,12 +175,8 @@ def upload_image(game_uuid):
         short_uuid = str(uuid.uuid4())[:8]
         filename = f"{game_file_key}_{unique_identifier}_{short_uuid}.{file_extension}"
     save_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], filename)
-    if resized is not None:
-        # Keep the uploaded format so a .png stays a PNG — inferring it from the
-        # path would break RGBA on a .jpg and flatten nothing correctly.
-        resized.save(save_path, format=source_format or None)
-    else:
-        file.save(save_path)
+    with open(save_path, 'wb') as output:
+        output.write(image_content)
     logger.info(f"File saved to: {save_path}")
     new_image = Image(game_uuid=game_uuid, image_type=image_type, url=filename)
     db.session.add(new_image)

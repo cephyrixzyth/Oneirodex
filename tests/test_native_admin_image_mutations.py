@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from threading import Event, Thread
 from types import SimpleNamespace
 
 import pytest
@@ -192,6 +193,9 @@ class FakeImageMutations:
 
     def upload_single(self, app, game_uuid, filename, image_type, content):
         self.single_upload = (game_uuid, filename, image_type, content)
+        if hasattr(self, 'upload_started'):
+            self.upload_started.set()
+            self.upload_continue.wait(timeout=3)
         return {
             'message': 'File uploaded successfully',
             'url': '/static/library/images/fixture.jpg', 'flash': 'Image uploaded successfully!',
@@ -218,6 +222,10 @@ def _client():
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     data = FakeImageMutations()
     app = FastAPI()
+    @app.get('/health')
+    async def health():
+        return {'status': 'ok'}
+
     app.include_router(create_admin_image_mutation_router(
         flask_app, find_user=lambda uid: user if uid == 8 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
@@ -229,6 +237,29 @@ def _client():
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     client.headers['X-CSRFToken'] = csrf
     return client, data
+
+
+def test_native_game_image_work_does_not_block_health_route(monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.scanning.is_scan_job_running', lambda: False)
+    client, data = _client()
+    data.upload_started = Event()
+    data.upload_continue = Event()
+    responses = []
+
+    upload = Thread(target=lambda: responses.append(client.post(
+        '/upload_image/game-1', files={'file': ('cover.png', b'image-bytes', 'image/png')},
+        data={'image_type': 'cover'},
+    )))
+    upload.start()
+    try:
+        assert data.upload_started.wait(timeout=2)
+        assert client.get('/health').json() == {'status': 'ok'}
+    finally:
+        data.upload_continue.set()
+        upload.join(timeout=3)
+
+    assert not upload.is_alive()
+    assert responses and responses[0].status_code == 200
 
 
 def test_delete_image_returns_success_or_not_found_without_touching_real_files():
