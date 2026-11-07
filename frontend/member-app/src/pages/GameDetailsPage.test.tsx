@@ -759,7 +759,7 @@ test('version download toasts Backend hint on 410 path_missing', async () => {
   expect(showToast).toHaveBeenCalledWith('Use game details → Remove missing versions', 'error')
 })
 
-test('admin can remove missing versions via cleanup_orphans', async () => {
+test('librarian capability can remove missing versions via cleanup_orphans', async () => {
   const user = userEvent.setup()
   stubFetch((url: any, options = {}) => {
     const href = String(url)
@@ -769,7 +769,8 @@ test('admin can remove missing versions via cleanup_orphans', async () => {
         json: () =>
           Promise.resolve({
             ...detailsPayload,
-            is_admin: true,
+            is_admin: false,
+            can_cleanup_versions: true,
           }),
       })
     }

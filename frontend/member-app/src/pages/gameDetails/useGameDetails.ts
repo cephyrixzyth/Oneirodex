@@ -105,7 +105,7 @@ export function useVersionActions({
   }
 
   async function handleCleanupOrphans() {
-    if (!gameUuid || cleanupBusy || !game?.is_admin) {
+    if (!gameUuid || cleanupBusy || !game?.can_cleanup_versions) {
       return
     }
     setCleanupBusy(true)

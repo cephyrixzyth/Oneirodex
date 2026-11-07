@@ -34,7 +34,7 @@ export function DetailsVersionsSection({
     <section className="od-details-page__section" id="updates">
       <div className="od-details-page__section-head">
         <h2>Versions</h2>
-        {game.is_admin ? (
+        {game.can_cleanup_versions ? (
           <Button
             type="button"
             pill

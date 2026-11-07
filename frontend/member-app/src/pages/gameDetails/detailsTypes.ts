@@ -91,6 +91,7 @@ export interface DetailsGame {
   is_admin?: boolean
   is_favorite?: boolean
   can_edit?: boolean
+  can_cleanup_versions?: boolean
   can_play_in_browser?: boolean
   client_connected?: boolean
   has_english?: boolean
