@@ -9,6 +9,11 @@ from pathlib import Path
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
+_ABSOLUTE_PATH_PATTERN = re.compile(
+    r'(?<![\w])(?:[A-Za-z]:\\|\\\\)[^\s\'"<>|]+'
+    r'|(?<![:/\w])/(?:[^\s\'"<>|]+)',
+)
+
 
 def _storage_roots() -> tuple[Path, Path]:
     from oneirodex.utils.runtime_config import get_runtime_config
@@ -358,6 +363,7 @@ def anonymize_user_audit_events(session, user) -> None:
         text = event.event_text
         for value in identifiers:
             text = re.sub(re.escape(value), '[deleted account]', text, flags=re.IGNORECASE)
+        text = _ABSOLUTE_PATH_PATTERN.sub('[redacted path]', text)
         event.event_text = text
         if event.audit_user == user.id:
             event.audit_user = None

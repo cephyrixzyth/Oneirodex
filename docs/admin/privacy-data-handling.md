@@ -138,6 +138,7 @@ columns to user IDs; all nine with no database `ON DELETE` action have explicit 
 retain dispositions. PostgreSQL route/service tests cover a blocking download request, invite
 creator and used-by references, personal attract settings, favorites/status rows, duplicate-fix
 actor history, authored newsletter removal, and audit retention with direct identifiers removed.
+Absolute Windows, UNC, and POSIX paths in retained events for the deleted account are redacted.
 This is an ORM-source inventory, not a comparison against every deployed database schema.
 
 The selected policy is to purge user-specific emulator save-state, uploaded avatar, and chat
@@ -145,10 +146,11 @@ attachment bytes after the database deletion commits. The deletion transaction r
 managed-root cleanup jobs before it commits; failed unlinks remain retryable, and the deletion
 response reports whether cleanup is pending. A background worker retries pending jobs after
 startup and every minute. Offline backups are outside account deletion and follow a separate
-operator retention policy with no duration set here. A full review of retained free text and
-paths remains open. Shared library/game files, shared chat spaces, shared emojis, and reference
+operator retention policy with no duration set here. A full review of retained free text remains
+open. Shared library/game files, shared chat spaces, shared emojis, and reference
 sets must not be removed merely because an account is deleted; uploader/author references are
-cleared where supported. Restore reapplication remains open work. Deleting a game removes its
+cleared where supported. Actual worker process restart and restore reapplication remain open work.
+Deleting a game removes its
 play sessions and per-game progress; game requests, owned-title matches, and linked game-server
 records remain with their game reference cleared where the schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
