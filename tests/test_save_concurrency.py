@@ -15,6 +15,7 @@ from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.emulator_saves import (
     SaveQuotaExceeded,
     SaveRevisionConflict,
+    read_save_bytes,
     store_save,
 )
 
@@ -164,3 +165,51 @@ def test_concurrent_stale_revision_allows_only_one_replacement(
     assert current.revision == 2
     assert initial_path.read_bytes() == b'initial'
     assert Path(history.storage_path).read_bytes() == b'initial'
+
+
+def test_sustained_concurrent_replacements_preserve_every_committed_generation(
+    app, no_savepoint_db, tmp_path,
+):
+    _assert_postgresql(app)
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
+    app.config['ENABLE_EMULATOR_SAVE_SYNC'] = True
+    user_id, game_uuid = _seed_owner_game(no_savepoint_db)
+
+    writer_count = 4
+    writes_per_writer = 8
+    barrier = Barrier(writer_count)
+    expected_payloads = {
+        f'writer-{writer}-write-{write}'.encode()
+        for writer in range(writer_count)
+        for write in range(writes_per_writer)
+    }
+
+    def replace_repeatedly(writer):
+        with app.app_context():
+            barrier.wait(timeout=10)
+            for write in range(writes_per_writer):
+                store_save(
+                    user_id=user_id,
+                    game_uuid=game_uuid,
+                    slot_name='shared-slot',
+                    file_storage=BytesIO(f'writer-{writer}-write-{write}'.encode()),
+                )
+
+    with ThreadPoolExecutor(max_workers=writer_count) as pool:
+        list(pool.map(replace_repeatedly, range(writer_count)))
+
+    no_savepoint_db.expire_all()
+    current = no_savepoint_db.query(EmulatorSave).filter_by(
+        user_id=user_id, game_uuid=game_uuid, slot_name='shared-slot',
+    ).one()
+    generations = no_savepoint_db.query(EmulatorSaveGeneration).filter_by(
+        save_id=current.id,
+    ).all()
+
+    assert current.revision == len(expected_payloads)
+    assert len(generations) == len(expected_payloads) - 1
+    all_paths = [current.storage_path, *(row.storage_path for row in generations)]
+    assert len(set(all_paths)) == len(expected_payloads)
+    assert {read_save_bytes(row) for row in [current, *generations]} == expected_payloads
+    assert len(list(Path(tmp_path).rglob('*.save'))) == len(expected_payloads)
