@@ -205,10 +205,7 @@ class AdminUserMutationData:
     def delete(self, user_id, actor_id):
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.event_logging import log_system_event
-        from oneirodex.utils.user_deletion import (
-            anonymize_user_audit_events,
-            delete_user_owned_rows,
-        )
+        from oneirodex.utils.user_deletion import delete_user_account
 
         actor = self._lock_and_reload_actor(actor_id)
         if actor is None:
@@ -224,15 +221,12 @@ class AdminUserMutationData:
         deleting_self = actor.id == user.id
         audit_actor_id = 'system' if deleting_self else actor.id
         try:
-            anonymize_user_audit_events(db.session, user)
-            delete_user_owned_rows(db.session, user)
-            db.session.delete(user)
-            db.session.commit()
+            cleanup_pending = delete_user_account(db.session, user)
             log_system_event(
                 'Admin account deleted user account',
                 event_type='audit', event_level='warning', audit_user=audit_actor_id,
             )
-            return {}, None
+            return {'cleanup_pending': cleanup_pending > 0}, None
         except Exception:  # noqa: BLE001 — persistence diagnostics stay in logs
             db.session.rollback()
             log_system_event(

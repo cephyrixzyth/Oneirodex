@@ -41,6 +41,33 @@ class Newsletter(db.Model):
     
     sender = db.relationship('User', backref='sent_newsletters')
 
+
+class UserDeletionFileJob(db.Model):
+    """Retryable post-commit purge of one file under a managed storage root."""
+
+    __tablename__ = 'user_deletion_file_jobs'
+    __table_args__ = (
+        db.UniqueConstraint('path_key', name='uq_user_delete_file_job_path'),
+        db.Index('ix_user_deletion_file_jobs_state', 'state', 'updated_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    path_key = db.Column(db.String(64), nullable=False)
+    root_path = db.Column(db.String(1024), nullable=False)
+    relative_path = db.Column(db.String(1024), nullable=False)
+    state = db.Column(
+        db.String(16), nullable=False, default='pending', server_default='pending',
+    )
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    last_error_code = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
 class GlobalSettings(db.Model):
     __tablename__ = 'global_settings'
 
@@ -426,4 +453,5 @@ __all__ = [
     "AllowedFileType",
     "IgnoredFileType",
     "SystemEvents",
+    "UserDeletionFileJob",
 ]

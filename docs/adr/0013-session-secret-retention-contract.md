@@ -20,8 +20,10 @@ This record captures the owner's selected policies. The persistent browser
 session implementation is present in the current review branch. The reusable-
 credential envelope and conversion tooling are implemented in the candidate;
 focused tests and an independent source review passed. Operator database
-conversion and restore qualification remain pending. Account-deletion
-migrations remain planned work.
+conversion and restore qualification remain pending. Account deletion now has
+a PostgreSQL-verified relation inventory, a transactional managed-file job
+queue, and a retry worker; deployment-schema, restart, and restore qualification
+remain pending.
 
 ## Decision
 
@@ -99,9 +101,10 @@ migrations remain planned work.
    decryptability is verified. **Implementation and focused source review
    passed; operator conversion and restore qualification remain pending.**
 4. Inventory every user relation and managed file, then implement resumable
-   deletion using the decisions above. The ORM user-FK inventory currently has
-   50 columns and a focused PostgreSQL test compares it with database schema;
-   physical-file cleanup and retry status remain implementation work.
+   deletion using the decisions above. The ORM user-FK inventory has 50 columns
+   and a focused PostgreSQL test compares it with the database schema. Managed
+   avatar, save, and chat-attachment cleanup is transactionally queued and
+   retried; deployed-schema and restart-level qualification remain open.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
 

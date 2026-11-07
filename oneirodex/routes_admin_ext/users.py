@@ -438,17 +438,16 @@ def manage_user_api(user_id):
         audit_actor_id = 'system' if deleting_self else current_user.id
 
         try:
-            _anonymize_user_audit_events(user)
-            _delete_user_owned_rows(user)
-            db.session.delete(user)
-            db.session.commit()
+            from oneirodex.utils.user_deletion import delete_user_account
+
+            cleanup_pending = delete_user_account(db.session, user)
             log_system_event(
                 f"Admin account {'deleted' if deleting_self else current_user.name} deleted user account",
                 event_type='audit',
                 event_level='warning',
                 audit_user=audit_actor_id,
             )
-            return api_ok()
+            return api_ok({'cleanup_pending': cleanup_pending > 0})
         except Exception:
             db.session.rollback()
             log_system_event(

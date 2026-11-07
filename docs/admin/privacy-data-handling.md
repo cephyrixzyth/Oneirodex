@@ -140,16 +140,17 @@ creator and used-by references, personal attract settings, favorites/status rows
 actor history, authored newsletter removal, and audit retention with direct identifiers removed.
 This is an ORM-source inventory, not a comparison against every deployed database schema.
 
-Retryable cleanup of user-owned files and a full review of retained free text and paths remain
-open. The selected policy is to purge user-specific emulator save-state, uploaded avatar, and
-chat attachment bytes after the database deletion commits. A failed purge must remain visible
-and retryable. Offline backups are outside account deletion and follow a separate operator
-retention policy with no duration set here. Shared library/game files,
-shared chat spaces, shared emojis, and reference sets must not be removed merely because an
-account is deleted; uploader/author references are cleared where supported. Physical file
-erasure, restore reapplication, and fault/retry behavior remain open work. Deleting a game removes
-its play sessions and per-game progress; game requests, owned-title matches, and linked
-game-server records remain with their game reference cleared where the schema defines `SET NULL`.
+The selected policy is to purge user-specific emulator save-state, uploaded avatar, and chat
+attachment bytes after the database deletion commits. The deletion transaction records safe
+managed-root cleanup jobs before it commits; failed unlinks remain retryable, and the deletion
+response reports whether cleanup is pending. A background worker retries pending jobs after
+startup and every minute. Offline backups are outside account deletion and follow a separate
+operator retention policy with no duration set here. A full review of retained free text and
+paths remains open. Shared library/game files, shared chat spaces, shared emojis, and reference
+sets must not be removed merely because an account is deleted; uploader/author references are
+cleared where supported. Restore reapplication remains open work. Deleting a game removes its
+play sessions and per-game progress; game requests, owned-title matches, and linked game-server
+records remain with their game reference cleared where the schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
 
 Admin → System danger-zone reset can wipe catalog / libraries / users / settings in-app; it **never
