@@ -124,20 +124,20 @@ continues to follow accepted-friend and game-access rules.
 ## Backups and deletion
 
 Postgres holds accounts, chat, playtime, and the catalog. Game files live on the library mounts.
-The store-credential key ring is required to decrypt linked provider credentials and must be
+The linked-store credential key ring is required to decrypt provider credentials and must be
 backed up separately under protected access. A database backup without the matching key ring
-cannot restore store sync. Backups created before credential conversion may still contain
-plaintext provider credentials and should remain protected accordingly. Backups from before
-password-reset token hashing may also contain raw reset tokens; the application continues to
-enforce the 15-minute expiry when a token is used.
-Deleting a user cascades their progress, tokens, and chat authorship per schema `ON DELETE`.
-The current account-delete flow does not purge user-specific emulator save-state or chat
-attachment bytes from the server's storage. Their database metadata is removed, and the
-authenticated download routes require that metadata plus current owner/channel access, so
-the application no longer serves the orphaned files. Operators who need physical erasure
-must handle those files through a documented storage-retention procedure; automated cleanup
-is still open work.
-Deleting a game removes its play sessions and per-game progress; game requests, owned-title
+cannot restore store sync. Other integration settings still include credential fields that are
+not yet covered by the shared encrypted-secret contract. Backups created before linked-store
+credential conversion may contain plaintext provider credentials and should remain protected
+accordingly. Backups from before password-reset token hashing may also contain raw reset tokens;
+the application continues to enforce the 15-minute expiry when a token is used.
+Account deletion is in progress: the current route removes the user and several inventoried
+no-action relation rows, and retained audit events have direct account identifiers cleared.
+The complete relation inventory, durable/retryable cleanup, and review of retained free text and
+paths remain open. User-specific emulator save-state and chat attachment bytes are not yet
+purged from server storage. Their database metadata may be removed, and authenticated download
+routes require metadata plus current owner/channel access, so orphaned files are not served by
+the application. Physical file erasure and fault/retry behavior remain open work.Deleting a game removes its play sessions and per-game progress; game requests, owned-title
 matches, and linked game-server records remain with their game reference cleared where the
 schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
