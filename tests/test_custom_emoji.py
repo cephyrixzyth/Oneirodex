@@ -132,5 +132,54 @@ def test_upload_rejects_oversized_dimensions_before_decode_or_file_creation(
     assert not (tmp_path / 'chat-emoji').exists()
 
 
+def test_upload_uses_decoded_format_independent_of_filename_suffix(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='party', label='Party', file=_png_file(name='party.jpg'),
+            uploader=admin,
+        )
+        file_name = row.file_name
+
+    assert file_name.endswith('.webp')
+    assert (tmp_path / 'chat-emoji' / file_name).is_file()
+
+
+def test_upload_rejects_unsupported_content_under_allowed_suffix(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    content = BytesIO()
+    Image.new('RGB', (12, 12), 'purple').save(content, format='TIFF')
+    content.seek(0)
+    upload = FileStorage(stream=content, filename='not-really.png')
+
+    with app.app_context(), pytest.raises(ValueError, match='image content'):
+        upload_custom_emoji(
+            slug='tiff', label='TIFF', file=upload, uploader=admin,
+        )
+
+    assert not (tmp_path / 'chat-emoji').exists()
+
+
+def test_upload_rejects_animated_content(tmp_path, app, db_session, admin, monkeypatch):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    first = Image.new('RGBA', (16, 16), 'red')
+    second = Image.new('RGBA', (16, 16), 'blue')
+    content = BytesIO()
+    first.save(content, format='PNG', save_all=True, append_images=[second], duration=50)
+    content.seek(0)
+    upload = FileStorage(stream=content, filename='animated.png')
+
+    with app.app_context(), pytest.raises(ValueError, match='Animated images'):
+        upload_custom_emoji(
+            slug='motion', label='Motion', file=upload, uploader=admin,
+        )
+
+    assert not (tmp_path / 'chat-emoji').exists()
+
+
 def test_fixed_set_unchanged():
     assert len(ALLOWED_REACTIONS) == 5

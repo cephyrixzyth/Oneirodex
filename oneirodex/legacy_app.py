@@ -67,6 +67,16 @@ def create_app(config_object=None):
             raise RuntimeError('CRITICAL: App test database configuration mismatch; connection details withheld.')
         logger.info('PYTEST MODE: validated test database configuration')
 
+    # Apply the custom-emoji body cap before Flask-WTF's before-request hook
+    # reads request.form to locate a CSRF token. Route-level limits alone run
+    # too late: the multipart parser would already have consumed the body.
+    @app.before_request
+    def _limit_custom_emoji_upload_body():
+        from flask import request
+        from oneirodex.utils.custom_emoji import limit_custom_emoji_request_body
+
+        limit_custom_emoji_request_body(request)
+
     csrf.init_app(app)
     apply_proxy_fix(app)
     apply_security_headers(app)

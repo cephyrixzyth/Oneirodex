@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from flask import flash, redirect, request, url_for, current_app
 from flask_login import current_user, login_required
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.custom_emoji import (
     MAX_CUSTOM_EMOJI,
     MAX_UPLOAD_BYTES,
+    MAX_UPLOAD_BODY_BYTES,
     MAX_EDGE_PX,
     ALLOWED_EXT,
+    ImageWorkBusy,
     normalize_slug,
     delete_custom_emoji,
     list_custom_emoji,
@@ -39,6 +42,7 @@ def chat_emoji_api():
         except Exception:
             current_app.logger.warning('Could not load custom chat emoji')
             return api_error('Could not load custom chat emoji', code='internal')
+    request.max_content_length = MAX_UPLOAD_BODY_BYTES
     try:
         row = upload_custom_emoji(slug=request.form.get('slug') or '',
                                  label=request.form.get('label') or '',
@@ -49,6 +53,10 @@ def chat_emoji_api():
         if text.startswith('Invalid image:'):
             text = 'The file could not be read as an image'
         return api_error(text, code='bad_request')
+    except ImageWorkBusy as exc:
+        return api_error(str(exc), code='unavailable')
+    except RequestEntityTooLarge:
+        return api_error('Emoji upload exceeds the size limit.', code='payload_too_large')
     except Exception:
         db.session.rollback()
         current_app.logger.warning('Custom emoji upload failed')
@@ -78,7 +86,12 @@ def delete_chat_emoji_api(slug):
 @admin_required
 def chat_emoji_admin():
     if request.method == 'POST':
-        action = (request.form.get('action') or 'upload').strip()
+        request.max_content_length = MAX_UPLOAD_BODY_BYTES
+        try:
+            action = (request.form.get('action') or 'upload').strip()
+        except RequestEntityTooLarge:
+            flash('Emoji upload exceeds the size limit.', 'error')
+            return redirect(url_for('admin2.chat_emoji_admin'))
         if action == 'delete':
             slug = request.form.get('slug') or ''
             if delete_custom_emoji(slug):
@@ -95,6 +108,8 @@ def chat_emoji_admin():
             )
             flash(f'Uploaded {row.reaction_key()}', 'success')
         except ValueError as exc:
+            flash(str(exc), 'error')
+        except ImageWorkBusy as exc:
             flash(str(exc), 'error')
         return redirect(url_for('admin2.chat_emoji_admin'))
 

@@ -7502,6 +7502,41 @@ def test_native_admin_chat_emoji_upload_keeps_admin_payload_and_limits(monkeypat
     assert calls == [('party', 'Party', 'party.png', b'fixture', 7, None)]
 
 
+def test_native_admin_chat_emoji_streams_and_caps_multipart_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    calls = []
+
+    class Row:
+        def to_dict(self):
+            return {'slug': 'party', 'file_name': 'party.webp'}
+
+    def upload(_self, **kwargs):
+        calls.append(kwargs['file'].read())
+        return Row()
+
+    monkeypatch.setattr(chat_emoji_read.ChatEmojiData, 'upload', upload)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(file_bytes):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/admin/chat-emoji', data={'slug': 'party', 'label': 'Party'},
+                files={'file': ('party.png', file_bytes, 'image/png')},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    accepted = asyncio.run(send(b'a' * (256 * 1024)))
+    rejected = asyncio.run(send(b'a' * (400 * 1024)))
+
+    assert accepted.status_code == 201
+    assert rejected.status_code == 413
+    assert rejected.json()['error_code'] == 'payload_too_large'
+    assert calls == [b'a' * (256 * 1024)]
+
+
 def test_chat_storage_directories_accept_explicit_root_without_flask_context(tmp_path):
     from flask import has_app_context
 

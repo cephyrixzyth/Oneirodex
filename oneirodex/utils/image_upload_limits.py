@@ -2,6 +2,7 @@
 
 from io import BytesIO
 from threading import BoundedSemaphore
+from contextlib import contextmanager
 
 LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 LIBRARY_IMAGE_MAX_PIXELS = 16_000_000
@@ -10,13 +11,25 @@ GAME_IMAGE_MAX_BYTES = 3 * 1024 * 1024
 GAME_IMAGE_MAX_PIXELS = 60_000_000
 GAME_IMAGE_COVER_MAX_SIZE = (1200, 1600)
 GAME_IMAGE_FORMAT_EXTENSIONS = {'GIF': 'gif', 'JPEG': 'jpg', 'PNG': 'png'}
-GAME_IMAGE_WORKER = BoundedSemaphore(1)
+IMAGE_DECODE_WORKER = BoundedSemaphore(1)
+GAME_IMAGE_WORKER = IMAGE_DECODE_WORKER
 LIBRARY_PREVIEW_MAX_BODY_BYTES = ((LIBRARY_IMAGE_MAX_BYTES + 2) // 3) * 4 + 128 * 1024
 CUSTOM_EMOJI_MAX_PIXELS = 4_000_000
 
 
 class ImageWorkBusy(RuntimeError):
     """Raised when the process image-work slot is already occupied."""
+
+
+@contextmanager
+def image_decode_work_slot():
+    """Limit decoded-image work to one concurrent operation per process."""
+    if not IMAGE_DECODE_WORKER.acquire(blocking=False):
+        raise ImageWorkBusy('Image processing is busy. Try again shortly.')
+    try:
+        yield
+    finally:
+        IMAGE_DECODE_WORKER.release()
 
 
 def prepare_game_image(content: bytes, image_type: str) -> tuple[bytes, str]:
@@ -26,7 +39,7 @@ def prepare_game_image(content: bytes, image_type: str) -> tuple[bytes, str]:
     an unnecessary full pixel buffer. A busy slot fails quickly so callers can
     keep their request/event loop available and return a retryable response.
     """
-    if not GAME_IMAGE_WORKER.acquire(blocking=False):
+    if not IMAGE_DECODE_WORKER.acquire(blocking=False):
         raise ImageWorkBusy('Image processing is busy. Try again shortly.')
     image = None
     output = None
@@ -66,7 +79,7 @@ def prepare_game_image(content: bytes, image_type: str) -> tuple[bytes, str]:
             if output is not None:
                 output.close()
         finally:
-            GAME_IMAGE_WORKER.release()
+            IMAGE_DECODE_WORKER.release()
 
 
 def library_image_header_error(image) -> str | None:

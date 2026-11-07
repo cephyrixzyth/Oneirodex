@@ -239,7 +239,7 @@ def create_chat_emoji_router(
         from .csrf_compat import csrf_error_response
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
-        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BYTES
+        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BODY_BYTES, MAX_UPLOAD_BYTES
         from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
         from oneirodex.utils.role_catalog import normalize_role
 
@@ -281,8 +281,18 @@ def create_chat_emoji_router(
                     )
                     response = JSONResponse(body, status_code=status)
             if response is None:
-                form = await request.form()
+                form = None
                 try:
+                    from .bounded_multipart import (
+                        InvalidContentLength, RequestBodyTooLarge,
+                        bounded_multipart_form,
+                    )
+                    from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                    form = await bounded_multipart_form(
+                        request, max_body_bytes=MAX_UPLOAD_BODY_BYTES,
+                        max_files=1, max_fields=12, max_part_size=MAX_UPLOAD_BYTES + 1,
+                    )
                     upload = first_form_upload(form, 'file')
                     file = None
                     if isinstance(upload, StarletteUploadFile):
@@ -293,16 +303,28 @@ def create_chat_emoji_router(
                         )
                     slug = str(first_form_value(form, 'slug') or '')
                     label = str(first_form_value(form, 'label') or '')
-                finally:
-                    await form.close()
-                try:
-                    row = data.upload(
+                    from starlette.concurrency import run_in_threadpool
+
+                    row = await run_in_threadpool(data.upload,
                         slug=slug, label=label, file=file, uploader=auth.user,
                         upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
                     )
                     response = JSONResponse(api_ok_payload({
                         'emoji': row.to_dict(), 'message': 'Custom emoji uploaded.',
                     }), status_code=201)
+                except RequestBodyTooLarge:
+                    body, status = api_error_payload(
+                        'Emoji upload exceeds the size limit.', code='payload_too_large',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                except InvalidContentLength:
+                    body, status = api_error_payload(
+                        'Invalid request size.', code='bad_request',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                except ImageWorkBusy as exc:
+                    body, status = api_error_payload(str(exc), code='unavailable')
+                    response = JSONResponse(body, status_code=status)
                 except ValueError as exc:
                     message = str(exc)
                     if message.startswith('Invalid image:'):
@@ -320,6 +342,9 @@ def create_chat_emoji_router(
                         'Could not upload custom emoji', code='internal',
                     )
                     response = JSONResponse(body, status_code=status)
+                finally:
+                    if form is not None:
+                        await form.close()
             if auth is not None and auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -342,7 +367,7 @@ def create_chat_emoji_router(
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
         from .oidc_status import _set_session_cookie
-        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BYTES
+        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BODY_BYTES, MAX_UPLOAD_BYTES
         from oneirodex.utils.role_catalog import normalize_role
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
@@ -392,8 +417,8 @@ def create_chat_emoji_router(
 
                     try:
                         form = await bounded_multipart_form(
-                            request, max_body_bytes=MAX_UPLOAD_BYTES + 64 * 1024,
-                            max_files=1, max_fields=12, max_part_size=64 * 1024,
+                            request, max_body_bytes=MAX_UPLOAD_BODY_BYTES,
+                            max_files=1, max_fields=12, max_part_size=MAX_UPLOAD_BYTES + 1,
                         )
                     except RequestBodyTooLarge:
                         from oneirodex.utils.api_contract import api_error_payload
@@ -443,13 +468,18 @@ def create_chat_emoji_router(
                                 content_type=upload.content_type,
                             )
                         try:
-                            row = data.upload(
+                            from starlette.concurrency import run_in_threadpool
+                            from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                            row = await run_in_threadpool(data.upload,
                                 slug=str(first_form_value(form, 'slug') or ''),
                                 label=str(first_form_value(form, 'label') or ''), file=file,
                                 uploader=auth.user,
                                 upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
                             )
                             message, category = f'Uploaded {row.reaction_key()}', 'success'
+                        except ImageWorkBusy as exc:
+                            message, category = str(exc), 'error'
                         except ValueError as exc:
                             message, category = str(exc), 'error'
                         except Exception:

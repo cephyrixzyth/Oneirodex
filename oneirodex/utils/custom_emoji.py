@@ -11,18 +11,35 @@ from oneirodex.utils.runtime_config import get_runtime_config
 from PIL import Image
 from sqlalchemy import func, select
 from werkzeug.datastructures import FileStorage
-from werkzeug.utils import secure_filename
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import CustomEmoji, User
-from oneirodex.utils.image_upload_limits import CUSTOM_EMOJI_MAX_PIXELS
+from oneirodex.utils.image_upload_limits import (
+    CUSTOM_EMOJI_MAX_PIXELS,
+    ImageWorkBusy,
+    image_decode_work_slot,
+)
 
 SLUG_RE = re.compile(r'^[a-z0-9_-]{2,24}$')
 MAX_CUSTOM_EMOJI = 20
 MAX_UPLOAD_BYTES = 256 * 1024
+MAX_UPLOAD_BODY_BYTES = MAX_UPLOAD_BYTES + 64 * 1024
 MAX_EDGE_PX = 128
 ALLOWED_EXT = frozenset({'png', 'webp', 'jpg', 'jpeg'})
+ALLOWED_FORMATS = frozenset({'JPEG', 'PNG', 'WEBP'})
 ALLOWED_REACTIONS = frozenset({'👍', '❤️', '😂', '🎉', '👀'})
+
+
+class _InvalidImageUpload(ValueError):
+    """Safe validation failures for uploaded image content."""
+
+
+def limit_custom_emoji_request_body(request) -> None:
+    """Set the per-route cap before any Flask before-request parser runs."""
+    if request.method == 'POST' and request.path in {
+        '/api/admin/chat-emoji', '/admin/chat_emoji',
+    }:
+        request.max_content_length = MAX_UPLOAD_BODY_BYTES
 
 
 def emoji_dir(upload_folder: str | None = None) -> str:
@@ -85,11 +102,6 @@ def upload_custom_emoji(
     if not file or not getattr(file, 'filename', None):
         raise ValueError('Image file required')
 
-    filename = secure_filename(file.filename or '')
-    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext not in ALLOWED_EXT:
-        raise ValueError('Only PNG, WebP, or JPEG allowed')
-
     raw = file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise ValueError(f'File too large (max {MAX_UPLOAD_BYTES // 1024}KB)')
@@ -97,36 +109,57 @@ def upload_custom_emoji(
         raise ValueError('Empty file')
 
     try:
-        img = Image.open(BytesIO(raw))
-    except Exception as exc:
-        raise ValueError(f'Invalid image: {exc}') from exc
-
-    if img.width <= 0 or img.height <= 0 or img.width * img.height > CUSTOM_EMOJI_MAX_PIXELS:
-        img.close()
-        raise ValueError('Image dimensions are too large for a custom emoji.')
-
-    try:
-        img.load()
-    except Exception as exc:
-        img.close()
-        raise ValueError(f'Invalid image: {exc}') from exc
-
-    if img.mode not in ('RGB', 'RGBA'):
-        img = img.convert('RGBA')
-    img.thumbnail((MAX_EDGE_PX, MAX_EDGE_PX), Image.LANCZOS)
+        with image_decode_work_slot():
+            with Image.open(BytesIO(raw)) as opened:
+                image_format = str(opened.format or '').upper()
+                if image_format not in ALLOWED_FORMATS:
+                    raise _InvalidImageUpload('Only PNG, WebP, or JPEG image content is allowed')
+                if opened.width <= 0 or opened.height <= 0 \
+                        or opened.width * opened.height > CUSTOM_EMOJI_MAX_PIXELS:
+                    raise _InvalidImageUpload('Image dimensions are too large for a custom emoji.')
+                if getattr(opened, 'n_frames', 1) > 1:
+                    raise _InvalidImageUpload('Animated images are not supported for custom emoji.')
+                opened.load()
+                img = opened.convert('RGBA') if opened.mode not in ('RGB', 'RGBA') else opened.copy()
+            try:
+                img.thumbnail((MAX_EDGE_PX, MAX_EDGE_PX), Image.LANCZOS)
+                output = BytesIO()
+                img.save(output, format='WEBP', quality=85)
+                encoded = output.getvalue()
+                output.close()
+            finally:
+                img.close()
+    except ImageWorkBusy:
+        raise
+    except _InvalidImageUpload:
+        raise
+    except Exception:
+        raise ValueError('Invalid image data') from None
 
     out_name = f'{uuid4().hex}.webp'
     out_path = os.path.join(emoji_dir(upload_folder), out_name)
-    img.save(out_path, format='WEBP', quality=85)
+    try:
+        with open(out_path, 'xb') as output_file:
+            output_file.write(encoded)
 
-    row = CustomEmoji(
-        slug=slug,
-        label=label,
-        file_name=out_name,
-        uploaded_by_user_id=getattr(uploader, 'id', None),
-    )
-    db.session.add(row)
-    db.session.commit()
+        row = CustomEmoji(
+            slug=slug,
+            label=label,
+            file_name=out_name,
+            uploaded_by_user_id=getattr(uploader, 'id', None),
+        )
+        db.session.add(row)
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            os.remove(out_path)
+        except OSError:
+            pass
+        raise
     return row
 
 
