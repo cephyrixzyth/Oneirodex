@@ -175,13 +175,26 @@ check_homebrew() {
 }
 
 install_prerequisites() {
-    print_step "Installing prerequisites (Python, PostgreSQL)..."
+    print_step "Installing prerequisites (Python, PostgreSQL) and checking Node 22..."
 
     if ! brew list --formula "$PYTHON_FORMULA" >/dev/null 2>&1; then
         print_verbose "Installing $PYTHON_FORMULA..."
         run_quiet brew install "$PYTHON_FORMULA"
     fi
     print_success "Python available"
+
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+        print_error "Node.js 22 and npm are required to build the Oneirodex SPAs."
+        print_info "Install with Homebrew: brew install node@22"
+        return 1
+    fi
+    local node_version
+    node_version="$(node -p 'process.versions.node')"
+    if [[ "$node_version" != 22.* ]]; then
+        print_error "Node.js 22 is required; found $node_version"
+        return 1
+    fi
+    print_success "Node.js $node_version available"
 
     if [ "$SKIP_DB" = true ]; then
         print_info "Skipping PostgreSQL install (--no-db)"
@@ -259,6 +272,14 @@ setup_python_environment() {
     if [ "$DEV_MODE" = true ] && [ -f "$SCRIPT_DIR/requirements-dev.txt" ]; then
         run_quiet python3 -m pip install -r "$SCRIPT_DIR/requirements-dev.txt"
     fi
+}
+
+build_native_spas() {
+    print_step "Building all five native installer SPAs with Node 22..."
+    cd "$SCRIPT_DIR"
+    run_quiet npm ci --no-audit --no-fund
+    run_quiet npm run build:native-spas
+    print_success "Member, member-auth, admin, admin-pilot and ops-glance bundles built"
 }
 
 check_scan_locations() {
@@ -380,10 +401,10 @@ validate_installation() {
     source "$SCRIPT_DIR/.env"
     set +a
 
-    if python3 -c "from oneirodex import create_app; create_app()" >/dev/null 2>&1; then
-        print_success "Flask application setup validated"
+    if python3 scripts/validate-native-install.py >/dev/null 2>&1; then
+        print_success "Native runtime and frontend assets validated"
     else
-        print_error "Flask application validation failed — see $LOG_FILE"
+        print_error "Native runtime or frontend asset validation failed — see $LOG_FILE"
         return 1
     fi
 
@@ -456,6 +477,7 @@ main() {
     install_prerequisites
     setup_postgresql
     setup_python_environment
+    build_native_spas
     configure_application
     validate_installation
     show_summary

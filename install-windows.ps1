@@ -116,6 +116,20 @@ function Test-Prerequisites {
     $version = (& python -c 'import sys; print("%d.%d" % sys.version_info[:2])').Trim()
     Write-Ok "Python $version at $python"
 
+    $node = Get-CommandPath 'node'
+    $npm = Get-CommandPath 'npm'
+    if ($null -eq $node -or $null -eq $npm) {
+        Write-Fail 'Node.js 22 and npm were not found on PATH.'
+        Write-Note 'Install Node.js 22 LTS, then re-run this script.'
+        throw 'Node.js 22 is required to build the Oneirodex SPAs'
+    }
+    $nodeVersion = (& node -p 'process.versions.node').Trim()
+    if ($nodeVersion -notmatch '^22\.') {
+        Write-Fail "Node.js 22 is required; found $nodeVersion at $node"
+        throw 'Unsupported Node.js version'
+    }
+    Write-Ok "Node.js $nodeVersion at $node"
+
     if ($SkipDb) {
         Write-Note 'Skipping PostgreSQL check (-SkipDb)'
         return
@@ -208,6 +222,21 @@ function Install-PythonEnvironment {
         & $venvPython -m pip install -r $devRequirements --quiet
         Write-Ok 'Development dependencies installed'
     }
+}
+
+function Install-NativeSpas {
+    Write-Step 'Installing Node workspace dependencies and building the five SPAs...'
+    Push-Location $ScriptDir
+    try {
+        & npm.cmd ci --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed for the root workspace' }
+        & npm.cmd run build:native-spas
+        if ($LASTEXITCODE -ne 0) { throw 'Native SPA build failed' }
+    }
+    finally {
+        Pop-Location
+    }
+    Write-Ok 'Member, member-auth, admin, admin-pilot and ops-glance bundles built'
 }
 
 function Test-ScanLocations([string]$Roots) {
@@ -368,6 +397,7 @@ try {
 
     $databaseUrl = New-Databases
     Install-PythonEnvironment
+    Install-NativeSpas
     Write-EnvFile $databaseUrl
     Show-Summary
 }

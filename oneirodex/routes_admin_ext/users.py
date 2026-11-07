@@ -2,11 +2,25 @@
 from oneirodex.utils.api_response import api_error, api_ok
 from flask import request, jsonify
 from flask_login import login_required, current_user, login_user
-from oneirodex.models import Library, User, Genre, Theme
+from oneirodex.models import (
+    DownloadRequest,
+    DuplicateFixLog,
+    InviteToken,
+    Library,
+    Newsletter,
+    SystemEvents,
+    User,
+    UserAttractModeSettings,
+    Genre,
+    Theme,
+    user_favorites,
+    user_game_status,
+)
 from oneirodex import db
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func, or_, update
 from . import admin2_bp
 from uuid import uuid4
+import re
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.accounts import display_email, is_placeholder_email, placeholder_email
 from oneirodex.utils.auth import admin_required
@@ -35,6 +49,50 @@ def _lock_admin_user_mutation():
     if actor is None:
         return False
     return actor.role == 'admin' and actor.state is not False
+
+
+def _anonymize_user_audit_events(user):
+    """Retain audit rows while removing direct account identifiers."""
+    identifiers = [value for value in (user.name, user.email, user.user_id) if value]
+    predicates = [SystemEvents.audit_user == user.id]
+    predicates.extend(
+        SystemEvents.event_text.contains(value, autoescape=True) for value in identifiers
+    )
+    events = db.session.execute(
+        select(SystemEvents).where(or_(*predicates)).with_for_update()
+    ).scalars()
+    for event in events:
+        text = event.event_text
+        for value in identifiers:
+            text = re.sub(re.escape(value), '[deleted account]', text, flags=re.IGNORECASE)
+        event.event_text = text
+        if event.audit_user == user.id:
+            event.audit_user = None
+
+
+def _delete_user_owned_rows(user):
+    """Handle user references without database ON DELETE actions explicitly."""
+    db.session.execute(delete(user_favorites).where(user_favorites.c.user_id == user.id))
+    db.session.execute(delete(user_game_status).where(user_game_status.c.user_id == user.id))
+    db.session.execute(delete(DownloadRequest).where(DownloadRequest.user_id == user.id))
+    db.session.execute(delete(Newsletter).where(Newsletter.sender_id == user.id))
+    db.session.execute(
+        delete(InviteToken).where(InviteToken.creator_user_id == user.user_id)
+    )
+    db.session.execute(
+        update(InviteToken).where(InviteToken.used_by == user.user_id).values(used_by=None)
+    )
+    db.session.execute(
+        delete(UserAttractModeSettings).where(
+            UserAttractModeSettings.user_id == user.user_id
+        )
+    )
+    # This operational audit record remains useful without its former actor link.
+    db.session.execute(
+        update(DuplicateFixLog)
+        .where(DuplicateFixLog.actor_user_id == user.id)
+        .values(actor_user_id=None)
+    )
 
 def check_email_unique(email, exclude_user_id=None):
     """Check if email is unique in the system"""
@@ -415,15 +473,27 @@ def manage_user_api(user_id):
         if not valid:
             return api_error(error, code='forbidden')
 
-        # Store user info for logging before deletion
-        user_info = f"{user.name} (email: {user.email}, role: {user.role})"
+        deleting_self = current_user.id == user.id
+        audit_actor_id = 'system' if deleting_self else current_user.id
 
         try:
+            _anonymize_user_audit_events(user)
+            _delete_user_owned_rows(user)
             db.session.delete(user)
             db.session.commit()
-            log_system_event(f"Admin {current_user.name} deleted user: {user_info}", event_type='audit', event_level='warning')
+            log_system_event(
+                f"Admin account {'deleted' if deleting_self else current_user.name} deleted user account",
+                event_type='audit',
+                event_level='warning',
+                audit_user=audit_actor_id,
+            )
             return api_ok()
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            log_system_event(f"Admin {current_user.name} failed to delete user {user_info}: {str(e)}", event_type='audit', event_level='error')
+            log_system_event(
+                'Admin account deletion failed',
+                event_type='audit',
+                event_level='error',
+                audit_user=audit_actor_id,
+            )
             return api_error('Failed to delete user', code='internal')

@@ -13,6 +13,7 @@
     "clients/desktop"
   ],
   "scripts": {
+    "build:native-spas": "node scripts/build-native-spas.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"frontend/**/*.{js,jsx,ts,tsx,mjs,cjs,json,css,md}\"",

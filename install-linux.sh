@@ -454,6 +454,19 @@ install_prerequisites() {
     fi
     print_success "Python3 installed: $(python3 --version)"
 
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+        print_error "Node.js 22 and npm are required to build the Oneirodex SPAs."
+        print_info "Install Node.js 22 from your distribution's supported source, then re-run."
+        return 1
+    fi
+    local node_version
+    node_version="$(node -p 'process.versions.node')"
+    if [[ "$node_version" != 22.* ]]; then
+        print_error "Node.js 22 is required; found $node_version"
+        return 1
+    fi
+    print_success "Node.js $node_version available"
+
     if ! python3 -m pip --version >/dev/null 2>&1; then
         print_error "pip installation failed"
         return 1
@@ -765,6 +778,14 @@ setup_python_environment() {
     fi
 }
 
+build_native_spas() {
+    print_step "Building all five native installer SPAs with Node 22..."
+    cd "$SCRIPT_DIR"
+    execute_quiet "install Node workspace dependencies" npm ci --no-audit --no-fund
+    execute_quiet "build native installer SPAs" npm run build:native-spas
+    print_success "Member, member-auth, admin, admin-pilot and ops-glance bundles built"
+}
+
 # Configure application settings
 configure_application() {
     print_step "Configuring Oneirodex application..."
@@ -885,11 +906,10 @@ validate_installation() {
     if [ -d "$SCRIPT_DIR/venv" ]; then
         source "$SCRIPT_DIR/venv/bin/activate"
 
-        # Test Flask app creation
-        if python3 -c "from oneirodex import create_app; app = create_app(); print('Flask app creation: OK')" >/dev/null 2>&1; then
-            print_success "Flask application setup validated"
+        if python3 "$SCRIPT_DIR/scripts/validate-native-install.py" >/dev/null 2>&1; then
+            print_success "Native runtime and frontend assets validated"
         else
-            print_error "Flask application validation failed"
+            print_error "Native runtime or frontend asset validation failed"
             return 1
         fi
     else
@@ -1028,6 +1048,10 @@ main() {
 
     # Setup Python environment
     if ! setup_python_environment; then
+        exit 1
+    fi
+
+    if ! build_native_spas; then
         exit 1
     fi
 
