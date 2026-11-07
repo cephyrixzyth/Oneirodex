@@ -14,18 +14,30 @@ function formatDuration(totalSeconds: any) {
 
 export function MemberProfilePage() {
   const { userId } = useParams()
-  const [data, setData] = useState<any>(null)
-  const [error, setError] = useState<any>(null)
+  const [reload, setReload] = useState(0)
+  const [profile, setProfile] = useState<any>({ userId: null, data: null, error: null })
 
   useEffect(() => {
     const controller = new AbortController()
+    let current = true
+    setProfile({ userId, data: null, error: null })
     fetchMemberProfile(userId, { signal: controller.signal })
-      .then(setData)
-      .catch((err: any) => {
-        if (err.name !== 'AbortError') setError(err)
+      .then((data) => {
+        if (current) setProfile({ userId, data, error: null })
       })
-    return () => controller.abort()
-  }, [userId])
+      .catch((err: any) => {
+        if (current && err.name !== 'AbortError') setProfile({ userId, data: null, error: err })
+      })
+    return () => {
+      current = false
+      controller.abort()
+    }
+  }, [userId, reload])
+
+  const currentProfile = profile.userId === userId
+    ? profile
+    : { userId, data: null, error: null }
+  const { data, error } = currentProfile
 
   if (error || !data) {
     return (
@@ -33,6 +45,7 @@ export function MemberProfilePage() {
         <PageStatus
           loading={!error}
           error={error}
+          onRetry={error ? () => setReload((value) => value + 1) : null}
           errorMessage="Unable to load profile."
           loadingMessage="Loading profile…"
         />
