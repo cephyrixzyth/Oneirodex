@@ -153,6 +153,8 @@ play sessions and per-game progress; game requests, owned-title matches, and lin
 records remain with their game reference cleared where the schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
 
+To inspect emulator-save storage without modifying files, run `python scripts/audit_emulator_saves.py --root <configured-save-root>` with the intended database configured through the same explicit database settings as the other operator maintenance scripts. The bounded report includes only counts and status for referenced, missing, outside-root, symlink, and unreferenced entries; it never prints paths and never performs garbage collection. Review reported orphan candidates before any manual action.
+
 Admin → System danger-zone reset can wipe catalog / libraries / users / settings in-app; it **never
 touches files on disk**.
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+import stat
+from pathlib import Path
 from datetime import datetime, timezone
 from io import BytesIO
 from uuid import uuid4
@@ -20,6 +22,92 @@ from oneirodex.utils.library_paths import library_dir
 MAX_SAVE_BYTES = 2 * 1024 * 1024  # 2 MiB
 MAX_SLOTS_PER_GAME = 10
 DEFAULT_USER_SAVE_QUOTA_MB = 1024
+DEFAULT_SAVE_AUDIT_ENTRY_LIMIT = 100_000
+
+
+def _fsync_directory(directory: str | os.PathLike[str]) -> bool:
+    """Persist a directory entry update where the platform supports it."""
+    if os.name == 'nt' or not hasattr(os, 'O_DIRECTORY'):
+        return False
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def audit_save_storage(
+    session,
+    root: str | os.PathLike[str],
+    *,
+    entry_limit: int = DEFAULT_SAVE_AUDIT_ENTRY_LIMIT,
+) -> dict:
+    """Return a path-free, report-only inventory of managed save files."""
+    resolved_root = Path(root).resolve()
+    report = {
+        'root_available': resolved_root.is_dir(),
+        'complete': False,
+        'entry_limit': max(1, int(entry_limit)),
+        'entries_scanned': 0,
+        'regular_files': 0,
+        'referenced_files': 0,
+        'missing_references': 0,
+        'outside_root_references': 0,
+        'unreferenced_files': 0,
+        'symlinks_skipped': 0,
+        'scan_limit_reached': False,
+        'mutated_files': False,
+    }
+    if not report['root_available']:
+        return report
+
+    referenced: set[str] = set()
+    paths = session.execute(select(EmulatorSave.storage_path)).scalars().all()
+    paths += session.execute(select(EmulatorSaveGeneration.storage_path)).scalars().all()
+    for stored_path in paths:
+        if not stored_path:
+            continue
+        candidate = Path(os.path.abspath(stored_path))
+        try:
+            candidate.relative_to(resolved_root)
+        except ValueError:
+            report['outside_root_references'] += 1
+            continue
+        normalized = os.path.normcase(str(candidate))
+        referenced.add(normalized)
+        if not candidate.is_file():
+            report['missing_references'] += 1
+
+    report['referenced_files'] = len(referenced)
+    limit = report['entry_limit']
+    pending_dirs = [resolved_root]
+    while pending_dirs:
+        directory = pending_dirs.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    report['entries_scanned'] += 1
+                    if report['entries_scanned'] > limit:
+                        report['scan_limit_reached'] = True
+                        return report
+                    try:
+                        if entry.is_symlink():
+                            report['symlinks_skipped'] += 1
+                        elif entry.is_dir(follow_symlinks=False):
+                            pending_dirs.append(Path(entry.path))
+                        elif stat.S_ISREG(entry.stat(follow_symlinks=False).st_mode):
+                            report['regular_files'] += 1
+                            if os.path.normcase(os.path.abspath(entry.path)) not in referenced:
+                                report['unreferenced_files'] += 1
+                    except OSError:
+                        report['complete'] = False
+                        return report
+        except OSError:
+            report['complete'] = False
+            return report
+    report['complete'] = True
+    return report
 
 
 class SaveQuotaExceeded(ValueError):
@@ -221,6 +309,7 @@ def store_save(
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_path, dest_path)
+        _fsync_directory(dest_dir)
     except Exception:
         try:
             os.remove(temp_path)
