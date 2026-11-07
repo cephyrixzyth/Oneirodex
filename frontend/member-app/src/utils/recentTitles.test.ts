@@ -1,10 +1,9 @@
 import { afterEach, expect, test } from 'vitest'
 import {
   RECENT_TITLES_KEY,
+  clearLegacyRecentTitles,
   mergeSuggestRecent,
   normalizeRecentTitle,
-  readRecentTitles,
-  recordRecentTitle,
 } from './recentTitles'
 
 afterEach(() => {
@@ -21,22 +20,23 @@ test('normalizeRecentTitle drops empty rows', () => {
   })
 })
 
-test('recordRecentTitle newest-first and unique', () => {
-  recordRecentTitle({ uuid: 'a', name: 'Alpha' })
-  recordRecentTitle({ uuid: 'b', name: 'Beta' })
-  recordRecentTitle({ uuid: 'a', name: 'Alpha' })
-  expect(readRecentTitles().map((row) => row!.uuid)).toEqual(['a', 'b'])
+test('legacy origin-global history is removed', () => {
+  window.localStorage.setItem(
+    RECENT_TITLES_KEY,
+    JSON.stringify([{ uuid: 'restricted', name: 'Private title' }]),
+  )
+
+  clearLegacyRecentTitles()
+
+  expect(window.localStorage.getItem(RECENT_TITLES_KEY)).toBeNull()
 })
 
-test('mergeSuggestRecent prefers server played rows then local opened', () => {
-  const merged = mergeSuggestRecent(
-    [{ uuid: 'p', name: 'Played', hint: 'Played recently' }],
-    [
-      { uuid: 'p', name: 'Played again' },
-      { uuid: 'o', name: 'Opened' },
-    ],
-  )
-  expect(merged.map((row) => row.uuid)).toEqual(['p', 'o'])
-  expect(merged[0].hint).toBe('Played recently')
-  expect(merged[1].hint).toBe('Opened here')
+test('recent suggestions use only current server rows', () => {
+  const merged = mergeSuggestRecent([
+    { uuid: 'p', name: 'Played', hint: 'Played recently' },
+    { uuid: 'p', name: 'Duplicate' },
+    { uuid: '', name: 'Invalid' },
+  ])
+
+  expect(merged).toEqual([{ uuid: 'p', name: 'Played', hint: 'Played recently', cover_url: null }])
 })

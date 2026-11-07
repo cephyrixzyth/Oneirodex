@@ -5,7 +5,7 @@
 ## Navigation
 
 **How do I jump around quickly?**  
-**Ctrl+K** (⌘K on Mac) or the top-nav **Search** hint opens the command palette — pages, Preferences, Help, Admin. Type two letters to search **library titles** from any page. An empty box shows titles you recently played or opened, plus household favourites (on this server, not store trends). Navigate / More / Account stay listed.
+**Ctrl+K** (⌘K on Mac) or the top-nav **Search** hint opens the command palette — pages, Preferences, Help, Admin. Type two letters to search **library titles** from any page. An empty box shows server-authorized recently played titles and household favourites (on this server, not store trends). Opened-title history is not stored in this browser. If suggestions are unavailable, title search still works. Navigate / More / Account stay listed.
 
 **How do I jump to the top or bottom of a long page?**  
 When the member page is scrollable, aurora glass **Jump to top** / **Jump to bottom** controls appear (bottom-left, clear of the Friends/Chat dock). They hide on short pages that don’t scroll.

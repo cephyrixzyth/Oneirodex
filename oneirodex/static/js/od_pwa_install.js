@@ -64,6 +64,11 @@
           'a[href$="/logout"], a[href*="/logout?"], button[data-action="logout"]',
         );
         if (!action) return;
+        try {
+          window.localStorage.removeItem('od.palette.recent');
+        } catch (err) {
+          // Restricted storage is optional; current code never writes this key.
+        }
         if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
         navigator.serviceWorker.controller.postMessage({ type: 'od-clear-caches' });
       },

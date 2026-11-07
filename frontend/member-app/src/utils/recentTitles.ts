@@ -1,12 +1,16 @@
-/** Recently opened titles for the command-palette empty state.
-
-This browser only — no telemetry, no household broadcast. Played titles come
-from the server; this list fills the gap while a vault is still scanning and
-nobody has playtime yet.
-*/
+/** Server-authorized recent titles for the command-palette empty state. */
 
 export const RECENT_TITLES_KEY = 'od.palette.recent'
 export const RECENT_TITLES_MAX = 8
+
+/** Remove the pre-privacy-fix origin-global history from this browser profile. */
+export function clearLegacyRecentTitles() {
+  try {
+    window.localStorage?.removeItem(RECENT_TITLES_KEY)
+  } catch {
+    // Private or restricted storage is optional.
+  }
+}
 
 export function normalizeRecentTitle(row: any) {
   const uuid = String(row?.uuid || '').trim()
@@ -15,36 +19,12 @@ export function normalizeRecentTitle(row: any) {
   return { uuid, name, hint: row?.hint || 'Opened here' }
 }
 
-export function readRecentTitles() {
-  try {
-    const raw = window.localStorage?.getItem(RECENT_TITLES_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(normalizeRecentTitle).filter(Boolean).slice(0, RECENT_TITLES_MAX)
-  } catch {
-    return []
-  }
-}
-
-export function recordRecentTitle(row: any) {
-  const next = normalizeRecentTitle(row)
-  if (!next) return readRecentTitles()
-  const rest = readRecentTitles().filter((item: any) => item.uuid !== next.uuid)
-  const list = [next, ...rest].slice(0, RECENT_TITLES_MAX)
-  try {
-    window.localStorage?.setItem(RECENT_TITLES_KEY, JSON.stringify(list))
-  } catch {
-    // Preference only.
-  }
-  return list
-}
-
-/** Server played-rows first; local opened-rows fill unused slots. */
-export function mergeSuggestRecent(serverRows: any, localRows: any, limit = RECENT_TITLES_MAX) {
+/** Deduplicate and bound recent rows returned for the current signed-in viewer. */
+export function mergeSuggestRecent(serverRows: any, limit = RECENT_TITLES_MAX) {
   const cap = Number(limit) > 0 ? Number(limit) : RECENT_TITLES_MAX
   const merged = []
   const seen = new Set()
-  for (const row of [...(serverRows || []), ...(localRows || [])]) {
+  for (const row of serverRows || []) {
     const item = normalizeRecentTitle(row)
     if (!item || seen.has(item.uuid)) continue
     seen.add(item.uuid)

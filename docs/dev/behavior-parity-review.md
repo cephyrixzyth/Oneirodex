@@ -59,7 +59,7 @@ The supplied independent review package evaluates snapshot `fd2683e5` and explic
 | FE-004 profile navigation stale identity/error | Source state-transition defect at audit snapshot | Current status unknown. |
 | FE-005 related-media modal focus handling | Source accessibility gap at audit snapshot | Current status unknown. |
 | FE-006 calendar query/display window mismatch | Source/data-window mismatch at audit snapshot | Current status unknown. |
-| FE-007 shared-browser recent titles | Synthetic localStorage reproduction at audit snapshot | Current status unknown; retain as an open privacy follow-up. |
+| FE-007 shared-browser recent titles | Synthetic localStorage reproduction at audit snapshot | Fixed in this checkout: local names are no longer written/read, the legacy key is removed on member-app mount and logout, and delayed suggestion responses are discarded after viewer changes. Focused unit coverage passes; real multi-account browser verification remains open. |
 | FE-008 missing React error boundary | Absence confirmed by source search; crash impact inferred | Current status unknown. |
 | DT-001 concurrent install record loss | Forced interleaving reproduced at audit snapshot | Current status unknown. |
 | DT-002 cold offline launch limitation | Source-based; runtime journey pending | Current status unknown. |
@@ -82,3 +82,16 @@ The independent report's 35 finding rows and four validation candidates remain d
 ### FE-001 correction
 
 The VR page still registers `/vr/sw.js` so existing installations can receive the retirement worker. On activation it removes `oneirodex-vr-v1`, claims clients, and unregisters; it has no fetch handler, cache-write path, or offline fallback. Its logout message also clears the retired cache. `tests/test_pwa_install.py` guards these properties. The user guide now describes the online update requirement. No live headset/browser account-switch test was run, so do not claim practical cross-account exposure is eliminated in already-offline clients until their worker updates.
+
+### P0-07 correction: remove origin-global title history
+
+The command palette now renders only recent/popular rows returned by the server for the active viewer. Open-title actions no longer persist names or IDs. The palette clears its old localStorage key on mount and resets/aborts suggestions when closed or when the viewer ID changes; a failed suggestions request reports an unavailable state without restoring old local titles, while title search remains usable. The shared sign-out helper also removes the legacy key before attempting service-worker messaging. `CommandPalette.test.tsx` and `recentTitles.test.ts` cover legacy-key removal, suggestion failure, normal search and stale-response rejection after an account switch. User guides now describe server-authorized suggestions and no browser history.
+
+**Verification:** Node `22.23.4` via the temporary `node@22` runner: member-app command palette/history tests **22 passed** and member-app TypeScript typecheck passed. Python `3.14.10` (not the planned 3.12): PostgreSQL 17.6 disposable review DB on the isolated `oneirodex-review` Compose project; focused password/favorites/export/VR tests **33 passed**. Database guard tests **27 passed** with `--noconftest`; PWA worker/logout assertions **2 passed** with `--noconftest`. These tests do not replace a real Chromium/headset cross-account cache/recents check.
+
+**P0-01 baseline remains partial:** Node 22 and the isolated review PostgreSQL service are available. `uv python install 3.12` could not fetch its CPython archive from Astral/GitHub, so Python tests used 3.14.10. The installed environment's `pip check` reports Playwright 1.64.1 requires `pyee<15` while 16.0.1 is installed, plus an incomplete `~uvicorn` distribution warning. Full baseline suite, all five SPA builds, desktop full/thin build, and native target checks remain outstanding. No root `.env` values were printed or file changes made; Compose may load `.env` for interpolation, while the review DB prefix and port were explicitly set for this isolated database-only service.
+
+### Owner decisions received
+
+- **D-P0-01 save history:** preserve prior committed generations; defer automatic garbage collection until the owner selects a time/space budget. This permits recoverable writes but means storage growth must be measured and surfaced.
+- **D-P1-04 child personal progress:** allow a child's own save operations only for games currently accessible to that child, using a narrow save-specific permission and retaining existing library-write restrictions. Implementation remains sequenced after safe save storage (R02).

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { fetchGameEditions } from '../api/gameEditions'
-import { recordRecentTitle } from '../utils/recentTitles'
 import { ExternalStoreLinks } from './ExternalStoreLinks'
 import './GamePreviewPopup.css'
 
@@ -354,7 +353,6 @@ export function GamePreviewPopup({ game, reason = '', onClose }: LooseProps) {
               <Link
                 className="od-btn od-btn--primary"
                 to={`/game_details/${game.uuid}`}
-                onClick={() => recordRecentTitle({ uuid: game.uuid, name: game.name })}
               >
                 Open details
               </Link>

@@ -83,7 +83,7 @@ On phones and narrow tablets (≤900px), the top nav becomes a **hamburger** men
 
 ## First things to try
 
-1. Open **Game Catalog** and filter by platform or Signals (sticky Filters on desktop; drawer ≤900px). **Tile / Rows / Grid** in the top bar changes the layout (remembered in this browser). **Grid** is genre shelves like Discover. Tile size is the TopNav percent slider (Tile, Rows, Grid, and Discover). **Ctrl+K** searches titles from any page; an empty box shows recent and household-favourite titles.
+1. Open **Game Catalog** and filter by platform or Signals (sticky Filters on desktop; drawer ≤900px). **Tile / Rows / Grid** in the top bar changes the layout (remembered in this browser). **Grid** is genre shelves like Discover. Tile size is the TopNav percent slider (Tile, Rows, Grid, and Discover). **Ctrl+K** searches titles from any page; an empty box shows server-authorized recently played and household-favourite titles.
 2. Open **Systems** and pick a console family — or **More → Ways to Play** for Browser / Companion / Catalog across the catalog.
 3. Open a game → details (media stage when a trailer or screenshot exists — click a screenshot for the lightbox, About when a storyline is on file, store requirements/languages only if Steam filled them, Extras & DLC with on-server honesty, store marks) → **Download** (streaming zip).
 4. Open preferences (account menu) → sectioned Preferences (decade-room cards + icon pack + tile size; no heavy cards).

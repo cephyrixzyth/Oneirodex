@@ -7,7 +7,6 @@ import {
 } from '../../api/gameDetails'
 import { initiateGameDownload } from '../../api/downloads'
 import { honestyApiErrorMessage } from '../../utils/playHonesty'
-import { recordRecentTitle } from '../../utils/recentTitles'
 import { showToast } from '../../utils/toast'
 import type { VersionActions } from './detailsTypes'
 
@@ -42,7 +41,6 @@ export function useGameDetails(gameUuid: string | undefined) {
           return
         }
         setGame(details)
-        recordRecentTitle({ uuid: details.uuid || gameUuid, name: details.name })
         setVersions(Array.isArray(versionData.versions) ? versionData.versions : [])
         setVersionsLoading(false)
       })

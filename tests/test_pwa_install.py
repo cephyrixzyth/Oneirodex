@@ -101,6 +101,7 @@ def test_install_helper_clears_pwa_cache_for_link_or_button_logout():
     assert 'a[href$="/logout"]' in install_helper
     assert 'button[data-action="logout"]' in install_helper
     assert "postMessage({ type: 'od-clear-caches' })" in install_helper
+    assert "removeItem('od.palette.recent')" in install_helper
 
 
 def test_worker_only_caches_versioned_static_assets():
