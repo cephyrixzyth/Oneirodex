@@ -277,8 +277,13 @@ def log_unmatched_folder(
             if stage_e_candidates:
                 print(f"[UNMATCHED] stage_e_candidates={len(stage_e_candidates)}")
         except IntegrityError:
-            log_system_event(f"Failed to log unmatched folder: {folder_path}", event_type='scan', event_level='warning')
             db.session.rollback()
+            from oneirodex.utils.event_logging import log_system_event
+
+            log_system_event(
+                f"Failed to log unmatched folder: {folder_path}",
+                event_type='scan', event_level='warning',
+            )
             print(f"[UNMATCHED ERROR] Failed to log unmatched folder due to a database error: {folder_path}")
     else:
         # Refresh match metadata when re-encountered as Duplicate

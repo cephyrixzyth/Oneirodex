@@ -145,6 +145,8 @@ def _render_preview(body, data):
             title_scale=body.title_scale,
         )
     except ValidationError as exc:
+        from oneirodex.utils.validation import format_validation_errors
+
         return None, format_validation_errors(exc)
     mime = 'image/webp' if fmt == 'webp' else 'image/png'
     return {
