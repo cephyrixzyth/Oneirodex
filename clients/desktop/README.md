@@ -118,7 +118,7 @@ While connected, the desktop companion POSTs `POST /api/client/heartbeat` every 
 
 The server uses recent heartbeats (5-minute TTL) to set `client_connected: true` on browse/discover/game-details responses so the web UI enables Install/Update/Uninstall actions when the companion is online.
 
-After **two consecutive heartbeat failures**, the UI switches to **Offline**: Download / Update / apply_patch are disabled with an explanation; Play / Install / Uninstall remain available. Queued web commands are nack’d back to `pending` until the companion is reachable again.
+After **two consecutive heartbeat failures**, the UI switches to **Offline**. Its Installed shelf contains only titles that were previously returned for the same verified server account and companion device, and that still have a local install record. Download, Update, mod and patch actions are unavailable; Play and Reveal use local files. The cache keeps only game UUIDs and names, plus the server/account/device binding and a SHA-256 fingerprint of the credential held in the OS keychain. It does not store the bearer token. The UI explains that server access can change while disconnected and that local file access follows OS permissions. Reconnect to refresh the shelf and current server access. Queued web commands remain pending until the companion is reachable.
 
 ## Friends window
 

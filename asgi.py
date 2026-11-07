@@ -1223,6 +1223,7 @@ class LazyASGIApp:
             '/api/tokens',
             '/api/client/capabilities',
             '/api/client/lifecycle',
+            '/api/client/identity',
             '/api/client/heartbeat',
             '/api/client/commands',
             '/api/announcements',

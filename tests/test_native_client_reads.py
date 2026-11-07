@@ -96,7 +96,9 @@ class FakeData:
 
 
 def make_client(*, scopes=('read:library', 'write:download')):
-    user = SimpleNamespace(id=27, role='user', state=True, is_active=True)
+    user = SimpleNamespace(
+        id=27, user_id='account-uuid-27', role='user', state=True, is_active=True
+    )
     token = FakeToken(scopes)
     data = FakeData()
     flask_app = Flask(__name__)
@@ -174,6 +176,23 @@ def test_lifecycle_read_preserves_read_library_scope():
     assert response.status_code == 200
     assert response.json() == {'records': [{'game_uuid': 'game-1', 'state': 'installed'}]}
     assert client.data.lifecycle_calls == [('read', 27)]
+
+
+def test_companion_identity_is_scope_gated_and_returns_only_stable_account_id():
+    client = make_client(scopes=('write:download',))
+    response = client.get(
+        '/api/client/identity', headers={'Authorization': f'Bearer {RAW_TOKEN}'}
+    )
+    assert response.status_code == 403
+    assert response.json()['error'] == 'Missing scope: read:library'
+
+    client = make_client(scopes=('read:library',))
+    response = client.get(
+        '/api/client/identity', headers={'Authorization': f'Bearer {RAW_TOKEN}'}
+    )
+    assert response.status_code == 200
+    assert response.json()['account_id'] == 'account-uuid-27'
+    assert 'email' not in response.json() and 'username' not in response.json()
 
 
 def test_lifecycle_write_is_bearer_only_and_preserves_scope_gate():

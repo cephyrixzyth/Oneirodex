@@ -26,7 +26,7 @@ function deviceApi(auth: AuthStore, fetchImpl?: typeof fetch) {
   }).device
 }
 
-function getOrCreateDeviceId(): string {
+export function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
     return crypto.randomUUID()
   }

@@ -19,7 +19,7 @@ import {
   modApplyBlockedReason,
   modApplyUiHint,
 } from './apply_mods.js'
-import { startClientHeartbeat, type HeartbeatScheduler } from './heartbeat.js'
+import { getOrCreateDeviceId, startClientHeartbeat, type HeartbeatScheduler } from './heartbeat.js'
 import { getInstallsDir } from './download.js'
 import { revealPathInOs } from './open-path.js'
 import { expandSavePath, hasSavePlaceholder, tauriResolvers } from './save-paths.js'
@@ -42,6 +42,12 @@ import {
   saveTrustedShares,
 } from './trusted-shares.js'
 import { buildLocalArchiveName } from './paths.js'
+import {
+  installedOfflineGames,
+  loadOfflineInstalledShelf,
+  saveOfflineInstalledShelf,
+  type OfflineShelfGame,
+} from './offline-shelf.js'
 import { checkServerUrl } from './transport-policy.js'
 import {
   hydrateLifecycleRegistry,
@@ -66,6 +72,11 @@ let lifecycle: LifecycleRegistry | null = null
 let sessionActive = false
 let connectionMode: ConnectionMode = 'disconnected'
 let libraryGames: SearchResultItem[] = []
+let verifiedAccountId = ''
+let localInstalls: Record<
+  string,
+  { extractPath?: string; archivePath?: string; exePath?: string | null }
+> = {}
 let heartbeatScheduler: HeartbeatScheduler | null = null
 let gamesWithEnabledMods = new Set<string>()
 let modsTrackingEnabled = true
@@ -134,21 +145,17 @@ async function renderLifecyclePanel(): Promise<void> {
   if (!registry) {
     return
   }
-  const records = registry.snapshot()
+  const records = registry.snapshot().filter((record) =>
+    connectionMode !== 'offline' ||
+    (localInstalls[record.gameUuid] && canLaunchGame(record.state) &&
+      libraryGames.some((game) => game.uuid === record.gameUuid)),
+  )
   if (records.length === 0) {
     els.lifecyclePanel.innerHTML =
       '<p class="muted">Lifecycle states appear after you load games (all start as <code>not_downloaded</code>).</p>'
     return
   }
-  let installs: Record<
-    string,
-    { extractPath?: string; archivePath?: string; exePath?: string | null }
-  > = {}
-  try {
-    installs = await loadInstallsFromDisk()
-  } catch {
-    installs = {}
-  }
+  const installs = localInstalls
   const nameByUuid = new Map(
     libraryGames.map((g) => [g.uuid, typeof g.name === 'string' ? g.name : g.uuid]),
   )
@@ -189,22 +196,31 @@ function renderLibrary(): void {
     els.library.innerHTML = '<p class="muted">Loading lifecycle registry…</p>'
     return
   }
-  if (libraryGames.length === 0) {
+  const visibleGames = connectionMode === 'offline'
+    ? installedOfflineGames(
+        libraryGames as OfflineShelfGame[],
+        localInstalls,
+        (uuid) => canLaunchGame(registry.get(uuid)),
+      )
+    : libraryGames
+  if (visibleGames.length === 0) {
     els.library.innerHTML =
-      '<p class="muted">Connected, but no games returned from search. Try another server or query later.</p>'
+      (connectionMode === 'offline'
+        ? '<p class="muted">No locally installed games from this verified account are available offline. Connect while online to refresh the Installed shelf.</p>'
+        : '<p class="muted">Connected, but no games returned from search. Try another server or query later.</p>')
     renderLifecyclePanel()
     return
   }
   const offlineBanner =
     connectionMode === 'offline'
-      ? `<p class="offline-banner" role="status">Server unreachable — Download, Update, and Apply mods blocked. Play, Install, and Uninstall still work. WebRetro cannot apply PC mods — use this companion when online.</p>`
+      ? `<p class="offline-banner" role="status">Offline Installed shelf — these titles were previously verified for this server account on this device. Play and Reveal use local files; anyone with OS-level access to those files may also access them. Reconnect to refresh server access.</p>`
       : ''
-  const cards = libraryGames
+  const cards = visibleGames
     .map((game) => {
       const uuid = game.uuid
       const name = typeof game.name === 'string' ? game.name : uuid
       const state = registry.get(uuid)
-      const actions = lifecycleActionsFor(state)
+      const actions = connectionMode === 'offline' ? [] : lifecycleActionsFor(state)
       const isBusy = busyGames.has(uuid)
       const activity = gameActivity.get(uuid)
       const actionButtons = actions
@@ -232,6 +248,7 @@ function renderLibrary(): void {
         : ` title="${escapeHtml(modApplyUiHint(connectionMode === 'online'))}"`
       const modDisabled = isBusy || Boolean(modBlocked) ? 'disabled' : ''
       const modButton =
+        connectionMode !== 'offline' &&
         modsTrackingEnabled && (gamesWithEnabledMods.has(uuid) || canLaunchGame(state))
           ? `<button type="button" class="action-btn secondary action-btn--mods" data-action="apply_mods" data-uuid="${escapeHtml(uuid)}"${modTitle} ${modDisabled}>Apply mods</button>`
           : ''
@@ -278,6 +295,30 @@ async function hydrateFromDisk(): Promise<void> {
   els.token.value = token ? normalizeOneirodexToken(token) : ''
   renderAuthSummary()
 }
+
+async function loadVerifiedOfflineShelf(
+  serverUrl: string,
+  token: string,
+): Promise<SearchResultItem[]> {
+  try {
+    const shelf = await loadOfflineInstalledShelf({
+      serverUrl,
+      deviceId: getOrCreateDeviceId(),
+      token,
+    })
+    if (!shelf) return []
+    verifiedAccountId = shelf.accountId
+    localInstalls = await loadInstallsFromDisk()
+    return installedOfflineGames(
+      shelf.games,
+      localInstalls,
+      (uuid) => Boolean(lifecycle && canLaunchGame(lifecycle.get(uuid))),
+    ) as SearchResultItem[]
+  } catch {
+    return []
+  }
+}
+
 async function handleConnect(): Promise<void> {
   const baseUrl = normalizeBaseUrl(els.baseUrl.value)
   const rawToken = els.token.value
@@ -308,12 +349,17 @@ async function handleConnect(): Promise<void> {
   const api = createDesktopApi(auth)
   const result = await validateConnection(api)
   if (!result.ok) {
-    sessionActive = false
-    setConnectionMode('disconnected')
-    libraryGames = []
+    libraryGames = await loadVerifiedOfflineShelf(baseUrl, token)
+    sessionActive = libraryGames.length > 0
+    setConnectionMode(sessionActive ? 'offline' : 'disconnected')
     heartbeatScheduler?.stop()
     heartbeatScheduler = null
-    setStatus(result.message, 'error')
+    setStatus(
+      sessionActive
+        ? 'Server unreachable — showing the Installed shelf from this previously verified account.'
+        : result.message,
+      sessionActive ? 'info' : 'error',
+    )
     renderAuthSummary()
     renderLibrary()
     els.connectBtn.disabled = false
@@ -331,6 +377,29 @@ async function handleConnect(): Promise<void> {
     return
   }
   libraryGames = await fetchLibraryPreview(api)
+  try {
+    const identity = await api.device.identity()
+    verifiedAccountId = identity.account_id
+    if (verifiedAccountId) {
+      await saveOfflineInstalledShelf(
+        {
+          serverUrl: baseUrl,
+          accountId: verifiedAccountId,
+          deviceId: getOrCreateDeviceId(),
+          token,
+        },
+        libraryGames,
+      )
+    }
+  } catch {
+    // Identity is required before persisting an offline account catalog.
+    verifiedAccountId = ''
+  }
+  try {
+    localInstalls = await loadInstallsFromDisk()
+  } catch {
+    localInstalls = {}
+  }
   try {
     const summary = await fetchModsSummaryGameUuids(auth)
     gamesWithEnabledMods = summary.gameUuids
@@ -355,7 +424,7 @@ async function handleConnect(): Promise<void> {
     onUnreachable: () => {
       setConnectionMode('offline')
       setStatus(
-        'Server unreachable — Download / Update blocked. Play, Install, Uninstall still work. Queued web commands wait.',
+        'Server unreachable — Download, Update and server actions are unavailable. Previously installed games can still Play or Reveal locally.',
         'error',
       )
       renderAuthSummary()
@@ -668,6 +737,11 @@ async function runGameAction(
     setStatus(message, 'error')
   } finally {
     busyGames.delete(uuid)
+    try {
+      localInstalls = await loadInstallsFromDisk()
+    } catch {
+      // Keep the last known local install index; failed reads do not promote titles.
+    }
     if (outcome === 'ok') {
       setGameActivity(uuid, '')
     }
@@ -868,6 +942,23 @@ export async function mountApp(root: HTMLElement): Promise<void> {
   els.lifecyclePanel.addEventListener('click', handleLibraryClick)
   await ensureLifecycleRegistry()
   await hydrateFromDisk()
+  try {
+    localInstalls = await loadInstallsFromDisk()
+    const token = auth.getToken()
+    if (token) {
+      libraryGames = await loadVerifiedOfflineShelf(auth.getBaseUrl(), token)
+      if (libraryGames.length > 0) {
+        sessionActive = true
+        setConnectionMode('offline')
+        setStatus(
+          'Offline Installed shelf loaded from this previously verified account and device.',
+          'info',
+        )
+      }
+    }
+  } catch {
+    localInstalls = {}
+  }
   renderLibrary()
   // Keep a hydrate failure (refused saved URL, keyring error) on screen.
   if (els.status.dataset.tone !== 'error') {

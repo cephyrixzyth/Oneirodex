@@ -35,7 +35,7 @@ export function offlineBlockReason(action: CompanionUiAction): string {
   if (!actionNeedsServer(action)) {
     return ''
   }
-  return 'Server offline — reconnect to download, update, or apply mods/patches. Play, Install, and Uninstall still work locally.'
+  return 'Server offline — reconnect to download, update, or apply mods/patches. Previously installed games can still Play or Reveal locally.'
 }
 
 export function connectionModeLabel(mode: ConnectionMode): string {

@@ -1589,6 +1589,7 @@ def _runtime(monkeypatch, *, admin=False):
     manager.login_message = 'Please log in to access this page.'
     user = SimpleNamespace(
         id=7,
+        user_id='account-uuid-7',
         role='admin' if admin else 'user',
         state=True,
         is_active=True,
@@ -5765,6 +5766,7 @@ def test_lazy_asgi_dispatches_password_change_without_flask(monkeypatch):
     [
         ('/api/client/capabilities?device_kind=browser', {'device_kind': 'browser'}),
         ('/api/client/lifecycle', {'records': [{'game_uuid': 'game-7', 'state': 'installed'}]}),
+        ('/api/client/identity', {'account_id': 'account-uuid-7'}),
     ],
 )
 def test_lazy_asgi_dispatches_client_reads_without_flask(monkeypatch, request, path, expected):

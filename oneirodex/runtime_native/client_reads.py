@@ -473,6 +473,37 @@ def create_client_reads_router(
             _finalize(response, flask_app, request)
             return response
 
+    @router.api_route('/api/client/identity', methods=['GET', 'HEAD'])
+    def client_identity(request: Request):
+        """Return only the stable account ID needed to bind an offline shelf."""
+        with open_database_scope():
+            auth = request_auth_context(
+                request, flask_app.config,
+                find_user=find_user,
+                find_token=find_token,
+                commit_token_touch=commit_token_touch,
+                load_user_id=load_user_id,
+                login_manager=login_manager,
+            )
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            elif not auth.has_scope('read:library'):
+                flask_response, status = api_error(
+                    'Missing scope: read:library', code='forbidden'
+                )
+                response = _from_flask_response(flask_response, status)
+            else:
+                flask_response, status = api_ok({
+                    'account_id': str(getattr(auth.user, 'user_id', '') or ''),
+                })
+                response = _from_flask_response(flask_response, status)
+                if auth.should_set_session_cookie:
+                    from .oidc_status import _set_session_cookie
+
+                    _set_session_cookie(response, flask_app, auth)
+            _finalize(response, flask_app, request)
+            return response
+
     @router.post('/api/client/lifecycle')
     async def client_lifecycle_update(request: Request):
         with open_database_scope():
