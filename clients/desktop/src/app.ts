@@ -73,7 +73,12 @@ const gameActivity = new Map<string, string>()
 const busyGames = new Set<string>()
 async function ensureLifecycleRegistry(): Promise<LifecycleRegistry> {
   if (!lifecycle) {
-    lifecycle = await hydrateLifecycleRegistry(auth)
+    lifecycle = await hydrateLifecycleRegistry(auth, () => {
+      setStatus(
+        'Install status could not be saved on this device. Check storage space and permissions.',
+        'error',
+      )
+    })
   }
   return lifecycle
 }

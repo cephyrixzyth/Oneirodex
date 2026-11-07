@@ -117,6 +117,7 @@ paths are the thing to look at.
 | Symptom | Likely cause | What to try |
 |---|---|---|
 | Connect fails 401/403 | Bad token / scopes / truncated paste | Account → API tokens: recreate with Desktop companion preset; paste full `gt_<prefix>_<secret>` (hyphens/`_` in the secret are normal — do not truncate after `-`). **Copy secret** copies the raw token only. On HTTP LAN, select the secret field + Ctrl+C if Copy fails. Server WARNING: `api_token_auth_failed reason=… prefix=…` |
+| Install status could not be saved on this device | The companion could not write its local registry | Check free disk space and that the app data folder is writable. Reopen the companion and verify the title's status before continuing. |
 | Download / Update greyed in companion | Offline heartbeat | Re-Connect; Play/Install/Uninstall still work — [desktop-companion.md](desktop-companion.md) |
 | Friends window can’t install games | By design (least-privilege) | Use the main companion window |
 | Update never appears | Local registry not merged | Re-Connect companion; see [desktop-companion.md](desktop-companion.md) |

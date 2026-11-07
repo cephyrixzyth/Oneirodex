@@ -486,7 +486,7 @@ fn save_config(app: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
         token: None,
     };
     let data = serde_json::to_string_pretty(&sanitized).map_err(|error| error.to_string())?;
-    fs::write(path, data).map_err(|error| error.to_string())
+    install_recovery::atomic_write(&path, data.as_bytes()).map_err(|error| error.to_string())
 }
 
 fn secure_entry(app: &tauri::AppHandle, account: &str) -> Result<Entry, String> {
@@ -539,7 +539,7 @@ fn save_lifecycle_registry(
 ) -> Result<(), String> {
     let path = lifecycle_path(&app)?;
     let data = serde_json::to_string_pretty(&registry).map_err(|error| error.to_string())?;
-    fs::write(path, data).map_err(|error| error.to_string())
+    install_recovery::atomic_write(&path, data.as_bytes()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

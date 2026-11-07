@@ -97,6 +97,7 @@ export interface GameLifecycleRecord {
 export interface LifecycleRegistryOptions {
   initial?: GameLifecycleRecord[]
   onChange?: (records: GameLifecycleRecord[]) => void | Promise<void>
+  onPersistenceError?: (error: unknown) => void
 }
 
 export function createLifecycleRegistry(options: LifecycleRegistryOptions = {}) {
@@ -107,7 +108,18 @@ export function createLifecycleRegistry(options: LifecycleRegistryOptions = {}) 
   }
 
   const notify = (): void => {
-    void options.onChange?.([...byUuid.entries()].map(([gameUuid, state]) => ({ gameUuid, state })))
+    const pending = options.onChange?.(
+      [...byUuid.entries()].map(([gameUuid, state]) => ({ gameUuid, state })),
+    )
+    if (pending && typeof pending.then === 'function') {
+      void pending.catch((error: unknown) => {
+        try {
+          options.onPersistenceError?.(error)
+        } catch (reportError) {
+          console.error('[lifecycle] persistence error reporter failed', reportError)
+        }
+      })
+    }
   }
 
   return {
