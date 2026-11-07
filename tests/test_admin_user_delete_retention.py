@@ -1,3 +1,5 @@
+import hashlib
+import time
 from uuid import uuid4
 from pathlib import Path
 
@@ -275,6 +277,42 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     unsafe_job = db_session.query(UserDeletionFileJob).one()
     assert unsafe_job.state == 'failed'
     assert unsafe_job.last_error_code == 'unsafe_path'
+
+
+def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_db, tmp_path):
+    from oneirodex.utils.user_deletion import start_file_cleanup_worker
+
+    relative_path = 'queued/deleted-after-restart.bin'
+    target = tmp_path / relative_path
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b'owned file')
+    root = str(tmp_path.resolve())
+    job = UserDeletionFileJob(
+        path_key=hashlib.sha256(f'{root}\0{relative_path}'.encode('utf-8')).hexdigest(),
+        root_path=root,
+        relative_path=relative_path,
+        state='failed',
+        attempts=1,
+        last_error_code='PermissionError',
+    )
+    no_savepoint_db.add(job)
+    no_savepoint_db.commit()
+
+    worker = start_file_cleanup_worker(app, interval_seconds=0.02)
+    assert worker is not None
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and target.exists():
+            time.sleep(0.01)
+    finally:
+        worker.stop()
+        worker.thread.join(timeout=5)
+
+    no_savepoint_db.expire_all()
+    assert not target.exists()
+    assert no_savepoint_db.query(UserDeletionFileJob).filter_by(
+        root_path=root, relative_path=relative_path,
+    ).one_or_none() is None
 
 
 def test_avatar_replacement_queues_old_bytes_before_pointer_commit_and_retries(db_session, tmp_path):
