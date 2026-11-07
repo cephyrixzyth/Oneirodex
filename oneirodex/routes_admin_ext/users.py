@@ -1,7 +1,7 @@
 # /oneirodex/routes_admin_ext/users.py
 from oneirodex.utils.api_response import api_error, api_ok
 from flask import request, jsonify
-from flask_login import login_required, current_user, login_user
+from flask_login import login_required, current_user
 from oneirodex.models import (
     DownloadRequest,
     DuplicateFixLog,
@@ -23,7 +23,7 @@ from uuid import uuid4
 import re
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.accounts import display_email, is_placeholder_email, placeholder_email
-from oneirodex.utils.auth import admin_required
+from oneirodex.utils.auth import admin_required, login_user
 from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.admin_invariant import lock_admin_mutation
 from oneirodex.utils.admin_user_validation import (

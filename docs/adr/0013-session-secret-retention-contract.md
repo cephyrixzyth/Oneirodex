@@ -16,8 +16,10 @@ file. These changes share key custody, backup and retained-record decisions;
 implementing them independently could strand integrations or retain data in a
 way the owner did not select.
 
-This record captures the owner's selected policies. It does not claim that the
-planned session, credential or deletion migrations have shipped.
+This record captures the owner's selected policies. The persistent browser
+session implementation is now present in the current review branch and is
+under independent postpatch review. Reusable-credential and account-deletion
+migrations remain planned work.
 
 ## Decision
 
@@ -82,8 +84,9 @@ planned session, credential or deletion migrations have shipped.
 ## Migration order
 
 1. Add and verify the session, key-envelope and deletion contracts against
-   current schema and runtime behavior.
+   current schema and runtime behavior. **Policy decisions recorded.**
 2. Add server-enforced sessions and explicit legacy-cookie reauthentication.
+   **Implemented in review branch; independent candidate review finding fixed and focused verification passed; release qualification remains pending.**
 3. Introduce versioned reusable-secret envelopes, then migrate and rotate
    credentials in restartable batches while retaining old ciphertext until
    decryptability is verified.

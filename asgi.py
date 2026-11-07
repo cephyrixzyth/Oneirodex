@@ -1341,6 +1341,7 @@ class LazyASGIApp:
             from oneirodex.runtime_native.account_password import mount_account_password_routes
             from oneirodex.runtime_native.release_calendar import mount_release_calendar_routes
             from oneirodex.runtime_native.account_tokens import mount_account_tokens_routes
+            from oneirodex.runtime_native.account_sessions import mount_account_sessions_routes
             from oneirodex.runtime_native.client_reads import mount_client_reads_routes
             from oneirodex.runtime_native.announcements import mount_announcements_routes
             from oneirodex.runtime_native.news_feeds import mount_news_feed_routes
@@ -1926,7 +1927,11 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
-            mount_auth_logout_routes(self._native_read_api_app, self._flask_app)
+            mount_auth_logout_routes(
+                self._native_read_api_app,
+                self._flask_app,
+                database_scope=lambda app: self._native_database_scope(app),
+            )
             mount_auth_pages_routes(
                 self._native_read_api_app,
                 self._flask_app,
@@ -2134,6 +2139,15 @@ class LazyASGIApp:
                 database_scope=lambda app: self._native_database_scope(app),
             )
             mount_account_tokens_routes(
+                self._native_read_api_app,
+                self._flask_app,
+                find_user=find_user,
+                find_token=find_token,
+                commit_token_touch=commit_token_touch,
+                login_manager=manager,
+                database_scope=lambda app: self._native_database_scope(app),
+            )
+            mount_account_sessions_routes(
                 self._native_read_api_app,
                 self._flask_app,
                 find_user=find_user,

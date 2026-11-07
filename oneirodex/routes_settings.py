@@ -1,10 +1,11 @@
 from flask import Blueprint, redirect, url_for, request, flash, current_app
-from flask_login import login_required, current_user, login_user
+from flask_login import login_required, current_user
 from oneirodex.forms import ChangePasswordForm, EditProfileForm, UserPreferencesForm
 from oneirodex.models import User, UserPreference
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.avatar import DEFAULT_AVATAR, finalize_avatar_change, save_avatar
 from oneirodex import db
+from oneirodex.utils.auth import login_user
 
 settings_bp = Blueprint('settings', __name__)
 

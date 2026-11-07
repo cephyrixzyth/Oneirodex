@@ -1,6 +1,7 @@
 """FastAPI logout redirect with Flask-Login session-cookie compatibility."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
@@ -8,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from .response_compat import flask_http_exception_response, flask_redirect_response
 
 
-def create_auth_logout_router(flask_app: FastAPI):
+def create_auth_logout_router(flask_app: FastAPI, *, database_scope=None):
     router = APIRouter()
 
     @router.api_route('/logout', methods=['GET', 'HEAD', 'POST'])
@@ -56,6 +57,27 @@ def create_auth_logout_router(flask_app: FastAPI):
 
         session_data.pop(str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
         original = dict(session_data)
+        identity = session_data.get('_user_id')
+        if (
+            identity
+            and config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING'))
+            and not config.get('TESTING')
+        ):
+            from oneirodex.utils.persistent_sessions import (
+                revoke_login_session,
+                session_id_from_identity,
+            )
+
+            session_id = session_id_from_identity(str(identity))
+            if session_id:
+                from oneirodex.runtime_native.db_session import native_db
+
+                raw_user_id = str(identity).split(':', 1)[0]
+                if raw_user_id.isdecimal():
+                    scope = database_scope(flask_app) if database_scope else nullcontext()
+                    with scope:
+                        revoke_login_session(session_id, user_id=int(raw_user_id))
+                        native_db.session.commit()
         for key in ('_user_id', '_fresh', '_id'):
             session_data.pop(key, None)
         remember_name = config.get('REMEMBER_COOKIE_NAME', 'remember_token')
@@ -102,6 +124,6 @@ def create_auth_logout_router(flask_app: FastAPI):
     return router
 
 
-def mount_auth_logout_routes(app: FastAPI, flask_app, **_kwargs):
-    app.include_router(create_auth_logout_router(flask_app))
+def mount_auth_logout_routes(app: FastAPI, flask_app, **kwargs):
+    app.include_router(create_auth_logout_router(flask_app, **kwargs))
     return app

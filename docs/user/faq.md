@@ -16,6 +16,9 @@ When the member page is scrollable, aurora glass **Jump to top** / **Jump to bot
 **I can’t log in.**  
 Ask an admin to check your invite/whitelist and that the server is up (`/pulse` liveness · `/awake` ready). SSO only works if Admin → Integrations has OIDC enabled *and* `OIDC_ENABLED=true`. After several failed passwords you may see “Too many login attempts” — wait a few minutes.
 
+**How do I sign out another browser or all devices?**
+Open Account → **API tokens** → **Browser sessions**. Revoke an individual browser or choose **Sign out on all devices**. A session expires after 7 days without activity and no later than 30 days after sign-in. Existing sessions from before this server update may need one fresh sign-in.
+
 **I can’t pair the desktop companion.**  
 Account menu → **API tokens** (`/tokens`). Create with the **Desktop companion** preset, then **Copy secret** (raw `gt_…` only) into Connect. Format is `gt_<prefix>_<secret>` — the secret segment may include `-` / `_`; paste the **full** string (do not stop at the last `-`). Thin seats use the **Thin client** preset (no download). Browser **Copy** writes only the `gt_…` secret; on plain HTTP LAN (common on Unraid), use the Copy fallback or select the secret field and Ctrl+C / ⌘C. See [desktop-companion.md](desktop-companion.md) · [thin-client.md](thin-client.md).
 

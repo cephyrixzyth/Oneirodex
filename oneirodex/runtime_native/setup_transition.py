@@ -408,9 +408,17 @@ def create_setup_transition_router(
 
                 if new_admin is not None:
                     from oneirodex.runtime_native.auth_resolver import session_identifier
+                    from oneirodex.utils.persistent_sessions import ensure_login_identity
                     from oneirodex.utils.trusted_proxy import trusted_forwarded_for
 
-                    auth.session_data['_user_id'] = str(new_admin.get_id())
+                    auth.session_data['_user_id'] = ensure_login_identity(
+                        str(new_admin.get_id()),
+                        testing=bool(flask_app.config.get('TESTING')),
+                        enabled=flask_app.config.get(
+                            'PERSISTENT_SESSIONS_ENABLED',
+                            not flask_app.config.get('TESTING'),
+                        ),
+                    )
                     auth.session_data['_fresh'] = True
                     auth.session_data['_id'] = session_identifier(
                         request.client.host if request.client else None,
@@ -515,9 +523,17 @@ def create_setup_transition_router(
                         else:
                             if new_admin is not None:
                                 from oneirodex.runtime_native.auth_resolver import session_identifier
+                                from oneirodex.utils.persistent_sessions import ensure_login_identity
                                 from oneirodex.utils.trusted_proxy import trusted_forwarded_for
 
-                                auth.session_data['_user_id'] = str(new_admin.get_id())
+                                auth.session_data['_user_id'] = ensure_login_identity(
+                                    str(new_admin.get_id()),
+                                    testing=bool(flask_app.config.get('TESTING')),
+                                    enabled=flask_app.config.get(
+                                        'PERSISTENT_SESSIONS_ENABLED',
+                                        not flask_app.config.get('TESTING'),
+                                    ),
+                                )
                                 auth.session_data['_fresh'] = True
                                 auth.session_data['_id'] = session_identifier(
                                     request.client.host if request.client else None,

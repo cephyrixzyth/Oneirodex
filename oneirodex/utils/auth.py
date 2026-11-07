@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from functools import wraps
-from flask import request, redirect, url_for, flash
+from flask import request, redirect, url_for, flash, current_app, session
 from urllib.parse import urlparse as url_parse
-from flask_login import current_user, login_user
+from flask_login import current_user, login_user as _flask_login_user, logout_user as _flask_logout_user
 from sqlalchemy import func, select
 from oneirodex.models import User, db
 from oneirodex import login_manager
@@ -20,8 +20,6 @@ def load_user(user_id):
     """
     import hmac
 
-    from flask import current_app
-
     uid, sep, fingerprint = str(user_id or '').partition(':')
     try:
         user = db.session.get(User, int(uid))
@@ -30,8 +28,51 @@ def load_user(user_id):
     if user is None or not user.is_active:
         return None
     if sep:
-        return user if hmac.compare_digest(fingerprint, user.session_fingerprint()) else None
+        fingerprint = fingerprint.split(':', 1)[0]
+        if not hmac.compare_digest(fingerprint, user.session_fingerprint()):
+            return None
+        if current_app.testing or not current_app.config.get('PERSISTENT_SESSIONS_ENABLED', True):
+            return user
+        from oneirodex.utils.persistent_sessions import validate_login_identity
+
+        return user if validate_login_identity(str(user_id), user) else None
     return user if current_app.testing else None
+
+
+def login_user(user, *args, **kwargs):
+    """Issue a Flask login bound to its server-side revocation record."""
+    logged_in = _flask_login_user(user, *args, **kwargs)
+    if (
+        not logged_in
+        or current_app.testing
+        or not current_app.config.get('PERSISTENT_SESSIONS_ENABLED', True)
+    ):
+        return logged_in
+    from oneirodex.utils.persistent_sessions import issue_login_identity
+
+    session['_user_id'] = issue_login_identity(user)
+    return logged_in
+
+
+def logout_user():
+    """Revoke this browser session before clearing its client-side cookie."""
+    # Flask-Login may not load a remember cookie until current_user is first
+    # accessed. Resolve it before looking in the session, or logout can clear
+    # the browser cookie without revoking its server-side session row.
+    _ = current_user.is_authenticated
+    if not current_app.testing and current_app.config.get('PERSISTENT_SESSIONS_ENABLED', True):
+        identity = session.get('_user_id')
+        from oneirodex.utils.persistent_sessions import (
+            revoke_login_session,
+            session_id_from_identity,
+        )
+
+        session_id = session_id_from_identity(identity)
+        raw_user_id = str(identity or '').split(':', 1)[0]
+        if session_id and raw_user_id.isdecimal():
+            revoke_login_session(session_id, user_id=int(raw_user_id))
+            db.session.commit()
+    return _flask_logout_user()
 
 
 def safe_next_url(next_page, *, fallback_endpoint='discover.discover'):

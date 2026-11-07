@@ -281,7 +281,7 @@ def account_password(body: ChangePasswordBody):
         return api_error('Could not change your password.', code='internal')
 
     # The new password ends every other session (User.get_id); keep this one.
-    from flask_login import login_user
+    from oneirodex.utils.auth import login_user
 
     login_user(user, remember=True)
     return api_ok({'changed': True})

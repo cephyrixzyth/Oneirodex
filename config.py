@@ -1,4 +1,5 @@
 import os, sys
+from datetime import timedelta
 
 from dotenv import load_dotenv
 
@@ -138,6 +139,9 @@ class Config(object):
     REMEMBER_COOKIE_SECURE = _env_bool('REMEMBER_COOKIE_SECURE', True)
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = os.getenv('REMEMBER_COOKIE_SAMESITE', 'Lax')
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    PERSISTENT_SESSIONS_ENABLED = True
 
     # HTTP security response headers — see oneirodex/utils/security_headers.py.
     # CSP enforces by default. Classic onclick= is gone; WebRetro WASM is a

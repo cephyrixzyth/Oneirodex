@@ -9,7 +9,8 @@ from flask import (
     make_response,
     session,
 )
-from flask_login import login_required, logout_user, current_user
+from flask_login import login_required, current_user
+from oneirodex.utils.auth import logout_user
 
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.member_spa import render_member_spa

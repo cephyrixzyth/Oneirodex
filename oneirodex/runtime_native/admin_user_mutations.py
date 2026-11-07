@@ -389,10 +389,17 @@ def _refresh_password_session(session_data, user, request, config):
 def _write_remember_cookie(response, flask_app, session_data):
     from .session_compat import encode_remember_cookie
     config = flask_app.config
-    duration = config.get('REMEMBER_COOKIE_DURATION') or timedelta(days=365)
+    from oneirodex.utils.persistent_sessions import MAX_SESSION_AGE, ensure_login_identity
+
+    session_data['_user_id'] = ensure_login_identity(
+        str(session_data['_user_id']), testing=bool(config.get('TESTING')),
+        enabled=config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING')),
+    )
     seconds = session_data.pop('_remember_seconds', None)
-    if seconds is not None:
-        duration = timedelta(seconds=seconds)
+    duration = timedelta(seconds=seconds) if seconds is not None else (
+        config.get('REMEMBER_COOKIE_DURATION') or MAX_SESSION_AGE
+    )
+    duration = min(duration, MAX_SESSION_AGE)
     response.set_cookie(
         config.get('REMEMBER_COOKIE_NAME', 'remember_token'),
         encode_remember_cookie(str(session_data['_user_id']), config['SECRET_KEY']),

@@ -228,12 +228,20 @@ def _write_remember_cookie(response, session_data, config):
         response.delete_cookie(name, path=path, domain=domain)
     elif action == 'set' and session_data.get('_user_id'):
         from oneirodex.runtime_native.auth_resolver import encode_remember_cookie
+        from oneirodex.utils.persistent_sessions import MAX_SESSION_AGE, ensure_login_identity
 
-        duration = config.get('REMEMBER_COOKIE_DURATION') or timedelta(days=365)
-        seconds = session_data.pop('_remember_seconds', None)
-        expires = datetime.now(timezone.utc) + (
-            timedelta(seconds=seconds) if seconds is not None else duration
+        session_data['_user_id'] = ensure_login_identity(
+            str(session_data['_user_id']),
+            testing=bool(config.get('TESTING')),
+            enabled=config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING')),
         )
+
+        duration = config.get('REMEMBER_COOKIE_DURATION') or MAX_SESSION_AGE
+        seconds = session_data.pop('_remember_seconds', None)
+        if seconds is not None:
+            duration = timedelta(seconds=seconds)
+        duration = min(duration, MAX_SESSION_AGE)
+        expires = datetime.now(timezone.utc) + duration
         response.set_cookie(
             name, encode_remember_cookie(str(session_data['_user_id']), config['SECRET_KEY']),
             expires=expires, path=path, domain=domain,

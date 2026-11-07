@@ -1,14 +1,26 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { TokensPage } from './TokensPage'
 import * as tokensApi from '../api/tokens'
+import * as sessionsApi from '../api/sessions'
 import { showToast } from '../utils/toast'
+
+vi.mock('@oneirodex/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@oneirodex/ui')>()
+  return { ...actual, confirmAction: vi.fn(() => Promise.resolve(true)) }
+})
 
 vi.mock('../api/tokens', () => ({
   listTokens: vi.fn(),
   createToken: vi.fn(),
   revokeToken: vi.fn(),
+}))
+
+vi.mock('../api/sessions', () => ({
+  listAccountLoginSessions: vi.fn(),
+  revokeAccountLoginSession: vi.fn(),
+  revokeAllAccountLoginSessions: vi.fn(),
 }))
 
 vi.mock('../utils/toast', () => ({
@@ -50,6 +62,43 @@ beforeEach(() => {
       },
     },
     valid_scopes: ['read:library', 'write:download'],
+  })
+  vi.mocked(sessionsApi.listAccountLoginSessions).mockResolvedValue({
+    sessions: [
+      {
+        id: '0123456789abcdef0123456789abcdef',
+        current: true,
+        created_at: '2026-07-01T12:00:00+00:00',
+        last_seen_at: '2026-07-02T12:00:00+00:00',
+        expires_at: '2026-07-31T12:00:00+00:00',
+      },
+      {
+        id: 'fedcba9876543210fedcba9876543210',
+        current: false,
+        created_at: '2026-06-01T12:00:00+00:00',
+        last_seen_at: '2026-06-02T12:00:00+00:00',
+        expires_at: '2026-07-01T12:00:00+00:00',
+      },
+    ],
+  })
+  vi.mocked(sessionsApi.revokeAccountLoginSession).mockResolvedValue({ ok: true })
+  vi.mocked(sessionsApi.revokeAllAccountLoginSessions).mockResolvedValue({ ok: true })
+})
+
+test('lists browser sessions and lets the member revoke another session', async () => {
+  const user = userEvent.setup()
+  render(<TokensPage />)
+
+  const row = await screen.findByText('Browser session')
+  expect(screen.getByText('This browser')).toBeInTheDocument()
+  const listItem = row.closest('li')
+  expect(listItem).not.toBeNull()
+  await user.click(within(listItem!).getByRole('button', { name: 'Revoke' }))
+
+  await waitFor(() => {
+    expect(sessionsApi.revokeAccountLoginSession).toHaveBeenCalledWith(
+      'fedcba9876543210fedcba9876543210',
+    )
   })
 })
 
@@ -234,9 +283,11 @@ test('revokes a token after confirm', async () => {
   render(<TokensPage />)
   expect(await screen.findByText('Living room PC')).toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: /revoke/i }))
-  // The house dialog, not window.confirm (UID-042) — its named button commits.
-  await user.click(await screen.findByRole('button', { name: /^revoke token$/i }))
+  await user.click(
+    within(screen.getByRole('region', { name: 'Your tokens' })).getByRole('button', {
+      name: /^revoke$/i,
+    }),
+  )
 
   await waitFor(() => {
     expect(tokensApi.revokeToken).toHaveBeenCalledWith(7)

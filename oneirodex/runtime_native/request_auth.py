@@ -161,6 +161,12 @@ def request_auth_context(
         remember_cookie_name=remember_cookie_name,
         authorization_header_name=str(config.get("AUTH_HEADER_NAME") or "Authorization"),
         allow_legacy_id=bool(config.get("TESTING")),
+        validate_session_identity=(
+            _validate_persistent_login
+            if config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING'))
+            and not config.get('TESTING')
+            else None
+        ),
         touch_bearer=touch_bearer,
         allow_remember=allow_remember,
     )
@@ -212,3 +218,9 @@ def _lifetime_seconds(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError, OverflowError):
         return 31_536_000
+
+
+def _validate_persistent_login(identity: str, user: Any, now: datetime | None) -> bool:
+    from oneirodex.utils.persistent_sessions import validate_login_identity
+
+    return validate_login_identity(identity, user, now=now)

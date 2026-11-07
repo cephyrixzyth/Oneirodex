@@ -21,6 +21,16 @@ the README product slots unless a matching slot is intentionally replaced.
 
 ## Recipe
 
+**2026-11-07 focused account-session capture:** the populated local capture
+instance was rebuilt from the current member bundle with background workers
+and external integrations disabled. Authenticated Playwright capture of
+`/tokens` shows browser-session dates and current/other/all-device controls;
+the image is `docs/media/screenshots/api-tokens.png`. The same isolated account
+exercised missing-CSRF rejection, single-session revocation and all-device
+revocation. No README slot depicts this page, so README images were not replaced.
+The capture database remained a disposable local database and was not used as
+Alembic-head evidence after startup reported its pre-existing baseline warning.
+
 **2026-10-30 scan workspace source-overlay capture:** rebuilt admin-app and admin-pilot bundles from the corrected source, then installed them before startup in an isolated current R1594 image clone. Paired read-only screenshots against official v1.1.8 and current at 1440x1000 and 390x844 confirm Automatic scan and Manual identify together, with Scan jobs separate and no horizontal overflow, page errors, failed local requests or external requests. No scan actions ran; cloned databases, containers, proxies and the internal network were removed. Evidence: `.artifacts/parity-v1.1.8/scan-workspace-unification-r1596.json` and `.artifacts/parity-v1.1.8/scan-workspace-visual-r1596.json`. No README product slot depicts this route, so README images were not replaced.
 
 **2026-11-05 admin scan navigation review:** rebuilt admin-app and admin-pilot from the local source and installed their bundle contents into isolated `oneirodex:parity-r1776-focus-fixed-v2` staging before restart. Authenticated replay covers Auto, Manual, Scan Jobs and Unmatched at seven widths (28 checks), including keyboard focus reveal and separate horizontal action/nav rows; no scan action ran. Fixtures were synthetic. Evidence and captures: `.artifacts/parity-v1.1.8/scan-ux-review-20261104/r1778/`. No README product slot depicts this route, so README images were not replaced.

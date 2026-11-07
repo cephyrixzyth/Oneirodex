@@ -18,7 +18,7 @@ Related: [members-and-invites.md](members-and-invites.md) · [settings-modules.m
 | Kind | What | Notes |
 |---|---|---|
 | Accounts | Username, Argon2 password hash, role, optional email | Emailless accounts use an unroutable `.invalid` placeholder — [members-and-invites.md](members-and-invites.md). New password-reset tokens are stored as SHA-256 digests and expire after 15 minutes; tokens issued before this change remain accepted until their existing expiry. |
-| Sessions | Signed session cookie + CSRF token | Same-origin. API tokens are **hashed** (SHA-256); the raw `gt_…` secret is shown once |
+| Sessions | Signed browser cookie, CSRF token, and a per-login server record with a hash of a random session secret plus created/last-seen/expiry/revocation times | Same-origin. Browser sessions expire after 7 inactive days and at 30 days absolute; members can revoke one or all from Account → API tokens → Browser sessions. The raw session secret is never stored. API tokens are separately **hashed** (SHA-256); the raw `gt_…` secret is shown once |
 | Library | Game metadata, paths, artwork you stored | Paths point at disks you mounted (`DATA_FOLDER_GAMES`, `ONEIRODEX_LIBRARY_ROOTS`); member freshness responses omit absolute install paths |
 | Playtime | Per-user totals and session heartbeats | `share_activity` (default on) controls whether accepted friends see live play status in Discover. It does not hide historical playtime from profile or comparison views when those viewers already have access to the member's library/social data. |
 | Presence | Online / away / in-game | Derived from play sessions and companion heartbeats, not a third-party tracker |

@@ -41,9 +41,21 @@ def create_public_demo_router(
         with scope:
             try:
                 demo_user = data.demo_user()
+                demo_identity = None
+                if demo_user is not None:
+                    from oneirodex.utils.persistent_sessions import ensure_login_identity
+
+                    demo_identity = ensure_login_identity(
+                        str(demo_user.get_id()),
+                        testing=bool(flask_app.config.get('TESTING')),
+                        enabled=flask_app.config.get(
+                            'PERSISTENT_SESSIONS_ENABLED',
+                            not flask_app.config.get('TESTING'),
+                        ),
+                    )
             except Exception:  # noqa: BLE001 — do not expose demo account lookup failures
                 return _secure_error(flask_app, 503, head=request.method == 'HEAD')
-        if demo_user is None:
+        if demo_user is None or demo_identity is None:
             return _secure_error(flask_app, 503, head=request.method == 'HEAD')
 
         from oneirodex.runtime_native.auth_login import _session_data
@@ -53,7 +65,7 @@ def create_public_demo_router(
         from oneirodex.utils.trusted_proxy import trusted_forwarded_for
 
         session_data = _session_data(request, flask_app.config)
-        session_data['_user_id'] = str(demo_user.get_id())
+        session_data['_user_id'] = demo_identity
         session_data['_fresh'] = True
         session_data['_id'] = session_identifier(
             request.client.host if request.client else None,

@@ -315,10 +315,19 @@ def _write_remember_cookie(response: Response, flask_app, session_data) -> None:
     remember_id = session_data.get('_user_id')
     if not remember_id:
         return
-    duration = config.get('REMEMBER_COOKIE_DURATION') or timedelta(days=365)
+    from oneirodex.utils.persistent_sessions import MAX_SESSION_AGE, ensure_login_identity
+
+    remember_id = ensure_login_identity(
+        str(remember_id), testing=bool(config.get('TESTING')),
+        enabled=config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING')),
+    )
+    session_data['_user_id'] = remember_id
     seconds = session_data.pop('_remember_seconds', None)
     if seconds is not None:
         duration = timedelta(seconds=seconds)
+    else:
+        duration = config.get('REMEMBER_COOKIE_DURATION') or MAX_SESSION_AGE
+    duration = min(duration, MAX_SESSION_AGE)
     response.set_cookie(
         config.get('REMEMBER_COOKIE_NAME', 'remember_token'),
         encode_remember_cookie(str(remember_id), config['SECRET_KEY']),

@@ -185,6 +185,9 @@ def _set_session_cookie(response, flask_app, auth: RequestAuthContext):
     if not secret_key:
         return
     session_data = auth.session_data
+    from oneirodex.utils.persistent_sessions import prepare_session_identity_for_cookie
+
+    prepare_session_identity_for_cookie(session_data, config)
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')

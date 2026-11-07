@@ -3,7 +3,7 @@ import os
 import uuid
 from html import escape as html_escape
 from flask import Blueprint, redirect, url_for, request, flash, current_app, abort, session, get_flashed_messages
-from flask_login import current_user, login_required, login_user, logout_user
+from flask_login import current_user, login_required
 from oneirodex import db
 from oneirodex.models import User, InviteToken, GlobalSettings, Whitelist
 from oneirodex.utils.global_settings import global_settings_row
@@ -13,7 +13,9 @@ from oneirodex.utils.public_origin import (
     site_url_is_configured,
 )
 from oneirodex.forms import LoginForm, RegistrationForm, ResetPasswordRequestForm, InviteForm, UserPasswordForm
-from oneirodex.utils.auth import burn_password_check, safe_next_url, sign_in_and_redirect
+from oneirodex.utils.auth import (
+    burn_password_check, login_user, logout_user, safe_next_url, sign_in_and_redirect,
+)
 from oneirodex.utils.accounts import is_placeholder_email
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.schemas.auth import LoginBody

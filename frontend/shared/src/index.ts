@@ -41,6 +41,7 @@ export * from './ShellConfigContext.js'
 // from `api/preferences`.
 export * from './copyText.js'
 export * from './accountApi.js'
+export * from './accountSessionsApi.js'
 export * from './tokensApi.js'
 export * from './preferencesModalHost.js'
 export * from './PreferencesModal.js'

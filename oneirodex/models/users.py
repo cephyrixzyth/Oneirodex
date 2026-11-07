@@ -2,6 +2,7 @@
 control rows, personal access tokens, client devices and invites."""
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from sqlalchemy import event, update
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -50,6 +51,15 @@ class User(db.Model):
     def set_password(self, password):
         # Now using Argon2 to hash new passwords
         self.password_hash = ph.hash(password)
+        if self.id is not None:
+            db.session.execute(
+                update(PersistentLoginSession)
+                .where(
+                    PersistentLoginSession.user_id == self.id,
+                    PersistentLoginSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=datetime.now(timezone.utc))
+            )
 
     def check_password(self, password):
         # Only use Argon2 for password verification
@@ -228,6 +238,46 @@ class ClientDevice(db.Model):
             'client_version': self.client_version,
             'last_seen_at': self.last_seen_at.isoformat() if self.last_seen_at else None,
         }
+
+
+class PersistentLoginSession(db.Model):
+    """Server-side revocation and age record for one browser login."""
+
+    __tablename__ = 'persistent_login_sessions'
+    __table_args__ = (
+        db.Index('ix_persistent_login_sessions_user_active', 'user_id', 'revoked_at'),
+        db.Index('ix_persistent_login_sessions_expiry', 'expires_at'),
+    )
+
+    id = db.Column(db.String(32), primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    secret_hash = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('persistent_login_sessions', lazy='dynamic', cascade='all, delete-orphan'),
+    )
+
+
+@event.listens_for(User.state, 'set')
+def _revoke_login_sessions_when_disabled(user, value, oldvalue, _initiator):
+    if value is False and oldvalue is not False and user.id is not None:
+        db.session.execute(
+            update(PersistentLoginSession)
+            .where(
+                PersistentLoginSession.user_id == user.id,
+                PersistentLoginSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=datetime.now(timezone.utc))
+        )
 
 class Whitelist(db.Model):
     __tablename__ = 'whitelist'
@@ -438,6 +488,7 @@ __all__ = [
     "UserContentFilter",
     "ApiToken",
     "ClientDevice",
+    "PersistentLoginSession",
     "Whitelist",
     "UserPreference",
     "DetailLayoutPreset",

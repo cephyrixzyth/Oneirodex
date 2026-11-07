@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from flask import current_app, request
-from flask_login import current_user, login_required, login_user
+from flask_login import current_user, login_required
 from sqlalchemy import select
 
 from oneirodex import db
@@ -15,6 +15,7 @@ from oneirodex.models import Library, LibraryPlatform, User
 from oneirodex.schemas.setup import SetupTransitionBody
 from oneirodex.utils.admin_invariant import lock_admin_mutation
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.auth import login_user
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
 from oneirodex.utils.oidc import is_secure_oidc_issuer

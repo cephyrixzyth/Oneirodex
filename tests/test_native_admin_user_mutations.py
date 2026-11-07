@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, Response
 
 from oneirodex.runtime_native.admin_user_mutations import create_admin_user_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -28,7 +31,9 @@ class FakeUserMutations:
 
 def _client(*, role='admin'):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-user-mutation-secret', CSP_ENABLED=False)
+    flask_app.config.update(
+        SECRET_KEY='native-user-mutation-secret', CSP_ENABLED=False, TESTING=True,
+    )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
@@ -109,6 +114,30 @@ def test_admin_changing_own_password_refreshes_session_and_remember_cookie():
     assert response.status_code == 200
     assert any(call[0] == 'update' for call in data.calls)
     assert 'remember_token=' in response.headers.get('set-cookie', '')
+
+
+def test_admin_remember_cookie_duration_cannot_exceed_thirty_days():
+    from oneirodex.runtime_native.admin_user_mutations import _write_remember_cookie
+
+    flask_app = Flask(__name__)
+    flask_app.config.update(
+        SECRET_KEY='native-user-mutation-secret', TESTING=True,
+        REMEMBER_COOKIE_DURATION=timedelta(days=90),
+    )
+    response = Response()
+    before = datetime.now(timezone.utc)
+
+    _write_remember_cookie(
+        response,
+        flask_app,
+        {'_user_id': '18:fingerprint', '_remember_seconds': 60 * 60 * 24 * 60},
+    )
+
+    cookies = SimpleCookie()
+    cookies.load(response.headers['set-cookie'])
+    expires = parsedate_to_datetime(cookies['remember_token']['expires'])
+    assert before + timedelta(days=29, hours=23) <= expires
+    assert expires <= before + timedelta(days=30, minutes=1)
 
 
 def _persist_admin(db_session, name):

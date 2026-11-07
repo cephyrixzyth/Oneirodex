@@ -114,7 +114,7 @@ def setup_submit():
             _stage_setup_step(2)  # same session, no intermediate commit
             db.session.commit()
             # The rest of the wizard requires this admin (_require_setup_admin).
-            from flask_login import login_user
+            from oneirodex.utils.auth import login_user
             login_user(user)
             log_system_event("Admin account created during setup", event_type='setup', event_level='information')
             flash('Admin account created successfully! Please configure your SMTP settings.', 'success')

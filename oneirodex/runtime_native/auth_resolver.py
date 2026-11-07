@@ -58,7 +58,7 @@ def load_active_user_id(
 ) -> Any | None:
     """Apply this app's active-user and password-fingerprint session rules."""
     raw = str(user_id or "")
-    uid, separator, fingerprint = raw.partition(":")
+    uid, separator, remainder = raw.partition(":")
     try:
         user = find_user(int(uid))
     except (TypeError, ValueError):
@@ -66,6 +66,7 @@ def load_active_user_id(
     if user is None or not _user_active(user):
         return None
     if separator:
+        fingerprint = remainder.split(":", 1)[0]
         expected = _session_fingerprint(user)
         if not hmac.compare_digest(fingerprint, expected):
             return None
@@ -113,6 +114,7 @@ def resolve_authentication(
     remember_cookie_name: str = "remember_token",
     authorization_header_name: str = "Authorization",
     allow_legacy_id: bool = False,
+    validate_session_identity: Callable[[str, Any, datetime | None], bool] | None = None,
     touch_bearer: bool = True,
     allow_remember: bool = True,
 ) -> AuthResolution:
@@ -143,7 +145,10 @@ def resolve_authentication(
             user = load_active_user_id(
                 str(session_user_id), find_user, allow_legacy_id=allow_legacy_id
             )
-        if user is not None:
+        if user is not None and (
+            validate_session_identity is None
+            or validate_session_identity(str(session_user_id), user, now)
+        ):
             return AuthResolution(user, source="session")
 
     remember_cookie = cookies.get(remember_cookie_name)
@@ -159,7 +164,10 @@ def resolve_authentication(
                 user = load_active_user_id(
                     remembered_id, find_user, allow_legacy_id=allow_legacy_id
                 )
-            if user is not None:
+            if user is not None and (
+                validate_session_identity is None
+                or validate_session_identity(remembered_id, user, now)
+            ):
                 session_data["_user_id"] = remembered_id
                 session_data["_fresh"] = False
                 return AuthResolution(user, source="remember")

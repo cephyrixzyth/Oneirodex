@@ -10084,7 +10084,9 @@ def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):
 
 def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(monkeypatch):
     calls = []
-    admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
+    setup_fingerprint = 'f' * 16
+    legacy_identity = f'81:{setup_fingerprint}'
+    admin = SimpleNamespace(get_id=lambda: legacy_identity)
     data = SimpleNamespace(
         current_step=lambda: 1,
         transition=lambda body, app, *, database_scope=None: calls.append((body['step'], app)) or (
@@ -10093,6 +10095,12 @@ def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(m
     )
     monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch)
+    persistent_identity = legacy_identity + ':' + ('a' * 32) + ':setup-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
 
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
@@ -10118,6 +10126,7 @@ def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(m
     saved_session = load_session_cookie(
         created.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
     )
+    assert saved_session['_user_id'] == persistent_identity
     assert saved_session['_flashes'][-1] == (
         'success', 'Admin account created successfully! Please configure your SMTP settings.',
     )
@@ -10227,7 +10236,9 @@ def test_lazy_asgi_setup_transition_requires_admin_after_account_creation(monkey
 
 def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monkeypatch):
     calls = []
-    admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
+    setup_fingerprint = 'f' * 16
+    legacy_identity = f'81:{setup_fingerprint}'
+    admin = SimpleNamespace(get_id=lambda: legacy_identity)
 
     class FakeSetupTransitionData:
         def current_step(self):
@@ -10241,6 +10252,12 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
         native_setup_transition, 'SetupTransitionData', FakeSetupTransitionData,
     )
     _flask_app, runtime = _runtime(monkeypatch)
+    persistent_identity = legacy_identity + ':' + ('a' * 32) + ':setup-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
     cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
@@ -10270,7 +10287,7 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
     )
-    assert saved_session['_user_id'] == '81:setup-fingerprint'
+    assert saved_session['_user_id'] == persistent_identity
     assert saved_session['_flashes'][-1] == (
         'success', 'Admin account created successfully! Please configure your SMTP settings.',
     )
@@ -10925,7 +10942,15 @@ def test_invite_management_forms_keep_first_run_setup_redirect(monkeypatch):
 def test_lazy_asgi_public_demo_uses_native_lookup_and_compatible_session(monkeypatch):
     monkeypatch.setenv('ONEIRODEX_PUBLIC_DEMO', 'true')
     _flask_app, runtime = _runtime(monkeypatch)
-    user = SimpleNamespace(id=7, get_id=lambda: '7:fp')
+    demo_fingerprint = 'b' * 16
+    legacy_identity = f'7:{demo_fingerprint}'
+    persistent_identity = legacy_identity + ':' + ('b' * 32) + ':demo-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
+    user = SimpleNamespace(id=7, get_id=lambda: legacy_identity)
     calls = []
     monkeypatch.setattr(
         auth_demo, 'PublicDemoData',
@@ -10940,7 +10965,7 @@ def test_lazy_asgi_public_demo_uses_native_lookup_and_compatible_session(monkeyp
     session = load_session_cookie(
         cookie, 'native-asgi-browse-secret', max_age=31_536_000,
     )
-    assert session['_user_id'] == '7:fp' and session['_fresh'] is True
+    assert session['_user_id'] == persistent_identity and session['_fresh'] is True
     assert session['_id'] and '_remember' not in session
     assert calls == ['lookup']
 
