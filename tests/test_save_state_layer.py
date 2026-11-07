@@ -26,6 +26,7 @@ from oneirodex.utils.emulator_saves import (
     is_state_slot,
     latest_state_by_game,
     audit_save_storage,
+    delete_save,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -422,6 +423,36 @@ def test_save_storage_audit_reports_missing_and_shared_root_references(db_sessio
         assert existing_path.exists() and (tmp_path / 'orphan.save').exists()
     finally:
         outside.unlink(missing_ok=True)
+
+
+def test_explicit_save_delete_keeps_legacy_path_until_last_reference_is_removed(
+    db_session, tmp_path,
+):
+    owner = _user(db_session)
+    other_owner = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    legacy_path = tmp_path / 'legacy-shared.state'
+    legacy_path.write_bytes(b'legacy committed state')
+    first = EmulatorSave(
+        user_id=owner.id, game_uuid=game.uuid, slot_name='first',
+        filename='first.state', size_bytes=22, storage_path=str(legacy_path),
+        encrypted=False,
+    )
+    second = EmulatorSave(
+        user_id=other_owner.id, game_uuid=game.uuid, slot_name='second',
+        filename='second.state', size_bytes=22, storage_path=str(legacy_path),
+        encrypted=False,
+    )
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    assert delete_save(owner.id, game.uuid, 'first') is True
+    assert legacy_path.read_bytes() == b'legacy committed state'
+    assert db_session.query(EmulatorSave).filter_by(id=second.id).one_or_none() is not None
+
+    assert delete_save(other_owner.id, game.uuid, 'second') is True
+    assert not legacy_path.exists()
 
 
 def test_failed_save_commit_keeps_previous_generation_readable(
