@@ -117,6 +117,20 @@ def normalize_library_image(content: bytes) -> bytes:
                 output.close()
 
 
+def validate_library_image_header(content: bytes) -> None:
+    """Check decoded type and dimensions without loading pixels, under the gate."""
+    if len(content) > LIBRARY_IMAGE_MAX_BYTES:
+        raise ValueError('Library image must be 10 MB or smaller.')
+
+    from PIL import Image as PILImage
+
+    with image_decode_work_slot():
+        with PILImage.open(BytesIO(content)) as opened:
+            error = library_image_header_error(opened)
+            if error:
+                raise ValueError(error)
+
+
 def game_image_header_error(image) -> str | None:
     """Validate game artwork from the decoder header, independent of filename."""
     image_format = str(getattr(image, 'format', '') or '').upper()

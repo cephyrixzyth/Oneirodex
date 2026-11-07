@@ -559,12 +559,32 @@ def apply_pack_as_fallback(
     library_src = _pick_library_file(pack_dir, fmt)
     ns_root = newstyle_root(package_root)
     ns_root.mkdir(parents=True, exist_ok=True)
-    cover_img = Image.open(cover_src).convert('RGB')
-    library_img = Image.open(library_src).convert('RGB')
+    from oneirodex.utils.image_upload_limits import (
+        GAME_IMAGE_MAX_PIXELS,
+        image_decode_work_slot,
+    )
+
+    def load_pack_image(path):
+        with image_decode_work_slot():
+            with Image.open(path) as opened:
+                width, height = opened.size
+                if width <= 0 or height <= 0 or width * height > GAME_IMAGE_MAX_PIXELS:
+                    raise ValueError('Art pack image dimensions are too large.')
+                opened.load()
+                return opened.convert('RGB')
+
     cover_dest = ns_root / 'default_cover.jpg'
     library_dest = ns_root / 'default_library.jpg'
-    cover_img.save(cover_dest, format='JPEG', quality=90, optimize=True)
-    library_img.save(library_dest, format='JPEG', quality=90, optimize=True)
+    cover_img = load_pack_image(cover_src)
+    try:
+        library_img = load_pack_image(library_src)
+        try:
+            cover_img.save(cover_dest, format='JPEG', quality=90, optimize=True)
+            library_img.save(library_dest, format='JPEG', quality=90, optimize=True)
+        finally:
+            library_img.close()
+    finally:
+        cover_img.close()
     return {
         'default_cover': str(cover_dest),
         'default_library': str(library_dest),

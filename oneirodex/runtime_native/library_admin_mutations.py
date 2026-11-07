@@ -11,7 +11,6 @@ import logging
 import os
 import base64
 from contextlib import nullcontext
-from io import BytesIO
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
@@ -26,8 +25,8 @@ from oneirodex.utils.image_upload_limits import (
     LIBRARY_IMAGE_MAX_BYTES,
     LIBRARY_PREVIEW_MAX_BODY_BYTES,
     ImageWorkBusy,
-    library_image_header_error,
     normalize_library_image,
+    validate_library_image_header,
 )
 
 logger = logging.getLogger(__name__)
@@ -518,14 +517,17 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                         else:
                             image = None
                             if raw_image is not None:
-                                from PIL import Image as PILImage, UnidentifiedImageError
-                                from io import BytesIO
                                 try:
-                                    with PILImage.open(BytesIO(raw_image)) as opened:
-                                        message = library_image_header_error(opened)
-                                        if message is None:
-                                            image = raw_image
-                                except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
+                                    from starlette.concurrency import run_in_threadpool
+
+                                    await run_in_threadpool(validate_library_image_header, raw_image)
+                                    image = raw_image
+                                except ImageWorkBusy:
+                                    message = 'Image processing is busy. Try again shortly.'
+                                    response_status = 503
+                                except ValueError:
+                                    message = 'Please correct the errors below.'
+                                except Exception:
                                     message = 'Please correct the errors below.'
                                     # v1.1.8 let corrupt image decoding escape
                                     # and returned HTTP 500. Keep the generic
@@ -800,11 +802,14 @@ async def _create(request, app, data, user):
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            with PILImage.open(BytesIO(content)) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    return _error(error, 'bad_request', 400)
-        except (UnidentifiedImageError, OSError, ValueError):
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(validate_library_image_header, content)
+        except ImageWorkBusy:
+            return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+        except ValueError as exc:
+            return _error(str(exc), 'bad_request', 400)
+        except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
         from starlette.concurrency import run_in_threadpool
@@ -847,11 +852,14 @@ async def _update(request, app, data, user, library_uuid):
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            with PILImage.open(BytesIO(content)) as opened:
-                error = library_image_header_error(opened)
-                if error:
-                    return _error(error, 'bad_request', 400)
-        except (UnidentifiedImageError, OSError, ValueError):
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(validate_library_image_header, content)
+        except ImageWorkBusy:
+            return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+        except ValueError as exc:
+            return _error(str(exc), 'bad_request', 400)
+        except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
         from starlette.concurrency import run_in_threadpool

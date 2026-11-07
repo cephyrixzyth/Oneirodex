@@ -308,7 +308,9 @@ def create_admin_art_studio_action_router(
             response = _api_error('game_uuid is required for game mode', 'bad_request')
         else:
             try:
-                result = service.apply(
+                from starlette.concurrency import run_in_threadpool
+
+                result = await run_in_threadpool(service.apply,
                     flask_app, pack_id, mode, game_uuid, library_uuid,
                     (body.filename or '').strip() or None,
                 )
@@ -316,12 +318,17 @@ def create_admin_art_studio_action_router(
                 response = JSONResponse(result)
             except LookupError as exc:
                 response = _api_error(str(exc), 'not_found')
-            except (ValueError, FileNotFoundError) as exc:
-                response = _api_error(str(exc), 'bad_request')
-            except (PermissionError, OSError):
-                response = _api_error('Failed to write cover art to disk', 'internal')
-            except Exception:
-                response = _api_error('Unexpected error applying pack', 'internal')
+            except Exception as exc:
+                from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                if isinstance(exc, ImageWorkBusy):
+                    response = _api_error('Image processing is busy. Try again shortly.', 'unavailable', status=503)
+                elif isinstance(exc, (ValueError, FileNotFoundError)):
+                    response = _api_error(str(exc), 'bad_request')
+                elif isinstance(exc, (PermissionError, OSError)):
+                    response = _api_error('Failed to write cover art to disk', 'internal')
+                else:
+                    response = _api_error('Unexpected error applying pack', 'internal')
         return _finish(response, flask_app, auth, scope)
 
     @router.post('/admin/api/art-studio/batch-generate')

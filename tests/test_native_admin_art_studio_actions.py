@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 class FakeActions:
     def __init__(self):
         self.calls = []
+        self.apply_had_running_loop = None
 
     def generate(self, body, package_root):
         self.calls.append(('generate', body.title, body.title_scale, package_root))
@@ -34,6 +36,12 @@ class FakeActions:
         return {'generated': 0, 'skipped': 1, 'errors': [], 'count': 1, 'results': []}
 
     def apply(self, app, pack_id, mode, game_uuid, library_uuid, filename):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.apply_had_running_loop = False
+        else:
+            self.apply_had_running_loop = True
         self.calls.append(('apply', pack_id, mode, game_uuid, library_uuid, filename))
         return {'mode': mode, 'game_uuid': game_uuid, 'pack_id': pack_id}
 
@@ -149,4 +157,5 @@ def test_art_studio_apply_and_batch_alias_keep_validations_and_results():
     assert batch.status_code == 200 and batch.json()['applied'] == 1
     assert alias.status_code == 200 and alias.json()['failed'] == 0
     assert [row[0] for row in actions.calls] == ['apply', 'batch-generate', 'batch-generate']
+    assert actions.apply_had_running_loop is False
     assert events
