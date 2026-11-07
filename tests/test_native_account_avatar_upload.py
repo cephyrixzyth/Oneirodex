@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from PIL import Image
 import pytest
 
 from oneirodex.runtime_native.account_avatar_upload import (
@@ -23,8 +26,15 @@ class FakeAvatarData:
         self.calls = []
         self.commits = 0
         self.rollbacks = 0
+        self.save_had_running_event_loop = None
 
     def save(self, file, user, _app):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.save_had_running_event_loop = False
+        else:
+            self.save_had_running_event_loop = True
         self.calls.append((file.filename, file.read(), user.id))
         return ('library/images/avatars_users/new.png', self.error)
 
@@ -108,6 +118,7 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
         'success': True,
     }
     assert data.calls == [('face.png', b'image-bytes', 167)]
+    assert data.save_had_running_event_loop is False
     assert data.commits == 1
     assert data.rollbacks == 0
     assert response.headers['x-content-type-options'] == 'nosniff'
@@ -320,29 +331,26 @@ def test_legacy_profile_edit_rejects_excess_multipart_parts_without_saving():
     assert data.commits == 0
 
 
-def test_legacy_profile_edit_rejects_unsupported_extension_with_legacy_form_feedback():
+def test_legacy_profile_edit_passes_filename_suffix_to_decoder_adapter():
     data = FakeAvatarData()
     client = make_client(data=data)
     session = {'_user_id': '167:fp', '_fresh': True}
     token = generate_csrf_token(session, SECRET)
     client.cookies.set('session', dump_session_cookie(session, SECRET))
+    content = BytesIO()
+    Image.new('RGB', (16, 16), 'green').save(content, format='PNG')
+    image_bytes = content.getvalue()
 
     response = client.post(
         '/settings_profile_edit',
         data={'csrf_token': token},
-        files={'avatar': ('invalid.txt', b'plain text', 'text/plain')},
+        files={'avatar': ('face.txt', image_bytes, 'application/octet-stream')},
         follow_redirects=False,
     )
 
-    assert response.status_code == 200
-    assert response.headers['content-type'].startswith('text/html')
-    assert "Error in field 'Profile Avatar': Images only!" in response.text
-    assert 'Your avatar was not changed.' in response.text
-    assert f'name="csrf_token" value="{token}"' in response.text
-    assert 'action="/settings_profile_edit" method="post"' in response.text
-    assert 'href="/library?account=avatar"' in response.text
-    assert data.calls == []
-    assert data.commits == 0
+    assert response.status_code == 302
+    assert data.calls == [('face.txt', image_bytes, 167)]
+    assert data.commits == 1
     assert data.rollbacks == 0
 
 

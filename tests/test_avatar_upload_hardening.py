@@ -69,6 +69,61 @@ def test_small_avatar_upload_still_saves_full_and_thumbnail(tmp_path):
     assert image_path.with_name(f"{image_path.stem}_thumbnail.png").is_file()
 
 
+def test_avatar_format_comes_from_decoded_content_not_filename(tmp_path):
+    app = Flask(__name__)
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    user = SimpleNamespace(avatarpath=None)
+    content = BytesIO()
+    Image.new("RGB", (80, 60), "green").save(content, format="PNG")
+    content.seek(0)
+    upload = FileStorage(stream=content, filename="member.jpg")
+
+    path, error = avatar.save_avatar(upload, user, app)
+
+    assert error is None
+    assert path.endswith(".png")
+    image_path = tmp_path / "images" / "avatars_users" / path.rsplit("/", 1)[-1]
+    with Image.open(image_path) as saved:
+        assert saved.format == "PNG"
+
+
+def test_avatar_rejects_unsupported_decoded_format(tmp_path):
+    app = Flask(__name__)
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    user = SimpleNamespace(avatarpath="existing.png")
+    content = BytesIO()
+    Image.new("RGB", (20, 20), "purple").save(content, format="TIFF")
+    content.seek(0)
+    upload = FileStorage(stream=content, filename="member.png")
+
+    path, error = avatar.save_avatar(upload, user, app)
+
+    assert path is None
+    assert error and "supported avatar image format" in error
+    assert user.avatarpath == "existing.png"
+    assert list((tmp_path / "images" / "avatars_users").iterdir()) == []
+
+
+def test_avatar_work_gate_rejects_overlap_without_leaving_staged_files(tmp_path):
+    app = Flask(__name__)
+    app.config["UPLOAD_FOLDER"] = str(tmp_path)
+    user = SimpleNamespace(avatarpath="existing.png")
+    upload = _save_upload(Image.new("RGB", (20, 20), "green"), "member.png")
+
+    from oneirodex.utils.image_upload_limits import IMAGE_DECODE_WORKER
+
+    assert IMAGE_DECODE_WORKER.acquire(blocking=False)
+    try:
+        path, error = avatar.save_avatar(upload, user, app)
+    finally:
+        IMAGE_DECODE_WORKER.release()
+
+    assert path is None
+    assert error and "busy" in error
+    assert user.avatarpath == "existing.png"
+    assert list((tmp_path / "images" / "avatars_users").iterdir()) == []
+
+
 def test_animated_avatar_within_limits_keeps_its_frames(tmp_path):
     app = Flask(__name__)
     app.config["UPLOAD_FOLDER"] = str(tmp_path)

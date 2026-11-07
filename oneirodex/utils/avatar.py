@@ -12,15 +12,17 @@ import os
 from uuid import uuid4
 
 from PIL import Image as PILImage
-from werkzeug.utils import secure_filename
-
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.image_upload_limits import (
+    ImageWorkBusy,
+    image_decode_work_slot,
+)
 
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
 MAX_AVATAR_PIXELS = 16_000_000
 MAX_AVATAR_TOTAL_PIXELS = 32_000_000
 MAX_AVATAR_FRAMES = 200
-ALLOWED_AVATAR_EXTENSIONS = frozenset({'jpg', 'jpeg', 'png', 'gif', 'webp'})
+AVATAR_FORMAT_EXTENSIONS = {'JPEG': 'jpg', 'PNG': 'png', 'GIF': 'gif', 'WEBP': 'webp'}
 
 # The unset-avatar mark: a gamepad in grey rather than the accent, so it reads
 # as "no picture chosen" while still saying *games*. It replaced a headset,
@@ -219,11 +221,6 @@ def validate_avatar(file) -> str | None:
     if not file or not getattr(file, 'filename', ''):
         return 'Choose an image first.'
 
-    extension = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if extension not in ALLOWED_AVATAR_EXTENSIONS:
-        allowed = ', '.join(sorted(ALLOWED_AVATAR_EXTENSIONS))
-        return f'Unsupported image type. Use one of: {allowed}.'
-
     if _file_size(file) > MAX_AVATAR_BYTES:
         return f'Image is larger than the {MAX_AVATAR_BYTES // 1024 // 1024}MB limit.'
 
@@ -320,39 +317,72 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
         app.logger.warning('avatar upload folder unavailable: %s', exc)
         return None, 'Could not write to the avatar folder.'
 
-    filename = secure_filename(file.filename)
-    extension = filename.rsplit('.', 1)[-1].lower()
-    stored_name = f'{uuid4()}.{extension}'
-    image_path = os.path.join(upload_folder, stored_name)
+    upload_id = uuid4().hex
+    staged_path = os.path.join(upload_folder, f'{upload_id}.upload')
+    image_path = None
 
     img = None
     try:
         from oneirodex.utils.functions import square_image
 
-        file.save(image_path)
-        img = PILImage.open(image_path)
-        _validate_avatar_dimensions(img)
-        if img.format == 'GIF' and 'duration' in img.info:
-            _resize_animated_gif(img, image_path)
-        else:
-            squared = square_image(img, AVATAR_MAX_EDGE)
-            squared.save(image_path)
-            thumbnail = squared.copy()
-            thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), PILImage.LANCZOS)
-            thumbnail.save(_thumbnail_path(image_path))
+        with image_decode_work_slot():
+            file.save(staged_path)
+            img = PILImage.open(staged_path)
+            image_format = str(img.format or '').upper()
+            if image_format not in AVATAR_FORMAT_EXTENSIONS:
+                raise AvatarResourceLimitError('Choose a supported avatar image format.')
+            _validate_avatar_dimensions(img)
+            extension = AVATAR_FORMAT_EXTENSIONS[image_format]
+            image_path = os.path.join(upload_folder, f'{upload_id}.{extension}')
+            if image_format == 'GIF' and 'duration' in img.info:
+                _resize_animated_gif(img, image_path)
+            else:
+                squared = square_image(img, AVATAR_MAX_EDGE)
+                if image_format == 'JPEG' and squared.mode not in ('RGB', 'L'):
+                    converted = squared.convert('RGB')
+                    if squared is not img:
+                        _close_image(squared)
+                    squared = converted
+                squared.save(image_path, format=image_format)
+                thumbnail = squared.copy()
+                thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), PILImage.LANCZOS)
+                thumbnail.save(_thumbnail_path(image_path), format=image_format)
+                if squared is not img:
+                    _close_image(squared)
+                _close_image(thumbnail)
+            _close_image(img)
+            img = None
+        os.remove(staged_path)
+    except ImageWorkBusy:
         _close_image(img)
-        img = None
+        _remove_partial_avatar_files(image_path) if image_path else None
+        try:
+            os.remove(staged_path)
+        except OSError:
+            pass
+        return None, 'Image processing is busy. Try again shortly.'
     except AvatarResourceLimitError as exc:
         _close_image(img)
         app.logger.info('avatar upload rejected by image limits: %s', exc)
-        _remove_partial_avatar_files(image_path)
+        if image_path:
+            _remove_partial_avatar_files(image_path)
+        try:
+            os.remove(staged_path)
+        except OSError:
+            pass
         return None, str(exc)
     except Exception as exc:  # Pillow raises a wide family for bad image data
         _close_image(img)
         app.logger.warning('avatar processing failed: %s', exc)
-        _remove_partial_avatar_files(image_path)
+        if image_path:
+            _remove_partial_avatar_files(image_path)
+        try:
+            os.remove(staged_path)
+        except OSError:
+            pass
         return None, 'That file could not be read as an image.'
 
+    stored_name = os.path.basename(image_path)
     user.avatarpath = AVATAR_URL_PREFIX + stored_name
     return user.avatarpath, None
 
