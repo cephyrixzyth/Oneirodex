@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
+import { Modal } from '@oneirodex/ui'
 import { fetchRelatedMedia } from '../api/gameDetails'
 import { safeHttpUrl } from '../utils/safeUrl'
 import './RelatedMediaStrip.css'
@@ -29,6 +30,7 @@ export function RelatedMediaStrip({ gameUuid }: LooseProps) {
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<any>(null)
   const [filter, setFilter] = useState('all')
+  const activeTitleId = useId()
 
   const load = useCallback(async () => {
     if (!gameUuid) return
@@ -49,15 +51,6 @@ export function RelatedMediaStrip({ gameUuid }: LooseProps) {
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    if (!active) return undefined
-    const onKey = (event: any) => {
-      if (event.key === 'Escape') setActive(null)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [active])
 
   if (loading || items.length === 0) {
     return null
@@ -131,57 +124,51 @@ export function RelatedMediaStrip({ gameUuid }: LooseProps) {
       </ul>
 
       {active ? (
-        <div
+        <Modal
+          open
+          onClose={() => setActive(null)}
+          labelledBy={activeTitleId}
           className="od-relmedia__scrim"
-          role="presentation"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setActive(null)
-          }}
+          panelClassName="od-relmedia__modal"
+          lockScroll
         >
-          <div
-            className="od-relmedia__modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={active.title}
+          <button
+            type="button"
+            className="od-relmedia__close"
+            aria-label="Close"
+            onClick={() => setActive(null)}
           >
-            <button
-              type="button"
-              className="od-relmedia__close"
-              aria-label="Close"
-              onClick={() => setActive(null)}
-            >
-              ×
-            </button>
+            ×
+          </button>
 
-            <div className="od-relmedia__modal-body">
-              {active.cover_url ? (
-                <img className="od-relmedia__modal-art" src={active.cover_url} alt="" />
-              ) : null}
-              <div className="od-relmedia__modal-text">
-                <span className="od-relmedia__kind">
-                  {KIND_ICON[active.media_kind] || '•'} {kindLabel(active.media_kind)}
-                </span>
-                <h3>{active.title}</h3>
-                <p className="od-relmedia__meta">
-                  {[active.creator, active.year].filter(Boolean).join(' · ')}
-                </p>
-                {active.summary ? <p className="od-relmedia__summary">{active.summary}</p> : null}
-                {safeHttpUrl(active.external_url) ? (
-                  <a
-                    className="od-btn od-btn--primary"
-                    href={safeHttpUrl(active.external_url) || undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Where to find it
-                  </a>
-                ) : (
-                  <p className="od-relmedia__meta">No link recorded for this one.</p>
-                )}
-              </div>
+          <div className="od-relmedia__modal-body">
+            {active.cover_url ? (
+              <img className="od-relmedia__modal-art" src={active.cover_url} alt="" />
+            ) : null}
+            <div className="od-relmedia__modal-text">
+              <span className="od-relmedia__kind">
+                {KIND_ICON[active.media_kind] || '•'} {kindLabel(active.media_kind)}
+              </span>
+              <h3 id={activeTitleId}>{active.title}</h3>
+              <p className="od-relmedia__meta">
+                {[active.creator, active.year].filter(Boolean).join(' · ')}
+              </p>
+              {active.summary ? <p className="od-relmedia__summary">{active.summary}</p> : null}
+              {safeHttpUrl(active.external_url) ? (
+                <a
+                  className="od-btn od-btn--primary"
+                  href={safeHttpUrl(active.external_url) || undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Where to find it
+                </a>
+              ) : (
+                <p className="od-relmedia__meta">No link recorded for this one.</p>
+              )}
             </div>
           </div>
-        </div>
+        </Modal>
       ) : null}
     </section>
   )
