@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from types import SimpleNamespace
+from uuid import uuid4
+from xml.etree import ElementTree
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
 from oneirodex.runtime_native.library_exports import create_library_export_router
+from oneirodex.runtime_native.library_exports import LibraryExportData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.models import Game, Library, User, UserLibraryAccess
+from oneirodex.platform import LibraryPlatform
 
 
 class FakeExports:
@@ -102,3 +107,57 @@ def test_exports_dispatch_through_outer_lazy_asgi_selector():
     response = asyncio.run(run())
     assert response.status_code == 200
     assert response.headers['content-disposition'] == 'attachment; filename="gamelist-all.xml"'
+
+
+def test_exports_include_all_authorized_games_and_filter_platform_before_iteration(
+    db_session, monkeypatch,
+):
+    user = User(
+        name=f'export-{uuid4().hex[:8]}', email=f'{uuid4().hex}@example.test',
+        role='user', user_id=str(uuid4()), state=True,
+    )
+    user.set_password('password123')
+    nes = Library(name=f'NES-{uuid4().hex[:6]}', platform=LibraryPlatform.NES, display_order=1)
+    psx = Library(name=f'PSX-{uuid4().hex[:6]}', platform=LibraryPlatform.PSX, display_order=2)
+    db_session.add_all([user, nes, psx])
+    db_session.flush()
+    db_session.add_all([
+        Game(
+            uuid=str(uuid4()), name=f'NES title {index:03}', library_uuid=nes.uuid,
+            full_disk_path=f'/games/nes/{index:03}.nes',
+        )
+        for index in range(501)
+    ])
+    only_psx = Game(
+        uuid=str(uuid4()), name='The final PSX title', library_uuid=psx.uuid,
+        full_disk_path='/games/psx/final.chd',
+    )
+    db_session.add(only_psx)
+    db_session.commit()
+
+    service = LibraryExportData()
+    flask_app = Flask(__name__)
+    flask_app.config.update(LIBRARY_HOST_PATH='/games')
+    all_xml = ElementTree.fromstring(service.esde(user, None, flask_app))
+    psx_xml = ElementTree.fromstring(service.esde(user, 'PSX', flask_app))
+    assert len(all_xml.findall('game')) == 502
+    assert [node.findtext('id') for node in psx_xml.findall('game')] == [only_psx.uuid]
+
+    from oneirodex.routes_apis import wave8_11
+    monkeypatch.setattr(wave8_11, 'current_user', user)
+    assert len(list(wave8_11._games_for_platform(None))) == 502
+    assert [game.uuid for game in wave8_11._games_for_platform('PSX')] == [only_psx.uuid]
+
+    child = User(
+        name=f'child-{uuid4().hex[:8]}', email=f'{uuid4().hex}@example.test',
+        role='child', user_id=str(uuid4()), state=True,
+    )
+    child.set_password('password123')
+    db_session.add(child)
+    db_session.flush()
+    db_session.add(UserLibraryAccess(user_id=child.id, library_uuid=nes.uuid))
+    db_session.commit()
+    child_xml = ElementTree.fromstring(service.esde(child, None, flask_app))
+    child_ids = [node.findtext('id') for node in child_xml.findall('game')]
+    assert len(child_ids) == 501
+    assert only_psx.uuid not in child_ids

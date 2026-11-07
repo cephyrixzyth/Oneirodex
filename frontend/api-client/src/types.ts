@@ -1,7 +1,13 @@
 /** Shapes aligned with docs/openapi/openapi.json components.schemas */
 
 export type ApiTokenScope =
-  'read:library' | 'read:social' | 'write:presence' | 'write:download' | 'write:library' | 'admin'
+  | 'read:library'
+  | 'read:social'
+  | 'write:presence'
+  | 'write:download'
+  | 'write:library'
+  | 'write:saves'
+  | 'admin'
 
 export type ApiTokenPreset = 'companion' | 'thin'
 

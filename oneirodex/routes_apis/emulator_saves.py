@@ -13,6 +13,7 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game
 from oneirodex.utils.emulator_saves import (
+    SaveRevisionConflict,
     SaveQuotaExceeded,
     delete_save,
     is_state_slot,
@@ -22,7 +23,7 @@ from oneirodex.utils.emulator_saves import (
     store_save,
 )
 from oneirodex.utils.library_acl import user_can_access_game
-from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.api_tokens import require_api_scope, require_save_write
 
 from . import apis_bp
 
@@ -47,6 +48,8 @@ def list_game_saves(game_uuid):
         # this every save it tried to upload was rejected as "CSRF token is
         # missing" -- silently, because the room only ever surfaced the status.
         'csrf_token': generate_csrf(),
+        'can_write_own_save': _can_write_saves(current_user),
+        'can_delete_own_save': _can_write_saves(current_user),
         'saves': [
             {**row.to_dict(), 'is_state': is_state_slot(row)}
             for row in list_saves(current_user.id, game_uuid)
@@ -54,9 +57,19 @@ def list_game_saves(game_uuid):
     })
 
 
+def _can_write_saves(user):
+    from oneirodex.utils.api_tokens import user_has_scope
+    from oneirodex.utils.role_catalog import normalize_role
+
+    role = normalize_role(getattr(user, 'role', None))
+    return user_has_scope('write:saves') or (
+        role != 'child' and user_has_scope('write:library')
+    )
+
+
 @apis_bp.route('/games/<game_uuid>/saves', methods=['POST'])
 @login_required
-@require_api_scope('write:library')
+@require_save_write
 def upload_game_save(game_uuid):
     if not save_sync_enabled():
         return api_error('Emulator save sync is disabled', code='forbidden')
@@ -73,11 +86,19 @@ def upload_game_save(game_uuid):
     slot = (request.form.get('slot') or request.args.get('slot') or 'slot1').strip()
 
     try:
+        raw_revision = request.form.get('expected_revision')
+        expected_revision = int(raw_revision) if raw_revision not in (None, '') else None
         row = store_save(
             user_id=current_user.id,
             game_uuid=game_uuid,
             slot_name=slot,
             file_storage=upload,
+            expected_revision=expected_revision,
+        )
+    except SaveRevisionConflict as exc:
+        return api_error(
+            str(exc), code=exc.code,
+            detail={'current_revision': exc.current_revision},
         )
     except SaveQuotaExceeded as exc:
         return api_error(str(exc), code=exc.code)
@@ -125,7 +146,7 @@ def download_game_save(game_uuid, slot_name):
 
 @apis_bp.route('/games/<game_uuid>/saves/<slot_name>', methods=['DELETE'])
 @login_required
-@require_api_scope('write:library')
+@require_save_write
 def delete_game_save(game_uuid, slot_name):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:

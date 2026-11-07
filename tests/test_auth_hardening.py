@@ -363,6 +363,12 @@ class TestChildTokenMinting:
         assert 'read:library' in row.scopes
         assert raw.startswith('gt_')
 
+    def test_child_can_mint_narrow_save_scope(self, db_session, child_user):
+        row, _raw = generate_api_token(child_user, 'save access', ['write:saves'])
+        assert row.scopes == ['write:saves']
+        with pytest.raises(ValueError, match='not allowed'):
+            generate_api_token(child_user, 'library access', ['write:library'])
+
     def test_child_cannot_mint_companion_preset(self, client, app, child_user):
         _login(client, app, child_user)
         resp = client.post(

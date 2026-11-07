@@ -66,8 +66,8 @@ class FakeData:
     def is_state_slot(self, row):
         return row.slot_name != 'cloud-sram'
 
-    def store_save(self, user_id, game_uuid, slot_name, filename, payload):
-        self.calls.append(('store_save', user_id, game_uuid, slot_name, filename, payload))
+    def store_save(self, user_id, game_uuid, slot_name, filename, payload, *, expected_revision=None):
+        self.calls.append(('store_save', user_id, game_uuid, slot_name, filename, payload, expected_revision))
         row = FakeSave(slot_name, filename or 'state.srm', payload)
         self.saves.append(row)
         return row
@@ -406,7 +406,29 @@ def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     assert download.headers['cache-control'] == 'no-cache'
     assert download.headers['content-length'] == str(len(download.content))
     assert deleted.status_code == 404
-    assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes') in data.calls
+    assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes', None) in data.calls
+
+
+def test_child_can_save_own_progress_in_accessible_game(native):
+    app, api, data, user = native
+    user.role = 'child'
+    cookie, csrf = _cookie(app, csrf=True)
+    response = _request(
+        api, 'POST', '/api/games/game-1/saves', cookie=cookie, csrf=csrf,
+        files={'file': ('child.state', b'child-save')},
+    )
+    listing = _request(api, 'GET', '/api/games/game-1/saves', cookie=cookie)
+    assert response.status_code == 201
+    assert listing.status_code == 200
+    assert listing.json()['can_write_own_save'] is True
+    assert ('store_save', 7, 'game-1', 'slot1', 'child.state', b'child-save', None) in data.calls
+    data.allowed = False
+    denied = _request(
+        api, 'POST', '/api/games/game-1/saves?slot=blocked', cookie=cookie, csrf=csrf,
+        files={'file': ('blocked.state', b'blocked')},
+    )
+    assert denied.status_code == 403
+    assert not any(call[0] == 'store_save' and call[3] == 'blocked' for call in data.calls)
 
 
 def test_save_options_match_legacy_allow_header(native):

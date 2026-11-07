@@ -945,6 +945,37 @@ class TestBackgroundImageProcessing:
 
 class TestMissingImageProcessing:
     """Test missing image detection and processing functions."""
+
+    def test_missing_downloaded_artwork_is_discovered_and_requeued(
+        self, app, db_session, sample_game, sample_global_settings, tmp_path,
+    ):
+        app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
+        (tmp_path / 'present.png').write_bytes(b'artwork')
+        rows = [
+            Image(
+                game_uuid=sample_game.uuid, image_type='cover', url='present.png',
+                download_url='https://images.example/present.png', is_downloaded=True,
+            ),
+            Image(
+                game_uuid=sample_game.uuid, image_type='screenshot', url='missing.png',
+                download_url='https://images.example/missing.png', is_downloaded=True,
+            ),
+        ]
+        db_session.add_all(rows)
+        db_session.commit()
+
+        with app.app_context():
+            found = find_missing_images_for_library(sample_game.library_uuid, app=app)
+            result = process_missing_images_for_scan(sample_game.library_uuid, app=app)
+
+        assert found['total_checked'] == 2
+        assert found['missing_count'] == 1
+        assert found['missing_images'][0]['url'] == 'missing.png'
+        assert 'error' not in found
+        assert result['success'] is True
+        assert result['queued'] == 1
+        db_session.refresh(rows[1])
+        assert rows[1].is_downloaded is False
     
     def test_find_missing_images_for_library(self, app, db_session, sample_library, sample_global_settings):
         """Test find_missing_images_for_library function."""

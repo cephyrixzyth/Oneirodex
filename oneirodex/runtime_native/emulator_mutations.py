@@ -89,13 +89,16 @@ class EmulatorMutationData:
 
         return is_state_slot(row)
 
-    def store_save(self, user_id, game_uuid, slot_name, filename, payload):
+    def store_save(
+        self, user_id, game_uuid, slot_name, filename, payload, *, expected_revision=None,
+    ):
         from werkzeug.datastructures import FileStorage
         from oneirodex.utils.emulator_saves import store_save
 
         return store_save(
             user_id=user_id, game_uuid=game_uuid, slot_name=slot_name,
             file_storage=FileStorage(stream=BytesIO(payload), filename=filename),
+            expected_revision=expected_revision,
         )
 
     def read_save(self, row):
@@ -213,8 +216,16 @@ def create_emulator_mutations_router(
                         auth.token is None or auth.has_scope('admin')
                     )
                 else:
-                    needed = 'write:library' if request.method in {'POST', 'DELETE'} else 'read:library'
-                    scope_ok = auth.has_scope(needed)
+                    if operation.startswith('save') and request.method in {'POST', 'DELETE'}:
+                        from oneirodex.utils.role_catalog import normalize_role
+
+                        role = normalize_role(getattr(auth.user, 'role', None))
+                        scope_ok = auth.has_scope('write:saves') or (
+                            role != 'child' and auth.has_scope('write:library')
+                        )
+                    else:
+                        needed = 'write:library' if request.method in {'POST', 'DELETE'} else 'read:library'
+                        scope_ok = auth.has_scope(needed)
                 if not scope_ok:
                     message = (
                         'This token does not have the required library scope'
@@ -498,9 +509,17 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
     if operation.startswith('save'):
         if operation == 'saves' and method == 'GET':
             rows = data.list_saves(user.id, game_uuid)
+            from oneirodex.utils.role_catalog import normalize_role
+
+            role = normalize_role(getattr(user, 'role', None))
+            can_write = auth.has_scope('write:saves') or (
+                role != 'child' and auth.has_scope('write:library')
+            )
             return JSONResponse({
                 'enabled': data.save_sync_enabled(), 'game_uuid': game_uuid,
                 'csrf_token': _csrf_token(auth.session_data, flask_app.config),
+                'can_write_own_save': can_write,
+                'can_delete_own_save': can_write,
                 'saves': [{**row.to_dict(), 'is_state': data.is_state_slot(row)} for row in rows],
             })
         if operation == 'saves' and method == 'POST':
@@ -521,8 +540,20 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                 slot = (str(first_form_value(form, 'slot') or first_query_value(request.query_params, 'slot') or 'slot1')).strip()
                 try:
                     payload = await upload.read()
-                    row = data.store_save(user.id, game_uuid, slot, getattr(upload, 'filename', None), payload)
+                    revision_value = first_form_value(form, 'expected_revision')
+                    expected_revision = int(revision_value) if revision_value not in (None, '') else None
+                    row = data.store_save(
+                        user.id, game_uuid, slot, getattr(upload, 'filename', None), payload,
+                        expected_revision=expected_revision,
+                    )
                 except ValueError as exc:
+                    from oneirodex.utils.emulator_saves import SaveRevisionConflict
+
+                    if isinstance(exc, SaveRevisionConflict):
+                        return _error(
+                            409, 'conflict', str(exc),
+                            current_revision=exc.current_revision,
+                        )
                     code = getattr(exc, 'code', 'bad_request')
                     return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
                 except RuntimeError as exc:

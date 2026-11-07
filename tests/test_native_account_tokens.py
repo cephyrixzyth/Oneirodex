@@ -94,7 +94,7 @@ class FakeData:
 class FakePolicy:
     valid = frozenset({
         'read:library', 'read:social', 'write:social', 'write:presence',
-        'write:download', 'write:library', 'admin',
+        'write:download', 'write:library', 'write:saves', 'admin',
     })
     preset_map = {
         'companion': {'label': 'Desktop companion', 'scopes': ['read:library', 'write:download']},
@@ -202,6 +202,7 @@ def test_child_role_hides_forbidden_scopes_and_presets():
     assert 'admin' not in body['valid_scopes']
     assert 'write:library' not in body['valid_scopes']
     assert 'write:download' not in body['valid_scopes']
+    assert 'write:saves' in body['valid_scopes']
     assert 'companion' not in body['scope_presets']
 
 

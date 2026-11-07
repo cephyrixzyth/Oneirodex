@@ -22,6 +22,7 @@ VALID_SCOPES = frozenset({
     'write:presence',
     'write:download',
     'write:library',
+    'write:saves',
     'admin',
 })
 
@@ -300,6 +301,31 @@ def require_api_scope(scope: str):
         return wrapped
 
     return decorator
+
+
+def require_save_write(fn):
+    """Allow own-save writes without granting children general library writes.
+
+    Existing adult tokens with write:library remain compatible. Child bearer
+    tokens need the explicit write:saves scope; cookie sessions use the same
+    own-save capability and are still constrained by the route's game ACL.
+    """
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        from flask_login import current_user
+
+        role = normalize_role(getattr(current_user, 'role', None))
+        if user_has_scope('write:saves') or (
+            role != 'child' and user_has_scope('write:library')
+        ):
+            return fn(*args, **kwargs)
+        return api_error(
+            'Missing permission to change saved states',
+            code='forbidden',
+            detail={'required_scope': 'write:saves'},
+        )
+
+    return wrapped
 
 
 def require_api_token_scope(scope: str):

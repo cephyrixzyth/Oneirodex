@@ -15,38 +15,45 @@ from .query_compat import first_query_value
 class LibraryExportData:
     def _games(self, user, platform):
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import Game
+        from oneirodex.models import Game, Library
+        from oneirodex.platform import LibraryPlatform
         from oneirodex.utils.library_acl import apply_game_access_filters
+        from sqlalchemy.orm import joinedload
 
-        games = list(
-            apply_game_access_filters(db.session.query(Game), user)
-            .limit(500)
-            .all()
-        )
-        if not platform:
-            return games
-        key = platform.upper()
-        return [
-            game for game in games
-            if getattr(getattr(getattr(game, 'library', None), 'platform', None), 'name', None)
-            and str(game.library.platform.name).upper() == key
-        ]
+        query = apply_game_access_filters(db.session.query(Game), user)
+        query = query.join(Library).options(joinedload(Game.library))
+        if platform:
+            requested = str(platform).strip().lower()
+            member = next((item for item in LibraryPlatform if (
+                item.name.lower() == requested or item.value.lower() == requested
+            )), None)
+            if member is None:
+                return []
+            query = query.filter(Library.platform == member)
+        # No silent row cap: exports contain every authorized matching title.
+        # yield_per bounds ORM buffering while the builders consume the rows.
+        return query.order_by(Game.name.asc(), Game.uuid.asc()).yield_per(250)
 
     def _rows(self, games, flask_app):
         from oneirodex.utils.frontend_export import portable_export_path
         from oneirodex.utils.security import get_allowed_base_directories
 
         roots = get_allowed_base_directories(flask_app)
-        return [{
-            'uuid': game.uuid,
-            'name': game.name,
-            'summary': getattr(game, 'summary', None) or '',
-            'path': portable_export_path(
-                getattr(game, 'full_disk_path', None) or '', library_roots=roots,
-            ) or game.name,
-            'cover_url': getattr(game, 'cover', None) or '',
-            'developer': '', 'publisher': '', 'genre': '',
-        } for game in games], roots
+
+        def iter_rows():
+            for game in games:
+                yield {
+                    'uuid': game.uuid,
+                    'name': game.name,
+                    'summary': getattr(game, 'summary', None) or '',
+                    'path': portable_export_path(
+                        getattr(game, 'full_disk_path', None) or '', library_roots=roots,
+                    ) or game.name,
+                    'cover_url': getattr(game, 'cover', None) or '',
+                    'developer': '', 'publisher': '', 'genre': '',
+                }
+
+        return iter_rows(), roots
 
     def esde(self, user, platform, flask_app):
         from oneirodex.utils.frontend_export import build_es_de_gamelist

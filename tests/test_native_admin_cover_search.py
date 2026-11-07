@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import asyncio
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -14,11 +15,21 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 class FakeCoverSearch:
     def __init__(self):
         self.calls = []
+        self.raise_search = False
+        self.raise_batch = False
+        self.ran_in_event_loop = None
 
     def game_name(self, game_uuid):
         return 'Found game' if game_uuid == 'found' else None
 
     def search(self, query, providers, limit):
+        try:
+            asyncio.get_running_loop()
+            self.ran_in_event_loop = True
+        except RuntimeError:
+            self.ran_in_event_loop = False
+        if self.raise_search:
+            raise RuntimeError('private provider detail')
         self.calls.append(('search', query, providers, limit))
         return {'query': query, 'candidates': [{'provider': 'fake', 'url': 'https://img/1'}], 'errors': []}
 
@@ -26,6 +37,8 @@ class FakeCoverSearch:
         return {'path': config['IMAGE_SAVE_PATH'], 'writable': True}
 
     def batch_search(self, **kwargs):
+        if self.raise_batch:
+            raise RuntimeError('private batch detail')
         self.calls.append(('batch', kwargs))
         return {
             'count': 0, 'games': [],
@@ -33,7 +46,18 @@ class FakeCoverSearch:
         }
 
 
-def _client():
+class ScopeCounter:
+    def __init__(self):
+        self.exits = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.exits += 1
+
+
+def _client(*, scope=None):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-cover-search', CSP_ENABLED=False, WTF_CSRF_ENABLED=True,
@@ -57,7 +81,7 @@ def _client():
         flask_app, find_user=lambda uid: user if uid == 8 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '8' else None,
-        login_manager=manager, database_scope=lambda _app: nullcontext(),
+        login_manager=manager, database_scope=lambda _app: scope or nullcontext(),
         data_access=service,
     ))
     client = TestClient(app)
@@ -76,6 +100,7 @@ def test_single_cover_search_keeps_bare_payload_and_game_lookup():
     assert response.json()['game_uuid'] == 'found'
     assert response.json()['image_save_path']['writable'] is True
     assert service.calls == [('search', 'Found game', ['steamgriddb', 'igdb'], 20)]
+    assert service.ran_in_event_loop is False
 
 
 def test_single_cover_search_errors_and_batch_search_bounds():
@@ -103,3 +128,19 @@ def test_cover_search_routes_reject_oversized_body_before_lookup_or_search():
         assert response.status_code == 413
         assert response.json()['error_code'] == 'payload_too_large'
     assert service.calls == []
+
+
+def test_provider_exceptions_are_redacted_and_database_scope_closes():
+    scope = ScopeCounter()
+    client, service = _client(scope=scope)
+    service.raise_search = True
+    service.raise_batch = True
+
+    single = client.post('/admin/api/covers/search', json={'query': 'synthetic'})
+    batch = client.post('/admin/api/covers/batch/search', json={'limit_games': 1})
+
+    assert single.status_code == batch.status_code == 500
+    assert single.json()['error'] == batch.json()['error'] == 'Cover search failed. Try again.'
+    assert 'private provider detail' not in single.text
+    assert 'private batch detail' not in batch.text
+    assert scope.exits == 2
