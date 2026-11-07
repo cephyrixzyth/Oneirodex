@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ShellConfigProvider, ViewerProvider, viewerFromConfig } from '@oneirodex/ui'
 import { App } from './App'
+import { AppErrorBoundary } from '@oneirodex/ui'
 import { installUnauthorizedRedirect } from './api/http'
 import { GameDetailsApp, parseGameDetailsRootConfig } from './GameDetailsApp'
 
@@ -181,13 +182,15 @@ if (memberAppRoot) {
   const viewerFromShell = viewerFromConfig(shellConfig)
   createRoot(memberAppRoot).render(
     <BrowserRouter>
-      <ViewerProvider value={viewerFromShell}>
-        <ShellConfigProvider value={shellConfig}>
-          <QueryClientProvider client={queryClient}>
-            <App />
-          </QueryClientProvider>
-        </ShellConfigProvider>
-      </ViewerProvider>
+      <AppErrorBoundary>
+        <ViewerProvider value={viewerFromShell}>
+          <ShellConfigProvider value={shellConfig}>
+            <QueryClientProvider client={queryClient}>
+              <App />
+            </QueryClientProvider>
+          </ShellConfigProvider>
+        </ViewerProvider>
+      </AppErrorBoundary>
     </BrowserRouter>,
   )
 }
@@ -195,6 +198,8 @@ if (memberAppRoot) {
 const detailsRootElement = document.getElementById('game-details-react-root')
 if (detailsRootElement) {
   createRoot(detailsRootElement).render(
-    <GameDetailsApp {...parseGameDetailsRootConfig(detailsRootElement)} />,
+    <AppErrorBoundary>
+      <GameDetailsApp {...parseGameDetailsRootConfig(detailsRootElement)} />
+    </AppErrorBoundary>,
   )
 }
