@@ -40,7 +40,7 @@ class FakeAvatarData:
         self.rollbacks += 1
 
 
-def make_client(*, data=None):
+def make_client(*, data=None, upload_folder=None, avatarpath='old.png'):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY=SECRET,
@@ -48,6 +48,7 @@ def make_client(*, data=None):
         WTF_CSRF_ENABLED=True,
         SESSION_COOKIE_NAME='session',
         REMEMBER_COOKIE_NAME='remember_token',
+        UPLOAD_FOLDER=str(upload_folder) if upload_folder is not None else None,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
@@ -55,7 +56,7 @@ def make_client(*, data=None):
         is_active=True,
         state=True,
         is_authenticated=True,
-        avatarpath='old.png',
+        avatarpath=avatarpath,
     )
     login_manager = SimpleNamespace(
         login_view='login.login',
@@ -214,6 +215,59 @@ def test_avatar_commit_failure_rolls_back_and_hides_internal_detail():
     assert 'private database detail' not in response.text
     assert data.commits == 1
     assert data.rollbacks == 1
+
+
+def test_real_avatar_files_survive_native_route_commit_failure(tmp_path):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX, save_avatar
+
+    class RealSaveCommitFailure:
+        def __init__(self):
+            self.user = None
+            self.previous_path = None
+
+        def save(self, file, user, flask_app):
+            self.user = user
+            self.previous_path = user.avatarpath
+            return save_avatar(file, user, flask_app)
+
+        def avatar_url(self, path):
+            return '/' + path
+
+        def commit(self):
+            raise RuntimeError('synthetic commit failure')
+
+        def rollback(self):
+            self.user.avatarpath = self.previous_path
+
+    upload_folder = tmp_path / 'uploads'
+    avatar_folder = upload_folder / 'images' / 'avatars_users'
+    avatar_folder.mkdir(parents=True)
+    previous_path = AVATAR_URL_PREFIX + 'old.png'
+    old_avatar = avatar_folder / 'old.png'
+    old_thumbnail = avatar_folder / 'old_thumbnail.png'
+    old_avatar.write_bytes(b'old avatar bytes')
+    old_thumbnail.write_bytes(b'old thumbnail bytes')
+    data = RealSaveCommitFailure()
+    client = make_client(
+        data=data, upload_folder=upload_folder, avatarpath=previous_path,
+    )
+    image = BytesIO()
+    Image.new('RGB', (48, 48), 'green').save(image, format='PNG')
+
+    response = client.post(
+        '/api/account/avatar', headers=browser_headers(),
+        files={'avatar': ('replacement.png', image.getvalue(), 'image/png')},
+    )
+
+    assert response.status_code == 500
+    assert data.user.avatarpath == previous_path
+    assert old_avatar.read_bytes() == b'old avatar bytes'
+    assert old_thumbnail.read_bytes() == b'old thumbnail bytes'
+    assert set(avatar_folder.iterdir()) == {old_avatar, old_thumbnail}
 
 
 def test_legacy_profile_edit_get_redirects_to_avatar_settings():
