@@ -86,38 +86,43 @@ class ImageMutationsData:
 
         from PIL import Image as PILImage
         from sqlalchemy import select
-        from werkzeug.utils import secure_filename
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, Image
         from oneirodex.utils.image_kinds import SINGULAR_IMAGE_KINDS
+        from oneirodex.utils.image_upload_limits import (
+            GAME_IMAGE_FORMAT_EXTENSIONS,
+            GAME_IMAGE_MAX_BYTES,
+            game_image_header_error,
+        )
 
         game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
         if game is None:
             return None
-        safe_name = secure_filename(filename)
-        extension = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
-        if extension not in {'jpg', 'jpeg', 'png', 'gif'}:
-            raise ValueError('Upload a JPG, PNG, or GIF.')
-        if len(content) > 3 * 1024 * 1024:
+        if len(content) > GAME_IMAGE_MAX_BYTES:
             raise ValueError('File size exceeds the 3MB limit')
         try:
             with PILImage.open(BytesIO(content)) as opened:
                 opened.verify()
             with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 60_000_000:
-                    raise OverflowError('Image pixel limit exceeded')
+                header_error = game_image_header_error(opened)
+                if header_error:
+                    raise ValueError(header_error)
                 source_format = opened.format
-                image = opened.copy()
-        except OverflowError:
-            raise ValueError('That image is too big. The limit is 60 megapixels.') from None
+                extension = GAME_IMAGE_FORMAT_EXTENSIONS[str(source_format).upper()]
+                needs_resize = image_type == 'cover' and (
+                    opened.width > 1200 or opened.height > 1600
+                )
+                image = opened.copy() if needs_resize else None
+        except ValueError:
+            raise
         except Exception as exc:
             from PIL import Image as PIL
             if isinstance(exc, PIL.DecompressionBombError):
                 raise ValueError('Invalid image data') from None
             raise ValueError('Invalid image data') from None
 
-        if image_type == 'cover' and (image.width > 1200 or image.height > 1600):
+        if image is not None:
             image.thumbnail((1200, 1600), PILImage.LANCZOS)
         root = Path(app.config['IMAGE_SAVE_PATH']).resolve()
         root.mkdir(parents=True, exist_ok=True)
@@ -149,7 +154,7 @@ class ImageMutationsData:
             target = (root / name).resolve()
             if root not in target.parents:
                 raise ValueError('Image target is invalid')
-            if image.width > 1200 or image.height > 1600:
+            if image is not None:
                 with target.open('wb') as output:
                     image.save(output, format=source_format or None)
             else:

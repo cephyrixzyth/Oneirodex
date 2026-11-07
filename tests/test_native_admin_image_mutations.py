@@ -149,7 +149,7 @@ def test_single_image_replacement_flushes_old_row_and_recovers_files(
         with pytest.raises(RuntimeError, match='synthetic database failure'):
             data.upload_single(
                 SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
-                game_uuid, 'replacement.png', 'cover', png.getvalue(),
+                game_uuid, 'replacement.jpeg', 'cover', png.getvalue(),
             )
         assert old_path.read_bytes() == b'previous cover'
         assert list(image_root.iterdir()) == [old_path]
@@ -157,11 +157,12 @@ def test_single_image_replacement_flushes_old_row_and_recovers_files(
     else:
         result = data.upload_single(
             SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
-            game_uuid, 'replacement.png', 'cover', png.getvalue(),
+            game_uuid, 'replacement.jpeg', 'cover', png.getvalue(),
         )
         assert result['image_type'] == 'cover'
         assert not old_path.exists()
         assert len(list(image_root.iterdir())) == 1
+        assert next(image_root.iterdir()).suffix == '.png'
         assert events[:3] == ['delete', 'flush', 'add']
         assert events[-1] == 'commit'
 

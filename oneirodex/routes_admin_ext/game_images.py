@@ -33,7 +33,6 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import select
-from werkzeug.utils import secure_filename
 from PIL import Image as PILImage
 
 from oneirodex import cache, db
@@ -51,6 +50,12 @@ from oneirodex.utils.image_kinds import (
     parse_image_kind,
 )
 from oneirodex.utils.image_paths import image_path_under_save_dir
+from oneirodex.utils.image_upload_limits import (
+    GAME_IMAGE_FORMAT_EXTENSIONS,
+    GAME_IMAGE_MAX_BYTES,
+    GAME_IMAGE_MAX_PIXELS,
+    game_image_header_error,
+)
 from oneirodex.utils.scanning import refresh_images_in_background, is_scan_job_running
 from oneirodex.utils.validation import validate_body
 
@@ -72,12 +77,12 @@ def edit_game_images(game_uuid):
 # Per-upload ceiling for game artwork. The global MAX_CONTENT_LENGTH in config
 # is the outer bound that stops an unbounded body being buffered at all; this is
 # the one a user actually hits, and it is the number the error message quotes.
-MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024
+MAX_IMAGE_UPLOAD_BYTES = GAME_IMAGE_MAX_BYTES
 
 # Decompression-bomb ceiling — roughly a 60-megapixel image, comfortably above
 # any real cover or screenshot. verify() does not decode pixel data, so without
 # this the resize below is where a 40000x40000 PNG would land.
-MAX_IMAGE_PIXELS = 60_000_000
+MAX_IMAGE_PIXELS = GAME_IMAGE_MAX_PIXELS
 
 
 def _game_filename_key(game_uuid: str) -> str:
@@ -116,13 +121,8 @@ def upload_image(game_uuid):
     if file.filename == '':
         return api_error('No file was selected.', code='bad_request')
 
-    # Validate file extension and content type
-    allowed_extensions = {'jpg', 'jpeg', 'png', 'gif'}
-    filename = secure_filename(file.filename)
-    file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-
-    if file_extension not in allowed_extensions:
-        return api_error('Upload a JPG, PNG, or GIF.', code='bad_request')
+    # Ignore the client suffix and select the stored suffix from the decoder so
+    # a mismatched filename cannot mislabel the saved content.
 
     # Size first, before anything decodes the file. The previous version read
     # `file.content_length`, which is 0 for an ordinary multipart upload, so the
@@ -141,16 +141,15 @@ def upload_image(game_uuid):
         img.verify()  # Verify that it is, in fact, an image
         file.seek(0)
         img = PILImage.open(file)
+        header_error = game_image_header_error(img)
+        if header_error:
+            return api_error(header_error, code='bad_request')
     except (IOError, SyntaxError, PILImage.DecompressionBombError):
         return api_error('Invalid image data', code='bad_request')
 
     # A few hundred KB of PNG can declare a 40000x40000 canvas; verify() does not
     # decode it, but the resize below would.
-    if (img.width * img.height) > MAX_IMAGE_PIXELS:
-        return api_error(
-            f'That image is too big. The limit is {MAX_IMAGE_PIXELS // 1_000_000} megapixels.',
-            code='bad_request',
-        )
+    file_extension = GAME_IMAGE_FORMAT_EXTENSIONS[str(img.format).upper()]
 
     # Resized output has to be *saved*, which is what was missing: thumbnail()
     # mutates `img` in place and the code then wrote the original bytes back

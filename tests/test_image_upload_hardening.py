@@ -135,6 +135,30 @@ class TestUploadCeiling:
         with PILImage.open(written[0]) as saved:
             assert saved.size == (600, 800)
 
+    def test_decoded_format_sets_saved_suffix_not_client_filename(
+        self, client, admin_user, sample_game, image_dir,
+    ):
+        response = _upload(
+            client, admin_user, sample_game, _png(32, 48), name='art.jpg',
+        )
+        assert response.status_code == 200
+        written = list(image_dir.iterdir())
+        assert len(written) == 1
+        assert written[0].suffix == '.png'
+        with PILImage.open(written[0]) as saved:
+            assert saved.format == 'PNG'
+
+    def test_unsupported_decoded_format_is_rejected_even_with_allowed_suffix(
+        self, client, admin_user, sample_game, image_dir,
+    ):
+        payload = io.BytesIO()
+        PILImage.new('RGB', (8, 8), (80, 40, 20)).save(payload, format='TIFF')
+        response = _upload(
+            client, admin_user, sample_game, payload.getvalue(), name='art.png',
+        )
+        assert response.status_code == 400
+        assert list(image_dir.iterdir()) == []
+
     def test_non_image_bytes_are_rejected(self, client, admin_user, sample_game, image_dir):
         response = _upload(client, admin_user, sample_game, b'not an image at all')
         assert response.status_code == 400
