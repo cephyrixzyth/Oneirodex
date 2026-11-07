@@ -239,6 +239,15 @@ function Install-NativeSpas {
     Write-Ok 'Member, member-auth, admin, admin-pilot and ops-glance bundles built'
 }
 
+function Test-NativeRuntime {
+    Write-Step 'Validating the native runtime and built frontend assets...'
+    $venvPython = Join-Path $ScriptDir 'venv\Scripts\python.exe'
+    $validator = Join-Path $ScriptDir 'scripts\validate-native-install.py'
+    & $venvPython $validator
+    if ($LASTEXITCODE -ne 0) { throw 'Native runtime or frontend asset validation failed' }
+    Write-Ok 'Native runtime and all five frontend assets validated'
+}
+
 function Test-ScanLocations([string]$Roots) {
     # Warn, never fail: a share can legitimately be offline at install time.
     if ([string]::IsNullOrWhiteSpace($Roots)) { return }
@@ -398,6 +407,7 @@ try {
     $databaseUrl = New-Databases
     Install-PythonEnvironment
     Install-NativeSpas
+    Test-NativeRuntime
     Write-EnvFile $databaseUrl
     Show-Summary
 }
