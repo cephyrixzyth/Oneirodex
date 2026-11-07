@@ -118,6 +118,7 @@ paths are the thing to look at.
 |---|---|---|
 | Connect fails 401/403 | Bad token / scopes / truncated paste | Account → API tokens: recreate with Desktop companion preset; paste full `gt_<prefix>_<secret>` (hyphens/`_` in the secret are normal — do not truncate after `-`). **Copy secret** copies the raw token only. On HTTP LAN, select the secret field + Ctrl+C if Copy fails. Server WARNING: `api_token_auth_failed reason=… prefix=…` |
 | Install status could not be saved on this device | The companion could not write its local registry | Check free disk space and that the app data folder is writable. Reopen the companion and verify the title's status before continuing. |
+| Game archive is rejected during install | The archive is malformed, contains unsafe paths, or exceeds the companion's extraction limits | Keep the existing install in place, check the archive source and available disk space, then try a supported archive. Current limits are 100 GiB compressed, 250,000 entries, and 200 GiB expanded. |
 | Download / Update greyed in companion | Offline heartbeat | Re-Connect; Play/Install/Uninstall still work — [desktop-companion.md](desktop-companion.md) |
 | Friends window can’t install games | By design (least-privilege) | Use the main companion window |
 | Update never appears | Local registry not merged | Re-Connect companion; see [desktop-companion.md](desktop-companion.md) |

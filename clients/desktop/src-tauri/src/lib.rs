@@ -4,6 +4,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::Manager;
 use url::{Host, Url};
 use zip::ZipArchive;
@@ -732,9 +733,8 @@ fn extract_zip_archive(
 
 /// The containment rules of `extract_zip_archive`, without the `AppHandle`.
 ///
-/// `extract_zip_to_dir` deletes `destination` before extracting, so the
-/// destination must be strictly *below* the installs root: a destination equal
-/// to the root (a game id of `.`) would wipe every installed game.
+/// The destination must be strictly *below* the installs root: a destination
+/// equal to the root (a game id of `.`) would replace every installed game.
 fn extract_zip_within_roots(
     archive: &Path,
     destination: &Path,
@@ -749,6 +749,7 @@ fn extract_zip_within_roots(
 const MAX_GAME_ARCHIVE_FILE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const MAX_GAME_ARCHIVE_ENTRIES: u64 = 250_000;
 const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
+static NEXT_GAME_ARCHIVE_STAGE: AtomicU64 = AtomicU64::new(0);
 
 fn validate_game_zip_limits(
     zip: &mut ZipArchive<File>,
@@ -765,6 +766,9 @@ fn validate_game_zip_limits(
     let mut expanded_bytes = 0_u64;
     for index in 0..zip.len() {
         let entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        if entry.enclosed_name().is_none() {
+            return Err("Game archive contains an unsafe entry path".into());
+        }
         expanded_bytes = expanded_bytes
             .checked_add(entry.size())
             .ok_or_else(|| "Game archive expanded size overflow".to_string())?;
@@ -815,10 +819,26 @@ fn extract_zip_to_dir_with_limits(
     // removing an existing installation at the destination.
     validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
 
-    if destination.exists() {
-        remove_path_inner(destination)?;
-    }
-    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+    let parent = destination
+        .parent()
+        .ok_or_else(|| "Install destination has no parent directory".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("install");
+    let (staging, backup) = loop {
+        let id = NEXT_GAME_ARCHIVE_STAGE.fetch_add(1, Ordering::Relaxed);
+        let suffix = format!("{}-{id}", std::process::id());
+        let staging = parent.join(format!(".{name}.staging-{suffix}"));
+        let backup = parent.join(format!(".{name}.previous-{suffix}"));
+        match fs::create_dir(&staging) {
+            Ok(()) => break (staging, backup),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    };
+    let _staging_cleanup = DirectoryCleanup(staging.clone());
 
     let mut expanded_bytes = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
@@ -826,18 +846,18 @@ fn extract_zip_to_dir_with_limits(
     for index in 0..zip.len() {
         let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
         // `enclosed_name()` returns `None` for any entry name that would escape
-        // the destination (`..` segments, absolute paths, drive letters), so a
-        // zip-slip entry is skipped outright.
+        // the destination (`..` segments, absolute paths, drive letters). The
+        // preflight rejects these entries; keep the check here as defense in depth.
         let entry_path = match entry.enclosed_name() {
-            Some(path) => destination.join(path),
-            None => continue,
+            Some(path) => staging.join(path),
+            None => return Err("Game archive contains an unsafe entry path".into()),
         };
 
         // Defence in depth: `enclosed_name()` already blocks traversal, but a
         // future swap of the zip crate must not be able to silently reintroduce
-        // zip-slip. A join that lands outside `destination` is dropped.
-        if !entry_path.starts_with(destination) {
-            continue;
+        // zip-slip. A join that lands outside staging fails the whole operation.
+        if !entry_path.starts_with(&staging) {
+            return Err("Game archive entry escapes the install directory".into());
         }
 
         if entry
@@ -896,11 +916,45 @@ fn extract_zip_to_dir_with_limits(
         }
     }
 
-    let exe_path = find_likely_exe(destination, 2);
+    let staged_exe_path = find_likely_exe(&staging, 2).map(PathBuf::from);
+
+    let had_destination = destination.exists();
+    if had_destination {
+        fs::rename(destination, &backup).map_err(|error| error.to_string())?;
+    }
+    if let Err(error) = fs::rename(&staging, destination) {
+        if had_destination && fs::rename(&backup, destination).is_err() {
+            return Err(format!(
+                "Could not promote the staged install ({error}); the previous install remains at {}",
+                backup.display()
+            ));
+        }
+        return Err(error.to_string());
+    }
+    if had_destination {
+        if let Err(error) = remove_path_inner(&backup) {
+            eprintln!("[desktop] could not remove the superseded install directory: {error}");
+        }
+    }
+
+    let exe_path = staged_exe_path.map(|path| {
+        destination
+            .join(path.strip_prefix(&staging).unwrap_or(path.as_path()))
+            .to_string_lossy()
+            .into_owned()
+    });
     Ok(ExtractZipResult {
         extract_path: destination.to_string_lossy().into_owned(),
         exe_path,
     })
+}
+
+struct DirectoryCleanup(PathBuf);
+
+impl Drop for DirectoryCleanup {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Keep ordinary read/write/execute bits from ZIP metadata while discarding
@@ -2132,7 +2186,40 @@ mod tests {
     }
 
     #[test]
-    fn extract_drops_parent_traversal_entry() {
+    fn extraction_read_failure_keeps_existing_install_and_cleans_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("corrupt.zip");
+        write_zip(&archive, &[("game.bin", b"payload")]);
+        let mut bytes = fs::read(&archive).unwrap();
+        let name_length = u16::from_le_bytes([bytes[26], bytes[27]]) as usize;
+        let extra_length = u16::from_le_bytes([bytes[28], bytes[29]]) as usize;
+        let payload_start = 30 + name_length + extra_length;
+        bytes[payload_start] ^= 0xff;
+        fs::write(&archive, bytes).unwrap();
+
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        assert!(extract_zip_to_dir(&archive, &destination).is_err());
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        let abandoned_staging = fs::read_dir(work.path()).unwrap().any(|entry| {
+            entry
+                .ok()
+                .and_then(|entry| entry.file_name().into_string().ok())
+                .is_some_and(|name| name.starts_with(".install.staging-"))
+        });
+        assert!(
+            !abandoned_staging,
+            "failed extraction left a staging directory"
+        );
+    }
+
+    #[test]
+    fn extract_rejects_parent_traversal_before_replacing_destination() {
         let work = tempdir().unwrap();
         let archive = work.path().join("evil.zip");
         write_zip(
@@ -2140,19 +2227,23 @@ mod tests {
             &[("../escape.txt", b"pwned"), ("safe.txt", b"ok")],
         );
         let dest = work.path().join("out");
-        extract_zip_to_dir(&archive, &dest).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("existing.bin"), b"keep me").unwrap();
+        let error = extract_zip_to_dir(&archive, &dest).unwrap_err();
+        assert!(error.contains("unsafe entry path"));
 
         // The traversal entry must not have been written anywhere outside dest.
         assert!(!work.path().join("escape.txt").exists());
         assert!(!dest.parent().unwrap().join("escape.txt").exists());
-        // The legitimate entry still lands.
-        assert!(dest.join("safe.txt").is_file());
+        // Validation fails before replacing a previous installation.
+        assert_eq!(fs::read(dest.join("existing.bin")).unwrap(), b"keep me");
+        assert!(!dest.join("safe.txt").exists());
         // And nothing escaped the destination at all.
         assert!(!dest.join("../escape.txt").exists());
     }
 
     #[test]
-    fn extract_drops_deep_traversal_and_absolute_entries() {
+    fn extract_rejects_deep_traversal_and_absolute_entries_before_staging() {
         let work = tempdir().unwrap();
         let src = work.path().join("src");
         fs::create_dir_all(&src).unwrap();
@@ -2165,25 +2256,25 @@ mod tests {
             ],
         );
         let dest = work.path().join("out");
-        extract_zip_to_dir(&archive, &dest).unwrap();
+        let error = extract_zip_to_dir(&archive, &dest).unwrap_err();
+        assert!(error.contains("unsafe entry path"));
 
-        assert!(dest.join("nested/ok.bin").is_file());
+        assert!(!dest.exists());
         // Nothing may have been written outside the destination.
         assert!(!work.path().join("tmp").exists());
         assert!(!work.path().join("evil.bin").exists());
         assert!(!dest.parent().unwrap().join("tmp/evil.bin").exists());
 
-        // Walk the destination tree; every extracted path must stay inside it.
-        let mut stack = vec![dest.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in fs::read_dir(&dir).unwrap() {
-                let path = entry.unwrap().path();
-                assert!(path.starts_with(&dest), "escaped path: {}", path.display());
-                if path.is_dir() {
-                    stack.push(path);
-                }
-            }
-        }
+        let abandoned_staging = fs::read_dir(work.path()).unwrap().any(|entry| {
+            entry
+                .ok()
+                .and_then(|entry| entry.file_name().into_string().ok())
+                .is_some_and(|name| name.starts_with(".out.staging-"))
+        });
+        assert!(
+            !abandoned_staging,
+            "unsafe archive left a staging directory"
+        );
     }
 
     #[test]
