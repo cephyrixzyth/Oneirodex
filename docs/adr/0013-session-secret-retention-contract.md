@@ -65,6 +65,11 @@ migrations remain planned work.
   the departing user authored, used or referenced them. Each relation and
   managed file class needs an explicit disposition before the deletion job is
   considered complete.
+- For user-owned avatar, emulator-save and generation, and uploaded chat
+  attachment files, purge after the database deletion commits. Failed cleanup
+  must remain retryable and visible; do not add a recovery quarantine.
+- Offline backups are outside account deletion and follow a separate operator
+  retention policy. This ADR does not set a backup duration.
 - A deletion job must revoke access first, be idempotent and resumable, and
   report partial failure until owned database rows and files are handled.
 - A database backup may contain data that was later deleted from the live
@@ -94,7 +99,9 @@ migrations remain planned work.
    decryptability is verified. **Implementation and focused source review
    passed; operator conversion and restore qualification remain pending.**
 4. Inventory every user relation and managed file, then implement resumable
-   deletion using the decisions above.
+   deletion using the decisions above. The ORM user-FK inventory currently has
+   50 columns and a focused PostgreSQL test compares it with database schema;
+   physical-file cleanup and retry status remain implementation work.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
 

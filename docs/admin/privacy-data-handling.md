@@ -140,9 +140,11 @@ creator and used-by references, personal attract settings, favorites/status rows
 actor history, authored newsletter removal, and audit retention with direct identifiers removed.
 This is an ORM-source inventory, not a comparison against every deployed database schema.
 
-Durable/retryable cleanup of user-owned files and a full review of retained free text and paths
-remain open. User-specific emulator save-state, uploaded avatar, and chat attachment bytes may
-remain on server storage after their database metadata is removed. Shared library/game files,
+Retryable cleanup of user-owned files and a full review of retained free text and paths remain
+open. The selected policy is to purge user-specific emulator save-state, uploaded avatar, and
+chat attachment bytes after the database deletion commits. A failed purge must remain visible
+and retryable. Offline backups are outside account deletion and follow a separate operator
+retention policy with no duration set here. Shared library/game files,
 shared chat spaces, shared emojis, and reference sets must not be removed merely because an
 account is deleted; uploader/author references are cleared where supported. Physical file
 erasure, restore reapplication, and fault/retry behavior remain open work. Deleting a game removes
