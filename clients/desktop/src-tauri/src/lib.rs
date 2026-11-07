@@ -1,10 +1,14 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
+use std::process::Child;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use tauri::Manager;
 use url::{Host, Url};
 use zip::ZipArchive;
@@ -89,6 +93,42 @@ pub struct LaunchGameResult {
     pub pid: u32,
     pub exe_path: String,
     pub resolved_exe_path: Option<String>,
+}
+
+#[derive(Clone, Default)]
+struct ManagedProcessRegistry(Arc<Mutex<HashMap<u32, bool>>>);
+
+impl ManagedProcessRegistry {
+    fn track(&self, mut child: Child) -> Result<u32, String> {
+        let pid = child.id();
+        self.0
+            .lock()
+            .map_err(|_| "Process registry is unavailable".to_string())?
+            .insert(pid, true);
+
+        let registry = Arc::clone(&self.0);
+        thread::spawn(move || {
+            // Waiting here reaps the direct child even when the webview is not
+            // polling. Its exited state is kept for the next watcher query.
+            let _ = child.wait();
+            if let Ok(mut processes) = registry.lock() {
+                processes.insert(pid, false);
+            }
+        });
+        Ok(pid)
+    }
+
+    fn is_running(&self, pid: u32) -> Result<Option<bool>, String> {
+        let mut processes = self
+            .0
+            .lock()
+            .map_err(|_| "Process registry is unavailable".to_string())?;
+        let state = processes.get(&pid).copied();
+        if state == Some(false) {
+            processes.remove(&pid);
+        }
+        Ok(state)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -966,6 +1006,7 @@ fn safe_archive_file_mode(mode: u32) -> u32 {
 #[tauri::command]
 fn launch_game(
     app: tauri::AppHandle,
+    processes: tauri::State<'_, ManagedProcessRegistry>,
     game_uuid: String,
     exe_path: Option<String>,
     extract_path: String,
@@ -1000,9 +1041,10 @@ fn launch_game(
         .current_dir(working_dir)
         .spawn()
         .map_err(|error| error.to_string())?;
+    let pid = processes.track(child)?;
 
     Ok(LaunchGameResult {
-        pid: child.id(),
+        pid,
         exe_path: resolved.to_string_lossy().into_owned(),
         resolved_exe_path: if had_exe_path {
             None
@@ -1013,7 +1055,13 @@ fn launch_game(
 }
 
 #[tauri::command]
-fn is_process_running(pid: u32) -> Result<bool, String> {
+fn is_process_running(
+    processes: tauri::State<'_, ManagedProcessRegistry>,
+    pid: u32,
+) -> Result<bool, String> {
+    if let Some(running) = processes.is_running(pid)? {
+        return Ok(running);
+    }
     Ok(check_process_running(pid))
 }
 
@@ -1736,6 +1784,7 @@ fn reveal_path_in_os(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ManagedProcessRegistry::default())
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
@@ -1775,7 +1824,38 @@ mod tests {
     // `Write` trait `write_zip` needs is already in scope here.
     use super::*;
     use std::fs;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    #[test]
+    fn managed_child_fixture() {
+        if std::env::var_os("ONEIRODEX_CHILD_REAP_TEST").is_some() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    #[test]
+    fn managed_process_waiter_reaps_a_short_lived_child() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_CHILD_REAP_TEST", "1")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let registry = ManagedProcessRegistry::default();
+        assert_eq!(registry.track(child).unwrap(), pid);
+        assert_eq!(registry.is_running(pid).unwrap(), Some(true));
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut observed = Some(true);
+        while observed == Some(true) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+            observed = registry.is_running(pid).unwrap();
+        }
+
+        assert_eq!(observed, Some(false));
+    }
     use zip::write::{SimpleFileOptions, ZipWriter};
 
     #[test]
