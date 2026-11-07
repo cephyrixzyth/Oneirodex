@@ -35,6 +35,14 @@ class AccountAvatarUploadData:
 
         return avatar_url(path)
 
+    def prepare_cleanup(self, user, previous_path: str | None, new_path: str, flask_app) -> None:
+        from oneirodex.runtime_native.db_session import native_db
+        from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
+
+        enqueue_avatar_replacement_cleanup(
+            native_db.session, flask_app, user.id, previous_path, new_path,
+        )
+
     def commit(self):
         from oneirodex.runtime_native.db_session import native_db as db
 
@@ -106,6 +114,8 @@ def create_account_avatar_upload_router(
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
+                            if hasattr(data, 'prepare_cleanup'):
+                                data.prepare_cleanup(auth.user, previous_path, path, flask_app)
                             data.commit()
                         except Exception as exc:
                             data.rollback()
@@ -191,6 +201,8 @@ def create_account_avatar_upload_router(
                             _flash(auth.session_data, 'error', error)
                         else:
                             try:
+                                if hasattr(data, 'prepare_cleanup'):
+                                    data.prepare_cleanup(auth.user, previous_path, path, flask_app)
                                 data.commit()
                                 from oneirodex.utils.avatar import finalize_avatar_change
 

@@ -275,3 +275,87 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     unsafe_job = db_session.query(UserDeletionFileJob).one()
     assert unsafe_job.state == 'failed'
     assert unsafe_job.last_error_code == 'unsafe_path'
+
+
+def test_avatar_replacement_queues_old_bytes_before_pointer_commit_and_retries(db_session, tmp_path):
+    from io import BytesIO
+    import logging
+    from PIL import Image
+    from werkzeug.datastructures import FileStorage
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX
+    from oneirodex.utils.avatar import save_avatar
+    from oneirodex.utils.user_deletion import (
+        enqueue_avatar_replacement_cleanup,
+        process_pending_file_jobs,
+    )
+
+    user = _make_user(f'avatar_replace_{str(uuid4())[:8]}', 'user')
+    old_name = f'{uuid4().hex}.png'
+    user.avatarpath = AVATAR_URL_PREFIX + old_name
+    db_session.add(user)
+    db_session.commit()
+    avatar_dir = tmp_path / 'images' / 'avatars_users'
+    avatar_dir.mkdir(parents=True)
+    old_file = avatar_dir / old_name
+    old_thumbnail = avatar_dir / f'{Path(old_name).stem}_thumbnail.png'
+    old_file.write_bytes(b'old avatar')
+    old_thumbnail.write_bytes(b'old thumbnail')
+
+    content = BytesIO()
+    Image.new('RGB', (32, 32), 'green').save(content, format='PNG')
+    content.seek(0)
+    app = type('AvatarApp', (), {
+        'config': {'UPLOAD_FOLDER': str(tmp_path)},
+        'logger': logging.getLogger('test-avatar'),
+    })()
+    previous_path = user.avatarpath
+    new_path, error = save_avatar(
+        FileStorage(stream=content, filename='replacement.png'), user, app,
+    )
+    assert error is None and new_path and new_path != AVATAR_URL_PREFIX + old_name
+    job_ids = enqueue_avatar_replacement_cleanup(
+        db_session, app, user.id, previous_path, new_path,
+    )
+    db_session.commit()
+
+    assert len(job_ids) == 2
+    assert db_session.query(UserDeletionFileJob).count() == 2
+    assert old_file.exists() and old_thumbnail.exists()
+    assert process_pending_file_jobs(db_session) == 0
+    assert not old_file.exists() and not old_thumbnail.exists()
+    assert db_session.query(UserDeletionFileJob).count() == 0
+    assert db_session.get(User, user.id).avatarpath == new_path
+
+
+def test_avatar_replacement_cleanup_keeps_file_shared_by_another_user(db_session, tmp_path):
+    from types import SimpleNamespace
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX
+    from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
+
+    suffix = str(uuid4())[:8]
+    owner = _make_user(f'avatar_shared_owner_{suffix}', 'user')
+    other = _make_user(f'avatar_shared_other_{suffix}', 'user')
+    old_name = f'{uuid4().hex}.png'
+    old_path = AVATAR_URL_PREFIX + old_name
+    owner.avatarpath = old_path
+    other.avatarpath = old_path
+    db_session.add_all([owner, other])
+    db_session.commit()
+    avatar_dir = tmp_path / 'images' / 'avatars_users'
+    avatar_dir.mkdir(parents=True)
+    old_file = avatar_dir / old_name
+    old_file.write_bytes(b'shared avatar')
+
+    owner.avatarpath = AVATAR_URL_PREFIX + f'{uuid4().hex}.png'
+    jobs = enqueue_avatar_replacement_cleanup(
+        db_session,
+        SimpleNamespace(config={'UPLOAD_FOLDER': str(tmp_path)}),
+        owner.id,
+        old_path,
+        owner.avatarpath,
+    )
+    db_session.commit()
+
+    assert jobs == []
+    assert db_session.query(UserDeletionFileJob).count() == 0
+    assert old_file.read_bytes() == b'shared avatar'

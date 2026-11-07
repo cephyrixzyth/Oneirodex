@@ -6,6 +6,7 @@ from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.avatar import DEFAULT_AVATAR, finalize_avatar_change, save_avatar
 from oneirodex import db
 from oneirodex.utils.auth import login_user
+from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -46,6 +47,10 @@ def settings_profile_edit():
             current_user.avatarpath = DEFAULT_AVATAR
 
         try:
+            if new_path:
+                enqueue_avatar_replacement_cleanup(
+                    db.session, current_app, current_user.id, previous_path, new_path,
+                )
             db.session.commit()
             if new_path:
                 finalize_avatar_change(current_app, previous_path, new_path, committed=True)

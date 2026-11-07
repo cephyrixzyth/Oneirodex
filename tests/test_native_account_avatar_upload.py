@@ -24,6 +24,7 @@ class FakeAvatarData:
         self.error = error
         self.commit_error = commit_error
         self.calls = []
+        self.cleanup_calls = []
         self.commits = 0
         self.rollbacks = 0
         self.save_had_running_event_loop = None
@@ -40,6 +41,9 @@ class FakeAvatarData:
 
     def avatar_url(self, path):
         return '/' + path
+
+    def prepare_cleanup(self, user, previous_path, new_path, _app):
+        self.cleanup_calls.append((user.id, previous_path, new_path))
 
     def commit(self):
         self.commits += 1
@@ -119,6 +123,7 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
     }
     assert data.calls == [('face.png', b'image-bytes', 167)]
     assert data.save_had_running_event_loop is False
+    assert data.cleanup_calls == [(167, 'old.png', 'library/images/avatars_users/new.png')]
     assert data.commits == 1
     assert data.rollbacks == 0
     assert response.headers['x-content-type-options'] == 'nosniff'

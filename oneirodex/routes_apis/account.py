@@ -38,6 +38,7 @@ from oneirodex.utils.public_origin import (
     public_origin,
     site_url_is_configured,
 )
+from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
 from oneirodex.utils.smtp import is_smtp_config_valid
 from oneirodex.utils.validation import validate_body
 
@@ -194,6 +195,9 @@ def account_avatar():
         return api_error(error, code='unprocessable')
 
     try:
+        enqueue_avatar_replacement_cleanup(
+            db.session, current_app, current_user.id, previous_path, path,
+        )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -228,6 +232,9 @@ def account_stock_avatar(body: StockAvatarBody):
         return api_error(error, code='bad_request')
 
     try:
+        enqueue_avatar_replacement_cleanup(
+            db.session, current_app, current_user.id, previous_path, path,
+        )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()

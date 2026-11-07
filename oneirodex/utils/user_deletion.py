@@ -81,7 +81,9 @@ def _thumbnail_name(filename: str) -> str:
     return f'{stem}_thumbnail{extension}'
 
 
-def _candidate_still_referenced(session, kind: str, root: str, relative: str) -> bool:
+def _candidate_still_referenced(
+    session, kind: str, root: str, relative: str, *, exclude_user_id: int | None = None,
+) -> bool:
     from oneirodex.models import (
         ChatMessageAttachment,
         EmulatorSave,
@@ -97,9 +99,10 @@ def _candidate_still_referenced(session, kind: str, root: str, relative: str) ->
         if stem.endswith('_thumbnail'):
             name = f'{stem[:-10]}{extension}'
         stored = AVATAR_URL_PREFIX + name
-        return session.execute(
-            select(User.id).where(User.avatarpath == stored).limit(1),
-        ).first() is not None
+        statement = select(User.id).where(User.avatarpath == stored)
+        if exclude_user_id is not None:
+            statement = statement.where(User.id != exclude_user_id)
+        return session.execute(statement.limit(1)).first() is not None
     if kind == 'attachment':
         return session.execute(
             select(ChatMessageAttachment.id).where(
@@ -120,12 +123,31 @@ def _candidate_still_referenced(session, kind: str, root: str, relative: str) ->
     raise ValueError('Unknown user deletion file kind')
 
 
-def _enqueue_file_candidates(session, candidates: list[tuple[str, str, str]]) -> list[int]:
+def _enqueue_file_candidates(
+    session,
+    candidates: list[tuple[str, str, str]],
+    *,
+    exclude_avatar_user_id: int | None = None,
+) -> list[int]:
     from oneirodex.models import UserDeletionFileJob
 
     job_ids = []
     for kind, root, relative in candidates:
-        if _candidate_still_referenced(session, kind, root, relative):
+        if _candidate_still_referenced(
+            session,
+            kind,
+            root,
+            relative,
+            exclude_user_id=exclude_avatar_user_id if kind == 'avatar' else None,
+        ):
+            existing = session.execute(
+                select(UserDeletionFileJob).where(
+                    UserDeletionFileJob.root_path == root,
+                    UserDeletionFileJob.relative_path == relative,
+                ).limit(1),
+            ).scalars().first()
+            if existing is not None:
+                session.delete(existing)
             continue
         job = session.execute(
             select(UserDeletionFileJob).where(
@@ -156,6 +178,30 @@ def _enqueue_file_candidates(session, candidates: list[tuple[str, str, str]]) ->
         job_ids.append(job.id)
     session.flush()
     return job_ids
+
+
+def enqueue_avatar_replacement_cleanup(
+    session, app, user_id: int, previous_path: str | None, new_path: str | None,
+) -> list[int]:
+    """Queue old avatar bytes in the same transaction as the avatar pointer update."""
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX, is_shipped_avatar
+
+    if not previous_path or previous_path == new_path:
+        return []
+    if not previous_path.startswith(AVATAR_URL_PREFIX) or is_shipped_avatar(previous_path):
+        return []
+    filename = Path(previous_path).name
+    if not filename or filename != previous_path[len(AVATAR_URL_PREFIX):]:
+        return []
+    upload_root = Path(app.config.get('UPLOAD_FOLDER') or _storage_roots()[0]).resolve()
+    stem, extension = os.path.splitext(filename)
+    candidates = [
+        ('avatar', str(upload_root), f'images/avatars_users/{filename}'),
+        ('avatar', str(upload_root), f'images/avatars_users/{stem}_thumbnail{extension}'),
+    ]
+    return _enqueue_file_candidates(
+        session, candidates, exclude_avatar_user_id=user_id,
+    )
 
 
 def process_pending_file_jobs(session, *, limit: int = 100) -> int:
