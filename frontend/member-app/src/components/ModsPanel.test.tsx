@@ -87,6 +87,24 @@ test('renders nothing when tracking is off, or when empty for a member', async (
   await waitFor(() => expect(second.container).toBeEmptyDOMElement())
 })
 
+test('keeps the section visible after a failed fetch and retries successfully', async () => {
+  let attempts = 0
+  stubFetch(async () => {
+    attempts += 1
+    if (attempts === 1) throw new Error('Mods service unavailable')
+    return { ok: true, status: 200, json: async () => PACK }
+  })
+  const user = userEvent.setup()
+  render(<ModsPanel gameUuid="g1" canEdit />)
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Mods service unavailable')
+  expect(screen.getByRole('heading', { name: 'Mods' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByText('Configuration Manager')).toBeInTheDocument()
+  expect(attempts).toBe(2)
+})
+
 test('a librarian adds a catalogue hit as a tracked row with the registry page as its source', async () => {
   const calls = routeFetch()
   const user = userEvent.setup()
