@@ -132,15 +132,22 @@ reconnect the affected integration. Backups created before the credential conver
 contain plaintext provider or integration credentials and should remain protected accordingly.
 Backups from before password-reset token hashing may also contain raw reset tokens;
 the application continues to enforce the 15-minute expiry when a token is used.
-Account deletion is in progress: the current route removes the user and several inventoried
-no-action relation rows, and retained audit events have direct account identifiers cleared.
-The complete relation inventory, durable/retryable cleanup, and review of retained free text and
-paths remain open. User-specific emulator save-state and chat attachment bytes are not yet
-purged from server storage. Their database metadata may be removed, and authenticated download
-routes require metadata plus current owner/channel access, so orphaned files are not served by
-the application. Physical file erasure and fault/retry behavior remain open work.Deleting a game removes its play sessions and per-game progress; game requests, owned-title
-matches, and linked game-server records remain with their game reference cleared where the
-schema defines `SET NULL`.
+Account deletion is in progress. The Flask and native handlers now share relation cleanup and
+audit anonymization. The current ORM metadata inventory contains 82 tables and 50 foreign-key
+columns to user IDs; all nine with no database `ON DELETE` action have explicit delete, clear, or
+retain dispositions. PostgreSQL route/service tests cover a blocking download request, invite
+creator and used-by references, personal attract settings, favorites/status rows, duplicate-fix
+actor history, authored newsletter removal, and audit retention with direct identifiers removed.
+This is an ORM-source inventory, not a comparison against every deployed database schema.
+
+Durable/retryable cleanup of user-owned files and a full review of retained free text and paths
+remain open. User-specific emulator save-state, uploaded avatar, and chat attachment bytes may
+remain on server storage after their database metadata is removed. Shared library/game files,
+shared chat spaces, shared emojis, and reference sets must not be removed merely because an
+account is deleted; uploader/author references are cleared where supported. Physical file
+erasure, restore reapplication, and fault/retry behavior remain open work. Deleting a game removes
+its play sessions and per-game progress; game requests, owned-title matches, and linked
+game-server records remain with their game reference cleared where the schema defines `SET NULL`.
 There is no built-in "export my data" package — dump the database if a household member asks for a copy.
 
 Admin → System danger-zone reset can wipe catalog / libraries / users / settings in-app; it **never

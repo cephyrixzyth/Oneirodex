@@ -205,6 +205,10 @@ class AdminUserMutationData:
     def delete(self, user_id, actor_id):
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.event_logging import log_system_event
+        from oneirodex.utils.user_deletion import (
+            anonymize_user_audit_events,
+            delete_user_owned_rows,
+        )
 
         actor = self._lock_and_reload_actor(actor_id)
         if actor is None:
@@ -217,20 +221,23 @@ class AdminUserMutationData:
         valid, message = self._protect_active_admin(user_id, new_state=False)
         if not valid:
             return None, (message, 'forbidden', None)
-        info = f'{user.name} (email: {user.email}, role: {user.role})'
+        deleting_self = actor.id == user.id
+        audit_actor_id = 'system' if deleting_self else actor.id
         try:
+            anonymize_user_audit_events(db.session, user)
+            delete_user_owned_rows(db.session, user)
             db.session.delete(user)
             db.session.commit()
             log_system_event(
-                f'Admin {actor.name} deleted user: {info}',
-                event_type='audit', event_level='warning', audit_user=actor.id,
+                'Admin account deleted user account',
+                event_type='audit', event_level='warning', audit_user=audit_actor_id,
             )
             return {}, None
         except Exception:  # noqa: BLE001 — persistence diagnostics stay in logs
             db.session.rollback()
             log_system_event(
-                f'Admin {actor.name} failed to delete user {info}: database error',
-                event_type='audit', event_level='error', audit_user=actor.id,
+                'Admin account deletion failed',
+                event_type='audit', event_level='error', audit_user=audit_actor_id,
             )
             return None, ('Failed to delete user', 'internal', None)
 
