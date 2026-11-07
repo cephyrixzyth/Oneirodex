@@ -80,6 +80,19 @@ test('focus moves to the first focusable on open, or to initialFocusRef', () => 
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'second' }))
 })
 
+test('hides outside page roots from assistive technology and restores them on close', () => {
+  const { container, unmount } = render(
+    <Modal open label="T">
+      <button type="button">inside</button>
+    </Modal>,
+  )
+  expect(container).toHaveAttribute('aria-hidden', 'true')
+  expect(container).toHaveAttribute('inert')
+  unmount()
+  expect(container).not.toHaveAttribute('aria-hidden')
+  expect(container).not.toHaveAttribute('inert')
+})
+
 test('Tab wraps inside the panel in both directions', () => {
   render(
     <Modal open label="T">
