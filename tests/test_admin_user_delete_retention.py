@@ -49,10 +49,10 @@ def _make_user(name: str, role: str) -> User:
     return user
 
 
-def test_admin_deletion_removes_user_and_retains_anonymized_audit_event(client, db_session):
+def test_admin_route_deletes_child_and_retains_anonymized_audit_event(client, db_session):
     suffix = str(uuid4())[:8]
     admin = _make_user(f'del_admin_{suffix}', 'admin')
-    victim = _make_user(f'del_member_{suffix}', 'user')
+    victim = _make_user(f'del_child_{suffix}', 'child')
     db_session.add_all([admin, victim])
     db_session.flush()
     victim_id = victim.id

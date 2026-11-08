@@ -84,6 +84,95 @@ def test_user_update_and_delete_require_csrf_and_preserve_native_dispatch():
     ]
 
 
+def test_authenticated_native_admin_route_deletes_child_and_anonymizes_audit(app):
+    from sqlalchemy import delete
+    from sqlalchemy.orm import Session
+
+    from oneirodex import db
+    from oneirodex.models import SystemEvents, User
+    from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+    from oneirodex.runtime_native.db_session import native_session_scope
+
+    suffix = uuid4().hex[:10]
+    admin = User(
+        name=f'native_route_admin_{suffix}', email=f'{suffix}-admin@example.org',
+        role='admin', state=True, is_email_verified=True, user_id=str(uuid4()),
+    )
+    child = User(
+        name=f'native_route_child_{suffix}', email=f'{suffix}-child@example.org',
+        role='child', state=True, is_email_verified=True, user_id=str(uuid4()),
+    )
+    admin.set_password('long enough test password')
+    child.set_password('long enough test password')
+    audit = None
+
+    with app.app_context():
+        engine = db.engine
+        with Session(engine) as setup:
+            setup.add_all([admin, child])
+            setup.flush()
+            audit = SystemEvents(
+                event_type='audit',
+                event_text=(f'{child.name} ({child.email}) accessed '
+                            r'C:\Users\private\child-save.sav'),
+                event_level='information',
+                audit_user=child.id,
+            )
+            setup.add(audit)
+            setup.commit()
+            admin_id, child_id, audit_id = admin.id, child.id, audit.id
+
+        flask_app = app
+        flask_app.config['TESTING'] = True
+        manager = SimpleNamespace(
+            login_view='login.login', blueprint_login_views={},
+            login_message='Please log in to access this page.',
+            login_message_category='message', localize_callback=None,
+            session_protection='basic',
+        )
+        identity = f'{admin_id}:native-test-fingerprint'
+        session_data = {'_user_id': identity, '_fresh': True}
+        router = create_admin_user_mutation_router(
+            flask_app,
+            find_user=lambda user_id: admin if user_id == admin_id else None,
+            find_token=lambda _prefix: None,
+            commit_token_touch=lambda _token: None,
+            load_user_id=lambda value: admin if value == identity else None,
+            login_manager=manager,
+            database_scope=lambda current_app: native_session_scope(current_app, db),
+            data_access=AdminUserMutationData(),
+        )
+        runtime = FastAPI()
+        runtime.include_router(router)
+        client = TestClient(runtime)
+        csrf = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
+        client.cookies.set('session', dump_session_cookie(
+            session_data, flask_app.config['SECRET_KEY'],
+        ))
+
+        try:
+            response = client.delete(
+                f'/admin/api/user/{child_id}', headers={'X-CSRFToken': csrf},
+            )
+            assert response.status_code == 200, response.text
+            with Session(engine) as check:
+                assert check.get(User, child_id) is None
+                retained = check.get(SystemEvents, audit_id)
+                assert retained is not None
+                assert retained.audit_user is None
+                assert child.name not in retained.event_text
+                assert child.email not in retained.event_text
+                assert r'C:\Users\private\child-save.sav' not in retained.event_text
+        finally:
+            client.close()
+            with Session(engine) as cleanup:
+                cleanup.execute(delete(SystemEvents).where(
+                    (SystemEvents.id == audit_id) | (SystemEvents.audit_user == admin_id)
+                ))
+                cleanup.execute(delete(User).where(User.id.in_([admin_id, child_id])))
+                cleanup.commit()
+
+
 def test_admin_user_mutation_rejects_oversized_json_body_before_data_access():
     client, data, csrf = _client()
     response = client.put(
