@@ -12,7 +12,7 @@ use std::process::Child;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tauri::{ipc::Channel, Manager, State};
+use tauri::{Emitter, Manager, State};
 use url::{Host, Url};
 use zip::ZipArchive;
 mod install_recovery;
@@ -91,8 +91,9 @@ pub struct ExtractZipResult {
     pub exe_path: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct GameArchiveProgress {
+    operation_id: String,
     bytes_extracted: u64,
     total_bytes: u64,
 }
@@ -791,7 +792,6 @@ async fn extract_zip_archive(
     archive_path: String,
     dest_dir: String,
     operation_id: String,
-    on_progress: Channel<GameArchiveProgress>,
     operations: State<'_, GameArchiveInstallOperations>,
 ) -> Result<ExtractZipResult, String> {
     if operation_id.trim().is_empty() || operation_id.len() > 128 {
@@ -809,6 +809,8 @@ async fn extract_zip_archive(
         active.insert(operation_id.clone(), cancellation.clone());
     }
     let operations = operations.0.clone();
+    let progress_app = app.clone();
+    let progress_operation_id = operation_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let _cleanup = GameArchiveOperationCleanup {
             operations,
@@ -823,10 +825,14 @@ async fn extract_zip_archive(
             Path::new(&dest_dir),
             &cancellation,
             |bytes_extracted, total_bytes| {
-                let _ = on_progress.send(GameArchiveProgress {
-                    bytes_extracted,
-                    total_bytes,
-                });
+                let _ = progress_app.emit(
+                    "game-archive-progress",
+                    GameArchiveProgress {
+                        operation_id: progress_operation_id.clone(),
+                        bytes_extracted,
+                        total_bytes,
+                    },
+                );
             },
         )
     })

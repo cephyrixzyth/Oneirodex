@@ -1,4 +1,5 @@
-import { Channel, invoke } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 import { isTauriRuntime } from './config-store.js'
 
@@ -20,6 +21,10 @@ interface ExtractZipResult {
 export interface ExtractZipProgress {
   bytes_extracted: number
   total_bytes: number
+}
+
+interface GameArchiveProgressMessage extends ExtractZipProgress {
+  operation_id: string
 }
 
 export async function getInstallRecord(gameUuid: string): Promise<GameInstallRecord | null> {
@@ -47,16 +52,28 @@ export async function extractInstallArchive(
         from: record.retainedPath,
         to: `${record.extractPath}.reinstall-${crypto.randomUUID()}`,
       })
-    : await invoke<ExtractZipResult>('extract_zip_archive', {
-        archivePath: record.archivePath,
-        destDir: record.extractPath,
-        operationId: options.operationId ?? crypto.randomUUID(),
-        onProgress: (() => {
-          const channel = new Channel<ExtractZipProgress>()
-          channel.onmessage = (progress) => options.onProgress?.(progress)
-          return channel
-        })(),
-      })
+    : await (async () => {
+        const operationId = options.operationId ?? crypto.randomUUID()
+        const unlisten = options.onProgress
+          ? await listen<GameArchiveProgressMessage>('game-archive-progress', ({ payload }) => {
+              if (payload.operation_id === operationId) {
+                options.onProgress?.({
+                  bytes_extracted: payload.bytes_extracted,
+                  total_bytes: payload.total_bytes,
+                })
+              }
+            })
+          : undefined
+        try {
+          return await invoke<ExtractZipResult>('extract_zip_archive', {
+            archivePath: record.archivePath,
+            destDir: record.extractPath,
+            operationId,
+          })
+        } finally {
+          unlisten?.()
+        }
+      })()
 
   const updated: GameInstallRecord = {
     archivePath: record.archivePath,

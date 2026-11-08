@@ -5,7 +5,7 @@
   "finding": "DT-005 base archive extraction resource and destination safety",
   "classification": "progress and cancellation behavior implemented; DT-005 remains partially remediated pending packaged platform smoke",
   "change": {
-    "progress": "Native extraction streams expanded-byte counts through a Tauri channel to the game card.",
+    "progress": "Native extraction emits expanded-byte counts tagged with the install operation id; the desktop listens only for its active operation.",
     "cancellation": "Each install has an operation id and a native cancellation flag. The cancel command remains responsive because extraction runs on Tauri's blocking pool.",
     "preservation": "Cancellation checks run during streaming and before promotion. Staging cleanup removes the partial generation while leaving the previous install and downloaded archive in place."
   },
@@ -25,8 +25,8 @@
         "result": "passed"
       },
       {
-        "command": "npm test -- --run src/install.test.ts src/app-smoke.test.ts (clients/desktop)",
-        "result": "passed: 11 tests"
+        "command": "npm test (clients/desktop)",
+        "result": "passed: 288 tests across 38 files"
       },
       {
         "command": "npm run build (clients/desktop)",
