@@ -25,6 +25,10 @@
         "result": "passed"
       },
       {
+        "command": "cargo clippy --all-targets -- -D warnings",
+        "result": "passed"
+      },
+      {
         "command": "npm test (clients/desktop)",
         "result": "passed: 288 tests across 38 files"
       },

@@ -1139,6 +1139,11 @@ fn extract_zip_to_dir_with_configured_budget_and_control(
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .unwrap_or(DEFAULT_GAME_ARCHIVE_RESERVE_BYTES);
+    let mut on_progress = on_progress;
+    let mut control = GameArchiveExtractionControl {
+        cancellation: Some(cancellation),
+        on_progress: &mut on_progress,
+    };
     extract_zip_to_dir_with_space_budget_and_control(
         archive,
         destination,
@@ -1146,8 +1151,7 @@ fn extract_zip_to_dir_with_configured_budget_and_control(
         max_expanded_bytes,
         reserve_bytes,
         None,
-        Some(cancellation),
-        on_progress,
+        &mut control,
     )
 }
 
@@ -1224,6 +1228,11 @@ fn extract_zip_to_dir_with_space_budget(
     reserve_bytes: u64,
     available_bytes_override: Option<u64>,
 ) -> Result<ExtractZipResult, String> {
+    let mut on_progress = |_, _| {};
+    let mut control = GameArchiveExtractionControl {
+        cancellation: None,
+        on_progress: &mut on_progress,
+    };
     extract_zip_to_dir_with_space_budget_and_control(
         archive,
         destination,
@@ -1231,9 +1240,13 @@ fn extract_zip_to_dir_with_space_budget(
         max_expanded_bytes,
         reserve_bytes,
         available_bytes_override,
-        None,
-        |_, _| {},
+        &mut control,
     )
+}
+
+struct GameArchiveExtractionControl<'a> {
+    cancellation: Option<&'a AtomicBool>,
+    on_progress: &'a mut dyn FnMut(u64, u64),
 }
 
 fn extract_zip_to_dir_with_space_budget_and_control(
@@ -1243,8 +1256,7 @@ fn extract_zip_to_dir_with_space_budget_and_control(
     max_expanded_bytes: u64,
     reserve_bytes: u64,
     available_bytes_override: Option<u64>,
-    cancellation: Option<&AtomicBool>,
-    mut on_progress: impl FnMut(u64, u64),
+    control: &mut GameArchiveExtractionControl<'_>,
 ) -> Result<ExtractZipResult, String> {
     if !archive.is_file() {
         return Err(format!("Archive not found: {}", archive.display()));
@@ -1262,7 +1274,10 @@ fn extract_zip_to_dir_with_space_budget_and_control(
     // removing an existing installation at the destination.
     let declared_expanded_bytes =
         validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
-    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
         return Err("Game archive extraction canceled".into());
     }
 
@@ -1314,10 +1329,13 @@ fn extract_zip_to_dir_with_space_budget_and_control(
 
     let mut expanded_bytes = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
-    on_progress(0, declared_expanded_bytes);
+    (control.on_progress)(0, declared_expanded_bytes);
 
     for index in 0..zip.len() {
-        if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        if control
+            .cancellation
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
             return Err("Game archive extraction canceled".into());
         }
         let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
@@ -1351,7 +1369,10 @@ fn extract_zip_to_dir_with_space_budget_and_control(
 
         let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
         loop {
-            if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            if control
+                .cancellation
+                .is_some_and(|flag| flag.load(Ordering::Relaxed))
+            {
                 return Err("Game archive extraction canceled".into());
             }
             use std::io::Read;
@@ -1383,7 +1404,7 @@ fn extract_zip_to_dir_with_space_budget_and_control(
             }
             out.write_all(&buffer[..read])
                 .map_err(|error| error.to_string())?;
-            on_progress(expanded_bytes, declared_expanded_bytes);
+            (control.on_progress)(expanded_bytes, declared_expanded_bytes);
         }
 
         // Restore the archived permission bits on unix. Without this every
@@ -1411,7 +1432,10 @@ fn extract_zip_to_dir_with_space_budget_and_control(
 
     #[cfg(test)]
     exit_at_archive_install_test_point("after_extract_before_ready");
-    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
         return Err("Game archive extraction canceled".into());
     }
     let ready_marker = mark_install_stage_ready(parent, name, &suffix)?;
@@ -1421,7 +1445,10 @@ fn extract_zip_to_dir_with_space_budget_and_control(
     };
     let staged_exe_path = find_likely_exe(&staging, 2).map(PathBuf::from);
 
-    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
         return Err("Game archive extraction canceled".into());
     }
     let had_destination = destination.exists();
@@ -2837,6 +2864,16 @@ mod tests {
         fs::write(destination.join("game.bin"), b"old generation").unwrap();
         let cancellation = AtomicBool::new(false);
         let mut progress_samples = Vec::new();
+        let mut on_progress = |bytes_extracted, total_bytes| {
+            progress_samples.push((bytes_extracted, total_bytes));
+            if bytes_extracted > 0 {
+                cancellation.store(true, Ordering::Relaxed);
+            }
+        };
+        let mut control = GameArchiveExtractionControl {
+            cancellation: Some(&cancellation),
+            on_progress: &mut on_progress,
+        };
 
         let error = extract_zip_to_dir_with_space_budget_and_control(
             &archive,
@@ -2845,13 +2882,7 @@ mod tests {
             1024 * 1024,
             0,
             Some(u64::MAX),
-            Some(&cancellation),
-            |bytes_extracted, total_bytes| {
-                progress_samples.push((bytes_extracted, total_bytes));
-                if bytes_extracted > 0 {
-                    cancellation.store(true, Ordering::Relaxed);
-                }
-            },
+            &mut control,
         )
         .unwrap_err();
 
