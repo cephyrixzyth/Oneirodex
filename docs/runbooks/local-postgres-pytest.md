@@ -138,3 +138,29 @@ python -m pytest tests/test_routes_info.py
 
 Scope to one file where you can; the full tree is slow on a network-mounted
 checkout.
+
+## Independent-review baseline and authentication fixtures
+
+Use Python 3.12 and Node 22 for the independent-review baseline. Select a fresh
+loopback test database and upgrade it with the guarded command above. For a
+run that must not inherit operator configuration, set
+`PYTHON_DOTENV_DISABLED=1` before starting Python and supply synthetic test
+settings in that process. This disables dotenv loading; it does not block
+outbound connections by itself. Block external delivery separately when running
+broad tests, and retain failures, skips and incomplete runs in the result log.
+Do not treat collecting tests as executing them or an early-stopped core run
+as a passing CI suite.
+
+The download-auth adapter checks can run without the shared PostgreSQL fixture:
+
+```bash
+python -m pytest --noconftest -o addopts= tests/test_asgi_download_auth.py -q
+```
+
+They use a disposable SQLite store and production persistent-session issuance,
+validation and revocation. They verify retired-cookie rejection, active-user and
+client binding, bearer precedence, and revocation without weakening production
+authentication. SQLite does not qualify PostgreSQL foreign keys, locking or
+migrations; use `tests/test_persistent_sessions.py` with the isolated PostgreSQL
+database for that integration boundary. Current baseline outcomes and remaining
+limits are recorded in the [maintained review](../dev/behavior-parity-review.md).

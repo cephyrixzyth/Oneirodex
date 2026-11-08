@@ -1,5 +1,7 @@
 # Oneirodex documentation
 
+> **Doc status:** Active
+
 **Product version:** 1.1.9 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
@@ -53,6 +55,14 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 ## Documentation boundaries and status
 
 User/admin guides describe implemented behavior; proposals and dated reports are not release verification. Local staging evidence is separate from production acceptance. Household PostgreSQL remains the supported server configuration; a serverless desktop migration is still a design/proof phase.
+
+The November 6, 2026 independent assessment describes its pinned source snapshot.
+Use the [current review dispositions](dev/behavior-parity-review.md#claims-checked-against-the-current-checkout)
+and the linked user/admin/runbook pages for subsequent corrections and remaining
+qualification limits. Its feature catalog and phase plans retain their original
+evaluation and proposed-work status; importing documentation does not complete
+their acceptance cases. The complete assessment, research and reconciliation
+index remain in the local private documentation collection.
 
 Operator host details, credentials, research exports, human responses and internal execution records belong in ignored local storage. Public docs use example addresses and paths. Never paste full database connection URLs into logs or support reports. Historical Git commits are not scrubbed by a working-tree documentation update.
 

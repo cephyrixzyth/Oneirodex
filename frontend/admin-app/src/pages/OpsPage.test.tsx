@@ -11,6 +11,12 @@ import {
 } from './OpsPage'
 import { DetailPanel, formatDetailValue } from './ops/opsColumns'
 
+beforeEach(() => {
+  // Opening Full log changes the URL, which survives component cleanup.
+  // Each scenario starts without a deep link left by a preceding scenario.
+  window.history.replaceState(null, '', '/admin/ops')
+})
+
 describe('formatScanJobCounters', () => {
   test('uses processed (success+failed) over success-only', () => {
     expect(

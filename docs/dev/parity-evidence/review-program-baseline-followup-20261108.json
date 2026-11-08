@@ -1,0 +1,73 @@
+{
+  "record_id": "review-program-baseline-followup-20261108",
+  "recorded_utc": "2026-11-08T22:43:53.591549+00:00",
+  "task_ids": [
+    "independent-review:P0-01",
+    "independent-review:P0-02"
+  ],
+  "task_status": "partial; reviewed baseline repair slice verified",
+  "source_head": "daa5e00be6422a75869d0cf096ef51b69f71bfa1",
+  "uncommitted_changes_at_capture": true,
+  "changed_source_sha256": {
+    "frontend/shared/src/safeExternalUrl.ts": "fa9f37f611b355b89ea72230d944ad55e3735d71cab1b3784a8ef8d2d0dd5677",
+    "frontend/member-app/src/utils/detailsMedia.ts": "a92caacb55236bd2838041df58a77e1b4d4fc664c968ee7cbe3683d234f85756",
+    "frontend/member-app/src/components/GameCard.test.tsx": "4e781f0d9406e2083360789e38e3af70ee2b904fe43bf4ec5f14edcf4774ac05",
+    "frontend/admin-app/src/pages/OpsPage.test.tsx": "dedc938b83c1cb75a639198732f93ebc6e708228b02ff340a320590cb3044144",
+    "tests/test_asgi_download_auth.py": "f943350efef34caf966b8f116e3aaff9c4085644e2a63461c8196249d22b97e1"
+  },
+  "prior_evidence": "review-program-baseline-20261108.json",
+  "prior_recorded_source_hashes_match": true,
+  "checks": [
+    {
+      "id": "auth-reviewed",
+      "started_utc": "2026-11-08T22:41:15.825000+00:00",
+      "elapsed_seconds": 7.06,
+      "exit_code": 0,
+      "passed_cases": 11,
+      "raw_log_sha256": "635dbbd64ee53159e5526df065a74511243ea5cb491a9f41fce8a20045927ed6"
+    },
+    {
+      "id": "card-reviewed",
+      "started_utc": "2026-11-08T22:41:15.843689+00:00",
+      "elapsed_seconds": 9.88,
+      "exit_code": 0,
+      "passed_cases": 24,
+      "raw_log_sha256": "ce56aa9ac6184f3a76918759ca04fc418fc84237fbbe9f4d9c77ccd29fc8a907"
+    },
+    {
+      "id": "ops-reviewed",
+      "started_utc": "2026-11-08T22:41:15.729388+00:00",
+      "elapsed_seconds": 11.41,
+      "exit_code": 0,
+      "passed_cases": 21,
+      "raw_log_sha256": "0d4bc7bab5907314fa7bc6bbf0cfcd2909847abb047016c0043f493adb312f65"
+    },
+    {
+      "id": "lint-reviewed",
+      "started_utc": "2026-11-08T22:41:15.860357+00:00",
+      "elapsed_seconds": 24.79,
+      "exit_code": 0,
+      "passed_cases": null,
+      "raw_log_sha256": "22d1a5c66d67c68137632316e214e862797fd1831cd326219b3aeb0d71ce6864"
+    }
+  ],
+  "other_checks": {
+    "touched_frontend_prettier": "passed",
+    "bundle_r1972": "passed: 7 reports, 1545 route rows, lifecycle, cleanup and secret/path scan",
+    "git_diff_check": "passed",
+    "lint_existing_warnings": 36
+  },
+  "core_continuation": {
+    "id": "core-postrepair",
+    "status_at_capture": "running",
+    "selection": "Existing CI non-integration marker/deselection set and coverage threshold; not full pytest",
+    "diagnostics": "Verbose per-test progress, slow-test duration summary and 60-second stack diagnostics",
+    "isolation": "Fresh loopback PostgreSQL test database, synthetic settings, dotenv disabled and process-local external-network restriction"
+  },
+  "limits": [
+    "This checkpoints the reviewed fixture/lint repairs only.",
+    "The original full workspace tests/builds are retained as earlier evidence, not rerun or newly claimed.",
+    "Core/full Python, clean installation, platform/runtime and remaining review acceptance are not complete."
+  ],
+  "review": "Inline author review using Superpowers executing-plans/systematic-debugging/verification-before-completion; no delegation."
+}

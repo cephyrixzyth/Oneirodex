@@ -1,4 +1,4 @@
-"""DB-free auth parity checks for ASGI download endpoints."""
+"""ASGI download auth checks with a disposable SQLite persistent-session store."""
 from __future__ import annotations
 
 import asyncio
@@ -8,29 +8,39 @@ from types import SimpleNamespace
 
 import pytest
 from flask import Flask
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 import oneirodex
 from asgi import LazyASGIApp
 from oneirodex.runtime_native import admin_pilot, db_session
 from oneirodex.runtime_native.auth_resolver import encode_remember_cookie, session_identifier
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.models import PersistentLoginSession
+from oneirodex.utils.persistent_sessions import (
+    issue_login_identity,
+    revoke_login_session,
+    session_id_from_identity,
+)
+
+
+@pytest.fixture(autouse=True)
+def _persistent_login_store(monkeypatch):
+    # Exercise production identity issuance/hash/revocation without requiring
+    # the shared PostgreSQL fixture or bypassing the persistent-session policy.
+    # SQLite here does not establish PostgreSQL FK/locking behavior.
+    engine = create_engine('sqlite://', poolclass=StaticPool)
+    PersistentLoginSession.__table__.create(engine)
+    try:
+        with Session(engine) as store:
+            monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=store))
+            yield store
+    finally:
+        engine.dispose()
 
 
 def _configure_native_auth(monkeypatch, app, user, token=None):
-    class Session:
-        @staticmethod
-        def get(_model, user_id):
-            return user if int(user_id) == user.id else None
-
-        @staticmethod
-        def execute(_statement):
-            return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: token))
-
-        @staticmethod
-        def commit():
-            return None
-
-    monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=Session()))
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: user if int(user_id) == user.id else None,
@@ -55,7 +65,7 @@ def _user(user_id=17, role='user'):
         role=role,
         state=True,
         is_active=True,
-        session_fingerprint=lambda: 'current-fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
 
 
@@ -63,19 +73,25 @@ def test_signed_download_session_uses_framework_free_cookie_and_active_user_chec
     user = _user()
     app = LazyASGIApp()
     _configure_native_auth(monkeypatch, app, user)
+    identity = issue_login_identity(user)
     cookie = dump_session_cookie(
-        {'_user_id': '17:current-fingerprint'}, app._flask_app.config['SECRET_KEY'],
+        {'_user_id': identity}, app._flask_app.config['SECRET_KEY'],
     )
     scope = {'headers': [(b'cookie', f'session={cookie}'.encode('ascii'))]}
 
     assert asyncio.run(app._get_user_from_session(scope)) == 17
 
     stale = dump_session_cookie(
-        {'_user_id': '17:old-fingerprint'}, app._flask_app.config['SECRET_KEY'],
+        {'_user_id': identity.replace(':0123456789abcdef:', ':fedcba9876543210:')},
+        app._flask_app.config['SECRET_KEY'],
     )
     assert asyncio.run(app._get_user_from_session({
         'headers': [(b'cookie', f'session={stale}'.encode('ascii'))],
     })) is None
+
+    user.state = False
+    user.is_active = False
+    assert asyncio.run(app._get_user_from_session(scope)) is None
 
 
 def test_strong_session_protection_rejects_download_cookie_from_changed_client(monkeypatch):
@@ -85,7 +101,7 @@ def test_strong_session_protection_rejects_download_cookie_from_changed_client(m
     app._flask_app.config['SESSION_PROTECTION'] = 'strong'
     cookie = dump_session_cookie(
         {
-            '_user_id': '17:current-fingerprint',
+            '_user_id': issue_login_identity(user),
             '_id': session_identifier('192.0.2.10', 'Oneirodex test agent'),
         },
         app._flask_app.config['SECRET_KEY'],
@@ -108,7 +124,7 @@ def test_strong_session_protection_allows_download_cookie_from_same_client(monke
     app._flask_app.config['SESSION_PROTECTION'] = 'strong'
     cookie = dump_session_cookie(
         {
-            '_user_id': '17:current-fingerprint',
+            '_user_id': issue_login_identity(user),
             '_id': session_identifier('192.0.2.10', 'Oneirodex test agent'),
         },
         app._flask_app.config['SECRET_KEY'],
@@ -129,7 +145,7 @@ def test_download_session_resolver_does_not_accept_remember_cookie(monkeypatch):
     app = LazyASGIApp()
     _configure_native_auth(monkeypatch, app, user)
     token = encode_remember_cookie(
-        '17:current-fingerprint', app._flask_app.config['SECRET_KEY'],
+        issue_login_identity(user), app._flask_app.config['SECRET_KEY'],
     )
 
     assert asyncio.run(app._get_user_from_session({
@@ -173,7 +189,7 @@ def test_bearer_credential_takes_precedence_over_a_valid_session(monkeypatch):
     app = LazyASGIApp()
     _configure_native_auth(monkeypatch, app, user, token)
     cookie = dump_session_cookie(
-        {'_user_id': '17:current-fingerprint'}, app._flask_app.config['SECRET_KEY'],
+        {'_user_id': issue_login_identity(user)}, app._flask_app.config['SECRET_KEY'],
     )
     scope = {'headers': [
         (b'authorization', f'Bearer {raw}'.encode('ascii')),
@@ -181,6 +197,36 @@ def test_bearer_credential_takes_precedence_over_a_valid_session(monkeypatch):
     ]}
 
     assert asyncio.run(app._get_user_id(scope)) is None
+
+
+def test_download_session_rejects_retired_unrevocable_cookie(monkeypatch):
+    user = _user()
+    app = LazyASGIApp()
+    _configure_native_auth(monkeypatch, app, user)
+    cookie = dump_session_cookie(
+        {'_user_id': '17:0123456789abcdef'}, app._flask_app.config['SECRET_KEY'],
+    )
+
+    assert asyncio.run(app._get_user_from_session({
+        'headers': [(b'cookie', f'session={cookie}'.encode('ascii'))],
+    })) is None
+
+
+def test_revoked_persistent_download_session_is_rejected(monkeypatch):
+    user = _user()
+    app = LazyASGIApp()
+    _configure_native_auth(monkeypatch, app, user)
+    identity = issue_login_identity(user)
+    cookie = dump_session_cookie(
+        {'_user_id': identity}, app._flask_app.config['SECRET_KEY'],
+    )
+    scope = {'headers': [(b'cookie', f'session={cookie}'.encode('ascii'))]}
+    assert asyncio.run(app._get_user_from_session(scope)) == 17
+
+    assert revoke_login_session(session_id_from_identity(identity), user_id=17)
+    oneirodex.db.session.commit()
+
+    assert asyncio.run(app._get_user_from_session(scope)) is None
 
 
 @pytest.mark.parametrize('path', ['/download_zip/nope', '/download_zip/-1'])

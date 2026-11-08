@@ -116,6 +116,7 @@ export function trailerEmbedUrls(game: any) {
 function safeYouTubeUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const raw = value.trim()
+  // eslint-disable-next-line no-control-regex -- Reject control bytes before URL parsing can normalize them.
   if (!raw || raw.length > 2048 || /[\u0000-\u001f\u007f]/.test(raw)) return null
   try {
     const url = new URL(raw)
@@ -145,7 +146,9 @@ export function youtubeDemoLink(game: any) {
 
   const urls = Array.isArray(game.urls) ? game.urls : []
   const yt = urls.find((row: any) => {
-    const typeMarksYoutube = String(row?.type || '').toLowerCase().includes('youtube')
+    const typeMarksYoutube = String(row?.type || '')
+      .toLowerCase()
+      .includes('youtube')
     const url = safeYouTubeUrl(row?.url)
     return Boolean(url && (typeMarksYoutube || /youtu(\.be|be\.com)/i.test(url)))
   })
