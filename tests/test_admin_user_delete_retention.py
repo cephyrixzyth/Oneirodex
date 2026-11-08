@@ -50,7 +50,8 @@ def test_admin_deletion_removes_user_and_retains_anonymized_audit_event(client, 
         event_type='audit',
         event_text=(
             f'{victim_name} ({victim_email}) changed account settings at '
-            r'C:\Users\private\report.txt and /srv/private/library/game.nes'
+            r'C:\Users\private\report.txt and /srv/private/library/game.nes '
+            r'and \\fileserver\share\private.log'
         ),
         event_level='information',
         audit_user=victim_id,
@@ -80,7 +81,8 @@ def test_admin_deletion_removes_user_and_retains_anonymized_audit_event(client, 
     assert victim_email not in retained.event_text
     assert r'C:\Users\private\report.txt' not in retained.event_text
     assert '/srv/private/library/game.nes' not in retained.event_text
-    assert retained.event_text.count('[redacted path]') == 2
+    assert r'\\fileserver\share\private.log' not in retained.event_text
+    assert retained.event_text.count('[redacted path]') == 3
 
 
 def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
