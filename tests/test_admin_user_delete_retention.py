@@ -58,12 +58,18 @@ def test_admin_deletion_removes_user_and_retains_anonymized_audit_event(client, 
         event_level='information',
         audit_user=victim_id,
     )
+    unlinked_audit = SystemEvents(
+        event_type='security',
+        event_text=f'Password reset requested for user: {victim_email.swapcase()}',
+        event_level='information',
+        audit_user=None,
+    )
     newsletter = Newsletter(
         subject='Account-owned announcement',
         content='Test content authored by account being deleted.',
         sender_id=victim_id,
     )
-    db_session.add_all([audit, newsletter])
+    db_session.add_all([audit, unlinked_audit, newsletter])
     db_session.commit()
     newsletter_id = newsletter.id
 
@@ -85,6 +91,10 @@ def test_admin_deletion_removes_user_and_retains_anonymized_audit_event(client, 
     assert '/srv/private/library/game.nes' not in retained.event_text
     assert r'\\fileserver\share\private.log' not in retained.event_text
     assert retained.event_text.count('[redacted path]') == 3
+    retained_unlinked = db_session.get(SystemEvents, unlinked_audit.id)
+    assert retained_unlinked is not None
+    assert victim_email.casefold() not in retained_unlinked.event_text.casefold()
+    assert '[deleted account]' in retained_unlinked.event_text
 
 
 def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(

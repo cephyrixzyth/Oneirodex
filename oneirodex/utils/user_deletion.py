@@ -353,7 +353,7 @@ def anonymize_user_audit_events(session, user) -> None:
     identifiers = [value for value in (user.name, user.email, user.user_id) if value]
     predicates = [SystemEvents.audit_user == user.id]
     predicates.extend(
-        SystemEvents.event_text.contains(value, autoescape=True)
+        SystemEvents.event_text.icontains(value, autoescape=True)
         for value in identifiers
     )
     events = session.execute(
