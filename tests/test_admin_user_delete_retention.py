@@ -25,9 +25,11 @@ from oneirodex.models import (
     PersistentLoginSession,
     StoreAccount,
     SystemEvents,
+    UnmatchedFolder,
     User,
     UserDeletionFileJob,
     UserAttractModeSettings,
+    UserNotification,
     user_favorites,
     user_game_status,
 )
@@ -241,6 +243,24 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
         slug=f'del-{suffix}', label='Shared household emoji', file_name=emoji_name,
         uploaded_by_user_id=victim_id,
     )
+    unmatched_feedback = UnmatchedFolder(
+        folder_path=f'/library/{suffix}/duplicate',
+        bad_match_reason='other',
+        bad_match_note=(
+            f'Please ask {victim_name} at {victim_email}; '
+            f'local note: /home/{victim_name}/private.txt'
+        ),
+        bad_match_by_user_id=victim_id,
+    )
+    actor_notification = UserNotification(
+        user_id=admin_id,
+        kind='mention',
+        title=f'{victim_name} mentioned you',
+        body=f'{victim_name}: shared household message preview',
+        link=f'/members/{victim_id}',
+        actor_user_id=victim_id,
+        payload={'actor_user_id': victim_id, 'display_name': victim_name},
+    )
     message = ChatMessage(
         channel_id=channel.id,
         user_id=victim_id,
@@ -289,6 +309,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     db_session.add_all([
         request, victim_invite, used_invite, attract_settings,
         duplicate_log, unlinked_duplicate_log, prior_audit, attachment, custom_emoji, owned_save,
+        unmatched_feedback, actor_notification,
         victim_session, victim_token, victim_store,
         admin_session, admin_token, admin_store,
         victim_shared_save, shared_save,
@@ -309,6 +330,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     db_session.commit()
     request_id, game_uuid = request.id, game.uuid
     attachment_id, message_id, owned_save_id = attachment.id, message.id, owned_save.id
+    unmatched_feedback_id, actor_notification_id = unmatched_feedback.id, actor_notification.id
     custom_emoji_id = custom_emoji.id
     victim_invite_id, used_invite_id = victim_invite.id, used_invite.id
     attract_id, duplicate_id, unlinked_duplicate_id, prior_audit_id = (
@@ -359,6 +381,20 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert retained_message.user_id is None
     assert retained_message.body == f'Household message from deleted member {suffix}'
     assert retained_message.to_dict()['user'] == 'member'
+    retained_feedback = db_session.get(UnmatchedFolder, unmatched_feedback_id)
+    assert retained_feedback is not None
+    assert retained_feedback.bad_match_by_user_id is None
+    assert victim_name.casefold() not in retained_feedback.bad_match_note.casefold()
+    assert victim_email.casefold() not in retained_feedback.bad_match_note.casefold()
+    assert '/home/' not in retained_feedback.bad_match_note
+    retained_notification = db_session.get(UserNotification, actor_notification_id)
+    assert retained_notification is not None
+    assert retained_notification.actor_user_id is None
+    assert victim_name.casefold() not in retained_notification.title.casefold()
+    assert victim_name.casefold() not in retained_notification.body.casefold()
+    assert retained_notification.link is None
+    assert retained_notification.payload['actor_user_id'] is None
+    assert victim_name.casefold() not in retained_notification.payload['display_name'].casefold()
     assert db_session.get(EmulatorSave, owned_save_id) is None
     retained_duplicate = db_session.get(DuplicateFixLog, duplicate_id)
     assert retained_duplicate is not None and retained_duplicate.actor_user_id is None

@@ -139,6 +139,11 @@ retain dispositions. PostgreSQL route/service tests cover a blocking download re
 creator and used-by references, personal attract settings, favorites/status rows, duplicate-fix
 actor history, authored newsletter removal, and audit retention with direct identifiers removed.
 Absolute Windows, UNC, and POSIX paths in retained events for the deleted account are redacted.
+Retained unmatched-folder feedback and notifications delivered to other members also have the
+departing actor's identifiers and absolute paths redacted; household chat message text remains
+visible with its author anonymized, as selected by the owner. Public and system game collections
+and their items remain available after their owner is deleted, with the owner reference cleared;
+private non-system collections and items are deleted with that account.
 This is an ORM-source inventory, not a comparison against every deployed database schema.
 
 The selected policy is to purge user-specific emulator save-state, uploaded avatar, and chat
@@ -149,7 +154,8 @@ startup and every minute. Offline backups are outside account deletion and follo
 operator retention policy with no duration set here. A full review of retained free text remains
 open. Shared library/game files, shared chat spaces, shared emojis, and reference
 sets must not be removed merely because an account is deleted; uploader/author references are
-cleared where supported. Full server restart/redeployment and restore reapplication remain open work.
+cleared where supported. A broader review of retained authored content, full server
+restart/redeployment, deployed-schema comparison, and restore reapplication remain open work.
 The verified offline backup flow currently covers standalone installs only; see
 [Backup and restore](../runbooks/backup-restore.md) for its inclusion and exclusion boundary.
 Deleting a game removes its

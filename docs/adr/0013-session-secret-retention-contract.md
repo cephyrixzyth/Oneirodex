@@ -89,6 +89,9 @@ qualification remain open.
   the departing user authored, used or referenced them. Each relation and
   managed file class needs an explicit disposition before the deletion job is
   considered complete.
+- Preserve public or system game collections when their creator leaves, clear
+  the creator reference, and retain their items. Delete private non-system
+  collections and their items with the departing account.
 - Keep messages the departing user sent in household chat channels, since other
   members share that history. Clear the message's author reference so it renders
   with the existing anonymous `member` label; delete the departing user's
@@ -96,6 +99,12 @@ qualification remain open.
 - For user-owned avatar, emulator-save and generation, and uploaded chat
   attachment files, purge after the database deletion commits. Failed cleanup
   must remain retryable and visible; do not add a recovery quarantine.
+- Retain shared unmatched-folder feedback and notifications delivered to other
+  members, clear the departing actor reference, redact the departing account's
+  direct identifiers and absolute paths from free-text feedback/notification
+  fields, and remove links that point to the deleted member profile. The
+  retained household chat message body remains governed by the explicit rule
+  above.
 - Before local account deletion, attempt remote revocation only when the exact
   stored credential type has a provider-documented revocation operation. A
   missing endpoint, timeout, or provider error must not block deletion of local

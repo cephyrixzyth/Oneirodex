@@ -17,7 +17,7 @@ EXPECTED_USER_FKS = {
     'custom_emoji.uploaded_by_user_id': 'SET NULL',
     'detail_layout_presets.user_id': 'CASCADE',
     'duplicate_fix_logs.actor_user_id': None,
-    'game_collections.owner_user_id': 'CASCADE',
+    'game_collections.owner_user_id': 'SET NULL',
     'invite_tokens.creator_user_id': None,
     'invite_tokens.used_by': None,
     'newsletters.sender_id': None,
@@ -112,7 +112,7 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
     manifest_path = (
         Path(__file__).resolve().parents[1]
         / 'docs' / 'dev' / 'parity-evidence'
-        / 'account-deletion-relation-manifest-r1989.json'
+        / 'account-deletion-relation-manifest-r1994.json'
     )
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     relations = {item['foreign_key']: item for item in manifest['relations']}
@@ -124,7 +124,9 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
     } == EXPECTED_USER_FKS
     assert all(item['disposition'] and item['policy'] for item in relations.values())
     assert all(
-        item['synthetic_fixture'] in {'covered', 'inventory_only'}
+        item['synthetic_fixture'] in {
+            'covered', 'inventory_only', 'public_retention_and_private_deletion_covered',
+        }
         for item in relations.values()
     )
     assert _database_user_fk_actions(db_session.connection()) == EXPECTED_USER_FKS
@@ -179,7 +181,7 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
     manifest_path = (
         Path(__file__).resolve().parents[1]
         / 'docs' / 'dev' / 'parity-evidence'
-        / 'account-deletion-relation-manifest-r1989.json'
+        / 'account-deletion-relation-manifest-r1994.json'
     )
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     suffix = uuid4().hex[:10]
@@ -202,7 +204,9 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         user.set_password('synthetic account-deletion fixture password')
         return user
 
-    departing = make_user('manifest_departing', 'user')
+    # Exercise the same ownership cleanup for a child account; relation
+    # disposition must not depend on role.
+    departing = make_user('manifest_departing', 'child')
     survivor = make_user('manifest_survivor', 'admin')
     db_session.add_all([departing, survivor])
     db_session.flush()
@@ -283,6 +287,10 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
                 )
             elif target in parent_refs:
                 values[column.name] = parent_refs[target]
+            elif table_name == 'game_collections' and column.name == 'is_public':
+                values[column.name] = True
+            elif table_name == 'game_collections' and column.name == 'is_system':
+                values[column.name] = False
             elif table_name == 'emulator_saves' and column.name == 'storage_path':
                 save_path = save_root / f'fixture-save-{suffix}.state'
                 save_path.write_bytes(b'synthetic save')
@@ -318,8 +326,46 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         ))
 
     db_session.flush()
+    collection_relation = next(
+        item for item in populated if item[0].name == 'game_collections'
+    )
+    collection_table, _column_name, _disposition, collection_pk, collection_values = collection_relation
+    collection_predicate = and_(
+        *(column == value for column, value in zip(collection_pk, collection_values))
+    )
+    public_collection_id = db_session.execute(
+        select(collection_table.c.id).where(collection_predicate)
+    ).scalar_one()
+    from oneirodex.models import GameCollectionItem
+
+    private_collection = db_session.execute(
+        insert(collection_table).values(
+            uuid=str(uuid4()),
+            name=f'Private deletion fixture {suffix}',
+            description='private text owned by departing user',
+            owner_user_id=departing.id,
+            is_public=False,
+            is_system=False,
+            created_at=datetime.now(timezone.utc),
+        ).returning(collection_table.c.id)
+    ).scalar_one()
+    db_session.add_all([
+        GameCollectionItem(collection_id=public_collection_id, game_uuid=game.uuid, position=0),
+        GameCollectionItem(collection_id=private_collection, game_uuid=game.uuid, position=0),
+    ])
+    db_session.flush()
+    private_collection_item = db_session.execute(
+        select(GameCollectionItem.id).where(
+            GameCollectionItem.collection_id == private_collection,
+        )
+    ).scalar_one()
     assert len(populated) == len(EXPECTED_USER_FKS)
-    assert all(item['synthetic_fixture'] == 'covered' for item in relations)
+    assert all(
+        item['synthetic_fixture'] in {
+            'covered', 'public_retention_and_private_deletion_covered',
+        }
+        for item in relations
+    )
     assert all(
         item['synthetic_fixture'] == 'covered'
         for item in manifest['managed_files']
@@ -333,7 +379,10 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
             column == value for column, value in zip(primary_key, primary_key_values)
         ))
         row = db_session.execute(select(table).where(predicate)).mappings().first()
-        if disposition == 'retain_shared_row_clear_user_reference':
+        if disposition in {
+            'retain_shared_row_clear_user_reference',
+            'retain_public_collection_delete_private',
+        }:
             assert row is not None, f'{table.name}.{target_column_name} shared row was deleted'
             assert row[target_column_name] is None
         elif disposition in {
@@ -345,3 +394,15 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
             assert row is None, f'{table.name}.{target_column_name} row survived deletion'
 
     assert db_session.get(User, survivor.id) is not None
+    assert db_session.execute(
+        select(collection_table.c.owner_user_id).where(collection_predicate)
+    ).scalar_one_or_none() is None
+    assert db_session.execute(
+        select(collection_table.c.id).where(collection_table.c.id == private_collection)
+    ).first() is None
+    assert db_session.execute(
+        select(GameCollectionItem.id).where(
+            GameCollectionItem.collection_id == public_collection_id,
+        )
+    ).first() is not None
+    assert db_session.get(GameCollectionItem, private_collection_item) is None

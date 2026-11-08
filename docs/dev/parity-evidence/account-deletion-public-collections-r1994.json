@@ -1,0 +1,20 @@
+{
+  "review_id": "R1994",
+  "title": "Preserve shared public collections during account deletion",
+  "classification": "Confirmed policy mismatch: user-owned public collections were deleted by the owner foreign-key CASCADE even though other members could read them.",
+  "change": {
+    "behavior": "Account deletion deletes private non-system collections and cascaded items; public or system collections and their items remain with owner_user_id cleared.",
+    "schema": "The owner FK now uses ON DELETE SET NULL. Alembic revision e1f2a3b4c5d6 upgrades existing schemas; no collection row is migrated or removed by the schema migration.",
+    "manifest": "R1994 replaces the earlier R1989 disposition for game_collections.owner_user_id with a conditional public-retain/private-delete policy."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py tests/test_admin_user_mutation_concurrency.py -q",
+    "result": "passed: 19 tests in 112.51 seconds on Python 3.14.10 and PostgreSQL 17.6 against a fresh disposable schema migrated through e1f2a3b4c5d6; the child-role departing account fixture ran and the database was dropped after the run.",
+    "assertions": "The populated relation fixture seeds a public collection/item and a private collection/item for the departing child account; it asserts the public row/item survive ownerless and the private row/item are deleted.",
+    "schema": "Current ORM and Alembic head e1f2a3b4c5d6."
+  },
+  "limits": [
+    "The behavior is verified against the current disposable PostgreSQL schema, not a deployed operator schema.",
+    "Existing private collection content is deleted after migration because account deletion classifies it as private user data."
+  ]
+}

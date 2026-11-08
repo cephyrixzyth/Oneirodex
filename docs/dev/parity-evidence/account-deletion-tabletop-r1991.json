@@ -7,14 +7,14 @@
   "scenarios": [
     {
       "scenario": "child or adult member deletion",
-      "classification": "source-reviewed; role-specific runtime case not separately exercised",
-      "outcome": "The shared deletion service removes account-linked private rows and credentials, retains shared rows under their declared disposition, and queues owned files after the database transaction. The deletion service has no child-specific data-retention branch. The R1989 fixture exercises the common service using a regular user and a surviving admin.",
+      "classification": "shared service behavior exercised with a child-role account",
+      "outcome": "The shared deletion service removes account-linked private rows and credentials, retains shared rows under their declared disposition, and queues owned files after the database transaction. The deletion service has no child-specific data-retention branch. The R1994 populated relation fixture exercises the common service with a child-role account and a surviving admin.",
       "evidence": [
         "oneirodex/utils/user_deletion.py:delete_user_account",
         "tests/test_user_deletion_inventory.py:test_populated_manifest_relations_follow_owner_dispositions",
-        "docs/dev/parity-evidence/account-deletion-relation-manifest-r1989.json"
+        "docs/dev/parity-evidence/account-deletion-relation-manifest-r1994.json"
       ],
-      "limits": "A dedicated child-role account-deletion test was not run. Existing child save-access policy is independent of this deletion disposition."
+      "limits": "Child-role deletion is now exercised in the R1994 populated relation fixture through the shared deletion service. A full authenticated admin-route child deletion replay is not separately covered. Existing child save-access policy is independent of this deletion disposition."
     },
     {
       "scenario": "admin deletion",
@@ -71,7 +71,7 @@
   ],
   "verification": {
     "source_review": "Completed for all five scenarios listed above.",
-    "focused_tests": "Existing R1987-R1990 PostgreSQL regression results support the referenced outcomes; no code changed for this tabletop.",
+    "focused_tests": "R1994 fresh-schema PostgreSQL deletion/inventory/admin-race suite passed 19/19; the populated relation test deletes a child-role account. An authenticated admin-route child deletion replay remains open.",
     "bundle_validator": "The R1972 seven-report validator was rerun and passed; R1991 is a separate follow-up artifact outside that immutable bundle.",
     "remaining": [
       "Reassess provider revocation when a supported integration begins storing a credential with a provider-documented revocation operation.",

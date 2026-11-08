@@ -268,6 +268,7 @@ def delete_user_account(session, user) -> int:
     """Delete DB-owned data atomically, then purge safe owned files after commit."""
     candidates = _user_file_candidates(session, user)
     anonymize_user_audit_events(session, user)
+    anonymize_user_retained_content(session, user)
     delete_user_owned_rows(session, user)
     session.delete(user)
     session.flush()
@@ -376,6 +377,58 @@ def anonymize_user_audit_events(session, user) -> None:
             event.audit_user = None
 
 
+def _redact_notification_payload(value, identifiers: list[str], user_id: int, key=None):
+    if isinstance(value, dict):
+        return {
+            name: _redact_notification_payload(item, identifiers, user_id, name)
+            for name, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _redact_notification_payload(item, identifiers, user_id, key)
+            for item in value
+        ]
+    if isinstance(value, str):
+        return _redact_account_text(value, identifiers)
+    if key and str(key).casefold() in {'user_id', 'actor_user_id', 'member_id'}:
+        if value == user_id:
+            return None
+    return value
+
+
+def anonymize_user_retained_content(session, user) -> None:
+    """Keep shared feedback/notifications while removing the departing actor's IDs."""
+    from oneirodex.models import UnmatchedFolder, UserNotification
+
+    identifiers = [value for value in (user.name, user.email, user.user_id) if value]
+    feedback = session.execute(
+        select(UnmatchedFolder).where(
+            UnmatchedFolder.bad_match_by_user_id == user.id,
+        ).with_for_update()
+    ).scalars()
+    for row in feedback:
+        row.bad_match_note = _redact_account_text(row.bad_match_note, identifiers)
+
+    notifications = session.execute(
+        select(UserNotification).where(
+            UserNotification.actor_user_id == user.id,
+            UserNotification.user_id != user.id,
+        ).with_for_update()
+    ).scalars()
+    member_profile_path = re.compile(
+        rf'(^|/)members/{re.escape(str(user.id))}(?:$|[/?#])',
+        re.IGNORECASE,
+    )
+    for row in notifications:
+        row.title = _redact_account_text(row.title, identifiers) or 'Notice'
+        row.body = _redact_account_text(row.body, identifiers)
+        if row.link and member_profile_path.search(row.link):
+            row.link = None
+        row.payload = _redact_notification_payload(
+            row.payload or {}, identifiers, user.id,
+        )
+
+
 def _redact_account_text(text: str | None, identifiers: list[str]) -> str | None:
     if not text:
         return text
@@ -389,6 +442,7 @@ def delete_user_owned_rows(session, user) -> None:
     from oneirodex.models import (
         DownloadRequest,
         DuplicateFixLog,
+        GameCollection,
         InviteToken,
         Newsletter,
         UserAttractModeSettings,
@@ -397,6 +451,18 @@ def delete_user_owned_rows(session, user) -> None:
     )
 
     # These tables have no ORM ownership cascade or database ON DELETE action.
+    session.execute(
+        delete(GameCollection).where(
+            GameCollection.owner_user_id == user.id,
+            GameCollection.is_public.is_(False),
+            GameCollection.is_system.is_(False),
+        )
+    )
+    session.execute(
+        update(GameCollection).where(
+            GameCollection.owner_user_id == user.id,
+        ).values(owner_user_id=None)
+    )
     session.execute(delete(user_favorites).where(user_favorites.c.user_id == user.id))
     session.execute(delete(user_game_status).where(user_game_status.c.user_id == user.id))
     session.execute(delete(DownloadRequest).where(DownloadRequest.user_id == user.id))
