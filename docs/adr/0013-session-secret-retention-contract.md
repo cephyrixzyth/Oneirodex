@@ -23,8 +23,9 @@ focused tests and an independent source review passed. Synthetic database
 conversion and recovery from a separate operator-backup copy are qualified;
 live operator database conversion and a protected-backup restore drill remain
 pending. Save encryption now has a separate versioned keyring candidate and
-legacy read path; database-backed rotation and restore qualification remain
-pending. Account deletion now has
+legacy read path, with a synthetic PostgreSQL current/history rotation test;
+protected-backup restore and operator migration qualification remain pending.
+Account deletion now has
 a PostgreSQL-verified relation inventory, a transactional managed-file job
 queue, and a retry worker; deployment-schema, restart, and restore qualification
 remain pending.
@@ -119,8 +120,8 @@ remain pending.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
    A versioned save keyring and standalone-move key-ID contract are implemented
-   in the candidate; database-backed rotation and isolated restore checks are
-   still required.
+   in the candidate; a synthetic PostgreSQL rotation test passed, while a
+   protected-backup restore and operator migration are still required.
 
 Each step requires focused database-backed verification and operator-facing
 documentation before it can be marked complete.
