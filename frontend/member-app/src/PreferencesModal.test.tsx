@@ -81,7 +81,10 @@ it('shows and saves an uploaded operator font from the server-provided choices',
   const uploadedFont = { value: 'paritycollision', label: 'ParityCollision (operator)' }
   const withUploadedFont = {
     ...preferenceResponse,
-    choices: { ...preferenceResponse.choices, fonts: [...preferenceResponse.choices.fonts, uploadedFont] },
+    choices: {
+      ...preferenceResponse.choices,
+      fonts: [...preferenceResponse.choices.fonts, uploadedFont],
+    },
   }
   const fetchMock = vi
     .fn()

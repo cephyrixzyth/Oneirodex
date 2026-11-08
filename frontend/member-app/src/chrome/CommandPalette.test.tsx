@@ -184,7 +184,9 @@ test('does not show legacy titles when suggestions fail and keeps title search u
   renderPalette({}, { open: true }, ['/discover'])
 
   const dialog = await screen.findByRole('dialog')
-  expect(await within(dialog).findByRole('status')).toHaveTextContent(/suggestions are unavailable/i)
+  expect(await within(dialog).findByRole('status')).toHaveTextContent(
+    /suggestions are unavailable/i,
+  )
   expect(within(dialog).queryByText('Private prior account title')).toBeNull()
   expect(window.localStorage.getItem(RECENT_TITLES_KEY)).toBeNull()
 

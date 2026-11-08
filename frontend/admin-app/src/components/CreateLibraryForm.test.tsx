@@ -74,7 +74,9 @@ test('crops library artwork to PNG before creating and queueing the library', as
     const url = String(input)
     requests.push([url, init])
     if (url.endsWith('/api/admin/library_platforms'))
-      return response({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }] }) as any
+      return response({
+        platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }],
+      }) as any
     return response({ ok: true, library_uuid: 'new-library-1' }) as any
   }) as unknown as typeof fetch
 
@@ -96,7 +98,11 @@ test('crops library artwork to PNG before creating and queueing the library', as
   fireEvent.click(screen.getByRole('button', { name: 'Create library and start scan' }))
 
   await waitFor(() =>
-    expect(requests.some(([url, init]) => url.endsWith('/api/admin/libraries') && init?.method === 'POST')).toBe(true),
+    expect(
+      requests.some(
+        ([url, init]) => url.endsWith('/api/admin/libraries') && init?.method === 'POST',
+      ),
+    ).toBe(true),
   )
   const createRequest = requests.find(
     ([url, init]) => url.endsWith('/api/admin/libraries') && init?.method === 'POST',
@@ -121,7 +127,9 @@ test('keeps the create form visible when the first scan cannot be queued', async
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.endsWith('/api/admin/library_platforms'))
-      return response({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }] }) as any
+      return response({
+        platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }],
+      }) as any
     return response({ ok: true, library_uuid: 'new-library-2' }) as any
   }) as unknown as typeof fetch
 
@@ -134,7 +142,9 @@ test('keeps the create form visible when the first scan cannot be queued', async
   })
   fireEvent.click(screen.getByRole('button', { name: 'Create library and start scan' }))
 
-  expect(await screen.findByText(/Library created, but the first scan could not be queued/)).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Library created, but the first scan could not be queued/),
+  ).toBeInTheDocument()
   expect(onComplete).not.toHaveBeenCalled()
 })
 
@@ -142,7 +152,9 @@ test('creates a library without a folder and leaves first scan for later', async
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url.endsWith('/api/admin/library_platforms'))
-      return response({ platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }] }) as any
+      return response({
+        platforms: [{ key: 'NES', label: 'Nintendo Entertainment System' }],
+      }) as any
     return response({ ok: true, library_uuid: 'new-library-without-folder' }) as any
   }) as unknown as typeof fetch
 
@@ -153,8 +165,9 @@ test('creates a library without a folder and leaves first scan for later', async
   expect(screen.getByRole('button', { name: 'Create library' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Create library' }))
 
-  expect(await screen.findByText('Library created. Add a folder path when you are ready to scan.'))
-    .toBeInTheDocument()
+  expect(
+    await screen.findByText('Library created. Add a folder path when you are ready to scan.'),
+  ).toBeInTheDocument()
   expect(queueLeafScan).not.toHaveBeenCalled()
   expect(onComplete).toHaveBeenCalledOnce()
 })

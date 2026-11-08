@@ -40,8 +40,8 @@ test('renders a paginated scan table, carries link feedback, and requests the ne
       count: 1,
     }
   })
-  const request = vi.fn(async () =>
-    ({ ok: true, json: async () => ({ message: 'Folder ignored.' }) }) as Response,
+  const request = vi.fn(
+    async () => ({ ok: true, json: async () => ({ message: 'Folder ignored.' }) }) as Response,
   )
   vi.stubGlobal('fetch', request)
 
@@ -223,9 +223,7 @@ test('disk deletion requires confirmation before the destructive request', async
 
   await screen.findByText('delete-me')
   const row = screen.getByRole('row', { name: /delete-me/ })
-  expect(within(row).getByRole('button', { name: 'Save' })).toHaveClass(
-    'od-scan-unmatched__save',
-  )
+  expect(within(row).getByRole('button', { name: 'Save' })).toHaveClass('od-scan-unmatched__save')
   const actions = within(row).getByText('Actions')
   expect(actions).toHaveClass('od-scan-unmatched__row-menu-summary')
   const menu = actions.closest('details')

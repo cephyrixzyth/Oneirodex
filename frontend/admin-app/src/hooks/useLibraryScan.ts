@@ -51,44 +51,47 @@ export function useLibraryScan({ persistentErrors = false }: { persistentErrors?
   const pendingTarget = useRef<ScanTarget | null>(null)
   const clearScanError = useCallback(() => setScanError(''), [])
 
-  const postScan = useCallback(async (target: ScanTarget, policy: ScanQueuePolicy | null) => {
-    const body = {
-      library_uuid: target.libraryUuid,
-      ...(target.folder ? { folder: target.folder } : {}),
-      ...(target.settings || {}),
-      // null = operator has not chosen yet (idle path) → default queue fields.
-      ...buildScanQueueRequestFields(policy == null ? undefined : policy),
-    }
-    setScanError('')
-    setBusyKey(target.key || target.libraryUuid || 'scan')
-    try {
-      const { ok, status, data } = await postJsonResult(SCAN_URL, body)
-      if (isAlreadyRunningReject(status, data) && policy == null) {
-        pendingTarget.current = target
-        setConflictOpen(true)
-        return { deferred: true }
+  const postScan = useCallback(
+    async (target: ScanTarget, policy: ScanQueuePolicy | null) => {
+      const body = {
+        library_uuid: target.libraryUuid,
+        ...(target.folder ? { folder: target.folder } : {}),
+        ...(target.settings || {}),
+        // null = operator has not chosen yet (idle path) → default queue fields.
+        ...buildScanQueueRequestFields(policy == null ? undefined : policy),
       }
-      const toast = toastForScanStartResponse(data, ok)
-      const label = target.label ? `${target.label}: ` : ''
-      if (toast.variant === 'error' && persistentErrors) {
-        setScanError(`${label}${toast.text}`)
-      } else {
-        showToast(`${label}${toast.text}`, toastToneForScanVariant(toast.variant))
+      setScanError('')
+      setBusyKey(target.key || target.libraryUuid || 'scan')
+      try {
+        const { ok, status, data } = await postJsonResult(SCAN_URL, body)
+        if (isAlreadyRunningReject(status, data) && policy == null) {
+          pendingTarget.current = target
+          setConflictOpen(true)
+          return { deferred: true }
+        }
+        const toast = toastForScanStartResponse(data, ok)
+        const label = target.label ? `${target.label}: ` : ''
+        if (toast.variant === 'error' && persistentErrors) {
+          setScanError(`${label}${toast.text}`)
+        } else {
+          showToast(`${label}${toast.text}`, toastToneForScanVariant(toast.variant))
+        }
+        setConflictOpen(false)
+        pendingTarget.current = null
+        return { ok, status, data, deferred: false }
+      } catch (err) {
+        const message = errorText(err) || 'Scan failed to start.'
+        if (persistentErrors) setScanError(message)
+        else showToast(message, 'error')
+        setConflictOpen(false)
+        pendingTarget.current = null
+        return { ok: false, deferred: false, error: err }
+      } finally {
+        setBusyKey('')
       }
-      setConflictOpen(false)
-      pendingTarget.current = null
-      return { ok, status, data, deferred: false }
-    } catch (err) {
-      const message = errorText(err) || 'Scan failed to start.'
-      if (persistentErrors) setScanError(message)
-      else showToast(message, 'error')
-      setConflictOpen(false)
-      pendingTarget.current = null
-      return { ok: false, deferred: false, error: err }
-    } finally {
-      setBusyKey('')
-    }
-  }, [persistentErrors])
+    },
+    [persistentErrors],
+  )
 
   const startScan = useCallback(
     async (target: ScanTarget | null | undefined) => {

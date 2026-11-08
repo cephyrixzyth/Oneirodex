@@ -92,7 +92,9 @@ const WishlistPage = lazy(() =>
   import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })),
 )
 const TokensPage = lazy(() => import('./pages/TokensPage').then((m) => ({ default: m.TokensPage })))
-const InvitesPage = lazy(() => import('./pages/InvitesPage').then((m) => ({ default: m.InvitesPage })))
+const InvitesPage = lazy(() =>
+  import('./pages/InvitesPage').then((m) => ({ default: m.InvitesPage })),
+)
 const LicensedCatalogPage = lazy(() =>
   import('./pages/LicensedCatalogPage').then((m) => ({ default: m.LicensedCatalogPage })),
 )

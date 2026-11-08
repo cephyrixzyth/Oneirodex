@@ -330,11 +330,8 @@ export function resolveNavSection(pathname: string): string | null {
 
   // Keep retired standalone scan pages and compatibility aliases in the
   // Libraries context while bookmarks settle on the scan-management routes.
-  if (
-    path === '/admin/scan-jobs' ||
-    path === '/admin/scan-controls' ||
-    path === '/admin/unmatched'
-  ) return 'libraries'
+  if (path === '/admin/scan-jobs' || path === '/admin/scan-controls' || path === '/admin/unmatched')
+    return 'libraries'
 
   const owns = (href: string | undefined) => {
     // Fragments and query strings are the same page for ownership purposes.

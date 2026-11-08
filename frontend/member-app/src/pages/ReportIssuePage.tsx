@@ -110,8 +110,12 @@ export function ReportIssuePage() {
               </a>
             </>
           ) : null}
-          {result.github_sync === 'local_only' ? ' · Kept on this server; GitHub sync was not requested' : null}
-          {result.github_sync === 'skipped' ? ' · GitHub sync unavailable; ticket stayed on this server' : null}
+          {result.github_sync === 'local_only'
+            ? ' · Kept on this server; GitHub sync was not requested'
+            : null}
+          {result.github_sync === 'skipped'
+            ? ' · GitHub sync unavailable; ticket stayed on this server'
+            : null}
           {result.github_sync === 'error' ? ' · GitHub sync failed (ticket kept)' : null}
           {' · '}
           <Link to="/notifications">Notifications</Link>

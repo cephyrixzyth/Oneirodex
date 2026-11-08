@@ -158,22 +158,27 @@ test('child account details preserve download actions as disabled while the serv
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('aria-describedby')
   })
-  expect(screen.getByRole('button', { name: /^Download patch$/i }))
-    .toBeDisabled()
-  expect(screen.getByRole('button', { name: /^Download patch$/i }))
-    .toHaveAttribute('aria-describedby')
-  screen
-    .getAllByRole('button', { name: /^Apply with companion$/i })
-    .forEach((button) => {
-      expect(button).toBeDisabled()
-      expect(button).toHaveAttribute('aria-describedby')
-    })
-  expect(screen.getByRole('button', { name: /^Install$/i })).toHaveAttribute('aria-disabled', 'true')
-  expect(screen.getByRole('button', { name: /^Uninstall$/i })).toHaveAttribute('aria-disabled', 'true')
-  expect(screen.getByRole('link', { name: /^Update$/i }))
-    .toHaveAttribute('aria-disabled', 'true')
-  expect(screen.getByRole('link', { name: /^Update$/i }))
-    .toHaveAttribute('title', 'Updates are unavailable for child accounts')
+  expect(screen.getByRole('button', { name: /^Download patch$/i })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Download patch$/i })).toHaveAttribute(
+    'aria-describedby',
+  )
+  screen.getAllByRole('button', { name: /^Apply with companion$/i }).forEach((button) => {
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-describedby')
+  })
+  expect(screen.getByRole('button', { name: /^Install$/i })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  expect(screen.getByRole('button', { name: /^Uninstall$/i })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  expect(screen.getByRole('link', { name: /^Update$/i })).toHaveAttribute('aria-disabled', 'true')
+  expect(screen.getByRole('link', { name: /^Update$/i })).toHaveAttribute(
+    'title',
+    'Updates are unavailable for child accounts',
+  )
   const restrictionCopy = screen.getAllByText(/unavailable for child accounts/i)
   expect(restrictionCopy.length).toBeGreaterThan(0)
   downloadButtons.forEach((button) => {

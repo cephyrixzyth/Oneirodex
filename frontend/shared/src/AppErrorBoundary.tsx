@@ -11,10 +11,7 @@ interface AppErrorBoundaryState {
 }
 
 /** Contains render and lazy-chunk failures without automatic reload loops. */
-export class AppErrorBoundary extends Component<
-  AppErrorBoundaryProps,
-  AppErrorBoundaryState
-> {
+export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
   state: AppErrorBoundaryState = { failed: false }
 
   static getDerivedStateFromError(): AppErrorBoundaryState {

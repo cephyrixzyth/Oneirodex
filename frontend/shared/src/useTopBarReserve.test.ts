@@ -9,9 +9,7 @@ test('shares the measured wrapped topbar height with body-portalled UI and remov
   document.body.append(shell)
 
   let height = 76
-  vi.spyOn(header, 'getBoundingClientRect').mockImplementation(
-    () => ({ height } as DOMRect),
-  )
+  vi.spyOn(header, 'getBoundingClientRect').mockImplementation(() => ({ height }) as DOMRect)
   const ref = { current: header }
   const { unmount } = renderHook(() => useTopBarReserve(ref))
 

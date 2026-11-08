@@ -110,7 +110,9 @@ test('status selection posts with CSRF and updates the status button', async () 
 
 test('favorite write failure keeps the current state and shows feedback', async () => {
   const user = userEvent.setup()
-  const fetchMock = vi.fn(() => failedJsonResponse({ error: 'Internal error', error_code: 'internal' }))
+  const fetchMock = vi.fn(() =>
+    failedJsonResponse({ error: 'Internal error', error_code: 'internal' }),
+  )
   vi.stubGlobal('fetch', fetchMock)
 
   renderCard(<GameCard game={{ ...game, is_favorite: true }} />)
@@ -126,7 +128,9 @@ test('favorite write failure keeps the current state and shows feedback', async 
 
 test('status write failure keeps the current status and shows feedback', async () => {
   const user = userEvent.setup()
-  const fetchMock = vi.fn(() => failedJsonResponse({ error: 'Internal error', error_code: 'internal' }))
+  const fetchMock = vi.fn(() =>
+    failedJsonResponse({ error: 'Internal error', error_code: 'internal' }),
+  )
   vi.stubGlobal('fetch', fetchMock)
 
   renderCard(<GameCard game={game} showPlayStatus />)
@@ -134,7 +138,10 @@ test('status write failure keeps the current status and shows feedback', async (
   await user.click(screen.getByRole('button', { name: /^Beaten$/i }))
 
   await waitFor(() =>
-    expect(showToast).toHaveBeenCalledWith('Could not update game status. Please try again.', 'error'),
+    expect(showToast).toHaveBeenCalledWith(
+      'Could not update game status. Please try again.',
+      'error',
+    ),
   )
   expect(screen.getByRole('button', { name: /game status: no status/i })).toBeInTheDocument()
 })

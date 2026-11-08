@@ -39,6 +39,7 @@ type UnmatchedRow = {
 }
 
 type LibraryOption = { uuid: string; name: string; platform?: string }
+type LibraryApiRow = Partial<LibraryOption> & { platform_name?: string }
 type BadMatchReason = { id: string; label: string }
 type PageResult = { items?: UnmatchedRow[]; total?: number; count?: number }
 
@@ -113,7 +114,7 @@ export function ScanUnmatchedPage() {
         const source = Array.isArray(value) ? value : []
         setLibraries(
           source
-            .map((row: any) => ({
+            .map((row: LibraryApiRow) => ({
               uuid: String(row.uuid || ''),
               name: String(row.name || ''),
               platform: String(row.platform_name || row.platform || ''),

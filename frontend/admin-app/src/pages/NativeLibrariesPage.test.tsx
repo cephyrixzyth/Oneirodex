@@ -56,9 +56,7 @@ describe('NativeLibrariesPage', () => {
     const renderedOrder = mainPanels
       .map((id) => ({ id, element: screen.getByTestId(id) }))
       .sort((a, b) =>
-        a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING
-          ? -1
-          : 1,
+        a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
       )
       .map(({ id }) => id)
 

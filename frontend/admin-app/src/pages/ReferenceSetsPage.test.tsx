@@ -158,7 +158,11 @@ test('rehash/catalog actions retain platform payloads and count feedback without
 test('rehash keeps progress and errors beside its action', async () => {
   vi.mocked(getJson).mockResolvedValue(state)
   let finish!: (value: any) => void
-  vi.mocked(postJson).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+  vi.mocked(postJson).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
   render(<ReferenceSetsPage />)
   await screen.findByLabelText('DAT file')
 

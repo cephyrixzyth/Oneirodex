@@ -268,7 +268,9 @@ export function GameActionBar({
         data-seat="thin"
       >
         <span
-          className={canDownload ? 'od-action-bar__status' : 'od-action-bar__status visually-hidden'}
+          className={
+            canDownload ? 'od-action-bar__status' : 'od-action-bar__status visually-hidden'
+          }
           id={childActionDescriptionId}
           role="status"
         >
@@ -316,7 +318,11 @@ export function GameActionBar({
         </span>
       ) : null}
       {!canDownload ? (
-        <span className="od-action-bar__status visually-hidden" id={childActionDescriptionId} role="note">
+        <span
+          className="od-action-bar__status visually-hidden"
+          id={childActionDescriptionId}
+          role="note"
+        >
           Downloads and companion install actions are unavailable for child accounts.
         </span>
       ) : null}
@@ -375,7 +381,9 @@ export function GameActionBar({
       <button
         type="button"
         className="od-action-bar__btn od-action-bar__btn--danger"
-        title={!canDownload ? 'Companion uninstall is unavailable for child accounts' : uninstallTitle}
+        title={
+          !canDownload ? 'Companion uninstall is unavailable for child accounts' : uninstallTitle
+        }
         aria-disabled={!canDownload || !companionUninstallReady}
         aria-describedby={!canDownload ? childActionDescriptionId : undefined}
         data-action="uninstall"

@@ -14,10 +14,7 @@ afterEach(() => {
 })
 
 test('keeps rejected scan errors in persistent state when requested', async () => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({ status: 200, ok: true, json: async () => [] }),
-  )
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, ok: true, json: async () => [] }))
   vi.mocked(postJsonResult).mockResolvedValue({
     ok: false,
     status: 400,

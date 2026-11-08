@@ -34,9 +34,7 @@ export function MemberProfilePage() {
     }
   }, [userId, reload])
 
-  const currentProfile = profile.userId === userId
-    ? profile
-    : { userId, data: null, error: null }
+  const currentProfile = profile.userId === userId ? profile : { userId, data: null, error: null }
   const { data, error } = currentProfile
 
   if (error || !data) {

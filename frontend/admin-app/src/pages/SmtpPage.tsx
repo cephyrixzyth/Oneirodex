@@ -242,7 +242,8 @@ export function SmtpPage() {
               Use TLS
             </label>
             <p id="smtp-tls-help" className="od-admin-hint">
-              Port 465 uses implicit TLS and requires this setting. Other TLS-enabled ports use STARTTLS.
+              Port 465 uses implicit TLS and requires this setting. Other TLS-enabled ports use
+              STARTTLS.
             </p>
             <label className="od-admin-field">
               Default Sender Email

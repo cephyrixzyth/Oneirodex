@@ -160,12 +160,14 @@ test('auto-pick posts covers/batch/apply with best-available policy', async () =
     expect(await screen.findByText(/applied 2/i)).toBeInTheDocument()
 
     await user.click(await screen.findByRole('button', { name: 'Delete' }))
-    expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Delete this image?',
-      body: 'If the image has been saved on disk, its file will be deleted too.',
-      confirmLabel: 'Delete image and file',
-      cancelLabel: 'Cancel',
-    }))
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Delete this image?',
+        body: 'If the image has been saved on disk, its file will be deleted too.',
+        confirmLabel: 'Delete image and file',
+        cancelLabel: 'Cancel',
+      }),
+    )
   } finally {
     globalThis.fetch = originalFetch
   }

@@ -87,12 +87,14 @@ export function InvitesPanel(): ReactNode {
       <Note tone="good">{done}</Note>
       {!state.smtp_enabled ? (
         <Note tone="warning">
-          SMTP is not configured. Invite links can still be copied and shared, but invited users will not receive an email.
+          SMTP is not configured. Invite links can still be copied and shared, but invited users
+          will not receive an email.
         </Note>
       ) : null}
       {!state.site_url_configured ? (
         <Note tone="warning">
-          Invite links use the address you are browsing from. Set a public Site URL so guests can open them.
+          Invite links use the address you are browsing from. Set a public Site URL so guests can
+          open them.
         </Note>
       ) : null}
 

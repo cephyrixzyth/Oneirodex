@@ -390,7 +390,11 @@ export function UpdatesPage() {
                         <Button
                           type="button"
                           disabled={!canDownload || busyKey === applyKey}
-                          title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+                          title={
+                            !canDownload
+                              ? 'Downloads are unavailable for child accounts'
+                              : undefined
+                          }
                           aria-describedby={
                             !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
                           }
@@ -424,7 +428,11 @@ export function UpdatesPage() {
                         <Button
                           type="button"
                           disabled={!canDownload || busyKey === applyKey}
-                          title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
+                          title={
+                            !canDownload
+                              ? 'Companion actions are unavailable for child accounts'
+                              : undefined
+                          }
                           aria-describedby={
                             !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
                           }
@@ -437,7 +445,11 @@ export function UpdatesPage() {
                         </Button>
                       ) : null}
                       {pack?.download_url && !canDownload ? (
-                        <span className="visually-hidden" id={`updates-child-restriction-${game.uuid}`} role="note">
+                        <span
+                          className="visually-hidden"
+                          id={`updates-child-restriction-${game.uuid}`}
+                          role="note"
+                        >
                           Downloads unavailable for child accounts
                         </span>
                       ) : null}

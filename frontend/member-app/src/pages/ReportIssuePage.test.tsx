@@ -20,7 +20,9 @@ test('keeps logs and context collapsed by default', () => {
   expect(screen.queryByRole('heading', { name: /What happened/i })).not.toBeInTheDocument()
   expect(screen.getByRole('radio', { name: /Something is broken/ })).toBeChecked()
   expect(screen.getByRole('radio', { name: /An idea/ })).not.toBeChecked()
-  expect(screen.getByRole('checkbox', { name: /Also send this report to GitHub/i })).not.toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Also send this report to GitHub/i }),
+  ).not.toBeChecked()
   expect(screen.getByLabelText('Title')).toBeInTheDocument()
   expect(screen.getByLabelText('Symptom')).toBeInTheDocument()
 
@@ -72,7 +74,10 @@ test('GitHub sync is sent only after the member opts in', async () => {
   const user = userEvent.setup()
   const fetch = stubFetch((_input, init) => {
     expect(JSON.parse(init.body).sync_to_github).toBe(true)
-    return jsonResponse({ ok: true, ticket: { id: 17, github_sync: 'local_only' } }, { status: 201 })
+    return jsonResponse(
+      { ok: true, ticket: { id: 17, github_sync: 'local_only' } },
+      { status: 201 },
+    )
   })
 
   render(

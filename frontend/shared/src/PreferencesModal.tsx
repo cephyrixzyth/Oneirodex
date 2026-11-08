@@ -142,10 +142,7 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
       root.style.setProperty('--btn-primary', accent)
     }
     if (theme.era) root.setAttribute('data-era', theme.era)
-    if (
-      theme.icon_pack &&
-      data?.choices.icon_packs.some((pack) => pack.id === theme.icon_pack)
-    )
+    if (theme.icon_pack && data?.choices.icon_packs.some((pack) => pack.id === theme.icon_pack))
       previewIconPack(theme.icon_pack)
   }
 

@@ -25,7 +25,9 @@ test('matches the legacy page title and places instructions before credentials',
   expect(form).not.toBeNull()
   expect(form).toHaveClass('od-igdb-form')
   expect(form).not.toHaveClass('od-admin-panel')
-  expect(instructions!.compareDocumentPosition(form!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(
+    instructions!.compareDocumentPosition(form!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
   expect(screen.getByLabelText('Client Secret')).toHaveAttribute(
     'placeholder',
     'Saved. Leave blank to keep it',
@@ -36,9 +38,13 @@ test('matches the legacy page title and places instructions before credentials',
     screen.getByRole('heading', { name: 'How to Get Your IGDB API Credentials' }),
   ).toBeInTheDocument()
   expect(
-    instructions!.querySelector('.od-igdb-instructions__body > ol')?.querySelectorAll(':scope > li'),
+    instructions!
+      .querySelector('.od-igdb-instructions__body > ol')
+      ?.querySelectorAll(':scope > li'),
   ).toHaveLength(6)
-  expect(screen.getByText(/free tier includes 4 requests per second and 500k requests per month/)).toBeInTheDocument()
+  expect(
+    screen.getByText(/free tier includes 4 requests per second and 500k requests per month/),
+  ).toBeInTheDocument()
 })
 
 test('saved secret is never populated; dirty drafts can test saved settings and save retains the entered secret', async () => {

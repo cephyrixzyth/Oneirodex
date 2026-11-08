@@ -41,7 +41,12 @@ test('creates a link without email, then refreshes and exposes it for copying', 
   vi.mocked(listInvites)
     .mockResolvedValueOnce(emptyState)
     .mockResolvedValueOnce({ ...emptyState, invites: [invite], remaining: 4 })
-  vi.mocked(createInvite).mockResolvedValue({ invite, emailed: false, remaining: 4, unlimited: false })
+  vi.mocked(createInvite).mockResolvedValue({
+    invite,
+    emailed: false,
+    remaining: 4,
+    unlimited: false,
+  })
 
   render(<InvitesPanel />)
 
@@ -52,7 +57,9 @@ test('creates a link without email, then refreshes and exposes it for copying', 
   fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }))
 
   await waitFor(() => expect(createInvite).toHaveBeenCalledWith({}))
-  expect(await screen.findByText('Invite created. Copy the link below and pass it on.')).toBeInTheDocument()
+  expect(
+    await screen.findByText('Invite created. Copy the link below and pass it on.'),
+  ).toBeInTheDocument()
   expect(screen.getByText(invite.url)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument()

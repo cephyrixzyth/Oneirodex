@@ -64,7 +64,7 @@ export function DiscoverShelf({
   const [hbar, setHbar] = useState({ max: 0, thumbPx: 0, leftPx: 0, scrollLeft: 0 })
   const abortRef = useRef<any>(null)
   const hbarDragRef = useRef<any>(null)
-  const loadMoreRef = useRef<any>(null)
+  const loadMoreRef = useRef<(() => void) | null>(null)
   const [wrapToEndRequested, setWrapToEndRequested] = useState(false)
   const beginWrapToEnd = useCallback(() => {
     setWrapToEndRequested(true)

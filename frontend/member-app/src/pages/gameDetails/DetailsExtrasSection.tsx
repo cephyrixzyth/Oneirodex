@@ -76,7 +76,9 @@ export function DetailsExtrasSection({
                       <Button
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
-                        title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+                        title={
+                          !canDownload ? 'Downloads are unavailable for child accounts' : undefined
+                        }
                         aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return
@@ -96,7 +98,11 @@ export function DetailsExtrasSection({
                       <Button
                         type="button"
                         disabled={!canDownload || Boolean(busyVersionKey)}
-                        title={!canDownload ? 'Companion actions are unavailable for child accounts' : undefined}
+                        title={
+                          !canDownload
+                            ? 'Companion actions are unavailable for child accounts'
+                            : undefined
+                        }
                         aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
                           if (!canDownload) return

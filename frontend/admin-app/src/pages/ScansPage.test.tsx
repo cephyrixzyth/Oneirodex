@@ -107,7 +107,11 @@ describe('ScansPage queued jobs', () => {
       })),
     )
 
-    render(<MemoryRouter><ScansPage /></MemoryRouter>)
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
 
     expect(await screen.findByText('Library 1')).toBeInTheDocument()
     expect(screen.getByText('Library 27')).toBeInTheDocument()

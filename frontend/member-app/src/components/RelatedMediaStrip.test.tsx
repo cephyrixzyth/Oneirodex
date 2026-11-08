@@ -8,17 +8,22 @@ vi.mock('../api/gameDetails', () => ({
   fetchRelatedMedia: vi.fn(),
 }))
 
-const items = [{
-  id: 1,
-  media_kind: 'film',
-  title: 'The Movie',
-  year: 2025,
-  external_url: 'https://example.test/movie',
-}]
+const items = [
+  {
+    id: 1,
+    media_kind: 'film',
+    title: 'The Movie',
+    year: 2025,
+    external_url: 'https://example.test/movie',
+  },
+]
 
 describe('RelatedMediaStrip dialog focus', () => {
   beforeEach(() => {
-    vi.mocked(fetchRelatedMedia).mockResolvedValue({ items, kinds: [{ id: 'film', label: 'Film' }] } as any)
+    vi.mocked(fetchRelatedMedia).mockResolvedValue({
+      items,
+      kinds: [{ id: 'film', label: 'Film' }],
+    } as any)
   })
 
   it('traps focus, closes with Escape, and restores focus to the launcher', async () => {

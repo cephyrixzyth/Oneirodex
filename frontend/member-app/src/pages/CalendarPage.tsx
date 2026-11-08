@@ -244,17 +244,19 @@ function MonthView({
   const coverageStart = shiftDateKey(todayKey, -Number(daysBehind || 0))
   const coverageEnd = shiftDateKey(todayKey, Number(daysAhead || 0))
   const isInWindow = (dateKey: string | null) =>
-    Boolean(dateKey && coverageStart && coverageEnd && dateKey >= coverageStart && dateKey <= coverageEnd)
+    Boolean(
+      dateKey && coverageStart && coverageEnd && dateKey >= coverageStart && dateKey <= coverageEnd,
+    )
 
   useEffect(() => {
     const withReleases = cells.filter((c) => c.inMonth && c.releases.length > 0)
     const preferToday = withReleases.find((c) => c.dateKey === todayKey)
-    const firstCovered = cells.find(
-      (c) => c.inMonth && c.dateKey && isInWindow(c.dateKey),
-    )
+    const firstCovered = cells.find((c) => c.inMonth && c.dateKey && isInWindow(c.dateKey))
     setSelectedKey(
-      preferToday?.dateKey || withReleases[0]?.dateKey ||
-      (!emptyReason ? firstCovered?.dateKey : null) || null,
+      preferToday?.dateKey ||
+        withReleases[0]?.dateKey ||
+        (!emptyReason ? firstCovered?.dateKey : null) ||
+        null,
     )
   }, [focusYear, focusMonth, cells, todayKey, coverageStart, coverageEnd, emptyReason])
 
@@ -322,8 +324,11 @@ function MonthView({
                 aria-label={
                   cell.inMonth
                     ? `${cell.day}${isToday ? ', today' : ''}${
-                        !inWindow ? ', outside loaded window' :
-                          count ? `, ${count} release${count === 1 ? '' : 's'}` : ', no releases loaded'
+                        !inWindow
+                          ? ', outside loaded window'
+                          : count
+                            ? `, ${count} release${count === 1 ? '' : 's'}`
+                            : ', no releases loaded'
                       }`
                     : undefined
                 }

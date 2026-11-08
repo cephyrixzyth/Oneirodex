@@ -350,10 +350,7 @@ export function GamePreviewPopup({ game, reason = '', onClose }: LooseProps) {
             />
 
             <div className="od-preview__actions">
-              <Link
-                className="od-btn od-btn--primary"
-                to={`/game_details/${game.uuid}`}
-              >
+              <Link className="od-btn od-btn--primary" to={`/game_details/${game.uuid}`}>
                 Open details
               </Link>
             </div>

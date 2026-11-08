@@ -139,10 +139,12 @@ test('manual deep link scrolls after scan controls finish loading', async () => 
       resolveRoots({ roots: [] })
     })
 
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({
-      block: 'start',
-      behavior: 'smooth',
-    }))
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: 'start',
+        behavior: 'smooth',
+      }),
+    )
   } finally {
     HTMLElement.prototype.scrollIntoView = originalScrollIntoView
   }
@@ -247,9 +249,9 @@ test('lists manual identify candidates without starting a scan and links to the 
   fireEvent.click(screen.getByRole('button', { name: 'List games to identify' }))
   const identify = await screen.findByRole('link', { name: 'Identify' })
   expect(
-    screen.getByRole('table', { name: 'Games available for manual identification' }).querySelector(
-      'caption',
-    ),
+    screen
+      .getByRole('table', { name: 'Games available for manual identification' })
+      .querySelector('caption'),
   ).toHaveClass('od-scan-controls__manual-caption')
   expect(identify).toHaveAttribute(
     'href',

@@ -23,6 +23,7 @@ from oneirodex import db
 from oneirodex.models import StoreAccount, StoreSyncJob, UserOwnedTitle
 from oneirodex.utils import store_ownership, store_ownership_common, store_sync_jobs
 from oneirodex.utils.store_connection_status import admin_connections, member_connections
+from oneirodex.utils.store_credentials import write_store_credential
 from oneirodex.utils.store_sync_errors import StoreSyncError
 from oneirodex.utils.store_sync_jobs import checkpoint, mark_partial, mark_warning, request_cancel, utcnow
 
@@ -160,8 +161,10 @@ def _client(app, uid):
 def _link(uid, store, credential=None, external='acct', created=None):
     # Linked before any job a test records, as a real link always is.
     created = created or utcnow() - timedelta(hours=3)
-    db.session.add(StoreAccount(user_id=uid, store=store, external_account_id=external, credential=credential,
-                                created_at=created, updated_at=utcnow() - timedelta(hours=1)))
+    account = StoreAccount(user_id=uid, store=store, external_account_id=external,
+                           created_at=created, updated_at=utcnow() - timedelta(hours=1))
+    write_store_credential(account, credential)
+    db.session.add(account)
     db.session.commit()
 
 
@@ -194,6 +197,26 @@ def _fake_sync(store, rows, *, before_write=None):
 def _titles(uid, store):
     return db.session.execute(select(func.count()).select_from(UserOwnedTitle).where(
         UserOwnedTitle.user_id == uid, UserOwnedTitle.store == store)).scalar()
+
+
+@pytest.mark.parametrize('store, credential', [
+    ('gog', json.dumps({'refresh_token': 'r'})),
+    ('epic', EPIC_DEVICE),
+    ('amazon', json.dumps({'refresh_token': 'r', 'device_serial': 'serial'})),
+])
+def test_poller_syncs_encrypted_member_credentials_without_household_tokens(app, monkeypatch, store, credential):
+    from oneirodex.utils import ownership_poller
+
+    with app.app_context():
+        _link(MEMBER, store, credential=credential)
+        account = db.session.execute(select(StoreAccount).filter_by(user_id=MEMBER, store=store)).scalar_one()
+        assert account.credential is None and account.credential_ciphertext
+        monkeypatch.setattr(store_ownership, f'sync_{store}_owned_games', _fake_sync(store, [('1', 'Fixture')]))
+
+        result = ownership_poller.sync_all_linked_accounts()
+
+        assert result['synced'] == 1, result
+        assert _titles(MEMBER, store) == 1
 
 
 def test_successful_sync_is_recorded_and_reported_connected(app, monkeypatch):
@@ -807,9 +830,12 @@ def test_a_sign_in_saved_before_the_upgrade_is_not_claimed_as_the_members_own(ap
     used onto the member's account, untagged. The migration leaves updated_at
     NULL, so on a server with a household sign-in such a copy is 'unknown'."""
     with app.app_context():
-        db.session.add(StoreAccount(user_id=MEMBER, store='gog', external_account_id='acct',
-                                    credential=json.dumps({'refresh_token': 'rotated-long-ago'}),
-                                    created_at=utcnow() - timedelta(days=30), updated_at=None))
+        account = StoreAccount(user_id=MEMBER, store='gog', external_account_id='acct',
+                               created_at=utcnow() - timedelta(days=30), updated_at=None)
+        # Storage has been converted, but the old link's provenance remains
+        # ambiguous. Plaintext-storage rejection has its own regression suite.
+        write_store_credential(account, json.dumps({'refresh_token': 'rotated-long-ago'}))
+        db.session.add(account)
         db.session.commit()
         client = _client(app, MEMBER)
         assert _state(client, 'gog')['credential']['source'] == 'member', 'no household sign-in: nothing to confuse it with'

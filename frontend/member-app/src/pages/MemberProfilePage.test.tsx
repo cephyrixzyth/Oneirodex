@@ -56,7 +56,12 @@ describe('MemberProfilePage identity transitions', () => {
     let resolveB!: (value: any) => void
     vi.mocked(fetchMemberProfile)
       .mockResolvedValueOnce({ user: { name: 'Member A' }, recent_games: [] } as any)
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveB = resolve }) as any)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveB = resolve
+          }) as any,
+      )
     const user = userEvent.setup()
     renderProfiles()
     expect(await screen.findByRole('heading', { name: 'Member A' })).toBeInTheDocument()

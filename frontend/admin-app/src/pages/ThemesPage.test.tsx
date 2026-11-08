@@ -108,10 +108,7 @@ describe('ThemesPage', () => {
     expect(preview).toHaveTextContent('Rotating across 7 motifs')
     expect(preview.querySelector('[data-motif="dpad"]')).toHaveAttribute('tabindex', '0')
     expect(preview.querySelector('[data-motif="dpad"]')).toHaveAttribute('aria-label', 'D-pad')
-    expect(buildNode).toHaveBeenCalledWith(
-      'dpad',
-      'od-loading-motif--sm od-loading-motif--preview',
-    )
+    expect(buildNode).toHaveBeenCalledWith('dpad', 'od-loading-motif--sm od-loading-motif--preview')
 
     fireEvent.click(screen.getByLabelText('Use one motif'))
     await waitFor(() => expect(preview.querySelectorAll('[data-motif]')).toHaveLength(1))

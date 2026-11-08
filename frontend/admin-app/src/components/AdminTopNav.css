@@ -156,7 +156,11 @@ body.od-shell-host header.od-topbar .od-topbar__start {
     touch-action: pan-x;
   }
 
-  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group[aria-label='Scan pages'] > .od-cbtn--section {
+  body.od-shell-host
+    header.od-topbar
+    .od-topbar__page
+    > .od-cbtn-group[aria-label='Scan pages']
+    > .od-cbtn--section {
     padding-inline: 0;
   }
 

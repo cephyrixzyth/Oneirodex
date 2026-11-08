@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, confirmAction } from '@oneirodex/ui'
+import { Button, confirmAction, type AccountLoginSession } from '@oneirodex/ui'
 import { createToken, listTokens, revokeToken } from '../api/tokens'
 import {
   listAccountLoginSessions,
@@ -25,7 +25,7 @@ const PRESET_FALLBACK: Record<string, any> = {
   },
 }
 
-function formatWhen(iso: any) {
+function formatWhen(iso: string | null | undefined) {
   if (!iso) return '—'
   try {
     return new Date(iso).toLocaleString()
@@ -44,11 +44,11 @@ export function TokensPage() {
   const [createdSecret, setCreatedSecret] = useState<any>(null)
   const [copyState, setCopyState] = useState('idle')
   const [retryCount, setRetryCount] = useState(0)
-  const [sessions, setSessions] = useState<any[]>([])
+  const [sessions, setSessions] = useState<AccountLoginSession[]>([])
   const [sessionsError, setSessionsError] = useState<any>(null)
   const [sessionsBusy, setSessionsBusy] = useState(false)
   const [sessionsRetry, setSessionsRetry] = useState(0)
-  const secretInputRef = useRef<any>(null)
+  const secretInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -131,7 +131,7 @@ export function TokensPage() {
     }
   }
 
-  async function onRevoke(tokenId: any, tokenName: any) {
+  async function onRevoke(tokenId: number, tokenName: string) {
     if (busy) return
     const ok = await confirmAction({
       title: `Revoke token “${tokenName}”?`,
@@ -152,7 +152,7 @@ export function TokensPage() {
     }
   }
 
-  async function onRevokeSession(session: any) {
+  async function onRevokeSession(session: AccountLoginSession) {
     if (sessionsBusy) return
     const ok = await confirmAction({
       title: session.current ? 'Sign out this browser?' : 'Revoke this browser session?',
@@ -412,7 +412,9 @@ export function TokensPage() {
                   <div className="od-tokens__row-main">
                     <strong>{row.current ? 'This browser' : 'Browser session'}</strong>
                     <span className="od-tokens__meta">Signed in {formatWhen(row.created_at)}</span>
-                    <span className="od-tokens__meta">Last active {formatWhen(row.last_seen_at)}</span>
+                    <span className="od-tokens__meta">
+                      Last active {formatWhen(row.last_seen_at)}
+                    </span>
                     <span className="od-tokens__meta">Expires {formatWhen(row.expires_at)}</span>
                   </div>
                   <Button
