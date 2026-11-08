@@ -10,6 +10,7 @@ from oneirodex.models import (
     DuplicateFixLog,
     Game,
     ChatChannel,
+    ChatMessage,
     ChatMessageAttachment,
     EmulatorSave,
     EmulatorSaveGeneration,
@@ -168,8 +169,16 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     attachment_file = upload_root / 'chat-attachments' / attachment_name
     attachment_file.parent.mkdir(parents=True)
     attachment_file.write_bytes(b'attachment')
+    message = ChatMessage(
+        channel_id=channel.id,
+        user_id=victim_id,
+        body=f'Household message from deleted member {suffix}',
+    )
+    db_session.add(message)
+    db_session.flush()
     attachment = ChatMessageAttachment(
         channel_id=channel.id,
+        message_id=message.id,
         uploaded_by_user_id=victim_id,
         file_name=attachment_name,
         original_name='private.png',
@@ -225,7 +234,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     ))
     db_session.commit()
     request_id, game_uuid = request.id, game.uuid
-    attachment_id, owned_save_id = attachment.id, owned_save.id
+    attachment_id, message_id, owned_save_id = attachment.id, message.id, owned_save.id
     victim_invite_id, used_invite_id = victim_invite.id, used_invite.id
     attract_id, duplicate_id, prior_audit_id = (
         attract_settings.id, duplicate_log.id, prior_audit.id,
@@ -253,6 +262,11 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert surviving_invite is not None and surviving_invite.used_by is None
     assert db_session.get(UserAttractModeSettings, attract_id) is None
     assert db_session.get(ChatMessageAttachment, attachment_id) is None
+    retained_message = db_session.get(ChatMessage, message_id)
+    assert retained_message is not None
+    assert retained_message.user_id is None
+    assert retained_message.body == f'Household message from deleted member {suffix}'
+    assert retained_message.to_dict()['user'] == 'member'
     assert db_session.get(EmulatorSave, owned_save_id) is None
     retained_duplicate = db_session.get(DuplicateFixLog, duplicate_id)
     assert retained_duplicate is not None and retained_duplicate.actor_user_id is None

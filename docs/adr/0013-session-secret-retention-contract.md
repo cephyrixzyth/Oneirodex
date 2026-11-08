@@ -89,6 +89,10 @@ qualification remain open.
   the departing user authored, used or referenced them. Each relation and
   managed file class needs an explicit disposition before the deletion job is
   considered complete.
+- Keep messages the departing user sent in household chat channels, since other
+  members share that history. Clear the message's author reference so it renders
+  with the existing anonymous `member` label; delete the departing user's
+  attachment metadata and purge its uploaded files after commit.
 - For user-owned avatar, emulator-save and generation, and uploaded chat
   attachment files, purge after the database deletion commits. Failed cleanup
   must remain retryable and visible; do not add a recovery quarantine.
@@ -128,7 +132,9 @@ qualification remain open.
    deletion using the decisions above. The ORM user-FK inventory has 50 columns
    and a focused PostgreSQL test compares it with the database schema. Managed
    avatar, save, and chat-attachment cleanup is transactionally queued and
-   retried; deployed-schema and restart-level qualification remain open.
+   retried. Shared chat messages are retained with a null author reference and
+   the generic member label; a downgrade refuses while such messages exist.
+   Deployed-schema qualification remains open.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
    A versioned save keyring and standalone-move key-ID contract are implemented

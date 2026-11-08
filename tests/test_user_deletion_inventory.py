@@ -50,7 +50,7 @@ EXPECTED_USER_FKS = {
     'user_game_status.user_id': None,
     'user_owned_titles.user_id': 'CASCADE',
     'chat_channel_members.user_id': 'CASCADE',
-    'chat_messages.user_id': 'CASCADE',
+    'chat_messages.user_id': 'SET NULL',
     'ownership_match_decisions.actor_id': 'CASCADE',
     'chat_message_attachments.uploaded_by_user_id': 'CASCADE',
     'chat_message_reactions.user_id': 'CASCADE',
