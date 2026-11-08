@@ -203,6 +203,9 @@ def test_reusable_migration_is_verified_restartable_and_rotates_keys(tmp_path, m
     first_key = Fernet.generate_key().decode('ascii')
     second_key = Fernet.generate_key().decode('ascii')
     path = _keyring_file(tmp_path, active='first', keys={'first': first_key})
+    backup_path = tmp_path / 'operator-backup' / 'keyring.json'
+    backup_path.parent.mkdir()
+    backup_path.write_bytes(path.read_bytes())
     monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
     engine = create_engine('sqlite://')
     GlobalSettings.__table__.create(engine)
@@ -238,6 +241,13 @@ def test_reusable_migration_is_verified_restartable_and_rotates_keys(tmp_path, m
         unavailable = migrate_reusable_secrets(session)
         assert unavailable['failures'] == 1
         assert session.get(GlobalSettings, 1).smtp_password == first_ciphertext
+
+        # Recover the matching key from the separately stored operator backup.
+        # The database ciphertext remains untouched while its key is absent.
+        path.write_bytes(backup_path.read_bytes())
+        recovered = session.get(GlobalSettings, 1)
+        assert read_global_secret(recovered, 'smtp_password') == scalar_canary
+        assert read_arr_settings(recovered)['indexers'][0]['api_key'] == arr_canary
 
         path.write_text(json.dumps({
             'active_key_id': 'second', 'keys': {'first': first_key, 'second': second_key},

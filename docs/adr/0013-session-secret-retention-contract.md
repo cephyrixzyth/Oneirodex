@@ -19,8 +19,10 @@ not select.
 This record captures the owner's selected policies. The persistent browser
 session implementation is present in the current review branch. The reusable-
 credential envelope and conversion tooling are implemented in the candidate;
-focused tests and an independent source review passed. Operator database
-conversion and restore qualification remain pending. Account deletion now has
+focused tests and an independent source review passed. Synthetic database
+conversion and recovery from a separate operator-backup copy are qualified;
+live operator database conversion and a protected-backup restore drill remain
+pending. Account deletion now has
 a PostgreSQL-verified relation inventory, a transactional managed-file job
 queue, and a retry worker; deployment-schema, restart, and restore qualification
 remain pending.
@@ -98,8 +100,10 @@ remain pending.
    **Implemented in review branch; independent candidate review finding fixed and focused verification passed; release qualification remains pending.**
 3. Introduce versioned reusable-secret envelopes, then migrate and rotate
    credentials in restartable batches while retaining old ciphertext until
-   decryptability is verified. **Implementation and focused source review
-   passed; operator conversion and restore qualification remain pending.**
+   decryptability is verified. **Implementation, independent source review,
+   synthetic database conversion, and key-backup recovery qualification
+   passed; live operator conversion and protected-backup restore drill remain
+   pending.**
 4. Inventory every user relation and managed file, then implement resumable
    deletion using the decisions above. The ORM user-FK inventory has 50 columns
    and a focused PostgreSQL test compares it with the database schema. Managed
