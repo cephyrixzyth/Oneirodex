@@ -123,6 +123,7 @@ class FakeFlaskApp:
         'REMEMBER_COOKIE_NAME': 'remember_token',
         'PERMANENT_SESSION_LIFETIME': timedelta(days=31),
         'SESSION_PROTECTION': None,
+        'TESTING': True,
         'SESSION_REFRESH_EACH_REQUEST': True,
         'WTF_CSRF_ENABLED': csrf_enabled,
         'WTF_CSRF_FIELD_NAME': 'csrf_token',
@@ -146,6 +147,7 @@ class FakeLoginManager:
 
 def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True):
     app = FastAPI()
+    flask_app = FakeFlaskApp(csrf_enabled=csrf_enabled)
     data = FakeData(rows, raw=raw or 'gt_a1b2c3d4_RawSecret_0123456789')
     policy = FakePolicy()
     users = {user.id: user} if user is not None else {}
@@ -154,7 +156,7 @@ def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True)
 
     mount_account_tokens_routes(
         app,
-        FakeFlaskApp(csrf_enabled=csrf_enabled),
+        flask_app,
         find_user=lambda user_id: users.get(user_id),
         find_token=lambda prefix: tokens.get(prefix),
         commit_token_touch=touched.append,
@@ -357,3 +359,20 @@ def test_unauthenticated_get_keeps_flask_login_redirect_contract():
 
     assert response.status_code == 302
     assert response.headers['location'].startswith('/login?next=%2Fapi%2Ftokens')
+
+
+def test_expired_bearer_cannot_list_personal_tokens():
+    user = FakeUser()
+    bearer = FakeToken(7, user.id, ['read:library'], prefix='1234abcd')
+    bearer.is_expired = lambda now=None: True
+    client, data, _ = make_client(user=user, bearer=bearer)
+
+    response = client.get(
+        '/api/tokens',
+        headers={'Authorization': 'Bearer gt_1234abcd_test-secret'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'].startswith('/login?next=%2Fapi%2Ftokens')
+    assert data.rows == []

@@ -1,0 +1,29 @@
+{
+  "review_id": "R1975",
+  "title": "Personal token failure, populated, and expiry states",
+  "source_evidence": "docs/dev/parity-evidence/review-bundle-r1972/token-ui-lifecycle-r1972-full.json",
+  "classification": "Source/component state coverage expanded; exact-image parity remains partial.",
+  "current_checkout_checks": {
+    "member_panel": {
+      "test_file": "frontend/shared/src/account/TokensPanel.test.tsx",
+      "cases": [
+        "one-time secret dismissal removes the secret and restores focus",
+        "token list request failure is announced",
+        "token create failure is announced without displaying a secret",
+        "revoke failure leaves the populated token visible and reports the error"
+      ],
+      "result": "passed: 1 file, 4 tests; token API calls mocked"
+    },
+    "native_api": {
+      "test_file": "tests/test_native_account_tokens.py",
+      "cases": ["expired bearer is rejected before listing personal tokens"],
+      "result": "passed: 12 tests using --noconftest; no database connections"
+    }
+  },
+  "test_fixture_correction": "The native token harness now sets TESTING=True so legacy session-cookie fixtures bypass the production persistent-session identity requirement. This corrects the test setup; production session policy is unchanged.",
+  "open": [
+    "Exact v1.1.8/current comparisons for populated and failure states were not rerun.",
+    "Database failure injection at the production application error-handler boundary remains unverified.",
+    "Real-browser keyboard and screen-reader review remains unverified."
+  ]
+}
