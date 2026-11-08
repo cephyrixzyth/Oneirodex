@@ -53,6 +53,7 @@ Exact steps: [libraries-and-scans.md — After A0–A14](../admin/libraries-and-
 | `DATABASE_URL` | Yes (Compose builds it) | Host is always `db` — do not use `@localhost` |
 | `DATA_FOLDER_GAMES` | Yes | **Host** games path in `.env` (Compose mounts → `/storage:ro`). Container env hard-sets `/storage`. |
 | `LIBRARY_HOST_PATH` | Yes | **Host** appdata library path → `/app/oneirodex/static/library` RW |
+| `PUID` / `PGID` | No | Non-root app and embedded-PostgreSQL identity; defaults `99:100` (`nobody:users`). The writable library/appdata paths and optional key-ring file must be accessible to this identity. |
 | `ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` | Optional until credentials are saved | Container path to the separate read-only JSON key ring; default `/run/secrets/oneirodex-store-credential-keyring.json`. The former `ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` remains a compatibility alias. Add its protected host file using the optional CA Path mapping. |
 | `POSTGRES_PASSWORD` | If using bundled db | **Set a strong value** (`python -c "import secrets; print(secrets.token_hex(24))"`). Compose retains the legacy `postgres` fallback for interpolation, but startup rejects it by default. An existing volume that still uses it needs the temporary `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` opt-in; rotate the password and disable the flag immediately. New volumes reject the default. Read only when the `db_data` volume is first created — rotate an existing one per [docker-compose-deploy.md](docker-compose-deploy.md#rotating-the-password-on-an-existing-database). |
 | `POSTGRES_HOST_BIND` / `POSTGRES_HOST_PORT` | No | Host publish of Postgres. Defaults to `127.0.0.1:5432` (this Unraid box only). Set `POSTGRES_HOST_BIND=<Unraid LAN IP>` to reach it from another machine; see [Postgres exposure](docker-compose-deploy.md#postgres-exposure-and-password). |
@@ -74,10 +75,19 @@ Do **not** put covers, themes, or uploads on the games mount.
 | Store credential key ring | CA template **Store credential key ring** path | `/run/secrets/oneirodex-store-credential-keyring.json` | **ro** | Dedicated provider-key JSON file; back it up separately from database/library data |
 
 Protect the host key-ring file with mode `0600` and keep its parent directory
-private. The app refuses to load a key ring that is group- or world-readable on
+private. Set its owner to the configured `PUID:PGID` so the non-root app can read
+the file; the app refuses to load a key ring that is group- or world-readable on
 Linux. On Windows, use an NTFS ACL that grants read access only to the Oneirodex
 service account and administrators; the app cannot inspect Windows ACLs through
 its POSIX permission check. The file is mounted read-only in the CA container.
+
+The entrypoint starts PostgreSQL and performs the initial storage-owner migration
+as root, then drops all capabilities and runs startup initialization and ASGI as
+`PUID:PGID`. On first start after upgrade, or after changing those IDs, it
+recursively assigns the designated library path to that identity once per app
+identity and mounted library volume. Its marker is stored in the library mount,
+so replacement mounts are prepared as well. Keep the games mount separate and
+read-only; it is never included in that migration.
 
 Unraid path examples (edit to match your shares):
 

@@ -96,6 +96,10 @@ COPY --from=frontend-build /build/oneirodex/static/dist/admin-app /app/oneirodex
 COPY --from=frontend-build /build/oneirodex/static/dist/admin-pilot /app/oneirodex/static/dist/admin-pilot
 COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirodex/static/dist/ops-glance
 
+# Runtime storage belongs to the non-root app identity used by Unraid and the
+# Docker entrypoint. Empty named volumes inherit this ownership on first mount.
+RUN chown -R 99:100 /app/oneirodex/static/library
+
 RUN pip install -r requirements.txt
 ARG EMULATORJS_VERSION="4.2.3"
 ARG EMULATORJS_SHA256="07d451bc06fa3ad04ab30d9b94eb63ac34ad0babee52d60357b002bde8f3850b"

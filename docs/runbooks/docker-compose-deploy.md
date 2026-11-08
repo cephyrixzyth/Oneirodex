@@ -14,6 +14,13 @@ logs, the art stays plain text so the output remains readable.
 - Host path to games (mounted read-only at `/storage`)
 - Writable host path for library data (covers, themes)
 
+The app starts as non-root `PUID:PGID` (default `99:100`). Set those variables
+to match the owner of writable host mounts. On first start after upgrade or an
+identity change, the entrypoint transfers ownership of the configured library
+directory once per app identity and mounted library volume; its marker lives
+inside that persistent library mount, so replacement mounts are prepared as
+well. `/storage` is excluded and remains read-only.
+
 ## Isolated local staging
 
 Use `docker-compose.review.yml` with a distinct Compose project and an explicit

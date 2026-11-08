@@ -22,6 +22,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=oneirodex
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
       - SECRET_KEY=review-only-not-a-production-secret
       - DATA_FOLDER_GAMES=/storage
       - UPLOAD_FOLDER=/app/oneirodex/static/library

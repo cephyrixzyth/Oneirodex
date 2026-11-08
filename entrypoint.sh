@@ -148,14 +148,72 @@ if [[ "${EMBEDDED}" == "false" ]]; then
     wait_for_postgres
 
     echo "🎮 Starting Oneirodex Docker container..."
-    exec /app/startweb-docker.sh "$@"
+else
+    echo "🎮 Starting Oneirodex Docker container..."
 fi
 
-# Embedded database: stay as the parent so SIGTERM (docker stop) stops the app
-# first and PostgreSQL second, cleanly, and so a dead database takes the
-# container down for the restart policy to bring back.
+# The database and startup checks are initialized above. Run all Python startup
+# work and ASGI workers as the configured data owner, never as container root.
+APP_UID="${PUID:-99}"
+APP_GID="${PGID:-100}"
+if [[ "${APP_UID}" == "0" ]]; then
+    if [[ "${EMBEDDED}" == "true" ]]; then
+        APP_UID="${EMBEDDED_UID}"
+        APP_GID="${EMBEDDED_GID}"
+    else
+        echo "❌ PUID=0 is not supported for the app process; choose a non-root PUID/PGID."
+        exit 1
+    fi
+fi
+if [[ ! "${APP_UID}" =~ ^[0-9]+$ || ! "${APP_GID}" =~ ^[0-9]+$ \
+    || "${APP_UID}" == "0" || "${APP_GID}" == "0" ]]; then
+    echo "❌ PUID and PGID must be numeric and non-root."
+    exit 1
+fi
+
+APP_LIBRARY_DIR="$(realpath -m "${ONEIRODEX_LIBRARY_DIR:-${UPLOAD_FOLDER:-/app/oneirodex/static/library}}")"
+case "${APP_LIBRARY_DIR}" in
+    /app/oneirodex/static/library|/config/library)
+        ;;
+    /|/app|/app/*|/config|/config/*|/storage|/storage/*|/bin|/boot|/dev|/dev/*|\
+    /etc|/etc/*|/home|/home/*|/lib|/lib64|/media|/mnt|/mnt/*|/opt|/opt/*|\
+    /proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/srv|/srv/*|/sys|/sys/*|\
+    /tmp|/tmp/*|/usr|/usr/*|/var|/var/*)
+        echo "❌ Refusing to prepare unsafe app library path: ${APP_LIBRARY_DIR}"
+        exit 1
+        ;;
+esac
+mkdir -p "${APP_LIBRARY_DIR}"
+APP_LIBRARY_ID="$(stat -c '%d-%i' "${APP_LIBRARY_DIR}")"
+OWNER_MARKER="${APP_LIBRARY_DIR}/.oneirodex-library-owner-${APP_UID}-${APP_GID}-${APP_LIBRARY_ID}-v1"
+if [[ ! -f "${OWNER_MARKER}" ]]; then
+    echo "🔐 Preparing app library ownership for ${APP_UID}:${APP_GID} (first start or user change)."
+    chown -R "${APP_UID}:${APP_GID}" "${APP_LIBRARY_DIR}"
+    mkdir -p "${CONFIG_DIR}"
+    touch "${OWNER_MARKER}"
+fi
+
+APP_START_COMMAND=(/app/startweb-docker.sh "$@")
+if [[ "${EMBEDDED}" == "false" ]]; then
+    if [[ "$(id -u)" == "${APP_UID}" && "$(id -g)" == "${APP_GID}" ]]; then
+        exec setpriv --no-new-privs --clear-groups "${APP_START_COMMAND[@]}"
+    fi
+    exec setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --reuid="${APP_UID}" --regid="${APP_GID}" --clear-groups \
+        "${APP_START_COMMAND[@]}"
+fi
+
+# Embedded PostgreSQL stays supervised by the root entrypoint so SIGTERM stops
+# the unprivileged app first and then the database cleanly.
 echo "🎮 Starting Oneirodex Docker container..."
-/app/startweb-docker.sh "$@" &
+if [[ "$(id -u)" == "${APP_UID}" && "$(id -g)" == "${APP_GID}" ]]; then
+    setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --clear-groups "${APP_START_COMMAND[@]}" &
+else
+    setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --reuid="${APP_UID}" --regid="${APP_GID}" --clear-groups \
+        "${APP_START_COMMAND[@]}" &
+fi
 APP_PID=$!
 
 shutdown() {
