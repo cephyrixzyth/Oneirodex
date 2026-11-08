@@ -297,7 +297,7 @@ A fresh install (no `db_data` volume yet) just takes the value from `.env`.
 `ONEIRODEX_LIBRARY_WATCH` stays **off by default** (`0` / unset). Compose bind-mounts only forward filesystem events the kernel delivers on that mount:
 
 - **Direct host binds** (local disk path → `/storage:ro`) — events may work; still debounce + queue, never assume zero misses.
-- **Unraid `/mnt/user` FUSE / network remounts** — host-side renames and many writes **often never reach** inotify inside the container. Prefer scheduled/manual scan; details: [unraid-deploy.md § Library root watch](unraid-deploy.md#library-root-watch-gt_library_watch--unraid-honesty).
+- **Unraid `/mnt/user` FUSE / network remounts** — host-side renames and many writes **often never reach** inotify inside the container. Prefer scheduled/manual scan; details: [unraid-deploy.md § Library root watch](unraid-deploy.md#library-root-watch-oneirodex_library_watch--unraid-honesty).
 - When a watcher (or Admin) enqueues many paths while a scan is busy: use **Queue**, not force-parallel — [libraries-and-scans.md](../admin/libraries-and-scans.md#run-a-scan).
 
 ## After first start

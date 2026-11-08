@@ -390,7 +390,7 @@ Scans and image downloads can pin a NAS CPU if parallelism is left high. **There
 | Turbo image downloads | Server Settings | Off during first large scan, or threads **≤4**, batch **≤100** | Stored defaults are **4 / 100**; runtime also hard-caps via `OD_IMAGE_*` |
 | ClamAV profile | Compose `--profile clamav` | **Off** until needed | Heuristics + `ENABLE_MALWARE_SCAN` still run without the daemon; defs + on-add scans add CPU/IO |
 | Challenge / TRAWL | `--profile challenge` | Off unless Acquire needs it | Browser pool is heavy; old NAS → `TRAWL_IMAGE=…:baseline` |
-| `ONEIRODEX_LIBRARY_WATCH` | `.env` | **0** (off) | Best-effort root-folder watch; enqueues scans only — see [§ Library root watch](#library-root-watch-gt_library_watch--unraid-honesty) |
+| `ONEIRODEX_LIBRARY_WATCH` | `.env` | **0** (off) | Best-effort root-folder watch; enqueues scans only — see [§ Library root watch](#library-root-watch-oneirodex_library_watch--unraid-honesty) |
 | Watcher burst enqueue | Scan conflict UI / API | **Queue** (not force parallel) | Many path events → FIFO queue; force-parallel stacks jobs and spikes CPU |
 
 After Backend lands harder code caps/defaults: rebuild + recreate **app**, then open Server Settings once and confirm values match the safe row above (existing DB rows may keep old highs until clamped or re-saved).
