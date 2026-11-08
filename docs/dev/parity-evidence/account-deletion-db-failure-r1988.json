@@ -1,0 +1,21 @@
+{
+  "review_id": "R1988",
+  "title": "Verify pre-commit account deletion failure preserves account files",
+  "classification": "No new implementation defect reproduced. A synthetic deletion transaction failure rolls back the account and cleanup queue before any owned file is purged.",
+  "scenario": {
+    "records": "An admin and member with an uploaded avatar and thumbnail in a synthetic managed storage root.",
+    "injection": "Fail the deletion transaction commit once after relation changes and file cleanup jobs have been staged.",
+    "expected": "The member row remains, both files remain byte-for-byte intact, and no purge job survives the rollback."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q",
+    "result": "passed: 8 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "database": "Fresh uniquely named PostgreSQL test database upgraded through d6e7f8a9b0c1.",
+    "cleanup": "The disposable database was dropped after the passing run.",
+    "other_cases": "The same run covers retained household chat and custom emoji, private relation cleanup, survivor credential isolation, failed post-commit unlink retry, unsafe-path rejection, the deletion manifest, and FK inventory."
+  },
+  "limits": [
+    "The synthetic failure exercises the database commit boundary; it does not emulate process termination at every instruction.",
+    "Operator-schema comparison, deployment restart/retry, and the P2-09 relation tabletop remain open."
+  ]
+}

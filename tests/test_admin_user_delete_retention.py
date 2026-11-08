@@ -414,6 +414,55 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert unsafe_job.last_error_code == 'unsafe_path'
 
 
+def test_native_admin_deletion_database_failure_preserves_account_and_files(
+    db_session, tmp_path, monkeypatch,
+):
+    from oneirodex import db
+    from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+    from oneirodex.utils import user_deletion
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX
+
+    suffix = str(uuid4())[:8]
+    admin = _make_user(f'del_failure_admin_{suffix}', 'admin')
+    victim = _make_user(f'del_failure_member_{suffix}', 'user')
+    upload_root = tmp_path / 'uploads'
+    save_root = tmp_path / 'saves'
+    save_root.mkdir()
+    monkeypatch.setattr(
+        user_deletion, '_storage_roots', lambda: (upload_root.resolve(), save_root.resolve()),
+    )
+    avatar_name = f'{uuid4().hex}.png'
+    victim.avatarpath = AVATAR_URL_PREFIX + avatar_name
+    avatar_file = upload_root / 'images' / 'avatars_users' / avatar_name
+    avatar_file.parent.mkdir(parents=True)
+    avatar_file.write_bytes(b'preserve-uncommitted-account-file')
+    thumbnail = avatar_file.with_name(f'{avatar_file.stem}_thumbnail{avatar_file.suffix}')
+    thumbnail.write_bytes(b'preserve-uncommitted-thumbnail')
+    db_session.add_all([admin, victim])
+    db_session.commit()
+    admin_id, victim_id = admin.id, victim.id
+
+    original_commit = db_session.commit
+    should_fail = {'value': True}
+
+    def fail_deletion_commit_once():
+        if should_fail['value']:
+            should_fail['value'] = False
+            raise RuntimeError('synthetic deletion transaction failure')
+        return original_commit()
+
+    monkeypatch.setattr(db_session, 'commit', fail_deletion_commit_once)
+    payload, error = AdminUserMutationData().delete(victim_id, admin_id)
+
+    assert payload is None
+    assert error[:2] == ('Failed to delete user', 'internal')
+    db.session.expire_all()
+    assert db.session.get(User, victim_id) is not None
+    assert avatar_file.read_bytes() == b'preserve-uncommitted-account-file'
+    assert thumbnail.read_bytes() == b'preserve-uncommitted-thumbnail'
+    assert db.session.query(UserDeletionFileJob).count() == 0
+
+
 def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_db, tmp_path):
     relative_path = 'queued/deleted-after-restart.bin'
     target = tmp_path / relative_path
