@@ -1,5 +1,7 @@
 import hashlib
-import time
+import os
+import subprocess
+import sys
 from uuid import uuid4
 from pathlib import Path
 
@@ -288,8 +290,6 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
 
 
 def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_db, tmp_path):
-    from oneirodex.utils.user_deletion import start_file_cleanup_worker
-
     relative_path = 'queued/deleted-after-restart.bin'
     target = tmp_path / relative_path
     target.parent.mkdir(parents=True)
@@ -306,15 +306,50 @@ def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_d
     no_savepoint_db.add(job)
     no_savepoint_db.commit()
 
-    worker = start_file_cleanup_worker(app, interval_seconds=0.02)
-    assert worker is not None
-    try:
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and target.exists():
-            time.sleep(0.01)
-    finally:
-        worker.stop()
-        worker.thread.join(timeout=5)
+    child_script = r'''
+import os
+import sys
+import time
+from oneirodex import create_app, db
+from oneirodex.models import UserDeletionFileJob
+from oneirodex.utils.user_deletion import start_file_cleanup_worker
+
+target, root, relative_path = sys.argv[1:4]
+app = create_app()
+if app.config['SQLALCHEMY_DATABASE_URI'] != os.environ['TEST_DATABASE_URL']:
+    raise SystemExit('child app did not select the validated test database')
+worker = start_file_cleanup_worker(app, interval_seconds=0.02)
+if worker is None:
+    raise SystemExit('cleanup worker did not start in the child process')
+try:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and os.path.exists(target):
+        time.sleep(0.01)
+    with app.app_context():
+        remaining = db.session.query(UserDeletionFileJob).filter_by(
+            root_path=root, relative_path=relative_path,
+        ).count()
+    if os.path.exists(target) or remaining:
+        raise SystemExit('startup worker left the committed cleanup job pending')
+finally:
+    worker.stop()
+    worker.thread.join(timeout=5)
+'''
+    test_database_url = app.config['SQLALCHEMY_DATABASE_URI']
+    child_env = os.environ.copy()
+    child_env['DATABASE_URL'] = test_database_url
+    child_env['TEST_DATABASE_URL'] = test_database_url
+    child_env['PYTEST_CURRENT_TEST'] = 'account cleanup process restart regression'
+    result = subprocess.run(
+        [sys.executable, '-c', child_script, str(target), root, relative_path],
+        cwd=Path(__file__).resolve().parents[1],
+        env=child_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
     no_savepoint_db.expire_all()
     assert not target.exists()
