@@ -25,13 +25,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from oneirodex.utils.font_install import download_builtin_font  # noqa: E402
+from oneirodex.utils.font_install import (  # noqa: E402
+    FONT_SHA256,
+    download_builtin_font,
+)
 
 DEFAULT_OUT = ROOT / "oneirodex" / "static" / "library" / "fonts"
 
@@ -94,13 +100,22 @@ FONTS: list[tuple[str, str, str, str, str]] = [
 LICENSE_URLS = {
     "OFL.txt": f"{RAW}/pressstart2p/OFL.txt",
 }
+LICENSE_SHA256 = {
+    "OFL.txt": "004fc993a3bdaaf0fd443cb58d7e5c2fd09fc3a93b23309d0005421f7b8b7123",
+}
 
 
 def _looks_like_font(head: bytes) -> bool:
     return any(head.startswith(sig) for sig in FONT_MAGIC)
 
 
-def fetch(url: str, dest: Path, *, expect_font: bool = True) -> tuple[bool, str]:
+def fetch(
+    url: str,
+    dest: Path,
+    *,
+    expected_sha256: str,
+    expect_font: bool = True,
+) -> tuple[bool, str]:
     try:
         payload = download_builtin_font(url)
     except Exception as exc:  # noqa: BLE001
@@ -111,12 +126,25 @@ def fetch(url: str, dest: Path, *, expect_font: bool = True) -> tuple[bool, str]
 
     if not payload:
         return False, "empty response"
+    if hashlib.sha256(payload).hexdigest() != expected_sha256:
+        return False, "SHA-256 mismatch"
     if expect_font and not _looks_like_font(payload[:4]):
         # Almost always an HTML error page with a .ttf name.
         return False, "not a font file (upstream path may have moved)"
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(payload)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=dest.parent, prefix=f".{dest.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+        os.replace(temporary, dest)
+    except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return False, f"write failed ({type(exc).__name__})"
     return True, f"{len(payload) / 1024:.0f} KB"
 
 
@@ -147,7 +175,7 @@ def main() -> int:
             print(f"  = {filename:28} already present")
             skipped += 1
             continue
-        ok, detail = fetch(url, dest)
+        ok, detail = fetch(url, dest, expected_sha256=FONT_SHA256[filename])
         if ok:
             print(f"  + {filename:28} {detail}  ({use})")
             got += 1
@@ -158,7 +186,9 @@ def main() -> int:
     for name, url in LICENSE_URLS.items():
         dest = out / name
         if not dest.exists() or args.force:
-            ok, detail = fetch(url, dest, expect_font=False)
+            ok, detail = fetch(
+                url, dest, expected_sha256=LICENSE_SHA256[name], expect_font=False
+            )
             print(f"  {'+' if ok else '!'} {name:28} {detail}")
 
     print(f"\n{got} downloaded, {skipped} already present, {len(failed)} failed")

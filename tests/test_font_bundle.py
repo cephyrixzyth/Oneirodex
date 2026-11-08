@@ -10,6 +10,7 @@ script nobody knew to run.
 """
 
 import os
+import hashlib
 
 import pytest
 
@@ -40,6 +41,14 @@ def test_the_licence_travels_with_the_faces():
     """These are OFL 1.1 fonts; redistributing them without OFL.txt is not allowed."""
     for name in BUNDLED_EXTRAS:
         assert os.path.isfile(os.path.join(BUNDLED_FONTS_DIR, name)), name
+
+
+def test_bundled_faces_match_reviewed_sha256_digests():
+    from oneirodex.utils.font_install import FONT_SHA256
+
+    for name, expected in FONT_SHA256.items():
+        with open(os.path.join(BUNDLED_FONTS_DIR, name), 'rb') as handle:
+            assert hashlib.file_digest(handle, 'sha256').hexdigest() == expected, name
 
 
 def test_seeding_installs_every_face_with_no_network(tmp_path, monkeypatch):
@@ -82,6 +91,20 @@ def test_seeded_files_are_real_fonts(tmp_path):
             continue
         with open(os.path.join(root, name), 'rb') as handle:
             assert _looks_like_font(handle.read(4)), name
+
+
+def test_seed_skips_bundled_font_with_unexpected_digest(tmp_path, monkeypatch):
+    import oneirodex.utils.font_install as font_install
+
+    source = tmp_path / 'bundle'
+    source.mkdir()
+    name = next(iter(font_install.FONT_SOURCES))
+    (source / name).write_bytes(b'\x00\x01\x00\x00tampered')
+    monkeypatch.setattr(font_install, 'BUNDLED_FONTS_DIR', str(source))
+    monkeypatch.setattr(font_install, 'FONT_SHA256', {name: '0' * 64})
+
+    assert seed_builtin_fonts(str(tmp_path / 'target')) == 0
+    assert not (tmp_path / 'target' / name).exists()
 
 
 def test_an_unwritable_target_costs_the_font_not_the_boot(tmp_path, monkeypatch):

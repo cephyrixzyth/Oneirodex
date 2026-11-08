@@ -24,6 +24,7 @@ redistributing them without the licence text is not permitted.
 from __future__ import annotations
 
 import logging
+import hashlib
 import os
 import shutil
 import tempfile
@@ -57,6 +58,16 @@ FONT_SOURCES: dict[str, str] = {
     'VT323-Regular.ttf': f'{RAW}/vt323/VT323-Regular.ttf',
     'ShareTechMono-Regular.ttf': f'{RAW}/sharetechmono/ShareTechMono-Regular.ttf',
     'Orbitron-Variable.ttf': f'{RAW}/orbitron/Orbitron%5Bwght%5D.ttf',
+}
+
+# SHA-256 digests of the reviewed Google Fonts assets. Keep the startup
+# fallback pinned even though normal installs copy the bundled files above.
+FONT_SHA256: dict[str, str] = {
+    'PressStart2P-Regular.ttf': '034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d',
+    'Silkscreen-Regular.ttf': 'c845473330b94c2079ce9af01c51ac8ba2d99c24f4d14c039843bbb8e642ebd8',
+    'VT323-Regular.ttf': 'cf4de751ada78ceac033dbe16a687742939995b77bc2a052ae17a4957958594d',
+    'ShareTechMono-Regular.ttf': '9ceab1f87414829af259c0f537573ae03ef7dd3147c0b27a36a1a0beb6732677',
+    'Orbitron-Variable.ttf': 'f42db2dd16e642258e35782916eceb1dcdbea06fb958d77ad71dc5963587e8fd',
 }
 
 #: TrueType, OpenType, and the two WOFF wrappers.
@@ -98,6 +109,17 @@ def seed_builtin_fonts(root: str, *, force: bool = False) -> int:
         dest = os.path.join(root, name)
         if not os.path.isfile(source):
             continue
+        if name in FONT_SHA256:
+            try:
+                with open(source, 'rb') as handle:
+                    source_digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+            except OSError:
+                continue
+            if source_digest != FONT_SHA256[name]:
+                logging.getLogger(__name__).warning(
+                    'Skipping bundled font %s after SHA-256 verification failed', name,
+                )
+                continue
         if os.path.isfile(dest) and not force and name in BUNDLED_EXTRAS:
             continue
         try:
@@ -163,6 +185,12 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
         # it would leave a file that exists, never renders, and stops this
         # function ever retrying.
         if not payload or not _looks_like_font(payload[:4]):
+            continue
+        expected_sha256 = FONT_SHA256.get(name)
+        if not expected_sha256 or hashlib.sha256(payload).hexdigest() != expected_sha256:
+            logging.getLogger(__name__).warning(
+                'Skipping built-in font %s after SHA-256 verification failed', name,
+            )
             continue
 
         temporary_path = None

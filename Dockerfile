@@ -1,6 +1,6 @@
 # SPA bundles contain only static assets. Build them on the native build
 # platform so an arm64 image does not run npm install/build through QEMU.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS frontend-build
 
 WORKDIR /build
 
@@ -46,7 +46,9 @@ RUN mkdir -p oneirodex/static/dist/member-app oneirodex/static/dist/admin-app on
     && npm run build:pilot --workspace=admin-app \
     && npm run build --workspace=ops-glance
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
+
+ARG DEBIAN_SNAPSHOT=20261104T212339Z
 
 WORKDIR /app
 
@@ -76,7 +78,12 @@ LABEL org.opencontainers.image.title="Oneirodex" \
 # single-container / Unraid Community Apps install). The Compose stack keeps
 # using its separate postgres:17 service and never starts this one. No cluster is
 # created at build time: it is made on first start inside the /config volume.
-RUN mkdir -p /etc/postgresql-common \
+RUN sed -i \
+    -e "s|^URIs: http://deb.debian.org/debian\$|URIs: https://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
+    -e "s|^URIs: http://deb.debian.org/debian-security\$|URIs: https://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}|" \
+    -e '/^Suites:/a Check-Valid-Until: no' \
+    /etc/apt/sources.list.d/debian.sources \
+    && mkdir -p /etc/postgresql-common \
     && printf 'create_main_cluster = false\n' > /etc/postgresql-common/createcluster.conf \
     && apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -100,7 +107,7 @@ COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirode
 # Docker entrypoint. Empty named volumes inherit this ownership on first mount.
 RUN chown -R 99:100 /app/oneirodex/static/library
 
-RUN pip install -r requirements.txt
+RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
 ARG EMULATORJS_VERSION="4.2.3"
 ARG EMULATORJS_SHA256="07d451bc06fa3ad04ab30d9b94eb63ac34ad0babee52d60357b002bde8f3850b"
 RUN EMULATORJS_DATA_DIR=/app/oneirodex/static/vendor/emulatorjs/data \

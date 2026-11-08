@@ -1,6 +1,6 @@
-# Core ASGI/ORM runtime dependencies. A self-hosted image is rebuilt on user
-# hardware on the user's schedule; pinning prevents builds from resolving
-# incompatible framework/ORM minors. Legacy Flask adapters are development-only.
+# Direct runtime constraints. The Docker image installs the complete
+# hash-locked requirements.lock generated from this file with pip-tools 7.6.2.
+# Legacy Flask adapters are development-only.
 fastapi==0.143.0
 starlette==1.7.0
 python-multipart==0.0.32
@@ -18,7 +18,7 @@ alembic==1.20.0
 pydantic==2.13.5
 # pydantic 2.13.5 requires exactly this core; another package on the shared
 # interpreter has twice pulled it to 2.49.0, and pydantic then refuses to import
-# (create_app() SystemError). Pinning it here lets `pip install -r` reassert it.
+# (create_app() SystemError). This direct constraint is repeated in the lock.
 pydantic-core==2.46.5
 
 argon2_cffi==25.1.0

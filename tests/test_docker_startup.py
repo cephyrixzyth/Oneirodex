@@ -89,3 +89,17 @@ def test_entrypoint_passes_database_settings_as_environment_not_python_source():
     assert "os.environ.get('DATABASE_HOST', '${DB_HOST}')" not in entrypoint
     assert "os.environ.get('DATABASE_PORT', '${DB_PORT}')" not in entrypoint
     assert "os.environ.get('POSTGRES_USER', '${DB_USER}')" not in entrypoint
+
+
+def test_docker_build_inputs_are_digest_pinned_and_emit_image_evidence():
+    dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    workflow = (ROOT / '.github' / 'workflows' / 'docker-publish.yml').read_text(encoding='utf-8')
+
+    assert 'node:22-alpine@sha256:' in dockerfile
+    assert 'python:3.12-slim@sha256:' in dockerfile
+    assert 'snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}' in dockerfile
+    assert '--require-hashes -r requirements.lock' in dockerfile
+    assert 'sbom: true' in workflow
+    assert 'provenance: mode=max' in workflow
+    assert 'steps.image.outputs.digest' in workflow
+    assert 'scripts/check_release_license_files.py' in workflow

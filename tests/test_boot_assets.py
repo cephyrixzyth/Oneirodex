@@ -13,6 +13,7 @@ path. These tests cover the importable half: no network, no database.
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,11 @@ def without_the_bundle(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         font_install, 'BUNDLED_FONTS_DIR', str(tmp_path / 'deliberately-absent')
+    )
+    fake_font = b'\x00\x01\x00\x00' + b'x' * 64
+    monkeypatch.setattr(
+        font_install, 'FONT_SHA256',
+        {name: hashlib.sha256(fake_font).hexdigest() for name in font_install.FONT_SOURCES},
     )
     return font_install
 
@@ -129,6 +135,47 @@ def test_install_rejects_an_html_error_page(tmp_path, monkeypatch, without_the_b
     assert all(call['stream'] is True and call['timeout'] == 60 for call in fetcher.kwargs)
     assert written == 0
     assert list(tmp_path.iterdir()) == []
+
+
+def test_install_rejects_font_with_unexpected_digest_and_preserves_existing(
+    tmp_path, monkeypatch, without_the_bundle
+):
+    font_install = without_the_bundle
+    name = next(iter(font_install.FONT_SOURCES))
+    original = b'previous-reviewed-font'
+    (tmp_path / name).write_bytes(original)
+    monkeypatch.setattr(font_install, 'FONT_SHA256', {name: '0' * 64})
+    monkeypatch.setattr(font_install, 'safe_get', _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64))
+
+    assert font_install.install_builtin_fonts(str(tmp_path), force=True) == 0
+    assert (tmp_path / name).read_bytes() == original
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_manual_font_fetch_rejects_unexpected_digest_before_publication(tmp_path, monkeypatch):
+    import importlib.util
+
+    script_path = ROOT / 'scripts' / 'fetch-fonts.py'
+    spec = importlib.util.spec_from_file_location('fetch_fonts_script', script_path)
+    assert spec and spec.loader
+    fetch_fonts = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fetch_fonts)
+    name = 'PressStart2P-Regular.ttf'
+    destination = tmp_path / name
+    previous = b'previous-reviewed-font'
+    destination.write_bytes(previous)
+    payload = b'\x00\x01\x00\x00' + b'x' * 64
+    monkeypatch.setattr(fetch_fonts, 'download_builtin_font', lambda _url: payload)
+
+    ok, detail = fetch_fonts.fetch(
+        'https://fonts.example.invalid/font.ttf', destination,
+        expected_sha256='0' * 64,
+    )
+
+    assert not ok
+    assert detail == 'SHA-256 mismatch'
+    assert destination.read_bytes() == previous
+    assert not list(tmp_path.glob('*.tmp'))
 
 
 def test_install_writes_a_real_font(tmp_path, monkeypatch, without_the_bundle):

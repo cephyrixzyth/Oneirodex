@@ -21,6 +21,17 @@ directory once per app identity and mounted library volume; its marker lives
 inside that persistent library mount, so replacement mounts are prepared as
 well. `/storage` is excluded and remains read-only.
 
+Image builds pin the Node and Python base indexes by digest, install Debian
+packages from a fixed Debian snapshot, and install Python runtime packages from
+the hash-locked `requirements.lock`. Npm uses the committed integrity-bearing
+root lockfile. Update direct runtime versions in `requirements.txt`, regenerate
+the Python lock with `pip-tools==7.6.2`, and review the full lock diff together.
+The EmulatorJS archive and font fallback assets also require their reviewed
+SHA-256 digests. Before publishing, the workflow checks required licence files,
+their pinned digests, and the third-party notice entries; it attaches BuildKit
+SBOM and provenance attestations and records the published image digest beside
+the source commit in its GitHub job summary.
+
 ## Isolated local staging
 
 Use `docker-compose.review.yml` with a distinct Compose project and an explicit
