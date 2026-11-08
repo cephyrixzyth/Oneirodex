@@ -369,6 +369,14 @@ def anonymize_user_audit_events(session, user) -> None:
             event.audit_user = None
 
 
+def _redact_account_text(text: str | None, identifiers: list[str]) -> str | None:
+    if not text:
+        return text
+    for value in identifiers:
+        text = re.sub(re.escape(value), '[deleted account]', text, flags=re.IGNORECASE)
+    return _ABSOLUTE_PATH_PATTERN.sub('[redacted path]', text)
+
+
 def delete_user_owned_rows(session, user) -> None:
     """Delete private rows and anonymize references to retained audit records."""
     from oneirodex.models import (
@@ -395,8 +403,23 @@ def delete_user_owned_rows(session, user) -> None:
             UserAttractModeSettings.user_id == user.user_id
         )
     )
-    session.execute(
-        update(DuplicateFixLog)
-        .where(DuplicateFixLog.actor_user_id == user.id)
-        .values(actor_user_id=None)
-    )
+    identifiers = [value for value in (user.name, user.email, user.user_id) if value]
+    duplicate_predicates = [DuplicateFixLog.actor_user_id == user.id]
+    for value in identifiers:
+        duplicate_predicates.extend((
+            DuplicateFixLog.folder_path.icontains(value, autoescape=True),
+            DuplicateFixLog.notes.icontains(value, autoescape=True),
+        ))
+    duplicate_logs = session.execute(
+        select(DuplicateFixLog).where(or_(*duplicate_predicates)).with_for_update()
+    ).scalars()
+    for log in duplicate_logs:
+        actor_owned = log.actor_user_id == user.id
+        # Retained duplicate triage rows can contain operator paths and free text.
+        # Keep the action and match metadata, but remove paths and account identifiers.
+        if actor_owned or any(value.casefold() in (log.folder_path or '').casefold()
+                              for value in identifiers):
+            log.folder_path = '[redacted path]'
+        log.notes = _redact_account_text(log.notes, identifiers)
+        if actor_owned:
+            log.actor_user_id = None

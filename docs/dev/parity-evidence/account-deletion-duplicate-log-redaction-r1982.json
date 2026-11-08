@@ -1,0 +1,21 @@
+{
+  "review_id": "R1982",
+  "title": "Redact retained duplicate-triage records on account deletion",
+  "owner_decision": "Delete user data, retain security/audit logs; retain household chat messages with anonymized authors.",
+  "classification": "Confirmed privacy leak fixed: retained DuplicateFixLog rows cleared the actor foreign key but kept actor-owned filesystem paths and account identifiers in free-text notes.",
+  "change": {
+    "selection": "Rows are selected when the deleted account is the actor or its name, email, or user ID appears case-insensitively in the folder path or notes; SQL LIKE metacharacters in identifiers are escaped.",
+    "retention": "Duplicate action and match metadata remain. Actor references are cleared, account identifiers in notes are replaced with [deleted account], and absolute paths in matching notes or folder_path values are replaced with [redacted path]."
+  },
+  "verification": {
+    "pre_fix_reproduction": "On a fresh database at Alembic head, the new deletion regression failed because the actor-owned Windows folder path remained in DuplicateFixLog.folder_path.",
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q",
+    "result": "passed: 6 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "coverage": "Actor-owned mixed-case email and Windows/POSIX paths are redacted; unlinked rows matching a case-variant email are selected, their path is redacted, and their note is anonymized. Existing deletion and FK inventory regressions pass.",
+    "database": "Fresh oneirodexdupfixpost_test database upgraded from Alembic baseline through head; dropped after verification. TEST_DATABASE_URL was process-scoped; root .env unchanged."
+  },
+  "limits": [
+    "The review covered SystemEvents and DuplicateFixLog retained text; other retained user-authored free-text columns still require classification.",
+    "Verification uses the current ORM/Alembic schema, not a deployed operator schema."
+  ]
+}

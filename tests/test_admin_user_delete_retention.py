@@ -157,7 +157,19 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
         filter_settings={}, autoplay_settings={},
     )
     duplicate_log = DuplicateFixLog(
-        folder_path=f'/synthetic/{suffix}', action='keep', actor_user_id=victim_id,
+        folder_path=f'C:\\Users\\{victim_name}\\AppData\\Oneirodex\\duplicates',
+        action='keep',
+        actor_user_id=victim_id,
+        notes=(
+            f'Checked by {victim_email.swapcase()} from '
+            f'/home/{victim_name}/.local/share/oneirodex.log'
+        ),
+    )
+    unlinked_duplicate_log = DuplicateFixLog(
+        folder_path=f'/home/{victim_name}/duplicates',
+        action='keep',
+        actor_user_id=None,
+        notes=f'Follow-up requested by {victim_email.swapcase()}',
     )
     prior_audit = SystemEvents(
         event_type='audit',
@@ -216,7 +228,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     )
     db_session.add_all([
         request, victim_invite, used_invite, attract_settings,
-        duplicate_log, prior_audit, attachment, owned_save,
+        duplicate_log, unlinked_duplicate_log, prior_audit, attachment, owned_save,
         victim_shared_save, shared_save,
     ])
     db_session.flush()
@@ -236,8 +248,8 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     request_id, game_uuid = request.id, game.uuid
     attachment_id, message_id, owned_save_id = attachment.id, message.id, owned_save.id
     victim_invite_id, used_invite_id = victim_invite.id, used_invite.id
-    attract_id, duplicate_id, prior_audit_id = (
-        attract_settings.id, duplicate_log.id, prior_audit.id,
+    attract_id, duplicate_id, unlinked_duplicate_id, prior_audit_id = (
+        attract_settings.id, duplicate_log.id, unlinked_duplicate_log.id, prior_audit.id,
     )
 
     original_unlink = Path.unlink
@@ -270,6 +282,17 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert db_session.get(EmulatorSave, owned_save_id) is None
     retained_duplicate = db_session.get(DuplicateFixLog, duplicate_id)
     assert retained_duplicate is not None and retained_duplicate.actor_user_id is None
+    assert retained_duplicate.folder_path == '[redacted path]'
+    assert victim_name.casefold() not in retained_duplicate.notes.casefold()
+    assert victim_email.casefold() not in retained_duplicate.notes.casefold()
+    assert '[deleted account]' in retained_duplicate.notes
+    assert '/home/' not in retained_duplicate.notes
+    retained_unlinked_duplicate = db_session.get(DuplicateFixLog, unlinked_duplicate_id)
+    assert retained_unlinked_duplicate is not None
+    assert retained_unlinked_duplicate.actor_user_id is None
+    assert retained_unlinked_duplicate.folder_path == '[redacted path]'
+    assert victim_email.casefold() not in retained_unlinked_duplicate.notes.casefold()
+    assert '[deleted account]' in retained_unlinked_duplicate.notes
     assert db_session.execute(user_favorites.select().where(
         user_favorites.c.user_id == victim_id,
     )).first() is None
