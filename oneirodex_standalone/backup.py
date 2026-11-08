@@ -120,7 +120,7 @@ def finalize_backup_manifest(
 
     tables = manifest['db']['tables']
     manifest['backup'] = {
-        'format': 'oneirodex-standalone-backup/1',
+        'format': 'oneirodex-standalone-backup/2',
         'created_at': created_at or datetime.now(timezone.utc).isoformat(),
         'source_commit': source_commit if source_commit and len(source_commit) == 40 else None,
         'postgresql_major': int(pg_major_text),
@@ -143,7 +143,7 @@ def finalize_backup_manifest(
     fingerprint = _sha256(raw.encode('utf-8'))
     _atomic_write(bundle / 'manifest.sha256', (fingerprint + '\n').encode('ascii'))
     complete = {
-        'format': 'oneirodex-standalone-backup-complete/1',
+        'format': 'oneirodex-standalone-backup-complete/2',
         'manifest_sha256': fingerprint,
     }
     _atomic_write(bundle / 'backup.complete.json',
@@ -169,8 +169,14 @@ def verify_complete_backup(bundle: Path) -> dict:
     backup_metadata = manifest.get('backup')
     if not isinstance(backup_metadata, dict):
         raise Refused('backup manifest is incomplete or has changed')
-    if (backup_metadata.get('format') != 'oneirodex-standalone-backup/1'
-            or complete.get('format') != 'oneirodex-standalone-backup-complete/1'
+    backup_format = backup_metadata.get('format')
+    completion_format = complete.get('format')
+    supported = {
+        'oneirodex-standalone-backup/1': 'oneirodex-standalone-backup-complete/1',
+        'oneirodex-standalone-backup/2': 'oneirodex-standalone-backup-complete/2',
+    }
+    if (backup_format not in supported
+            or completion_format != supported[backup_format]
             or actual != recorded or actual != complete.get('manifest_sha256')):
         raise Refused('backup manifest is incomplete or has changed')
     database_metadata = manifest.get('db')

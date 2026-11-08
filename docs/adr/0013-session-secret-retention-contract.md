@@ -23,16 +23,22 @@ focused tests and an independent source review passed. Synthetic database
 conversion and recovery from a separate operator-backup copy are qualified;
 live operator database conversion and a protected-backup restore drill remain
 pending. Save encryption now has a separate versioned keyring candidate and
-legacy read path, with a synthetic PostgreSQL current/history rotation test;
-protected-backup restore and operator migration qualification remain pending.
+legacy read path, with a synthetic PostgreSQL current/history rotation test.
+The Linux Docker standalone restore rehearsal recovered the synthetic save
+keyring from a separate read-only backup volume and verified imported saves;
+real operator-media recovery and deployed/operator migration qualification
+remain pending.
 Account deletion now has
 a PostgreSQL-verified relation inventory, a transactional managed-file job
 queue, and a retry worker; deployment-schema, restart, and restore qualification
 remain pending.
 An offline standalone backup command now produces a versioned, checksummed
 bundle and refuses completion when reusable plaintext credentials remain or a
-referenced reusable-secret key ID is unavailable. Docker/Unraid capture and
-restore qualification remain open.
+referenced reusable-secret key ID is unavailable. A disposable Linux Docker
+rehearsal verified import, rollback, repeat import, restored file serving and
+recovery from a separate synthetic save-keyring backup volume. Docker/Unraid
+backup capture, external-PostgreSQL capture and production backup-media
+qualification remain open.
 
 ## Decision
 
@@ -62,10 +68,12 @@ restore qualification remain open.
   Never fall back to plaintext or a built-in key.
 - Cookie signing, reusable-credential encryption and save encryption have
   separate key purposes. New encrypted saves use a versioned key ID from a
-  dedicated operator-managed keyring; retain old key IDs while any current
-  save or supported encrypted backup needs them. Legacy `GTENC1` data remains
-  readable with its original `SECRET_KEY`-derived key or the protected legacy
-  key entry. Do not treat a `SECRET_KEY` rotation as save-key rotation.
+  dedicated operator-managed keyring and authenticate the owning user, game,
+  slot and opaque generation ID in `GTENC3`; retain old key IDs while any
+  current save or supported encrypted backup needs them. Legacy `GTENC1` and
+  `GTENC2` data remain readable; `GTENC1` uses its original `SECRET_KEY`-derived
+  key or the protected legacy key entry. Do not treat a `SECRET_KEY` rotation
+  as save-key rotation.
 - Restore save-encryption key material from a protected operator backup stored
   separately from database, library and move bundles. If a key is unavailable,
   preserve ciphertext and report the save as unreadable until its matching key
@@ -124,14 +132,17 @@ restore qualification remain open.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
    A versioned save keyring and standalone-move key-ID contract are implemented
-   in the candidate; a synthetic PostgreSQL rotation test passed, while a
-   protected-backup restore and operator migration are still required.
+   in the candidate; context-bound `GTENC3` writes, copy-across-owner rejection,
+   synthetic PostgreSQL rotation, and Linux Docker restore using a separate
+   read-only protected-key backup volume passed. Real operator-media restore
+   and migration are still required.
 6. The initial offline standalone backup reuses the stopped-application move
    snapshot and writes a completion marker only after re-hashing its dump and
    managed files. Its manifest records required key IDs and excluded roots,
    while key material stays in the separate protected operator backup.
-   Docker/Unraid capture, concurrent-traffic qualification outside standalone,
-   and restore rehearsal remain pending.
+   The disposable Linux Docker restore rehearsal passed; Docker/Unraid backup
+   capture and concurrent-traffic qualification outside standalone remain
+   pending.
 
 Each step requires focused database-backed verification and operator-facing
 documentation before it can be marked complete.

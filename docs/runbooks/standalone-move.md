@@ -49,14 +49,20 @@ python -m oneirodex_standalone export --pg-home <bundled-postgres> --to <move-fo
 The export prints a **fingerprint**, 64 characters long. Write it down or copy
 it somewhere other than the move folder, because the import asks for it.
 
+New exports use move format version 2 for owner-bound `GTENC3` saves. The current
+importer also accepts version 1 bundles that contain only legacy save formats;
+it rejects context-bound saves mislabeled as version 1. Older importers that
+recognize only version 1 reject new exports as unsupported.
+
 ## 2. Copy the move folder to the server
 
 Put it next to `docker-compose.yml`, for example as `./move`, over a share or
 a USB drive. The import checks every file against the manifest, so a partial
 copy is refused rather than half-restored.
 
-The fingerprint is what makes the folder trustworthy on the server. Restoring
-a database runs its contents on the server. So a folder someone changed along
+The fingerprint detects changes when compared with the value kept separately.
+It does not authenticate who created the bundle. Restoring a database runs its
+contents on the server. So a folder someone changed along
 the way, even with every checksum inside rewritten to match, is refused unless
 its fingerprint is the one your export printed.
 

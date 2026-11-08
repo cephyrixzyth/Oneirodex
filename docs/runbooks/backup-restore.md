@@ -20,11 +20,14 @@ python -m oneirodex_standalone backup --pg-home <bundled-postgresql> --data-dir 
 ```
 
 The output folder must be new or empty. A successful backup contains the
-existing verified move payload, a versioned `backup` manifest section, and
+verified move format version 2 payload, a versioned `backup` manifest section, and
 `backup.complete.json`. The completion marker binds the final manifest hash;
 the database dump and each listed managed file are re-hashed before the marker
 is written. Without the marker, the folder is incomplete and must not be used
 as a restore source.
+The backup and completion metadata use version 2, so older importers that only
+recognize version 1 refuse the new format. The current importer continues to
+accept verified version 1 backups.
 
 The bundle includes the database and files under the standalone library's
 managed user folders, including emulator saves and retained save generations.
@@ -40,6 +43,13 @@ reusable-secret ring is missing a referenced ID. Keep a separately protected
 operator backup of both keyrings. The encrypted database and personal files
 remain sensitive household data; do not send the bundle to a shared location
 without protecting it.
+
+New `GTENC3` save entries include the owning user, game, slot and opaque
+generation context. The importer checks that context against the restored row
+and verifies the plaintext digest before accepting the restore. Legacy
+`GTENC1` files are re-encrypted into this format during export; older `GTENC2`
+files remain readable until the key-rotation command publishes a bound
+generation.
 
 The printed manifest SHA-256 is an integrity check, not publisher
 authentication. Store the bundle and hash in a protected operator location.

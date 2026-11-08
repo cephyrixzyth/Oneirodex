@@ -53,7 +53,7 @@ def moved(cur):
     for entry in encrypted_entries:
         path = LIBRARY / entry['path']
         try:
-            plaintext = maybe_decrypt(path.read_bytes())
+            plaintext = maybe_decrypt(path.read_bytes(), context=entry.get('save_context'))
             check(_sha256(plaintext) == entry['plain_sha256'],
                   f'{path.name} opens with the restored keyring and matches its plaintext digest')
         except Exception:  # noqa: BLE001 - report only the synthetic filename

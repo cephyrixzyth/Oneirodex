@@ -16,7 +16,7 @@ from werkzeug.utils import secure_filename
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, GlobalSettings, User
-from oneirodex.utils.save_crypto import maybe_decrypt, maybe_encrypt
+from oneirodex.utils.save_crypto import context_for_row, maybe_decrypt, maybe_encrypt, save_context
 from oneirodex.utils.library_paths import library_dir
 
 MAX_SAVE_BYTES = 2 * 1024 * 1024  # 2 MiB
@@ -227,7 +227,7 @@ def read_save_bytes(row: EmulatorSave) -> bytes:
         raise FileNotFoundError('Save file missing on disk')
     with open(row.storage_path, 'rb') as handle:
         payload = handle.read()
-    return maybe_decrypt(payload)
+    return maybe_decrypt(payload, context=context_for_row(row))
 
 
 def store_save(
@@ -293,15 +293,18 @@ def store_save(
     if not original:
         original = 'save.state'
 
-    payload, encrypted = maybe_encrypt(raw)
-
     dest_dir = os.path.join(_saves_root(), str(user_id), game_uuid)
     os.makedirs(dest_dir, exist_ok=True)
     # Opaque unique names avoid collisions between distinct display slots that
     # sanitize to the same filesystem name, and ensure writes never truncate a
     # previously committed generation.
-    dest_name = f'{uuid4().hex}.save'
+    generation_id = uuid4().hex
+    dest_name = f'{generation_id}.save'
     dest_path = os.path.join(dest_dir, dest_name)
+    payload, encrypted = maybe_encrypt(
+        raw,
+        context=save_context(user_id, game_uuid, slot, generation_id),
+    )
     fd, temp_path = tempfile.mkstemp(prefix='.pending-', dir=dest_dir)
     try:
         with os.fdopen(fd, 'wb') as handle:

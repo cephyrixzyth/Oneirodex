@@ -46,8 +46,12 @@ Encrypted emulator saves use a separate operator-managed keyring at
 `python scripts/migrate_emulator_save_keys.py --initialize-keyring <protected-output>`
 while the existing `SECRET_KEY` is available, then configure the absolute path
 in the install's `.env`. Back up this keyring separately from database and
-library backups. The app writes new encrypted saves using a versioned key ID;
-the ring also keeps the legacy key needed to read existing `GTENC1` saves.
+library backups. New encrypted saves use `GTENC3`: the versioned key ID and
+ciphertext authenticate the owning user, game, slot and opaque generation ID.
+Copying a blob into another owner or generation fails authentication. `GTENC1`
+and older `GTENC2` saves remain readable; the rotation command writes bound
+`GTENC3` generations while retaining old keys for supported backups. The ring
+also keeps the legacy key needed to read existing `GTENC1` saves.
 Restore matching key IDs from the protected backup before restoring encrypted
 saves. Do not rotate `SECRET_KEY` as a substitute for save-key rotation.
 

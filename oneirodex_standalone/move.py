@@ -44,7 +44,8 @@ import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-FORMAT = 'oneirodex-household-move/1'
+LEGACY_FORMAT = 'oneirodex-household-move/1'
+FORMAT = 'oneirodex-household-move/2'
 #: The server's runtime folder; always a root, filled in on both ends.
 LIBRARY_ROOT = 'library'
 #: Folders under the library that hold members' own files. Everything else in
@@ -55,6 +56,7 @@ PRESET_MARKER_KEY = 'oneirodex_preset'
 #: oneirodex/utils/save_crypto.py: encrypted save files start with this.
 SAVE_MAGIC = b'GTENC1:'
 KEYED_SAVE_MAGIC = b'GTENC2:'
+BOUND_SAVE_MAGIC = b'GTENC3:'
 #: Columns holding machine paths (P05 audit). Any other text column named
 #: *path* or *folder* is picked up at run time, so a new one is not missed.
 KNOWN_PATH_COLUMNS = {
@@ -493,7 +495,42 @@ def is_carried_path(rel: str) -> bool:
     return parts[0] == 'themes' and len(parts) > 2 and parts[1] != 'default'
 
 
-def snapshot_files(library: Path, save_key: str | None) -> list[dict]:
+def save_contexts_by_path(url: str) -> dict[str, dict]:
+    """Load immutable save-owner contexts without placing them in SQL logs."""
+    from sqlalchemy import text
+    from oneirodex.utils.save_crypto import generation_id_for_path, save_context
+
+    engine = _engine(url)
+    try:
+        with engine.connect() as conn:
+            has_generations = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_name = 'emulator_save_generations')"
+            )).scalar()
+            query = "SELECT storage_path, user_id, game_uuid, slot_name FROM emulator_saves"
+            if has_generations:
+                query += (
+                    " UNION ALL SELECT g.storage_path, s.user_id, s.game_uuid, s.slot_name "
+                    "FROM emulator_save_generations g JOIN emulator_saves s ON s.id = g.save_id"
+                )
+            rows = conn.execute(text(query)).all()
+        contexts = {}
+        for path, user_id, game_uuid, slot_name in rows:
+            generation_id = generation_id_for_path(str(path))
+            try:
+                contexts[path] = save_context(user_id, game_uuid, slot_name, generation_id)
+            except ValueError:
+                # Legacy paths are valid for old formats but cannot identify a
+                # newly context-bound generation.
+                continue
+        return contexts
+    finally:
+        engine.dispose()
+
+
+def snapshot_files(
+    library: Path, save_key: str | None, contexts_by_path: dict[str, dict] | None = None,
+) -> list[dict]:
     from cryptography.fernet import InvalidToken
 
     entries = []
@@ -508,12 +545,18 @@ def snapshot_files(library: Path, save_key: str | None) -> list[dict]:
                 except InvalidToken:
                     raise Refused(f'{rel.as_posix()} is marked encrypted but does not open with this install\'s key; '
                                   'remove or replace that save, then export again') from None
-            elif data.startswith(KEYED_SAVE_MAGIC):
+            elif data.startswith((KEYED_SAVE_MAGIC, BOUND_SAVE_MAGIC)):
                 from oneirodex.utils.save_crypto import maybe_decrypt
 
                 try:
                     key_id = data[len(KEYED_SAVE_MAGIC):].partition(b':')[0].decode('ascii')
-                    entry['plain_sha256'] = _sha256(maybe_decrypt(data))
+                    context = (contexts_by_path or {}).get(str(path))
+                    if data.startswith(BOUND_SAVE_MAGIC):
+                        key_id = data[len(BOUND_SAVE_MAGIC):].partition(b':')[0].decode('ascii')
+                        if context is None:
+                            raise ValueError('context unavailable')
+                        entry['save_context'] = context
+                    entry['plain_sha256'] = _sha256(maybe_decrypt(data, context=context))
                     entry['save_key_id'] = key_id
                 except Exception:  # noqa: BLE001 - do not disclose key paths or values
                     raise Refused(f'{rel.as_posix()} needs its protected save keyring to export') from None
@@ -612,6 +655,7 @@ def export(args) -> int:
             raise Refused(str(exc)) from None
         try:
             db = snapshot_db(pg.url(), roots)
+            contexts_by_path = save_contexts_by_path(pg.url())
             if getattr(args, 'require_no_plaintext_secrets', False):
                 if db['legacy_reusable_secret_count']:
                     raise Refused(
@@ -640,7 +684,7 @@ def export(args) -> int:
             pg.stop()
 
         save_key = save_key_for(state['secret_key'])
-        files = snapshot_files(library, save_key)
+        files = snapshot_files(library, save_key, contexts_by_path)
         from oneirodex.utils.save_crypto import _encrypt_with_keyring, maybe_decrypt
         from oneirodex.utils.save_keyring import load_save_keyring
 
@@ -657,16 +701,20 @@ def export(args) -> int:
             if data is not None and data.startswith(SAVE_MAGIC):
                 if save_keyring is None:
                     raise Refused('encrypted saves need a protected save keyring before export')
-                payload = _encrypt_with_keyring(maybe_decrypt(data), save_keyring)
+                context = contexts_by_path.get(str(source))
+                if context is None:
+                    raise Refused(f'{entry["path"]} is missing save-owner metadata; cannot export safely')
+                payload = _encrypt_with_keyring(maybe_decrypt(data), save_keyring, context=context)
                 target.write_bytes(payload)
                 entry['sha256'] = _sha256(payload)
                 entry['size'] = len(payload)
                 entry['save_key_id'] = save_keyring.active_key_id
-                entry['plain_sha256'] = _sha256(maybe_decrypt(payload))
+                entry['plain_sha256'] = _sha256(maybe_decrypt(payload, context=context))
+                entry['save_context'] = context
                 required_key_ids.add(save_keyring.active_key_id)
             else:
                 shutil.copy2(source, target)
-                if data is not None and data.startswith(KEYED_SAVE_MAGIC):
+                if data is not None and data.startswith((KEYED_SAVE_MAGIC, BOUND_SAVE_MAGIC)):
                     required_key_ids.add(entry['save_key_id'])
                     entry['sha256'] = _sha256(data)
                     entry['size'] = len(data)
@@ -722,8 +770,15 @@ def check_bundle(bundle: Path, expect: str) -> dict:
     if not fingerprint.startswith(expect):
         raise Refused('the move folder does not match the fingerprint from export: it was changed or is a different folder')
     manifest = json.loads(raw)
-    if manifest.get('format') != FORMAT:
+    bundle_format = manifest.get('format')
+    if bundle_format not in (LEGACY_FORMAT, FORMAT):
         raise Refused(f'unsupported move folder format {manifest.get("format")!r}')
+    # Version 1 predates owner-bound save encryption and has no way to carry
+    # the authenticated owner context. Never let a new payload be interpreted
+    # using the old manifest contract.
+    if bundle_format == LEGACY_FORMAT and any(
+            entry.get('save_context') is not None for entry in manifest.get('files', [])):
+        raise Refused('context-bound saves require move folder format 2')
     problems = []
     dump = bundle / 'db.dump'
     if dump.is_symlink() or not dump.is_file() or _sha256(dump) != manifest['db_dump']['sha256']:
@@ -734,6 +789,11 @@ def check_bundle(bundle: Path, expect: str) -> dict:
         path = _safe_join(bundle / 'files', entry['path'], 'move folder')
         if path.is_symlink() or not path.is_file() or _sha256(path) != entry['sha256']:
             problems.append(f'files/{entry["path"]} missing or changed')
+            continue
+        if bundle_format == LEGACY_FORMAT and entry['path'].startswith('saves/'):
+            with path.open('rb') as handle:
+                if handle.read(len(BOUND_SAVE_MAGIC)) == BOUND_SAVE_MAGIC:
+                    raise Refused('context-bound saves require move folder format 2')
     if problems:
         raise Refused(f'move folder incomplete or altered ({len(problems)}): ' + '; '.join(problems[:5]))
     return manifest
@@ -760,7 +820,7 @@ def _file_conflicts(manifest: dict, library: Path, target_key: str | None = None
             try:
                 from oneirodex.utils.save_crypto import maybe_decrypt
 
-                if _sha256(maybe_decrypt(target.read_bytes())) == entry['plain_sha256']:
+                if _sha256(maybe_decrypt(target.read_bytes(), context=entry.get('save_context'))) == entry['plain_sha256']:
                     continue
             except Exception:  # noqa: BLE001 - an unreadable existing save is a conflict
                 pass
@@ -798,6 +858,7 @@ def rekey_saves(library: Path, manifest: dict, target_key: str) -> int:
 def verify(url: str, manifest: dict, new_roots: dict[str, str], library: Path, target_key: str | None) -> list[str]:
     expected, problems = manifest['db'], []
     actual = snapshot_db(url, new_roots)
+    actual_save_contexts = save_contexts_by_path(url)
     if actual['alembic_revision'] != expected['alembic_revision']:
         problems.append(f"schema revision {actual['alembic_revision']} != {expected['alembic_revision']}")
     for table, want in expected['tables'].items():
@@ -819,8 +880,12 @@ def verify(url: str, manifest: dict, new_roots: dict[str, str], library: Path, t
             try:
                 from oneirodex.utils.save_crypto import maybe_decrypt
 
+                expected_context = entry.get('save_context')
+                if expected_context is not None and actual_save_contexts.get(str(path)) != expected_context:
+                    problems.append(f'save {entry["path"]} owner context differs from the database row')
+                    continue
                 data = path.read_bytes()
-                if _sha256(maybe_decrypt(data)) != entry['plain_sha256']:
+                if _sha256(maybe_decrypt(data, context=entry.get('save_context'))) != entry['plain_sha256']:
                     problems.append(f'save {entry["path"]} does not match its plaintext digest')
             except Exception:  # noqa: BLE001 - do not print local key paths or values
                 problems.append(f'save {entry["path"]} cannot be opened with the configured save keyring')
@@ -877,7 +942,7 @@ def import_(args) -> int:
             for entry in manifest['files']:
                 if entry.get('save_key_id'):
                     candidate = _safe_join(bundle / 'files', entry['path'], 'move folder')
-                    if _sha256(maybe_decrypt(candidate.read_bytes())) != entry['plain_sha256']:
+                    if _sha256(maybe_decrypt(candidate.read_bytes(), context=entry.get('save_context'))) != entry['plain_sha256']:
                         raise Refused('an encrypted save does not match its manifest plaintext digest')
         except Refused:
             raise

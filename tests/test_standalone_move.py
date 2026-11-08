@@ -102,6 +102,31 @@ def test_versioned_save_move_records_key_id_without_key_material(tmp_path, monke
     assert raw_key not in json.dumps(manifest)
 
 
+def test_context_bound_save_move_carries_owner_generation_context(tmp_path, monkeypatch):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring, save_context
+    from oneirodex.utils.save_keyring import load_save_keyring
+    from scripts.migrate_emulator_save_keys import initialize_keyring
+
+    lib = _library(tmp_path)
+    keyring_path = tmp_path / 'protected-save-keyring.json'
+    initialize_keyring(keyring_path, 'legacy-server-secret')
+    monkeypatch.setenv('ONEIRODEX_SAVE_KEYRING_FILE', str(keyring_path))
+    keyring = load_save_keyring()
+    generation_id = 'd' * 32
+    context = save_context(1, 'game-canary', 'slot1', generation_id)
+    save = lib / f'saves/1/game-canary/{generation_id}.save'
+    save.parent.mkdir(parents=True, exist_ok=True)
+    save.write_bytes(_encrypt_with_keyring(b'bound-save', keyring, context=context))
+
+    files = move.snapshot_files(lib, move.save_key_for('legacy-server-secret'), {str(save): context})
+    entry = next(e for e in files if e['path'].endswith(f'{generation_id}.save'))
+
+    assert entry['plain_sha256'] == move._sha256(b'bound-save')
+    assert entry['save_key_id'] == keyring.active_key_id
+    assert entry['save_context'] == context
+    assert move._sha256(save.read_bytes()) == entry['sha256']
+
+
 def test_rekey_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
     lib = _library(tmp_path)
     source, server = move.save_key_for('standalone'), move.save_key_for('server')
@@ -159,6 +184,44 @@ def test_a_complete_bundle_passes_the_check(tmp_path):
     bundle, manifest, fingerprint = _bundle(tmp_path)
     assert move.check_bundle(bundle, fingerprint) == json.loads(json.dumps(manifest))
     assert move.check_bundle(bundle, fingerprint[:16].upper()), 'a 16-character prefix is enough'
+
+
+def test_legacy_v1_bundle_remains_importable(tmp_path):
+    bundle, manifest, _ = _bundle(tmp_path)
+    manifest['format'] = move.LEGACY_FORMAT
+    fingerprint = _seal(bundle, manifest)
+
+    assert move.check_bundle(bundle, fingerprint)['format'] == move.LEGACY_FORMAT
+
+
+def test_unknown_future_move_bundle_version_is_rejected(tmp_path):
+    bundle, manifest, _ = _bundle(tmp_path)
+    manifest['format'] = 'oneirodex-household-move/3'
+    fingerprint = _seal(bundle, manifest)
+
+    with pytest.raises(Refused, match='unsupported move folder format'):
+        move.check_bundle(bundle, fingerprint)
+
+
+def test_context_bound_save_cannot_be_mislabeled_as_v1(tmp_path):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring, save_context
+    from oneirodex.utils.save_keyring import SaveKeyring
+
+    bundle, manifest, _ = _bundle(tmp_path)
+    context = save_context(7, 'game-canary', 'slot1', 'd' * 32)
+    keyring = SaveKeyring(active_key_id='key-1', keys={'key-1': Fernet(Fernet.generate_key())})
+    save_entry = next(entry for entry in manifest['files'] if entry['path'].startswith('saves/'))
+    payload = _encrypt_with_keyring(b'bound-save', keyring, context=context)
+    target = bundle / 'files' / save_entry['path']
+    target.write_bytes(payload)
+    save_entry.update({
+        'size': len(payload), 'sha256': move._sha256(payload), 'save_context': context,
+    })
+    manifest['format'] = move.LEGACY_FORMAT
+    fingerprint = _seal(bundle, manifest)
+
+    with pytest.raises(Refused, match='context-bound saves require move folder format 2'):
+        move.check_bundle(bundle, fingerprint)
 
 
 def test_a_resealed_bundle_does_not_match_the_exported_fingerprint(tmp_path):

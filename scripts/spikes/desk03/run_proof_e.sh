@@ -137,7 +137,7 @@ refused import_ -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -- --root
 docker run --rm -v p05e-move:/move --entrypoint python "$IMG" -c "
 import json, hashlib
 m=json.load(open('/move/bundle/manifest.json'))
-open('/move/bundle/backup.complete.json','w').write(json.dumps({'format':'oneirodex-standalone-backup-complete/1','manifest_sha256':hashlib.sha256(open('/move/bundle/manifest.json','rb').read()).hexdigest()})+'\\n')"
+open('/move/bundle/backup.complete.json','w').write(json.dumps({'format':'oneirodex-standalone-backup-complete/2','manifest_sha256':hashlib.sha256(open('/move/bundle/manifest.json','rb').read()).hexdigest()})+'\\n')"
 ok check untouched
 
 echo "== import"

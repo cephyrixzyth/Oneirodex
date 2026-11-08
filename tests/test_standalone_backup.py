@@ -23,7 +23,7 @@ def _move_bundle(tmp_path: Path) -> tuple[Path, Path]:
     save_path = bundle / 'files' / 'saves' / 'generation-12' / 'slot.sav'
     save_path.write_bytes(save)
     manifest = {
-        'format': 'oneirodex-household-move/1',
+        'format': 'oneirodex-household-move/2',
         'db': {
             'alembic_revision': 'revision-test',
             'tables': {
@@ -52,7 +52,7 @@ def test_completed_backup_binds_manifest_dump_and_save_generations(tmp_path):
     manifest = verify_complete_backup(bundle)
 
     assert fingerprint == (bundle / 'manifest.sha256').read_text(encoding='ascii').strip()
-    assert manifest['backup']['format'] == 'oneirodex-standalone-backup/1'
+    assert manifest['backup']['format'] == 'oneirodex-standalone-backup/2'
     assert manifest['backup']['source_commit'] == 'a' * 40
     assert manifest['backup']['postgresql_major'] == 17
     assert manifest['backup']['schema_revision'] == 'revision-test'
@@ -84,6 +84,24 @@ def test_backup_without_completion_marker_is_not_a_restorable_backup(tmp_path):
 
     with pytest.raises(Refused, match='incomplete or unreadable'):
         verify_complete_backup(bundle)
+
+
+def test_legacy_v1_backup_remains_restorable(tmp_path):
+    bundle, data_dir = _move_bundle(tmp_path)
+    finalize_backup_manifest(bundle, data_dir=data_dir)
+    manifest_path = bundle / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    manifest['backup']['format'] = 'oneirodex-standalone-backup/1'
+    raw = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
+    manifest_path.write_text(raw, encoding='utf-8')
+    fingerprint = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    (bundle / 'manifest.sha256').write_text(fingerprint + '\n', encoding='ascii')
+    (bundle / 'backup.complete.json').write_text(json.dumps({
+        'format': 'oneirodex-standalone-backup-complete/1',
+        'manifest_sha256': fingerprint,
+    }, sort_keys=True) + '\n', encoding='utf-8')
+
+    assert verify_complete_backup(bundle)['backup']['format'] == 'oneirodex-standalone-backup/1'
 
 
 def test_backup_refuses_legacy_plaintext_credential_rows(tmp_path):

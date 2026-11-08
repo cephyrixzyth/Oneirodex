@@ -28,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from oneirodex.models import EmulatorSave, EmulatorSaveGeneration
-from oneirodex.utils.save_crypto import KEYED_MAGIC, maybe_decrypt
+from oneirodex.utils.save_crypto import BOUND_MAGIC, _encrypt_with_keyring, context_for_row, maybe_decrypt, save_context
 from oneirodex.utils.save_keyring import load_save_keyring
 from scripts.migrate_store_credentials import resolve_database_url
 
@@ -105,12 +105,11 @@ def _safe_path(raw_path: str, root: Path) -> Path | None:
         return None
 
 
-def _encrypt_active(raw: bytes, keyring) -> bytes:
-    token = keyring.keys[keyring.active_key_id].encrypt(raw)
-    return KEYED_MAGIC + keyring.active_key_id.encode("ascii") + b":" + token
+def _encrypt_active(raw: bytes, keyring, context: dict) -> bytes:
+    return _encrypt_with_keyring(raw, keyring, context=context)
 
 
-def _stage(path: Path, payload: bytes) -> Path:
+def _stage(path: Path, payload: bytes, generation_id: str) -> Path:
     fd, temp_name = tempfile.mkstemp(prefix=".save-rotation-", dir=path.parent)
     temp_path = Path(temp_name)
     try:
@@ -118,7 +117,7 @@ def _stage(path: Path, payload: bytes) -> Path:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        final_path = path.parent / f"{uuid4().hex}.save"
+        final_path = path.parent / f"{generation_id}.save"
         os.replace(temp_path, final_path)
         try:
             directory_fd = os.open(path.parent, os.O_RDONLY)
@@ -155,21 +154,29 @@ def migrate_rows(session: Session, root: Path, *, apply: bool) -> dict[str, int]
             continue
         try:
             stored = old_path.read_bytes()
-            if stored.startswith(KEYED_MAGIC):
-                header = stored[len(KEYED_MAGIC):].partition(b":")[0].decode("ascii")
+            owner = row if isinstance(row, EmulatorSave) else session.get(EmulatorSave, row.save_id)
+            if owner is None:
+                counts["failures"] += 1
+                continue
+            context = context_for_row(row, owner=owner)
+            if stored.startswith(BOUND_MAGIC):
+                header = stored[len(BOUND_MAGIC):].partition(b":")[0].decode("ascii")
                 if header == keyring.active_key_id:
+                    maybe_decrypt(stored, context=context)
                     counts["already_active"] += 1
                     continue
-            plain = maybe_decrypt(stored)
-            replacement = _encrypt_active(plain, keyring)
-            if keyring.keys[keyring.active_key_id].decrypt(
-                replacement[len(KEYED_MAGIC):].partition(b":")[2],
-            ) != plain:
+            plain = maybe_decrypt(stored, context=context)
+            generation_id = uuid4().hex
+            replacement_context = save_context(
+                owner.user_id, owner.game_uuid, owner.slot_name, generation_id,
+            )
+            replacement = _encrypt_active(plain, keyring, replacement_context)
+            if maybe_decrypt(replacement, context=replacement_context) != plain:
                 raise ValueError("Save rotation verification failed")
             if not apply:
                 counts["rotated"] += 1
                 continue
-            new_path = _stage(old_path, replacement)
+            new_path = _stage(old_path, replacement, generation_id)
             row.storage_path = str(new_path)
             try:
                 session.commit()
