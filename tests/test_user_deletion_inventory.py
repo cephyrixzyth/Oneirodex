@@ -1,5 +1,8 @@
 """Keep account-deletion policy aligned with ORM and database user references."""
 
+import json
+from pathlib import Path
+
 from sqlalchemy import inspect
 
 
@@ -100,3 +103,30 @@ def test_user_fk_inventory_and_no_action_dispositions_match_database(db_session)
     assert _database_user_fk_actions(db_session.connection()) == EXPECTED_USER_FKS
     no_action = {key for key, action in EXPECTED_USER_FKS.items() if action is None}
     assert no_action == set(NO_ACTION_DISPOSITIONS)
+
+
+def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
+    manifest_path = (
+        Path(__file__).resolve().parents[1]
+        / 'docs' / 'dev' / 'parity-evidence'
+        / 'account-deletion-relation-manifest-r1986.json'
+    )
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    relations = {item['foreign_key']: item for item in manifest['relations']}
+    assert set(relations) == set(EXPECTED_USER_FKS)
+    assert len(relations) == 50
+    assert {
+        key: (None if value['on_delete'] == 'NO ACTION' else value['on_delete'])
+        for key, value in relations.items()
+    } == EXPECTED_USER_FKS
+    assert all(item['disposition'] and item['policy'] for item in relations.values())
+    assert all(
+        item['synthetic_fixture'] in {'covered', 'inventory_only'}
+        for item in relations.values()
+    )
+    assert _database_user_fk_actions(db_session.connection()) == EXPECTED_USER_FKS
+    assert all(
+        item['disposition'] == NO_ACTION_DISPOSITIONS[key]
+        for key, item in relations.items()
+        if EXPECTED_USER_FKS[key] is None
+    )

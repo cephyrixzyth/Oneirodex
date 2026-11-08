@@ -1,0 +1,404 @@
+{
+  "review_id": "R1986",
+  "title": "Account deletion relation and file disposition manifest",
+  "policy_source": "ADR 0013 and owner policy summarized in docs/dev/behavior-parity-review.md.",
+  "schema_basis": "Current ORM metadata and loopback PostgreSQL test schema; 50 user foreign-key columns across 82 ORM tables.",
+  "relations": [
+    {
+      "foreign_key": "announcements.author_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "api_tokens.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "chat_channel_members.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "chat_channels.created_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "chat_message_attachments.uploaded_by_user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "chat_message_reactions.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "chat_messages.user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "chat_space_invites.created_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "chat_space_members.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "chat_spaces.created_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "client_devices.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "custom_emoji.uploaded_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "detail_layout_presets.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "download_requests.user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_user_requests",
+      "policy": "Delete download requests owned by the departing account.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "duplicate_fix_logs.actor_user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "clear_actor_reference",
+      "policy": "Retain the duplicate action record and clear the departing actor reference; redact retained identifiers and paths.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "emulator_saves.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "game_collections.owner_user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "game_related_media.created_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "game_requests.resolved_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "game_requests.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "invite_tokens.creator_user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_owned_invites",
+      "policy": "Delete invite records created by the departing account.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "invite_tokens.used_by",
+      "on_delete": "NO ACTION",
+      "disposition": "clear_reference",
+      "policy": "Retain the invite created by another account and clear the departing account as its redeemer.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "newsletters.sender_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_authored_newsletters",
+      "policy": "Delete newsletter content authored by the departing account.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "ownership_match_decisions.actor_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "pc_cheats.created_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "persistent_login_sessions.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "play_sessions.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "reference_sets.uploaded_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "saved_filters.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "store_accounts.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "store_sync_jobs.actor_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "store_sync_jobs.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "support_tickets.resolved_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "support_tickets.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "system_events.audit_user",
+      "on_delete": "NO ACTION",
+      "disposition": "anonymize_and_retain_audit",
+      "policy": "Retain the security/audit event after clearing the account reference and redacting identifiers and absolute paths.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "unmatched_folders.bad_match_by_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_attract_mode_settings.user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_personal_settings",
+      "policy": "Delete the departing account personal attract-mode settings.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "user_content_filters.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_discover_impressions.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_favorites.user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_user_associations",
+      "policy": "Delete the departing account association only.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "user_friendships.friend_user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_friendships.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_game_progress.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_game_status.user_id",
+      "on_delete": "NO ACTION",
+      "disposition": "delete_user_associations",
+      "policy": "Delete the departing account association only.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "user_library_access.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_notifications.actor_user_id",
+      "on_delete": "SET NULL",
+      "disposition": "retain_shared_row_clear_user_reference",
+      "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_notifications.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_owned_titles.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_preferences.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    },
+    {
+      "foreign_key": "user_taste_facets.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account private row, credential, membership, or association; retain shared parent records and rows owned by other accounts.",
+      "synthetic_fixture": "inventory_only"
+    }
+  ],
+  "managed_files": [
+    {
+      "class": "user avatar original",
+      "disposition": "purge_after_database_commit",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "user avatar thumbnail",
+      "disposition": "purge_after_database_commit",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "emulator save current generation",
+      "disposition": "purge_after_database_commit",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "emulator save prior generations",
+      "disposition": "purge_after_database_commit_on_account_deletion; preserve_on_replacement_until_explicit_gc_policy",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "uploaded chat attachment",
+      "disposition": "delete_attachment_row_then_purge_after_database_commit",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "shared custom emoji",
+      "disposition": "retain_shared_row_and_file; clear_uploader_reference",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "class": "shared save file also referenced by another account",
+      "disposition": "retain_while_any_current_save_or_generation_references_it",
+      "synthetic_fixture": "covered"
+    }
+  ],
+  "coverage": {
+    "relation_dispositions": "50/50 explicitly classified and compared to ORM plus live test-schema foreign keys.",
+    "populated_relation_fixtures": "16/50 user foreign-key columns are seeded by the current focused account-deletion tests; other relations remain inventory-only and block full P2-09 acceptance.",
+    "follow_up": "Add disposable synthetic records for every inventory-only relation and complete the child/adult/admin/shared-channel-owner/departed-download-history/external-store-disconnect tabletop."
+  },
+  "verification": {
+    "test": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q",
+    "fresh_postgresql": "Passed: 7 tests on Python 3.14.10 and PostgreSQL 17.6 after a fresh Alembic upgrade through d6e7f8a9b0c1; disposable database dropped."
+  }
+}
