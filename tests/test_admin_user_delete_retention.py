@@ -307,39 +307,71 @@ def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_d
     no_savepoint_db.commit()
 
     child_script = r'''
+import asyncio
+import importlib
 import os
 import sys
 import time
-from oneirodex import create_app, db
+from contextlib import ExitStack
+from unittest.mock import patch
+from asgi import LazyASGIApp
+from uvicorn.config import Config
+from uvicorn.lifespan.on import LifespanOn
+from oneirodex import db
 from oneirodex.models import UserDeletionFileJob
-from oneirodex.utils.user_deletion import start_file_cleanup_worker
 
 target, root, relative_path = sys.argv[1:4]
-app = create_app()
-if app.config['SQLALCHEMY_DATABASE_URI'] != os.environ['TEST_DATABASE_URL']:
-    raise SystemExit('child app did not select the validated test database')
-worker = start_file_cleanup_worker(app, interval_seconds=0.02)
-if worker is None:
-    raise SystemExit('cleanup worker did not start in the child process')
-try:
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline and os.path.exists(target):
-        time.sleep(0.01)
-    with app.app_context():
-        remaining = db.session.query(UserDeletionFileJob).filter_by(
-            root_path=root, relative_path=relative_path,
-        ).count()
-    if os.path.exists(target) or remaining:
-        raise SystemExit('startup worker left the committed cleanup job pending')
-finally:
-    worker.stop()
-    worker.thread.join(timeout=5)
+
+async def run_lifespan():
+    # Exercise the production ASGI startup/shutdown path while preventing unrelated
+    # scheduled work or provider egress from running in this disposable process.
+    inert_starters = (
+        ('oneirodex.utils.scan_scheduler', 'start_scan_scheduler'),
+        ('oneirodex.utils.library_watch', 'start_library_watch'),
+        ('oneirodex.utils.free_games_poller', 'start_free_games_scheduler'),
+        ('oneirodex.utils.discover_ml.job', 'start_discover_ml_scheduler'),
+        ('oneirodex.utils.ownership_poller', 'start_ownership_scheduler'),
+        ('oneirodex.utils.store_deals_poller', 'start_store_deals_scheduler'),
+        ('oneirodex.utils.email_digest_scheduler', 'start_email_digest_scheduler'),
+        ('oneirodex.utils.anticheat_poller', 'start_anticheat_scheduler'),
+        ('oneirodex.utils.save_paths_poller', 'start_save_paths_scheduler'),
+    )
+    app = LazyASGIApp()
+    lifespan = LifespanOn(Config(app=app, lifespan='on'))
+    started = False
+    with ExitStack() as stack:
+        for module_name, function_name in inert_starters:
+            module = importlib.import_module(module_name)
+            stack.enter_context(patch.object(module, function_name, return_value=None))
+        scan_queue = importlib.import_module('oneirodex.utils.scan_queue')
+        stack.enter_context(patch.object(scan_queue, 'reclaim_stale_busy_jobs', return_value=0))
+        try:
+            await lifespan.startup()
+            started = True
+            if app._flask_app.config['SQLALCHEMY_DATABASE_URI'] != os.environ['TEST_DATABASE_URL']:
+                raise SystemExit('ASGI lifespan selected a database other than the validated test database')
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and os.path.exists(target):
+                await asyncio.sleep(0.01)
+            with app._flask_app.app_context():
+                remaining = db.session.query(UserDeletionFileJob).filter_by(
+                    root_path=root, relative_path=relative_path,
+                ).count()
+            if os.path.exists(target) or remaining:
+                raise SystemExit('ASGI lifespan worker left the committed cleanup job pending')
+        finally:
+            if started:
+                await lifespan.shutdown()
+
+asyncio.run(run_lifespan())
 '''
     test_database_url = app.config['SQLALCHEMY_DATABASE_URI']
     child_env = os.environ.copy()
     child_env['DATABASE_URL'] = test_database_url
     child_env['TEST_DATABASE_URL'] = test_database_url
-    child_env['PYTEST_CURRENT_TEST'] = 'account cleanup process restart regression'
+    child_env.pop('PYTEST_CURRENT_TEST', None)
+    child_env['ONEIRODEX_ENABLE_BACKGROUND_WORKERS'] = 'true'
+    child_env['ONEIRODEX_INITIALIZATION_COMPLETE'] = 'true'
     result = subprocess.run(
         [sys.executable, '-c', child_script, str(target), root, relative_path],
         cwd=Path(__file__).resolve().parents[1],

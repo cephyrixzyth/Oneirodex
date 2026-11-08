@@ -1,0 +1,24 @@
+{
+  "review_id": "R1978",
+  "title": "Account-deletion file cleanup through ASGI restart",
+  "classification": "A committed failed file-cleanup job is retried and completed by the actual ASGI lifespan startup worker in a fresh child process.",
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py::test_cleanup_worker_startup_retries_a_committed_file_job -q",
+    "result": "passed: 1 test on Python 3.14.10 and PostgreSQL 17.6",
+    "database": "Fresh oneirodexr1978test database upgraded from the Alembic baseline through head with scripts/upgrade_test_schema.py; dropped after the test. TEST_DATABASE_URL and DATABASE_URL were process-scoped overrides; the root .env was not changed."
+  },
+  "method": {
+    "restart_boundary": "The test commits a failed cleanup job in the parent process, then starts a new child process and drives the production LazyASGIApp through Uvicorn LifespanOn startup and shutdown.",
+    "assertions": [
+      "the child application selects the validated loopback test database",
+      "ASGI startup starts the real post-commit file-cleanup worker",
+      "the worker removes the managed file and its completed retry row",
+      "ASGI shutdown completes successfully"
+    ],
+    "side_effect_limits": "Unrelated scan, polling, anti-cheat and save-location schedulers are stubbed in the child process; no provider requests or library scans run."
+  },
+  "limits": [
+    "This uses the current Alembic schema, not a deployed operator schema.",
+    "It does not qualify production redeployment, restore/reapplication, or other background scheduler behavior."
+  ]
+}
