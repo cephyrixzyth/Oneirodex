@@ -1,9 +1,12 @@
 """Keep account-deletion policy aligned with ORM and database user references."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
-from sqlalchemy import inspect
+from sqlalchemy import Enum, JSON, and_, inspect, insert, select
+from sqlalchemy.sql.sqltypes import Boolean, DateTime, Float, Integer, String
 
 
 EXPECTED_USER_FKS = {
@@ -109,7 +112,7 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
     manifest_path = (
         Path(__file__).resolve().parents[1]
         / 'docs' / 'dev' / 'parity-evidence'
-        / 'account-deletion-relation-manifest-r1986.json'
+        / 'account-deletion-relation-manifest-r1989.json'
     )
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     relations = {item['foreign_key']: item for item in manifest['relations']}
@@ -130,3 +133,215 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
         for key, item in relations.items()
         if EXPECTED_USER_FKS[key] is None
     )
+
+
+def _fixture_column_value(column, table_name, suffix):
+    column_type = column.type
+    if isinstance(column_type, Enum):
+        if column_type.enum_class is not None:
+            return next(iter(column_type.enum_class))
+        return column_type.enums[0]
+    if isinstance(column_type, Boolean):
+        return False
+    if isinstance(column_type, DateTime):
+        return datetime.now(timezone.utc)
+    if isinstance(column_type, Integer):
+        return 1
+    if isinstance(column_type, Float):
+        return 1.0
+    if isinstance(column_type, JSON) or column_type.__class__.__name__ == 'JSONEncodedDict':
+        return {}
+    if isinstance(column_type, String):
+        value = f'fx-{suffix}-{table_name}-{column.name}'
+        return value[:column_type.length] if column_type.length else value
+    raise AssertionError(
+        f'No account-deletion fixture value for {table_name}.{column.name} '
+        f'({column_type!r})'
+    )
+
+
+def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_path, monkeypatch):
+    from oneirodex.models import (
+        ChatChannel,
+        ChatMessage,
+        ChatSpace,
+        Game,
+        Library,
+        ScanJob,
+        User,
+        UserOwnedTitle,
+        db,
+    )
+    from oneirodex.platform import LibraryPlatform
+    from oneirodex.utils import user_deletion
+    from oneirodex.utils.user_deletion import delete_user_account
+
+    manifest_path = (
+        Path(__file__).resolve().parents[1]
+        / 'docs' / 'dev' / 'parity-evidence'
+        / 'account-deletion-relation-manifest-r1989.json'
+    )
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    suffix = uuid4().hex[:10]
+    upload_root = tmp_path / 'uploads'
+    save_root = tmp_path / 'saves'
+    save_root.mkdir()
+    monkeypatch.setattr(
+        user_deletion, '_storage_roots', lambda: (upload_root.resolve(), save_root.resolve()),
+    )
+
+    def make_user(name, role):
+        user = User(
+            name=f'{name}_{suffix}',
+            email=f'{name}_{suffix}@example.test',
+            user_id=str(uuid4()),
+            role=role,
+            state=True,
+            is_email_verified=True,
+        )
+        user.set_password('synthetic account-deletion fixture password')
+        return user
+
+    departing = make_user('manifest_departing', 'user')
+    survivor = make_user('manifest_survivor', 'admin')
+    db_session.add_all([departing, survivor])
+    db_session.flush()
+
+    library = Library(
+        name=f'Deletion fixture {suffix}',
+        platform=LibraryPlatform.NES,
+        display_order=0,
+    )
+    db_session.add(library)
+    db_session.flush()
+    game = Game(
+        uuid=str(uuid4()),
+        name=f'Deletion fixture game {suffix}',
+        library_uuid=library.uuid,
+        full_disk_path=f'/synthetic/deletion-fixture/{suffix}.nes',
+    )
+    space = ChatSpace(
+        name=f'Deletion fixture space {suffix}',
+        created_by_user_id=survivor.id,
+    )
+    db_session.add_all([game, space])
+    db_session.flush()
+    channel = ChatChannel(
+        name=f'Deletion fixture channel {suffix}',
+        space_id=space.id,
+        created_by_user_id=survivor.id,
+    )
+    db_session.add(channel)
+    db_session.flush()
+    message = ChatMessage(
+        channel_id=channel.id,
+        user_id=survivor.id,
+        body=f'Deletion fixture parent message {suffix}',
+    )
+    scan_job = ScanJob(
+        folders=[],
+        content_type='Games',
+        schedule='24_hours',
+        status='Completed',
+        library_uuid=library.uuid,
+    )
+    parent_title = UserOwnedTitle(
+        user_id=survivor.id,
+        store='steam',
+        external_app_id=f'parent-{suffix}',
+    )
+    db_session.add_all([message, scan_job, parent_title])
+    db_session.flush()
+
+    user_refs = {
+        'users.id': (departing.id, survivor.id),
+        'users.user_id': (departing.user_id, survivor.user_id),
+    }
+    parent_refs = {
+        'games.uuid': game.uuid,
+        'libraries.uuid': library.uuid,
+        'chat_spaces.id': space.id,
+        'chat_channels.id': channel.id,
+        'chat_messages.id': message.id,
+        'scan_jobs.id': scan_job.id,
+        'user_owned_titles.id': parent_title.id,
+    }
+    relations = manifest['relations']
+    assert len(relations) == 50
+    populated = []
+    metadata = db.Model.metadata
+    for relation in relations:
+        table_name, target_column_name = relation['foreign_key'].split('.', 1)
+        table = metadata.tables[table_name]
+        values = {}
+        for column in table.columns:
+            target = next((fk.target_fullname for fk in column.foreign_keys), None)
+            if target in user_refs:
+                departing_value, survivor_value = user_refs[target]
+                values[column.name] = (
+                    departing_value if column.name == target_column_name else survivor_value
+                )
+            elif target in parent_refs:
+                values[column.name] = parent_refs[target]
+            elif table_name == 'emulator_saves' and column.name == 'storage_path':
+                save_path = save_root / f'fixture-save-{suffix}.state'
+                save_path.write_bytes(b'synthetic save')
+                values[column.name] = str(save_path)
+            elif (
+                column.default is not None
+                or column.server_default is not None
+                or column.identity is not None
+                or (
+                    column.primary_key
+                    and isinstance(column.type, Integer)
+                    and column.autoincrement in (True, 'auto')
+                )
+            ):
+                continue
+            elif column.nullable:
+                continue
+            else:
+                values[column.name] = _fixture_column_value(
+                    column, table_name, f'{suffix}-{target_column_name}',
+                )
+
+        primary_key = tuple(table.primary_key.columns)
+        inserted = db_session.execute(
+            insert(table).values(**values).returning(*primary_key)
+        ).one()
+        populated.append((
+            table,
+            target_column_name,
+            relation['disposition'],
+            primary_key,
+            tuple(inserted),
+        ))
+
+    db_session.flush()
+    assert len(populated) == len(EXPECTED_USER_FKS)
+    assert all(item['synthetic_fixture'] == 'covered' for item in relations)
+    assert all(
+        item['synthetic_fixture'] == 'covered'
+        for item in manifest['managed_files']
+    )
+
+    delete_user_account(db_session, departing)
+    db_session.expire_all()
+
+    for table, target_column_name, disposition, primary_key, primary_key_values in populated:
+        predicate = and_(*(
+            column == value for column, value in zip(primary_key, primary_key_values)
+        ))
+        row = db_session.execute(select(table).where(predicate)).mappings().first()
+        if disposition == 'retain_shared_row_clear_user_reference':
+            assert row is not None, f'{table.name}.{target_column_name} shared row was deleted'
+            assert row[target_column_name] is None
+        elif disposition in {
+            'clear_actor_reference', 'clear_reference', 'anonymize_and_retain_audit',
+        }:
+            assert row is not None, f'{table.name}.{target_column_name} retained row was deleted'
+            assert row[target_column_name] is None
+        else:
+            assert row is None, f'{table.name}.{target_column_name} row survived deletion'
+
+    assert db_session.get(User, survivor.id) is not None

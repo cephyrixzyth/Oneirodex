@@ -384,7 +384,10 @@ class DetailLayoutPreset(db.Model):
     layout = db.Column(JSONEncodedDict, nullable=False)
     created = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    user = db.relationship('User', backref='detail_layout_presets')
+    user = db.relationship(
+        'User',
+        backref=db.backref('detail_layout_presets', passive_deletes='all'),
+    )
 
     def __repr__(self):
         return f"<DetailLayoutPreset {self.user_id}:{self.name}>"
@@ -430,7 +433,10 @@ class SavedFilter(db.Model):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    user = db.relationship('User', backref='saved_filters')
+    user = db.relationship(
+        'User',
+        backref=db.backref('saved_filters', passive_deletes='all'),
+    )
 
     def to_dict(self):
         return {

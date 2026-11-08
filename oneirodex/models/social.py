@@ -25,11 +25,15 @@ class UserFriendship(db.Model):
         nullable=False,
     )
 
-    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('friendships_sent', lazy='dynamic'))
+    user = db.relationship(
+        'User',
+        foreign_keys=[user_id],
+        backref=db.backref('friendships_sent', lazy='dynamic', passive_deletes='all'),
+    )
     friend = db.relationship(
         'User',
         foreign_keys=[friend_user_id],
-        backref=db.backref('friendships_received', lazy='dynamic'),
+        backref=db.backref('friendships_received', lazy='dynamic', passive_deletes='all'),
     )
 
     def to_dict(self):

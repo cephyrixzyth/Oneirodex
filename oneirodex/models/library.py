@@ -229,7 +229,10 @@ class PlaySession(db.Model):
     client = db.Column(db.String(64), nullable=True)  # web | desktop | etc.
     status = db.Column(db.String(16), default='active', nullable=False)  # active | ended | orphaned
 
-    user = db.relationship('User', backref=db.backref('play_sessions', lazy='dynamic'))
+    user = db.relationship(
+        'User',
+        backref=db.backref('play_sessions', lazy='dynamic', passive_deletes='all'),
+    )
     game = db.relationship(
         'Game',
         backref=db.backref(
