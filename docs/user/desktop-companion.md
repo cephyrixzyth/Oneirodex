@@ -19,6 +19,8 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 
 Game archive installs are limited to 250,000 entries and 200 GiB expanded by default. Before extraction, the companion checks the destination volume has space for the declared expanded data plus a 1 GiB reserve; extraction still enforces the expanded limit while streaming and preserves the prior install on failure. Operators can raise the entry limit with `ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES`, raise the expanded limit with `ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_EXPANDED_BYTES`, and adjust the reserve with `ONEIRODEX_DESKTOP_GAME_ARCHIVE_RESERVE_BYTES` in the desktop process environment. Missing, invalid, or zero entry/expanded limits fall back to the defaults. Free space remains the final bound.
 
+During ZIP extraction, the game card reports progress. **Cancel install** stops the staged extraction and removes its temporary files; the existing install stays in place, and an interrupted first install remains available to install again.
+
 Each game install is serialized while it is staged and promoted. If the companion stops during promotion, the next install attempt reconciles the matching temporary files: it restores the previous install or finishes a fully staged install, then cleans the abandoned generation. If recovery metadata is invalid or conflicting, the attempt stops and preserves the files for review.
 
 ## Friends window
@@ -68,7 +70,7 @@ retain this upstream dependency risk; Windows tests do not resolve it.
 | Action | Local effect |
 |---|---|
 | Download | Streams archive into the companion downloads folder (chunked append). When a title has more than one version, an in-window picker (arrow keys / Enter, Escape to cancel) chooses base vs. update/extra; a single version downloads straight away. |
-| Install | Extracts zip into installs folder |
+| Install | Extracts ZIP into a staged installs generation and promotes it after success. Progress appears on the game card; **Cancel install** discards the stage and preserves any previous generation. |
 | Update | Prepares a separate generation, carries forward missing base/save files, then atomically selects the new install. The generation it replaced is kept until the next update, then removed |
 | Uninstall | Removes the install folder, then the archive, then forgets the game (a failed removal can simply be retried). No snapshot is copied unless an archive-retaining uninstall is requested |
 | Play | Launches detected / stored exe |

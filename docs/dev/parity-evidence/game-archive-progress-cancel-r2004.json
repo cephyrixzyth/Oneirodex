@@ -1,0 +1,55 @@
+{
+  "review_id": "R2004",
+  "title": "Report desktop game archive extraction progress and support safe cancellation",
+  "reviewed_on": "2026-11-08",
+  "finding": "DT-005 base archive extraction resource and destination safety",
+  "classification": "progress and cancellation behavior implemented; DT-005 remains partially remediated pending packaged platform smoke",
+  "change": {
+    "progress": "Native extraction streams expanded-byte counts through a Tauri channel to the game card.",
+    "cancellation": "Each install has an operation id and a native cancellation flag. The cancel command remains responsive because extraction runs on Tauri's blocking pool.",
+    "preservation": "Cancellation checks run during streaming and before promotion. Staging cleanup removes the partial generation while leaving the previous install and downloaded archive in place."
+  },
+  "verification": {
+    "platform": "Windows local source checkout",
+    "commands": [
+      {
+        "command": "cargo test cancel_during_streaming_extraction_preserves_previous_install",
+        "result": "passed: 1; cancellation after a partial staging write preserved the previous generation and removed the staging directory"
+      },
+      {
+        "command": "cargo test --lib --locked",
+        "result": "passed: 98 tests, including archive validation, limits, recovery and cancellation regressions"
+      },
+      {
+        "command": "cargo fmt -- --check",
+        "result": "passed"
+      },
+      {
+        "command": "npm test -- --run src/install.test.ts src/app-smoke.test.ts (clients/desktop)",
+        "result": "passed: 11 tests"
+      },
+      {
+        "command": "npm run build (clients/desktop)",
+        "result": "passed: TypeScript check and Vite production build"
+      },
+      {
+        "command": "python validate_review_bundle.py (docs/dev/parity-evidence/review-bundle-r1972)",
+        "result": "passed: 7 report files, 1,545 route rows, lifecycle outcomes, cleanup and secret/path scan"
+      }
+    ]
+  },
+  "limits": [
+    "No packaged installer smoke or real game install/launch was performed in this change.",
+    "No actual disk exhaustion or hostile archive was executed.",
+    "macOS and Linux package/runtime behavior remains unverified.",
+    "The cancellation regression exercises the native extraction boundary; no interactive packaged UI cancellation session was captured."
+  ],
+  "related_paths": [
+    "clients/desktop/src-tauri/src/lib.rs",
+    "clients/desktop/src/install.ts",
+    "clients/desktop/src/install.test.ts",
+    "clients/desktop/src/app.ts",
+    "docs/user/desktop-companion.md",
+    "docs/dev/behavior-parity-review.md"
+  ]
+}

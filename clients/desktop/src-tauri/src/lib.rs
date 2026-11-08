@@ -9,10 +9,10 @@ use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process::Child;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tauri::Manager;
+use tauri::{ipc::Channel, Manager, State};
 use url::{Host, Url};
 use zip::ZipArchive;
 mod install_recovery;
@@ -89,6 +89,33 @@ pub struct InstallsFile {
 pub struct ExtractZipResult {
     pub extract_path: String,
     pub exe_path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct GameArchiveProgress {
+    bytes_extracted: u64,
+    total_bytes: u64,
+}
+
+struct GameArchiveInstallOperations(Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
+
+impl Default for GameArchiveInstallOperations {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(HashMap::new())))
+    }
+}
+
+struct GameArchiveOperationCleanup {
+    operations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    operation_id: String,
+}
+
+impl Drop for GameArchiveOperationCleanup {
+    fn drop(&mut self) {
+        if let Ok(mut operations) = self.operations.lock() {
+            operations.remove(&self.operation_id);
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -759,25 +786,74 @@ fn append_file_bytes(app: tauri::AppHandle, path: String, bytes: Vec<u8>) -> Res
 }
 
 #[tauri::command]
-fn extract_zip_archive(
+async fn extract_zip_archive(
     app: tauri::AppHandle,
     archive_path: String,
     dest_dir: String,
+    operation_id: String,
+    on_progress: Channel<GameArchiveProgress>,
+    operations: State<'_, GameArchiveInstallOperations>,
 ) -> Result<ExtractZipResult, String> {
-    let downloads = resolve_subdir(&app, "downloads")?;
-    let installs = resolve_subdir(&app, "installs")?;
-    extract_zip_within_roots(
-        Path::new(&archive_path),
-        Path::new(&dest_dir),
-        &downloads,
-        &installs,
-    )
+    if operation_id.trim().is_empty() || operation_id.len() > 128 {
+        return Err("Invalid game archive operation id".into());
+    }
+    let cancellation = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = operations
+            .0
+            .lock()
+            .map_err(|_| "Could not start game archive extraction".to_string())?;
+        if active.contains_key(&operation_id) {
+            return Err("Game archive operation is already active".into());
+        }
+        active.insert(operation_id.clone(), cancellation.clone());
+    }
+    let operations = operations.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _cleanup = GameArchiveOperationCleanup {
+            operations,
+            operation_id,
+        };
+        let downloads = resolve_subdir(&app, "downloads")?;
+        let installs = resolve_subdir(&app, "installs")?;
+        ensure_path_under_root(Path::new(&archive_path), &downloads)?;
+        ensure_path_strictly_under_root(Path::new(&dest_dir), &installs)?;
+        extract_zip_to_dir_with_configured_budget_and_control(
+            Path::new(&archive_path),
+            Path::new(&dest_dir),
+            &cancellation,
+            |bytes_extracted, total_bytes| {
+                let _ = on_progress.send(GameArchiveProgress {
+                    bytes_extracted,
+                    total_bytes,
+                });
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("Game archive extraction task failed: {error}"))?
+}
+
+#[tauri::command]
+fn cancel_game_archive_install(
+    operation_id: String,
+    operations: State<'_, GameArchiveInstallOperations>,
+) -> Result<bool, String> {
+    let active = operations
+        .0
+        .lock()
+        .map_err(|_| "Could not cancel game archive extraction".to_string())?;
+    Ok(active
+        .get(&operation_id)
+        .map(|cancellation| !cancellation.swap(true, Ordering::Relaxed))
+        .unwrap_or(false))
 }
 
 /// The containment rules of `extract_zip_archive`, without the `AppHandle`.
 ///
 /// The destination must be strictly *below* the installs root: a destination
 /// equal to the root (a game id of `.`) would replace every installed game.
+#[cfg(test)]
 fn extract_zip_within_roots(
     archive: &Path,
     destination: &Path,
@@ -1023,9 +1099,24 @@ fn configured_game_archive_entry_limit(raw: Option<&str>) -> u64 {
     configured_archive_limit(raw, MAX_GAME_ARCHIVE_ENTRIES)
 }
 
+#[cfg(test)]
 fn extract_zip_to_dir_with_configured_budget(
     archive: &Path,
     destination: &Path,
+) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_configured_budget_and_control(
+        archive,
+        destination,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+}
+
+fn extract_zip_to_dir_with_configured_budget_and_control(
+    archive: &Path,
+    destination: &Path,
+    cancellation: &AtomicBool,
+    on_progress: impl FnMut(u64, u64),
 ) -> Result<ExtractZipResult, String> {
     let max_entries = configured_game_archive_entry_limit(
         std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES")
@@ -1042,13 +1133,15 @@ fn extract_zip_to_dir_with_configured_budget(
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .unwrap_or(DEFAULT_GAME_ARCHIVE_RESERVE_BYTES);
-    extract_zip_to_dir_with_space_budget(
+    extract_zip_to_dir_with_space_budget_and_control(
         archive,
         destination,
         max_entries,
         max_expanded_bytes,
         reserve_bytes,
         None,
+        Some(cancellation),
+        on_progress,
     )
 }
 
@@ -1116,6 +1209,7 @@ fn extract_zip_to_dir_with_limits(
     )
 }
 
+#[cfg(test)]
 fn extract_zip_to_dir_with_space_budget(
     archive: &Path,
     destination: &Path,
@@ -1123,6 +1217,28 @@ fn extract_zip_to_dir_with_space_budget(
     max_expanded_bytes: u64,
     reserve_bytes: u64,
     available_bytes_override: Option<u64>,
+) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_space_budget_and_control(
+        archive,
+        destination,
+        max_entries,
+        max_expanded_bytes,
+        reserve_bytes,
+        available_bytes_override,
+        None,
+        |_, _| {},
+    )
+}
+
+fn extract_zip_to_dir_with_space_budget_and_control(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+    reserve_bytes: u64,
+    available_bytes_override: Option<u64>,
+    cancellation: Option<&AtomicBool>,
+    mut on_progress: impl FnMut(u64, u64),
 ) -> Result<ExtractZipResult, String> {
     if !archive.is_file() {
         return Err(format!("Archive not found: {}", archive.display()));
@@ -1140,6 +1256,9 @@ fn extract_zip_to_dir_with_space_budget(
     // removing an existing installation at the destination.
     let declared_expanded_bytes =
         validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
+    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err("Game archive extraction canceled".into());
+    }
 
     let parent = destination
         .parent()
@@ -1189,8 +1308,12 @@ fn extract_zip_to_dir_with_space_budget(
 
     let mut expanded_bytes = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
+    on_progress(0, declared_expanded_bytes);
 
     for index in 0..zip.len() {
+        if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err("Game archive extraction canceled".into());
+        }
         let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
         // `enclosed_name()` returns `None` for any entry name that would escape
         // the destination (`..` segments, absolute paths, drive letters). The
@@ -1222,6 +1345,9 @@ fn extract_zip_to_dir_with_space_budget(
 
         let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
         loop {
+            if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+                return Err("Game archive extraction canceled".into());
+            }
             use std::io::Read;
             let read = entry.read(&mut buffer).map_err(|error| error.to_string())?;
             if read == 0 {
@@ -1251,6 +1377,7 @@ fn extract_zip_to_dir_with_space_budget(
             }
             out.write_all(&buffer[..read])
                 .map_err(|error| error.to_string())?;
+            on_progress(expanded_bytes, declared_expanded_bytes);
         }
 
         // Restore the archived permission bits on unix. Without this every
@@ -1278,6 +1405,9 @@ fn extract_zip_to_dir_with_space_budget(
 
     #[cfg(test)]
     exit_at_archive_install_test_point("after_extract_before_ready");
+    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err("Game archive extraction canceled".into());
+    }
     let ready_marker = mark_install_stage_ready(parent, name, &suffix)?;
     let mut marker_cleanup = RecoveryMarkerCleanup {
         path: ready_marker.clone(),
@@ -1285,6 +1415,9 @@ fn extract_zip_to_dir_with_space_budget(
     };
     let staged_exe_path = find_likely_exe(&staging, 2).map(PathBuf::from);
 
+    if cancellation.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err("Game archive extraction canceled".into());
+    }
     let had_destination = destination.exists();
     if had_destination {
         fs::rename(destination, &backup).map_err(|error| error.to_string())?;
@@ -1356,6 +1489,7 @@ impl Drop for RecoveryMarkerCleanup {
 
 /// Keep ordinary read/write/execute bits from ZIP metadata while discarding
 /// SUID, SGID, and sticky bits that must never be applied to extracted files.
+#[cfg(any(unix, test))]
 fn safe_archive_file_mode(mode: u32) -> u32 {
     mode & 0o777
 }
@@ -2142,6 +2276,7 @@ fn reveal_path_in_os(
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcessRegistry::default())
+        .manage(GameArchiveInstallOperations::default())
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
@@ -2159,6 +2294,7 @@ pub fn run() {
             write_file_bytes,
             append_file_bytes,
             extract_zip_archive,
+            cancel_game_archive_install,
             launch_game,
             reveal_path_in_os,
             load_trusted_shares,
@@ -2682,6 +2818,56 @@ mod tests {
 
         extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(9)).unwrap();
         assert_eq!(fs::read(destination.join("game.bin")).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn cancel_during_streaming_extraction_preserves_previous_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        let body = vec![b'x'; 256 * 1024];
+        write_zip(&archive, &[("game.bin", &body)]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old generation").unwrap();
+        let cancellation = AtomicBool::new(false);
+        let mut progress_samples = Vec::new();
+
+        let error = extract_zip_to_dir_with_space_budget_and_control(
+            &archive,
+            &destination,
+            10,
+            1024 * 1024,
+            0,
+            Some(u64::MAX),
+            Some(&cancellation),
+            |bytes_extracted, total_bytes| {
+                progress_samples.push((bytes_extracted, total_bytes));
+                if bytes_extracted > 0 {
+                    cancellation.store(true, Ordering::Relaxed);
+                }
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("extraction canceled"), "got: {error}");
+        assert!(progress_samples.len() >= 2);
+        assert_eq!(progress_samples[0], (0, body.len() as u64));
+        assert!(progress_samples[1].0 > 0);
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old generation"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+        );
     }
 
     #[test]

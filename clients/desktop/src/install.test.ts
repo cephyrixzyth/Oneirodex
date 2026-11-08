@@ -1,10 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-import { kickoffInstall } from './install.js'
+import { cancelInstallArchive, kickoffInstall } from './install.js'
 import { createLifecycleRegistry } from './lifecycle.js'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+  Channel: class {
+    onmessage: ((value: unknown) => void) | undefined
+  },
 }))
 
 vi.mock('./config-store.js', () => ({
@@ -43,13 +46,28 @@ describe('install helper', () => {
 
     const next = await kickoffInstall(registry, 'game-42')
 
-    expect(invoke).toHaveBeenCalledWith('extract_zip_archive', {
-      archivePath: '/appdata/downloads/game-42.zip',
-      destDir: '/appdata/installs/game-42',
-    })
+    expect(invoke).toHaveBeenCalledWith(
+      'extract_zip_archive',
+      expect.objectContaining({
+        archivePath: '/appdata/downloads/game-42.zip',
+        destDir: '/appdata/installs/game-42',
+        operationId: expect.any(String),
+        onProgress: expect.any(Object),
+      }),
+    )
     expect(saveInstallsToDisk).toHaveBeenCalled()
     expect(next).toBe('installed')
     expect(registry.get('game-42')).toBe('installed')
+  })
+
+  it('sends cancellation for the active extraction operation id', async () => {
+    vi.mocked(invoke).mockResolvedValue(true)
+
+    await expect(cancelInstallArchive('operation-42')).resolves.toBe(true)
+
+    expect(invoke).toHaveBeenCalledWith('cancel_game_archive_install', {
+      operationId: 'operation-42',
+    })
   })
 
   it.each(['.', '..', 'a/b', 'a\\b', ''])(

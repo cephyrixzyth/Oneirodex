@@ -8,7 +8,7 @@ import {
 import { createDesktopApi } from './api.js'
 import { escapeHtml } from './html.js'
 import { kickoffDownload, pickDownloadVersion } from './download.js'
-import { kickoffInstall } from './install.js'
+import { cancelInstallArchive, kickoffInstall } from './install.js'
 import { loadInstallsFromDisk } from './install-store.js'
 import { canLaunchGame, kickoffLaunch } from './launch.js'
 import { kickoffUninstall, kickoffUpdate } from './uninstall.js'
@@ -83,6 +83,7 @@ let gamesWithEnabledMods = new Set<string>()
 let modsTrackingEnabled = true
 const gameActivity = new Map<string, string>()
 const busyGames = new Set<string>()
+const archiveInstallOperations = new Map<string, string>()
 async function ensureLifecycleRegistry(): Promise<LifecycleRegistry> {
   if (!lifecycle) {
     lifecycle = await hydrateLifecycleRegistry(auth, () => {
@@ -235,6 +236,9 @@ function renderLibrary(): void {
           return `<button type="button" class="action-btn secondary${updateClass}" data-action="${action}" data-uuid="${escapeHtml(uuid)}"${title} ${disabled}>${label}</button>`
         })
         .join('')
+      const cancelInstallButton = archiveInstallOperations.has(uuid)
+        ? `<button type="button" class="action-btn secondary action-btn--cancel-install" data-action="cancel_install" data-uuid="${escapeHtml(uuid)}">Cancel install</button>`
+        : ''
       const playButton = canLaunchGame(state)
         ? `<button type="button" class="action-btn primary play-btn" data-action="play" data-uuid="${escapeHtml(uuid)}" ${isBusy ? 'disabled' : ''}>Play</button>`
         : ''
@@ -263,7 +267,7 @@ function renderLibrary(): void {
           <p class="uuid">${escapeHtml(uuid)}</p>
           <p class="state">State: <strong>${escapeHtml(state)}</strong></p>
           ${activityHtml}
-          <div class="actions">${playButton}${revealButton}${modButton}${actionButtons || (!playButton && !modButton && !revealButton ? '<span class="muted">No actions</span>' : '')}</div>
+          <div class="actions">${playButton}${revealButton}${modButton}${cancelInstallButton}${actionButtons || (!playButton && !modButton && !revealButton && !cancelInstallButton ? '<span class="muted">No actions</span>' : '')}</div>
         </article>
       `
     })
@@ -708,8 +712,18 @@ async function runGameAction(
       })
       setStatus(`Downloaded ${uuid}.`, 'success')
     } else if (action === 'install') {
-      setGameActivity(uuid, 'Extracting…')
-      await kickoffInstall(registry, uuid)
+      const operationId = crypto.randomUUID()
+      archiveInstallOperations.set(uuid, operationId)
+      setGameActivity(uuid, 'Extracting… 0%')
+      renderLibrary()
+      await kickoffInstall(registry, uuid, {
+        operationId,
+        onProgress: ({ bytes_extracted, total_bytes }) => {
+          const percent =
+            total_bytes > 0 ? Math.min(100, Math.round((bytes_extracted / total_bytes) * 100)) : 100
+          setGameActivity(uuid, `Extracting… ${percent}%`)
+        },
+      })
       setStatus(`Installed ${uuid}.`, 'success')
     } else if (action === 'update') {
       setGameActivity(uuid, 'Updating…')
@@ -734,10 +748,16 @@ async function runGameAction(
   } catch (error) {
     outcome = 'error'
     const message = formatDesktopApiError(error)
-    setGameActivity(uuid, `Error: ${message}`)
-    setStatus(message, 'error')
+    if (action === 'install' && message.toLowerCase().includes('extraction canceled')) {
+      setGameActivity(uuid, 'Install canceled; previous files are unchanged.')
+      setStatus('Install canceled; the previous install was preserved.', 'info')
+    } else {
+      setGameActivity(uuid, `Error: ${message}`)
+      setStatus(message, 'error')
+    }
   } finally {
     busyGames.delete(uuid)
+    archiveInstallOperations.delete(uuid)
     try {
       localInstalls = await loadInstallsFromDisk()
     } catch {
@@ -762,6 +782,19 @@ function handleLibraryClick(event: Event): void {
   }
   if (action === 'reveal_path') {
     void runRevealInstallAction(uuid)
+    return
+  }
+  if (action === 'cancel_install') {
+    const operationId = archiveInstallOperations.get(uuid)
+    if (operationId) {
+      void cancelInstallArchive(operationId)
+        .then((cancelled) => {
+          if (cancelled) setGameActivity(uuid, 'Canceling extraction…')
+        })
+        .catch((error) => {
+          setStatus(formatDesktopApiError(error), 'error')
+        })
+    }
     return
   }
   if (action === 'play') {
