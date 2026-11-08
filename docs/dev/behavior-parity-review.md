@@ -171,6 +171,10 @@ partial until their remaining acceptance criteria are demonstrated.
 
 The post-repair follow-up matched all five changed-source hashes to the prior baseline, then passed 11 download-auth tests, 24 card/button tests, 21 Ops tests, touched-file formatting, and lint with zero errors and 36 existing warnings. The R1972 validator passed. A fresh disposable-database core run now records per-test progress and stack diagnostics; it was still running when the [follow-up evidence](parity-evidence/review-program-baseline-followup-20261108.json) was captured. These focused checks do not complete the core/full Python baseline.
 
+### Review-branch ancestry reconciliation — 2026-11-08
+
+Draft PR [281](https://github.com/cephyrixzyth/Oneirodex/pull/281) initially reported merge conflicts. Published `main` snapshot `fd2683e5` has the exact complete tracked-file tree of reachable review-branch ancestor `b255444b`. Merge commit `f048be20` records that published history into the review branch using the `ours` strategy. Before/after review tree IDs are identical and the first-parent file diff is empty: this resolves ancestry without replacing the current descendant source or invalidating its running source tests. [R2006 evidence](parity-evidence/published-release-ancestry-r2006.json) records the tree IDs and assertions. The PR remains a draft while remediation and acceptance gates are incomplete.
+
 ### Owner decisions received
 
 - **D-P0-01 save history:** preserve prior committed generations; defer automatic garbage collection until the owner selects a time/space budget. This permits recoverable writes but means storage growth must be measured and surfaced.
