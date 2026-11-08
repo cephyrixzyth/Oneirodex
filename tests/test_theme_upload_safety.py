@@ -139,6 +139,26 @@ def test_upload_rejects_symlink_entries_before_extracting(manager):
     assert not Path(manager.app.config['UPLOAD_FOLDER'], 'outside.css').exists()
 
 
+def test_upload_removes_partial_theme_after_post_copy_failure(manager, monkeypatch):
+    original_copytree = themes.shutil.copytree
+    copied_destinations = []
+
+    def copy_then_fail(source, destination, *args, **kwargs):
+        original_copytree(source, destination, *args, **kwargs)
+        copied_destinations.append(Path(destination))
+        raise OSError('injected post-copy failure')
+
+    monkeypatch.setattr(themes.shutil, 'copytree', copy_then_fail)
+
+    with manager.app.test_request_context():
+        result = manager.upload_theme(_theme_zip('Partial Theme'))
+
+    assert result is None
+    assert len(copied_destinations) == 1
+    assert not copied_destinations[0].exists()
+    assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
+
+
 def test_overlapping_uploads_keep_their_own_theme_files(manager, monkeypatch):
     barrier = Barrier(2)
     original_extractall = zipfile.ZipFile.extractall
