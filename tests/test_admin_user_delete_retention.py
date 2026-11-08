@@ -187,7 +187,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     emoji_file.parent.mkdir(parents=True)
     emoji_file.write_bytes(b'emoji')
     custom_emoji = CustomEmoji(
-        slug=f'del-{suffix}', label='Private uploaded emoji', file_name=emoji_name,
+        slug=f'del-{suffix}', label='Shared household emoji', file_name=emoji_name,
         uploaded_by_user_id=victim_id,
     )
     message = ChatMessage(
@@ -284,8 +284,10 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert surviving_invite is not None and surviving_invite.used_by is None
     assert db_session.get(UserAttractModeSettings, attract_id) is None
     assert db_session.get(ChatMessageAttachment, attachment_id) is None
-    assert db_session.get(CustomEmoji, custom_emoji_id) is None
-    assert not emoji_file.exists()
+    retained_emoji = db_session.get(CustomEmoji, custom_emoji_id)
+    assert retained_emoji is not None
+    assert retained_emoji.uploaded_by_user_id is None
+    assert emoji_file.is_file()
     retained_message = db_session.get(ChatMessage, message_id)
     assert retained_message is not None
     assert retained_message.user_id is None

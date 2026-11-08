@@ -37,7 +37,6 @@ def _user_file_candidates(session, user) -> list[tuple[str, str, str]]:
     """Return (kind, resolved root, relative file) candidates, never caller paths."""
     from oneirodex.models import (
         ChatMessageAttachment,
-        CustomEmoji,
         EmulatorSave,
         EmulatorSaveGeneration,
     )
@@ -61,13 +60,6 @@ def _user_file_candidates(session, user) -> list[tuple[str, str, str]]:
     for filename in attachments:
         if filename and Path(filename).name == filename:
             candidates.add(('attachment', str(upload_root), f'chat-attachments/{filename}'))
-
-    emoji_files = session.execute(
-        select(CustomEmoji.file_name).where(CustomEmoji.uploaded_by_user_id == user.id),
-    ).scalars()
-    for filename in emoji_files:
-        if filename and Path(filename).name == filename:
-            candidates.add(('custom_emoji', str(upload_root), f'chat-emoji/{filename}'))
 
     saves = list(session.execute(
         select(EmulatorSave).where(EmulatorSave.user_id == user.id),
@@ -397,7 +389,6 @@ def delete_user_owned_rows(session, user) -> None:
     from oneirodex.models import (
         DownloadRequest,
         DuplicateFixLog,
-        CustomEmoji,
         InviteToken,
         Newsletter,
         UserAttractModeSettings,
@@ -410,7 +401,6 @@ def delete_user_owned_rows(session, user) -> None:
     session.execute(delete(user_game_status).where(user_game_status.c.user_id == user.id))
     session.execute(delete(DownloadRequest).where(DownloadRequest.user_id == user.id))
     session.execute(delete(Newsletter).where(Newsletter.sender_id == user.id))
-    session.execute(delete(CustomEmoji).where(CustomEmoji.uploaded_by_user_id == user.id))
     session.execute(delete(InviteToken).where(InviteToken.creator_user_id == user.user_id))
     session.execute(
         update(InviteToken).where(InviteToken.used_by == user.user_id).values(used_by=None)
