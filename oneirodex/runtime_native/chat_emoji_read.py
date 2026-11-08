@@ -54,6 +54,40 @@ class ChatEmojiData:
             upload_folder=upload_folder,
         )
 
+    def discard_upload(self, row, *, upload_folder: str | None):
+        from oneirodex.utils.custom_emoji import discard_custom_emoji_upload
+
+        return discard_custom_emoji_upload(
+            row.id, row.file_name, upload_folder=upload_folder,
+        )
+
+
+async def _upload_custom_emoji_cancellable(
+    data, *, slug, label, file, uploader, upload_folder, logger=None,
+):
+    """Roll back the committed image and row if the request is cancelled."""
+    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+    def discard(row):
+        try:
+            data.discard_upload(row, upload_folder=upload_folder)
+        except Exception:
+            from oneirodex.runtime_native.db_session import native_db
+
+            native_db.session.rollback()
+            if logger:
+                logger.warning('Cancelled custom emoji upload cleanup failed')
+
+    return await run_image_work_in_threadpool(
+        data.upload,
+        slug=slug,
+        label=label,
+        file=file,
+        uploader=uploader,
+        upload_folder=upload_folder,
+        on_cancel=discard,
+    )
+
 
 def create_chat_emoji_router(
     flask_app,
@@ -303,11 +337,10 @@ def create_chat_emoji_router(
                         )
                     slug = str(first_form_value(form, 'slug') or '')
                     label = str(first_form_value(form, 'label') or '')
-                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
-
-                    row = await run_image_work_in_threadpool(data.upload,
+                    row = await _upload_custom_emoji_cancellable(data,
                         slug=slug, label=label, file=file, uploader=auth.user,
                         upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
+                        logger=getattr(flask_app, 'logger', None),
                     )
                     response = JSONResponse(api_ok_payload({
                         'emoji': row.to_dict(), 'message': 'Custom emoji uploaded.',
@@ -468,15 +501,14 @@ def create_chat_emoji_router(
                                 content_type=upload.content_type,
                             )
                         try:
-                            from oneirodex.utils.image_upload_limits import (
-                                ImageWorkBusy, run_image_work_in_threadpool,
-                            )
+                            from oneirodex.utils.image_upload_limits import ImageWorkBusy
 
-                            row = await run_image_work_in_threadpool(data.upload,
+                            row = await _upload_custom_emoji_cancellable(data,
                                 slug=str(first_form_value(form, 'slug') or ''),
                                 label=str(first_form_value(form, 'label') or ''), file=file,
                                 uploader=auth.user,
                                 upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
+                                logger=getattr(flask_app, 'logger', None),
                             )
                             message, category = f'Uploaded {row.reaction_key()}', 'success'
                         except ImageWorkBusy as exc:

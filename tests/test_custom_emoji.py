@@ -11,10 +11,12 @@ import pytest
 from PIL import Image
 from werkzeug.datastructures import FileStorage
 
-from oneirodex.models import User
+from oneirodex.models import User, UserDeletionFileJob
+from oneirodex.utils import custom_emoji as custom_emoji_utils
 from oneirodex.utils.chat import ALLOWED_REACTIONS, is_allowed_reaction
 from oneirodex.utils.custom_emoji import (
     MAX_CUSTOM_EMOJI,
+    discard_custom_emoji_upload,
     delete_custom_emoji,
     list_custom_emoji,
     normalize_slug,
@@ -145,6 +147,63 @@ def test_upload_uses_decoded_format_independent_of_filename_suffix(
 
     assert file_name.endswith('.webp')
     assert (tmp_path / 'chat-emoji' / file_name).is_file()
+
+
+def test_discard_cancelled_upload_removes_only_matching_row_and_file(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='cancelled', label='Cancelled', file=_png_file(), uploader=admin,
+        )
+        row_id, file_name = row.id, row.file_name
+        path = tmp_path / 'chat-emoji' / file_name
+
+        assert discard_custom_emoji_upload(
+            row_id, 'different.webp', upload_folder=str(tmp_path),
+        ) is False
+        assert db_session.get(type(row), row_id) is not None
+        assert path.is_file()
+        assert discard_custom_emoji_upload(
+            row_id, file_name, upload_folder=str(tmp_path),
+        ) is True
+
+    assert db_session.get(type(row), row_id) is None
+    assert not path.exists()
+
+
+def test_cancelled_upload_unlink_failure_queues_retryable_cleanup(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    from oneirodex.utils.user_deletion import process_pending_file_jobs
+
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='retry-cleanup', label='Retry', file=_png_file(), uploader=admin,
+        )
+        row_id, file_name = row.id, row.file_name
+        path = tmp_path / 'chat-emoji' / file_name
+
+        def fail_remove(_path):
+            raise PermissionError('synthetic unlink failure')
+
+        monkeypatch.setattr(custom_emoji_utils.os, 'remove', fail_remove)
+        assert discard_custom_emoji_upload(
+            row_id, file_name, upload_folder=str(tmp_path),
+        ) is True
+        assert db_session.get(type(row), row_id) is None
+        job = db_session.query(UserDeletionFileJob).filter_by(
+            relative_path=f'chat-emoji/{file_name}', state='pending',
+        ).one()
+
+        # The generic post-commit worker retries the same managed path.
+        remaining = process_pending_file_jobs(db_session)
+
+    assert remaining == 0
+    assert db_session.get(UserDeletionFileJob, job.id) is None
+    assert not path.exists()
 
 
 def test_upload_rejects_unsupported_content_under_allowed_suffix(

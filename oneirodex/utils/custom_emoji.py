@@ -170,9 +170,41 @@ def delete_custom_emoji(slug: str, *, upload_folder: str | None = None) -> bool:
     path = os.path.join(emoji_dir(upload_folder), row.file_name)
     db.session.delete(row)
     db.session.commit()
+    _remove_custom_emoji_file_after_commit(row.file_name, path)
+    return True
+
+
+def discard_custom_emoji_upload(
+    emoji_id: int, file_name: str, *, upload_folder: str | None = None,
+) -> bool:
+    """Remove exactly the emoji row produced by a cancelled upload request."""
+    if not file_name or os.path.basename(file_name) != file_name:
+        return False
+    row = db.session.execute(
+        select(CustomEmoji).where(
+            CustomEmoji.id == emoji_id,
+            CustomEmoji.file_name == file_name,
+        ).limit(1),
+    ).scalars().first()
+    if row is None:
+        return False
+    path = os.path.join(emoji_dir(upload_folder), file_name)
+    db.session.delete(row)
+    db.session.commit()
+    _remove_custom_emoji_file_after_commit(file_name, path)
+    return True
+
+
+def _remove_custom_emoji_file_after_commit(file_name: str, path: str) -> None:
     try:
-        if os.path.isfile(path):
+        if os.path.lexists(path):
             os.remove(path)
     except OSError:
-        pass
-    return True
+        from oneirodex.utils.user_deletion import _enqueue_file_candidates
+
+        upload_root = os.path.realpath(os.path.dirname(os.path.dirname(path)))
+        _enqueue_file_candidates(
+            db.session,
+            [('custom_emoji', upload_root, f'chat-emoji/{file_name}')],
+        )
+        db.session.commit()
