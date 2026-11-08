@@ -203,10 +203,11 @@ class FakeImageMutations:
         }
 
 
-def _client():
+def _client(database_scope=None):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-image-delete', CSP_ENABLED=False, WTF_CSRF_ENABLED=True,
+        TESTING=True,
     )
     user = SimpleNamespace(
         id=8, user_id='admin', role='admin', state=True, is_active=True,
@@ -230,7 +231,7 @@ def _client():
         flask_app, find_user=lambda uid: user if uid == 8 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '8' else None,
-        login_manager=manager, database_scope=lambda _app: nullcontext(),
+        login_manager=manager, database_scope=database_scope or (lambda _app: nullcontext()),
         data_access=data,
     ))
     client = TestClient(app)
@@ -260,6 +261,62 @@ def test_native_game_image_work_does_not_block_health_route(monkeypatch):
 
     assert not upload.is_alive()
     assert responses and responses[0].status_code == 200
+
+
+def test_cancelled_native_game_image_route_waits_before_database_scope_exit(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    monkeypatch.setattr('oneirodex.utils.scanning.is_scan_job_running', lambda: False)
+    events = []
+
+    class Scope:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            events.append('scope-exit')
+
+    client, data = _client(database_scope=lambda _app: Scope())
+    data.upload_started = Event()
+    data.upload_continue = Event()
+
+    def upload_single(app, game_uuid, filename, image_type, content):
+        data.single_upload = (game_uuid, filename, image_type, content)
+        data.upload_started.set()
+        assert data.upload_continue.wait(timeout=5)
+        events.append('worker-complete')
+        return {'message': 'uploaded'}
+
+    data.upload_single = upload_single
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as async_client:
+            async_client.cookies.set('session', client.cookies.get('session'))
+            request = asyncio.create_task(async_client.post(
+                '/upload_image/game-1',
+                files={'file': ('cover.png', b'image-bytes', 'image/png')},
+                data={'image_type': 'cover'},
+                headers={'X-CSRFToken': client.headers['X-CSRFToken']},
+            ))
+            assert await asyncio.to_thread(data.upload_started.wait, 5)
+            request.cancel()
+            await asyncio.sleep(0)
+            assert not request.done()
+            assert events == []
+            data.upload_continue.set()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        data.upload_continue.set()
+
+    assert data.single_upload == ('game-1', 'cover.png', 'cover', b'image-bytes')
+    assert events == ['worker-complete', 'scope-exit']
 
 
 def test_delete_image_returns_success_or_not_found_without_touching_real_files():

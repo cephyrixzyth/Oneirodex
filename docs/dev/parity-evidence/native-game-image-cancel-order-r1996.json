@@ -1,0 +1,26 @@
+{
+  "review_id": "R1996",
+  "title": "Verify native game-art request cancellation ordering",
+  "classification": "Confirmed evidence gap; no handler defect reproduced.",
+  "cause": {
+    "test_fixture": "The native admin image route fixture used retired uid:fingerprint session identities after persistent-session enforcement was enabled. Requests were redirected to an unmounted /login route, and TestClient followed the redirect to 404 before handlers ran.",
+    "application_behavior": "The route runs synchronous image and database work through run_image_work_in_threadpool. Cancellation is deferred until the worker returns, keeping request-scoped database access open until the worker finishes."
+  },
+  "change": {
+    "fixture": "Mark the route fixture TESTING so its legacy synthetic identity is accepted by the explicit test-only auth path.",
+    "regression": "Cancel an authenticated native game-art ASGI request while its worker is blocked. Assert cancellation remains pending, then release the worker and verify it completes before the database scope exits."
+  },
+  "verification": {
+    "command": "uv run --python <Python-3.12.16-path> --with-requirements requirements-dev.txt pytest tests/test_native_admin_image_mutations.py tests/test_upload_work_budgets.py -q",
+    "result": "25 passed on Python 3.12.16 with pinned requirements-dev.txt dependencies.",
+    "coverage": [
+      "The route-level regression uses an authenticated ASGI request and a gated worker, not a real client disconnect.",
+      "Separate R1995 tests cover filesystem and database replacement failure ordering."
+    ]
+  },
+  "limits": [
+    "Cancellation after the worker commits can leave the upload successful while the caller receives no response; this is an ambiguous client outcome, not a rollback guarantee.",
+    "No PostgreSQL or real image filesystem mutation was performed by this route cancellation regression.",
+    "Representative NAS peak-memory measurements and cancellation-under-load qualification remain open for P0-11."
+  ]
+}
