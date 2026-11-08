@@ -15,7 +15,7 @@ export MSYS_NO_PATHCONV=1
 REPO=${REPO:-C:/Apps/Oneirodex}
 IMG=oneirodex:standalone-proof PGIMG=postgres:17.6
 NET=p05e-net DB=p05e-db SA=p05e-standalone SRV=p05e-server
-VOLS=(p05e-data p05e-move p05e-library)
+VOLS=(p05e-data p05e-move p05e-library p05e-key-backup)
 PW=proof-only-pw SERVER_SECRET=proof-only-server-secret
 TARGET="postgresql://postgres:$PW@$DB:5432/oneirodex_moved"
 BUSY="postgresql://postgres:$PW@$DB:5432/oneirodex"
@@ -51,12 +51,12 @@ standalone() { docker run --rm --network none --user 65534:65534 -e HOME=/data -
   --read-only --tmpfs /tmp "${CODE[@]}" -v p05e-data:/data -v p05e-move:/move -w /app --entrypoint python "$IMG" "$@"; }
 # The server's app container: PostgreSQL 17 client tools, the server library volume, the move folder read-only.
 server() { docker run --rm --network "$NET" -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app "${CODE[@]}" \
-  -v p05e-data:/data:ro -v p05e-move:/move:ro -v p05e-library:/srv/library -w /app "$@"; }
+  -v p05e-key-backup:/operator-key-backup:ro -v p05e-move:/move:ro -v p05e-library:/srv/library -w /app "$@"; }
 # import_ DOCKER_ENV... -- IMPORT_ARGS...  (pg_restore from the bundle; move finds its libs)
 import_() { local env=(); while [ "$1" != -- ]; do env+=("$1"); shift; done; shift
-  server "${env[@]}" -e ONEIRODEX_SAVE_KEYRING_FILE=/data/save-keyring.json --entrypoint python "$IMG" -m oneirodex_standalone import /move/bundle --expect "$FP" \
+  server "${env[@]}" -e ONEIRODEX_SAVE_KEYRING_FILE=/operator-key-backup/save-keyring.json --entrypoint python "$IMG" -m oneirodex_standalone import /move/bundle --expect "$FP" \
     --library-dir /srv/library --pg-bin $PGBIN "$@"; }
-check() { server -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -e ONEIRODEX_SAVE_KEYRING_FILE=/data/save-keyring.json \
+check() { server -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -e ONEIRODEX_SAVE_KEYRING_FILE=/operator-key-backup/save-keyring.json \
   --entrypoint python "$IMG" scripts/spikes/desk03/proof_e/check_server.py "$@"; }
 awake() { docker exec "$1" python -c "
 import time, urllib.request
@@ -84,6 +84,8 @@ docker stop -t 60 "$SA" >/dev/null && docker rm "$SA" >/dev/null
 echo "== standalone: seed data worth moving (Windows-style game folder, encrypted saves)"
 ok standalone scripts/spikes/desk03/proof_e/seed.py
 ok standalone -c "import json, os; from pathlib import Path; from scripts.migrate_emulator_save_keys import initialize_keyring; Path('/data').chmod(0o700); s=json.loads(Path('/data/standalone.json').read_text()); initialize_keyring(Path('/data/save-keyring.json'), s['secret_key'])"
+ok docker run --rm -v p05e-data:/data:ro -v p05e-key-backup:/key-backup --entrypoint sh "$IMG" -c 'mkdir -p /key-backup && cp /data/save-keyring.json /key-backup/save-keyring.json && chmod 700 /key-backup && chmod 600 /key-backup/save-keyring.json'
+echo "== matching save keyring restored from a separate protected operator backup volume"
 
 echo "== backup"
 # The trailing separator is deliberate: it must not change which paths match.
