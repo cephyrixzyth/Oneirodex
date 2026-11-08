@@ -242,6 +242,13 @@ jobs:
       - name: Build (unsigned)
         run: npm run tauri:build${{ matrix.flavor == 'thin' && ':thin' || '' }} ${{ matrix.extra_args }}
 
+      - name: Native Rust tests
+        # Exercise native process/filesystem behavior on each host OS. The
+        # separate rust-checks job runs only on Linux; npm test covers JS.
+        if: matrix.flavor == 'full'
+        working-directory: clients/desktop/src-tauri
+        run: cargo test --lib --locked
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
