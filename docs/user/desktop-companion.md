@@ -19,6 +19,8 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 
 Game archive installs are limited to 250,000 entries and 200 GiB expanded by default. Before extraction, the companion checks the destination volume has space for the declared expanded data plus a 1 GiB reserve; extraction still enforces the expanded limit while streaming and preserves the prior install on failure. Operators can raise the expanded limit for a legitimate large game with `ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_EXPANDED_BYTES` and adjust the reserve with `ONEIRODEX_DESKTOP_GAME_ARCHIVE_RESERVE_BYTES` in the desktop process environment. Free space remains the final bound.
 
+Each game install is serialized while it is staged and promoted. If the companion stops during promotion, the next install attempt reconciles the matching temporary files: it restores the previous install or finishes a fully staged install, then cleans the abandoned generation. If recovery metadata is invalid or conflicting, the attempt stops and preserves the files for review.
+
 ## Friends window
 
 **Open friends window** opens (or focuses) a compact always-on-top Tauri popup (~360×560) anchored to the **bottom-right** of the work area (Windows taskbar-aware via `screen.avail*`), pointed at `/social-companion`. It is a Steam/Discord-friends-style overlay — not a fullscreen takeover of the companion. A second click focuses the existing window (keeps wherever you dragged it). Browser fallback uses the same size/`left`/`top` features when not running under Tauri.

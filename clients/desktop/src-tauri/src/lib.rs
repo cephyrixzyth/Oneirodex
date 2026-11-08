@@ -1,8 +1,8 @@
-use fs2::available_space;
+use fs2::{available_space, FileExt};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -791,7 +791,212 @@ const MAX_GAME_ARCHIVE_FILE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const MAX_GAME_ARCHIVE_ENTRIES: u64 = 250_000;
 const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
 const DEFAULT_GAME_ARCHIVE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
+const GAME_INSTALL_READY_MARKER: &str = ".oneirodex-ready-";
 static NEXT_GAME_ARCHIVE_STAGE: AtomicU64 = AtomicU64::new(0);
+
+fn game_install_lock(parent: &Path, name: &str) -> Result<File, String> {
+    let path = parent.join(format!(".{name}.install.lock"));
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| format!("Could not open the game install lock: {error}"))?;
+    lock.lock_exclusive()
+        .map_err(|error| format!("Could not acquire the game install lock: {error}"))?;
+    Ok(lock)
+}
+
+fn remove_recovery_directory(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("Could not inspect interrupted game install: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Interrupted game install path is not a real directory".into());
+    }
+    fs::remove_dir_all(path)
+        .map_err(|error| format!("Could not clean interrupted game install: {error}"))
+}
+
+fn recover_interrupted_install(destination: &Path) -> Result<(), String> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| "Install destination has no parent directory".to_string())?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("install");
+    let stage_prefix = format!(".{name}.staging-");
+    let previous_prefix = format!(".{name}.previous-");
+    let ready_prefix = format!(".{name}{GAME_INSTALL_READY_MARKER}");
+    let pending_prefix = format!(".{name}.ready-pending-");
+    let mut stages = Vec::new();
+    let mut previous = Vec::new();
+    let mut ready_markers = Vec::new();
+    let mut pending_markers = Vec::new();
+    for entry in fs::read_dir(parent).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let filename = entry.file_name();
+        let Some(filename) = filename.to_str() else {
+            continue;
+        };
+        let (prefix, kind) = if filename.starts_with(&stage_prefix) {
+            (&stage_prefix, 0)
+        } else if filename.starts_with(&previous_prefix) {
+            (&previous_prefix, 1)
+        } else if filename.starts_with(&ready_prefix) {
+            (&ready_prefix, 2)
+        } else if filename.starts_with(&pending_prefix) {
+            (&pending_prefix, 3)
+        } else {
+            continue;
+        };
+        let suffix = &filename[prefix.len()..];
+        let Some((process_id, counter)) = suffix.split_once('-') else {
+            return Err("Interrupted game install has an invalid recovery identifier".into());
+        };
+        if process_id.parse::<u32>().is_err() || counter.parse::<u64>().is_err() {
+            return Err("Interrupted game install has an invalid recovery identifier".into());
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+        if kind == 2 || kind == 3 {
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err("Game install recovery marker is not a regular file".into());
+            }
+            if kind == 2 && fs::read(&path).map_err(|error| error.to_string())? != suffix.as_bytes()
+            {
+                return Err("Game install recovery marker is invalid".into());
+            }
+            if kind == 2 {
+                ready_markers.push((suffix.to_string(), path));
+            } else {
+                pending_markers.push(path);
+            }
+        } else {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err("Interrupted game install path is not a real directory".into());
+            }
+            if kind == 0 {
+                stages.push((suffix.to_string(), path));
+            } else {
+                previous.push((suffix.to_string(), path));
+            }
+        }
+    }
+
+    let destination_exists = match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("Install destination is not a real directory".into());
+        }
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(format!("Could not inspect install destination: {error}")),
+    };
+    if ready_markers.len() > 1 || previous.len() > 1 {
+        return Err("Multiple interrupted game installs need manual recovery".into());
+    }
+    if let Some((ready_id, ready_marker)) = ready_markers.first() {
+        if previous.iter().any(|(id, _)| id != ready_id) {
+            return Err("Interrupted game install has conflicting previous data".into());
+        }
+        let ready_stage = stages
+            .iter()
+            .find(|(id, _)| id == ready_id)
+            .map(|(_, path)| path);
+        let matching_previous = previous
+            .iter()
+            .find(|(id, _)| id == ready_id)
+            .map(|(_, path)| path);
+        if let Some(stage) = ready_stage {
+            if destination_exists && matching_previous.is_some() {
+                return Err(
+                    "Interrupted game install has conflicting destination and previous data".into(),
+                );
+            }
+            if !destination_exists {
+                if let Some(old_install) = matching_previous {
+                    fs::rename(old_install, destination).map_err(|error| {
+                        format!("Could not restore the previous game install: {error}")
+                    })?;
+                } else {
+                    fs::rename(stage, destination).map_err(|error| {
+                        format!("Could not recover the completed game install: {error}")
+                    })?;
+                }
+            }
+            for (_, path) in &stages {
+                if path.exists() {
+                    remove_recovery_directory(path)?;
+                }
+            }
+            for (id, path) in &previous {
+                if id == ready_id && path.exists() {
+                    remove_recovery_directory(path)?;
+                }
+            }
+        } else if destination_exists {
+            for (_, path) in stages.iter().chain(previous.iter()) {
+                remove_recovery_directory(path)?;
+            }
+        } else if let Some((_, old_install)) = previous.first() {
+            fs::rename(old_install, destination)
+                .map_err(|error| format!("Could not restore the previous game install: {error}"))?;
+            for (_, path) in &stages {
+                remove_recovery_directory(path)?;
+            }
+        } else {
+            return Err(
+                "Completed game install data is missing; recovery files were preserved".into(),
+            );
+        }
+        fs::remove_file(ready_marker)
+            .map_err(|error| format!("Could not finalize recovered game install: {error}"))?;
+    } else if !destination_exists {
+        if let Some((_, old_install)) = previous.first() {
+            fs::rename(old_install, destination)
+                .map_err(|error| format!("Could not restore the previous game install: {error}"))?;
+        }
+        for (_, path) in &stages {
+            remove_recovery_directory(path)?;
+        }
+    } else {
+        if !previous.is_empty() {
+            return Err(
+                "Interrupted game install has conflicting destination and previous data".into(),
+            );
+        }
+        for (_, path) in &stages {
+            remove_recovery_directory(path)?;
+        }
+    }
+    for marker in pending_markers {
+        fs::remove_file(marker)
+            .map_err(|error| format!("Could not clean incomplete recovery marker: {error}"))?;
+    }
+    Ok(())
+}
+
+fn mark_install_stage_ready(parent: &Path, name: &str, suffix: &str) -> Result<PathBuf, String> {
+    let marker_path = parent.join(format!(".{name}{GAME_INSTALL_READY_MARKER}{suffix}"));
+    let pending_path = parent.join(format!(".{name}.ready-pending-{suffix}"));
+    let _pending_cleanup = RecoveryMarkerCleanup {
+        path: pending_path.clone(),
+        keep: false,
+    };
+    let mut marker = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&pending_path)
+        .map_err(|error| format!("Could not mark game install stage complete: {error}"))?;
+    marker
+        .write_all(suffix.as_bytes())
+        .and_then(|_| marker.sync_all())
+        .map_err(|error| format!("Could not persist game install recovery marker: {error}"))?;
+    fs::rename(&pending_path, &marker_path)
+        .map_err(|error| format!("Could not publish game install recovery marker: {error}"))?;
+    Ok(marker_path)
+}
 
 fn configured_archive_limit(raw: Option<&str>, default: u64) -> u64 {
     raw.and_then(|value| value.trim().parse::<u64>().ok())
@@ -916,6 +1121,12 @@ fn extract_zip_to_dir_with_space_budget(
         .parent()
         .ok_or_else(|| "Install destination has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("install");
+    let _install_lock = game_install_lock(parent, name)?;
+    recover_interrupted_install(destination)?;
     let required_bytes = declared_expanded_bytes
         .checked_add(reserve_bytes)
         .ok_or_else(|| "Game archive free-space requirement overflow".to_string())?;
@@ -939,17 +1150,13 @@ fn extract_zip_to_dir_with_space_budget(
             available_bytes / gib,
         ));
     }
-    let name = destination
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("install");
-    let (staging, backup) = loop {
+    let (suffix, staging, backup) = loop {
         let id = NEXT_GAME_ARCHIVE_STAGE.fetch_add(1, Ordering::Relaxed);
         let suffix = format!("{}-{id}", std::process::id());
         let staging = parent.join(format!(".{name}.staging-{suffix}"));
         let backup = parent.join(format!(".{name}.previous-{suffix}"));
         match fs::create_dir(&staging) {
-            Ok(()) => break (staging, backup),
+            Ok(()) => break (suffix, staging, backup),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error.to_string()),
         }
@@ -1032,6 +1239,11 @@ fn extract_zip_to_dir_with_space_budget(
         }
     }
 
+    let ready_marker = mark_install_stage_ready(parent, name, &suffix)?;
+    let mut marker_cleanup = RecoveryMarkerCleanup {
+        path: ready_marker.clone(),
+        keep: false,
+    };
     let staged_exe_path = find_likely_exe(&staging, 2).map(PathBuf::from);
 
     let had_destination = destination.exists();
@@ -1047,9 +1259,22 @@ fn extract_zip_to_dir_with_space_budget(
         }
         return Err(error.to_string());
     }
+    marker_cleanup.keep = true;
+    let mut previous_removed = !had_destination;
     if had_destination {
-        if let Err(error) = remove_path_inner(&backup) {
-            eprintln!("[desktop] could not remove the superseded install directory: {error}");
+        match remove_path_inner(&backup) {
+            Ok(()) => previous_removed = true,
+            Err(error) => {
+                eprintln!("[desktop] could not remove the superseded install directory: {error}");
+            }
+        }
+    }
+    if previous_removed {
+        match fs::remove_file(&ready_marker) {
+            Ok(()) => marker_cleanup.keep = false,
+            Err(error) => {
+                eprintln!("[desktop] could not remove the completed install marker: {error}");
+            }
         }
     }
 
@@ -1070,6 +1295,19 @@ struct DirectoryCleanup(PathBuf);
 impl Drop for DirectoryCleanup {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+struct RecoveryMarkerCleanup {
+    path: PathBuf,
+    keep: bool,
+}
+
+impl Drop for RecoveryMarkerCleanup {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -2373,6 +2611,160 @@ mod tests {
 
         extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(9)).unwrap();
         assert_eq!(fs::read(destination.join("game.bin")).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn interrupted_ready_stage_restores_previous_install_before_new_extract() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("new.bin"), b"new").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!destination.join("new.bin").exists());
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_promoted_install_keeps_new_and_cleans_previous_generation() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("new.bin"), b"new").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("new.bin")).unwrap(), b"new");
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_unready_stage_restores_previous_generation() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("partial.bin"), b"partial").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+    }
+
+    #[test]
+    fn interrupted_ready_stage_does_not_replace_existing_install_before_swap() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("old.bin"), b"old").unwrap();
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("new.bin"), b"new").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!destination.join("new.bin").exists());
+        assert!(!stage.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_marker_write_cleans_partial_stage_and_preserves_existing_install() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let pending_marker = work.path().join(".install.ready-pending-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("old.bin"), b"old").unwrap();
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("partial.bin"), b"partial").unwrap();
+        fs::write(&pending_marker, b"partial marker").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!stage.exists());
+        assert!(!pending_marker.exists());
+    }
+
+    #[test]
+    fn invalid_ready_marker_refuses_cleanup_and_preserves_recovery_data() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+        let marker = work.path().join(".install.oneirodex-ready-123-4");
+        fs::write(&marker, b"invalid").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        assert!(recover_interrupted_install(&destination).is_err());
+
+        assert!(!destination.exists());
+        assert_eq!(fs::read(previous.join("old.bin")).unwrap(), b"old");
+        assert!(marker.exists());
+    }
+
+    #[test]
+    fn missing_ready_stage_and_destination_preserves_marker_for_manual_recovery() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let marker = work.path().join(".install.oneirodex-ready-123-4");
+        fs::write(&marker, b"123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        assert!(recover_interrupted_install(&destination).is_err());
+
+        assert!(!destination.exists());
+        assert!(marker.exists());
+    }
+
+    #[test]
+    fn next_extraction_recovers_a_crash_state_before_installing_new_archive() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("fresh.bin", b"fresh")]);
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("staged.bin"), b"complete stage").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        extract_zip_to_dir(&archive, &destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("fresh.bin")).unwrap(), b"fresh");
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
     }
 
     #[test]
