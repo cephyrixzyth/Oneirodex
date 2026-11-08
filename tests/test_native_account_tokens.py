@@ -429,3 +429,49 @@ def test_database_failures_return_redacted_api_errors():
         await check_failure('DELETE', '/api/tokens/1')
 
     asyncio.run(run())
+
+
+def test_sqlalchemy_connection_failure_has_redacted_api_envelope():
+    import asyncio
+
+    import httpx
+    from sqlalchemy import create_engine, text
+
+    from asgi import _install_native_api_error_handlers
+
+    user = FakeUser()
+    _client, data, _ = make_client(user=user)
+    app = data._test_app
+    _install_native_api_error_handlers(
+        app, data._test_flask_app.config, data._test_flask_app.logger,
+    )
+    engine = create_engine(
+        'postgresql+psycopg2://synthetic_user:synthetic_password@127.0.0.1:1/synthetic_db',
+        connect_args={'connect_timeout': 1},
+    )
+
+    def list_using_unavailable_postgres(_user_id):
+        with engine.connect() as connection:
+            return connection.execute(text('SELECT 1')).all()
+
+    data.list_for_user = list_using_unavailable_postgres
+    credentials = browser_credentials(user)
+    cookie = credentials['Cookie'].split('=', 1)[1]
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url='http://testserver',
+        ) as async_client:
+            async_client.cookies.set('session', cookie)
+            response = await async_client.get('/api/tokens')
+        assert response.status_code == 500
+        assert response.json()['error_code'] == 'internal'
+        assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+        for diagnostic in ('synthetic_user', 'synthetic_password', 'synthetic_db', '127.0.0.1'):
+            assert diagnostic not in response.text
+
+    try:
+        asyncio.run(run())
+    finally:
+        engine.dispose()

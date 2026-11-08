@@ -1,0 +1,19 @@
+{
+  "review_id": "R1980",
+  "title": "Redacted token API response for SQLAlchemy connection failure",
+  "classification": "A real SQLAlchemy/psycopg2 OperationalError raised during PostgreSQL connection establishment is converted to the generic native API error envelope.",
+  "verification": {
+    "command": "python -m pytest --noconftest -o addopts= tests/test_native_account_tokens.py -q",
+    "result": "passed: 14 tests; no test database or external network used",
+    "fault": "The token-list adapter opens a SQLAlchemy PostgreSQL engine to an unavailable loopback port. Psycopg2's refused connection becomes SQLAlchemy OperationalError before any query or database mutation."
+  },
+  "assertions": [
+    "the configured production ASGI exception handlers return HTTP 500 with error_code internal",
+    "the response uses the generic user-facing error message",
+    "connection diagnostics and synthetic endpoint identity are absent from the response"
+  ],
+  "limits": [
+    "Only token listing exercises the real driver failure; create and revoke continue to use injected adapter failures in the neighboring regression.",
+    "This does not simulate a failed connection to the configured application database or provide paired exact-image response parity."
+  ]
+}
