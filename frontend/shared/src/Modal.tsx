@@ -156,15 +156,17 @@ export function Modal({
   }
 
   return createPortal(
-    <div
-      className={className}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={labelledBy}
-      aria-label={labelledBy ? undefined : label}
-      onClick={onBackdrop}
-    >
-      <div data-panel={panelData} ref={panelRef} className={panelClassName} tabIndex={-1}>
+    <div className={className} onClick={onBackdrop}>
+      <div
+        data-panel={panelData}
+        ref={panelRef}
+        className={panelClassName}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy ? undefined : label}
+        tabIndex={-1}
+      >
         {children}
       </div>
     </div>,
