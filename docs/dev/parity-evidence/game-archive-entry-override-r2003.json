@@ -1,0 +1,67 @@
+{
+  "review_id": "R2003",
+  "title": "Configurable desktop game archive entry limit",
+  "reviewed_on": "2026-11-08",
+  "finding": "DT-005 archive resource and destination risk",
+  "classification": "partially remediated; missing large-game entry-count override confirmed and fixed",
+  "change": {
+    "environment_variable": "ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES",
+    "default_entries": 250000,
+    "invalid_zero_or_missing_value": "falls back to the existing default",
+    "other_limits_unchanged": [
+      "100 GiB compressed archive limit",
+      "200 GiB default expanded-size limit, configurable separately",
+      "1 GiB default free-space reserve, configurable separately"
+    ],
+    "safety_invariants": [
+      "Declared entry count and expanded size are checked before promotion.",
+      "Expanded bytes are checked again while streaming.",
+      "Extraction remains in a sibling staging generation and a failed install preserves the previous generation.",
+      "Free space remains checked before extraction."
+    ]
+  },
+  "verification": {
+    "target": "Windows Rust unit tests",
+    "commands": [
+      {
+        "command": "cargo fmt --manifest-path clients/desktop/src-tauri/Cargo.toml --check",
+        "result": "passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib large_game_entry_limit_override_accepts_positive_value",
+        "result": "1 passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib archive",
+        "result": "8 passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib extract_",
+        "result": "8 passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib free_space_preflight",
+        "result": "1 passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib extraction_read_failure",
+        "result": "1 passed"
+      },
+      {
+        "command": "cargo test --manifest-path clients/desktop/src-tauri/Cargo.toml --lib simulated_disk_full",
+        "result": "1 passed"
+      }
+    ]
+  },
+  "limits": [
+    "This does not complete DT-005: the compressed-size ceiling and other default values remain as currently implemented.",
+    "No actual disk exhaustion or hostile archive was executed.",
+    "No macOS/Linux packaged installer or game-launch smoke was run.",
+    "Progress reporting and cancellation were not added by this change."
+  ],
+  "related_paths": [
+    "clients/desktop/src-tauri/src/lib.rs",
+    "docs/user/desktop-companion.md",
+    "tests are colocated in the Tauri Rust library module"
+  ]
+}

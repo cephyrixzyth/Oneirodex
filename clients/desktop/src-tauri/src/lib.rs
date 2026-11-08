@@ -1019,10 +1019,19 @@ fn configured_archive_limit(raw: Option<&str>, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
+fn configured_game_archive_entry_limit(raw: Option<&str>) -> u64 {
+    configured_archive_limit(raw, MAX_GAME_ARCHIVE_ENTRIES)
+}
+
 fn extract_zip_to_dir_with_configured_budget(
     archive: &Path,
     destination: &Path,
 ) -> Result<ExtractZipResult, String> {
+    let max_entries = configured_game_archive_entry_limit(
+        std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES")
+            .ok()
+            .as_deref(),
+    );
     let max_expanded_bytes = configured_archive_limit(
         std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_EXPANDED_BYTES")
             .ok()
@@ -1036,7 +1045,7 @@ fn extract_zip_to_dir_with_configured_budget(
     extract_zip_to_dir_with_space_budget(
         archive,
         destination,
-        MAX_GAME_ARCHIVE_ENTRIES,
+        max_entries,
         max_expanded_bytes,
         reserve_bytes,
         None,
@@ -2883,6 +2892,23 @@ mod tests {
         assert_eq!(configured_archive_limit(Some("0"), 200), 200);
         assert_eq!(configured_archive_limit(Some("invalid"), 200), 200);
         assert_eq!(configured_archive_limit(None, 200), 200);
+    }
+
+    #[test]
+    fn large_game_entry_limit_override_accepts_positive_value() {
+        assert_eq!(configured_game_archive_entry_limit(Some("500000")), 500_000);
+        assert_eq!(
+            configured_game_archive_entry_limit(Some("0")),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
+        assert_eq!(
+            configured_game_archive_entry_limit(Some("invalid")),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
+        assert_eq!(
+            configured_game_archive_entry_limit(None),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
     }
 
     #[test]
