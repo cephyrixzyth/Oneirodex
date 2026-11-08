@@ -1,0 +1,49 @@
+{
+  "review_id": "R2001",
+  "title": "Windows Node 22 native SPA build follow-up",
+  "reviewed_on": "2026-11-08",
+  "scope": [
+    "Windows execution of the native five-SPA build command",
+    "staged bundle promotion and generated manifest",
+    "framework-free native runtime manifest validation",
+    "focused installer contract and manifest tests"
+  ],
+  "verification": {
+    "host": "Windows 11",
+    "node_runner": "npm exec --yes --package=node@22",
+    "node_version": "22.23.4",
+    "global_node_installation_changed": false,
+    "command": "npm run build:native-spas",
+    "built_targets": [
+      "member-app",
+      "member-auth",
+      "admin-app",
+      "admin-pilot",
+      "ops-glance"
+    ],
+    "manifest_source_commit": "9f13318a1b3aaaa0cd16cfa8fae444686659c7aa",
+    "manifest_package_lock_sha256": "130a7280cea19944f9a275febf6ed1e8615368aeb2d95883150d8412bd6bfbdf",
+    "native_runtime_validator": "passed",
+    "focused_tests": {
+      "command": "python -m pytest --no-cov tests/test_native_install_contract.py tests/test_native_asset_manifest.py -q",
+      "passed": 12
+    },
+    "r1972_bundle_validator": "passed"
+  },
+  "observations": [
+    "The five-target staged build completed and promoted on Windows under Node 22.",
+    "The runtime Python validator accepted all target inventories and file hashes.",
+    "Vite emitted existing large-chunk warnings and runtime theme CSS paths that resolve when served by Oneirodex."
+  ],
+  "limits": [
+    "No complete native install, upgrade, server launch, browser render, or first-use journey was run.",
+    "No macOS or Linux native installer run was performed.",
+    "This does not qualify production startup or any deployment."
+  ],
+  "related_paths": [
+    "scripts/build-native-spas.mjs",
+    "scripts/validate-native-install.py",
+    "tests/test_native_install_contract.py",
+    "tests/test_native_asset_manifest.py"
+  ]
+}
