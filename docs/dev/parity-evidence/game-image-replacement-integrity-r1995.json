@@ -1,0 +1,31 @@
+{
+  "review_id": "R1995",
+  "title": "Preserve committed game artwork during singular image replacement",
+  "classification": "Confirmed file/database ordering defect reproduced in the current legacy upload route.",
+  "reproduction": {
+    "scenario": "Upload a cover, then inject a file-publication failure while replacing it.",
+    "before_fix": "The route deleted the old cover file and committed deletion of its database row before opening the replacement path. The reproduction raised the injected OSError and confirmed the prior Image row was gone.",
+    "first_regression_run": "After moving old-row deletion into the replacement transaction, PostgreSQL exposed that its unique_game_cover_image index required flushing the prior-row deletion before inserting the replacement. The route now flushes within the same transaction; this does not commit deletion separately."
+  },
+  "change": {
+    "publication": "Write image bytes to a same-directory temporary file, fsync, atomically replace to a unique filename, and sync the directory where supported before mutating image rows.",
+    "replacement": "Delete old singular rows and insert the new row in one transaction; flush the delete first to satisfy the PostgreSQL partial unique index. Remove old files only after commit and only when no remaining Image row references their URL.",
+    "failure": "A pre-publication failure preserves the old row and bytes and removes the temporary file. An ambiguous DB commit preserves old bytes and leaves the new unique file as a recovery candidate."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_image_upload_hardening.py -q",
+    "result": "passed: 17 tests on Python 3.14.10 and PostgreSQL 17.6 against a fresh disposable schema through Alembic head e1f2a3b4c5d6; database dropped afterward.",
+    "new_regressions": [
+      "Injected staging fsync failure leaves the old Image row and bytes intact and removes the temporary file.",
+      "Injected DB commit failure leaves the old Image row and bytes intact while retaining the new unique file as a recovery candidate.",
+      "Successful singular replacement commits one new row before removing the old file.",
+      "Replacing one game's image does not unlink a file still referenced by another game."
+    ],
+    "known_warnings": "Two pre-existing Werkzeug temporary upload ResourceWarnings occurred in other test cases; all assertions passed."
+  },
+  "limits": [
+    "No deployed image directory was inspected or changed.",
+    "Orphan recovery candidates from ambiguous DB commit failures are retained safely; automated image-orphan reconciliation is not implemented by this change.",
+    "This does not close representative NAS image-memory measurements or cancellation-under-load qualification."
+  ]
+}

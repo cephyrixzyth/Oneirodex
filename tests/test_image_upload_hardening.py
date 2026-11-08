@@ -25,9 +25,9 @@ from urllib.parse import quote
 
 import pytest
 from PIL import Image as PILImage
-from sqlalchemy import text
+from sqlalchemy import select, text
 
-from oneirodex.models import Game, Library, LibraryPlatform, User
+from oneirodex.models import Game, Image, Library, LibraryPlatform, User
 from oneirodex.routes_admin_ext.game_images import MAX_IMAGE_PIXELS, MAX_IMAGE_UPLOAD_BYTES
 
 
@@ -134,6 +134,109 @@ class TestUploadCeiling:
         assert sample_game.uuid not in written[0].name
         with PILImage.open(written[0]) as saved:
             assert saved.size == (600, 800)
+
+    def test_failed_singular_replacement_preserves_previous_record_and_bytes(
+        self, client, admin_user, sample_game, image_dir, db_session, monkeypatch,
+    ):
+        first = _upload(client, admin_user, sample_game, _png(600, 800))
+        assert first.status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_id, old_filename = old.id, old.url
+        old_path = image_dir / old_filename
+        old_bytes = old_path.read_bytes()
+
+        def fail_fsync(*_args):
+            raise OSError('injected image publication failure')
+
+        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.os.fsync', fail_fsync)
+        with pytest.raises(OSError, match='injected image publication failure'):
+            _upload(client, admin_user, sample_game, _png(640, 900))
+
+        db_session.expire_all()
+        retained = db_session.get(Image, old_id)
+        assert retained is not None
+        assert retained.url == old_filename
+        assert old_path.read_bytes() == old_bytes
+        assert len(list(image_dir.iterdir())) == 1
+
+    def test_failed_db_commit_keeps_old_image_and_new_recovery_bytes(
+        self, client, admin_user, sample_game, image_dir, db_session, monkeypatch,
+    ):
+        first = _upload(client, admin_user, sample_game, _png(600, 800))
+        assert first.status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_id, old_filename = old.id, old.url
+        old_path = image_dir / old_filename
+        old_bytes = old_path.read_bytes()
+
+        def fail_commit():
+            raise RuntimeError('injected commit failure')
+
+        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.db.session.commit', fail_commit)
+        with pytest.raises(RuntimeError, match='injected commit failure'):
+            _upload(client, admin_user, sample_game, _png(640, 900))
+
+        db_session.rollback()
+        db_session.expire_all()
+        retained = db_session.get(Image, old_id)
+        assert retained is not None and retained.url == old_filename
+        assert old_path.read_bytes() == old_bytes
+        # The new path is deliberately left as an unreferenced recovery
+        # candidate because a real commit exception can have an ambiguous
+        # outcome. Never delete the prior committed bytes to hide that state.
+        assert len(list(image_dir.iterdir())) == 2
+
+    def test_successful_singular_replacement_commits_new_row_before_old_unlink(
+        self, client, admin_user, sample_game, image_dir, db_session,
+    ):
+        assert _upload(client, admin_user, sample_game, _png(600, 800)).status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_path = image_dir / old.url
+
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+
+        assert response.status_code == 200
+        db_session.expire_all()
+        rows = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].url != old.url
+        assert not old_path.exists()
+        assert (image_dir / rows[0].url).is_file()
+
+    def test_replacing_one_reference_does_not_unlink_another_games_image(
+        self, client, admin_user, sample_game, image_dir, db_session,
+    ):
+        assert _upload(client, admin_user, sample_game, _png(600, 800)).status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_path = image_dir / old.url
+        other_game = Game(
+            library_uuid=sample_game.library_uuid,
+            name=f'Shared image reference {uuid4().hex[:8]}',
+            igdb_id=515152,
+        )
+        db_session.add(other_game)
+        db_session.flush()
+        db_session.add(Image(game_uuid=other_game.uuid, image_type='screenshot', url=old.url))
+        db_session.commit()
+
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+
+        assert response.status_code == 200
+        db_session.expire_all()
+        assert old_path.is_file()
+        assert db_session.execute(
+            select(Image.id).where(Image.game_uuid == other_game.uuid, Image.url == old.url)
+        ).first() is not None
 
     def test_decoded_format_sets_saved_suffix_not_client_filename(
         self, client, admin_user, sample_game, image_dir,

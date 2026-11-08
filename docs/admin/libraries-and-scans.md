@@ -354,6 +354,11 @@ buttons: use Tab to focus a folder and Enter or Space to open it.
 
 From a game card, details page, or the image queue, **Edit all artwork** opens `/edit_game_images/<uuid>` . The shared React page displays cover, screenshots and other image kinds; it supports local uploads, confirmed deletion and the existing artwork picker. Refresh from IGDB is available after the game artwork record loads, is a separate confirmed action, and runs in the background. Artwork changes pause while a scan is running.
 
+A singular artwork replacement publishes and syncs the new image before changing
+the database row. The previous file is removed only after the replacement row
+commits and no other image row references that file; a failed upload or database
+commit leaves the last committed artwork available.
+
 The legacy image editor uses the shared, theme-aware fallback when a game has
 no cover: the game title and **No cover art** stay readable as live text. A
 successful cover upload replaces the fallback with its preview and a delete control

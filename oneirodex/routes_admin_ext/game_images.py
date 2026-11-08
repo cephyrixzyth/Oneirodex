@@ -24,8 +24,10 @@ Route bodies moved verbatim; the nine ``print()`` calls become module-level
 import hashlib
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from flask import (
     abort, current_app, flash, jsonify, redirect, request,
@@ -89,6 +91,31 @@ def _game_filename_key(game_uuid: str) -> str:
     return hashlib.sha256(str(game_uuid).encode('utf-8')).hexdigest()[:16]
 
 
+def _publish_image_bytes(save_dir: Path, filename: str, content: bytes) -> Path:
+    """Durably publish a new immutable image file before changing its DB row."""
+    save_dir.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix='.oneirodex-image-', suffix='.tmp', dir=save_dir,
+    )
+    temporary_path = Path(temporary_name)
+    destination = save_dir / filename
+    try:
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, destination)
+        if os.name != 'nt' and hasattr(os, 'O_DIRECTORY'):
+            directory_fd = os.open(save_dir, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        return destination
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
 @admin2_bp.route('/upload_image/<game_uuid>', methods=['POST'])
 @login_required
 @admin_required
@@ -144,24 +171,20 @@ def upload_image(game_uuid):
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
 
-    # Singular kinds: replace existing primary of that kind
+    # Resolve old files before publication, but leave the current rows and
+    # bytes untouched until the replacement file is complete and durable.
+    existing_paths = []
     if image_type in SINGULAR_IMAGE_KINDS:
         existing_rows = db.session.execute(
             select(Image).filter_by(game_uuid=game_uuid, image_type=image_type)
         ).scalars().all()
-        existing_paths = []
         for existing in existing_rows:
             old_path = image_path_under_save_dir(
                 existing.url, current_app.config['IMAGE_SAVE_PATH'],
             )
             if old_path is None:
                 return api_error('Stored image path is invalid', code='bad_request')
-            existing_paths.append((existing, old_path))
-        for existing, old_path in existing_paths:
-            if os.path.exists(old_path):
-                os.remove(old_path)
-            db.session.delete(existing)
-        db.session.commit()
+            existing_paths.append((existing, old_path, existing.url))
     short_uuid = str(uuid.uuid4())[:8]
     # game_uuid is a route parameter and must never become a filesystem path
     # component directly. Hash it so encoded separators and Windows traversal
@@ -174,14 +197,33 @@ def upload_image(game_uuid):
         unique_identifier = datetime.now().strftime('%Y%m%d%H%M%S')
         short_uuid = str(uuid.uuid4())[:8]
         filename = f"{game_file_key}_{unique_identifier}_{short_uuid}.{file_extension}"
-    save_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], filename)
-    with open(save_path, 'wb') as output:
-        output.write(image_content)
-    logger.info(f"File saved to: {save_path}")
+    save_dir = Path(current_app.config['IMAGE_SAVE_PATH'])
+    _publish_image_bytes(save_dir, filename, image_content)
+    logger.info("Game image file published")
+    for existing, _old_path, _old_url in existing_paths:
+        db.session.delete(existing)
+    if existing_paths:
+        # PostgreSQL's partial unique index for singular image kinds checks
+        # uniqueness at statement time; flush the deletion inside this same
+        # transaction before inserting the replacement row.
+        db.session.flush()
     new_image = Image(game_uuid=game_uuid, image_type=image_type, url=filename)
     db.session.add(new_image)
     db.session.commit()
-    logger.info(f"File saved to DB with ID: {new_image.id}")
+    for _existing, old_path, old_url in existing_paths:
+        still_referenced = db.session.execute(
+            select(Image.id).where(Image.url == old_url).limit(1)
+        ).first()
+        if still_referenced is not None:
+            continue
+        try:
+            old_path.unlink(missing_ok=True)
+        except OSError:
+            # The DB already points at the replacement. Keep a harmless orphan
+            # for later operator cleanup rather than turning success into a
+            # misleading failure or risking another user's referenced file.
+            logger.warning("Obsolete game image cleanup failed after replacement")
+    logger.info("Game image row committed")
 
     return api_ok({
         'message': 'File uploaded successfully',
