@@ -24,6 +24,8 @@ R1972 compared the mobile token lifecycle in the signed-in account panel on both
 
 R1973 source follow-up confirmed that the shared modal exposed the scrim as the dialog while placing focus handling inside the visible panel. The role, modal state, and accessible name now sit on the visible panel; backdrop dismissal remains on the scrim. `npm test --workspace frontend/shared -- src/Modal.test.tsx` passed 9/9, covering dialog placement, naming, focus entry/containment/restoration, Escape, and backdrop handling. Evidence: `docs/dev/parity-evidence/token-dialog-semantics-r1973.json`. This is source and component-test evidence; screen-reader/browser behavior and exact-image lifecycle replay were not repeated, and token routes remain partial.
 
+R1974 keyboard review confirmed that dismissing the one-time token secret removed the focused Done button without moving focus. Done now clears the secret and focuses the token-name field. `npm test --workspace frontend/shared -- src/account/TokensPanel.test.tsx` passed 1/1 with mocked API responses, checking both removal and focus restoration. Evidence: `docs/dev/parity-evidence/token-secret-focus-r1974.json`. This remains component-test evidence; exact-image lifecycle replay and real-browser assistive-technology review remain open.
+
 ## Next execution batches
 
 1. Have the independent review inspect R1972 dialog/focus semantics; then cover remaining token failure, populated, keyboard, and accessibility states plus database-failure/expiry API cases.
