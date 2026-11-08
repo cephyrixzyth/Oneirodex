@@ -53,15 +53,20 @@
     },
     {
       "scenario": "external store disconnect during account deletion",
-      "classification": "local unlink confirmed; provider-side revocation unknown",
-      "outcome": "The departing account's StoreAccount rows, encrypted credential material, and owned-title rows are deleted locally by declared account cascades. The surviving account's linked-store rows are preserved. The shared deletion service makes no provider HTTP revocation call.",
+      "classification": "owner policy selected; no applicable provider-supported revocation endpoint identified for current credential contracts",
+      "outcome": "The owner selected attempting provider-supported revocation before local deletion, while local deletion must proceed if revocation is unsupported or unreachable. Source review found no documented revocation endpoint applicable to the exact credential types Oneirodex stores: Steam stores an account identifier; GOG, Epic Games Launcher, Amazon Games, Xbox and PlayStation use launcher/private or unofficial credentials; Meta Quest is import-only. Epic EOS's documented OAuth revoke endpoint is for EOS-issued tokens and does not match Epic Launcher device-auth records. The departing account's StoreAccount rows, encrypted credentials, and owned-title rows are deleted locally by declared cascades, and the surviving account's rows remain. No undocumented provider endpoint is called.",
       "evidence": [
         "oneirodex/models/ownership.py:StoreAccount.user_id and UserOwnedTitle.user_id foreign keys",
         "oneirodex/utils/user_deletion.py:delete_user_account",
         "tests/test_admin_user_delete_retention.py:test_admin_delete_user_removes_private_data_and_preserves_shared_data",
         "docs/dev/parity-evidence/account-deletion-credential-isolation-r1985.json"
       ],
-      "limits": "Local credential deletion prevents Oneirodex from using the credential, but does not establish that the third party invalidates it. Provider revocation behavior and whether account deletion should attempt provider-specific revocation remain unverified."
+      "limits": "The source review found no revocation operation supported for the current stored credential contracts; this is not proof that a provider has no private revocation endpoint. The member may still need to remove Oneirodex or the relevant launcher authorization in that provider's account settings. Reassess when an integration adopts a provider-documented revocable credential flow.",
+      "provider_references": [
+        "Steam's official OAuth overview describes its grant and token use; current Oneirodex Steam linking stores an account identifier, not a per-member OAuth token: https://partner.steamgames.com/doc/webapi_overview/oauth",
+        "Epic documents OAuth revocation for Epic Online Services tokens; Oneirodex's Epic adapter instead stores Epic Games Launcher device-auth material: https://dev.epicgames.com/docs/web-api-ref/authentication?lang=en-US",
+        "Amazon's Login with Amazon support guidance directs users to remove an app through Manage Login with Amazon; Oneirodex Amazon Games uses a separate unofficial Nile/Heroic credential shape: https://developer.amazon.com/docs/login-with-amazon/faq.html"
+      ]
     }
   ],
   "verification": {
@@ -69,7 +74,7 @@
     "focused_tests": "Existing R1987-R1990 PostgreSQL regression results support the referenced outcomes; no code changed for this tabletop.",
     "bundle_validator": "The R1972 seven-report validator was rerun and passed; R1991 is a separate follow-up artifact outside that immutable bundle.",
     "remaining": [
-      "Decide and implement provider-specific remote token revocation if required; do not infer remote revocation from local credential deletion.",
+      "Reassess provider revocation when a supported integration begins storing a credential with a provider-documented revocation operation.",
       "Compare deployed operator schema and exercise restore/reapplication and production restart only under separately authorized operations."
     ]
   }

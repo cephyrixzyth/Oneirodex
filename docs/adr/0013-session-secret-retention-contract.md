@@ -96,6 +96,14 @@ qualification remain open.
 - For user-owned avatar, emulator-save and generation, and uploaded chat
   attachment files, purge after the database deletion commits. Failed cleanup
   must remain retryable and visible; do not add a recovery quarantine.
+- Before local account deletion, attempt remote revocation only when the exact
+  stored credential type has a provider-documented revocation operation. A
+  missing endpoint, timeout, or provider error must not block deletion of local
+  credentials and user data. Never call an undocumented endpoint or revoke
+  operator-owned household credentials as though they belonged to the member.
+  Record the outcome without retaining credential material. Current store
+  adapters do not expose a provider-supported revocation path for their stored
+  credential types; reassess when an adapter changes its authentication flow.
 - Offline backups are outside account deletion and follow a separate operator
   retention policy. This ADR does not set a backup duration.
 - A deletion job must revoke access first, be idempotent and resumable, and
