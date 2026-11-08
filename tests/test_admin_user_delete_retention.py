@@ -12,6 +12,7 @@ from oneirodex.models import (
     ChatChannel,
     ChatMessage,
     ChatMessageAttachment,
+    CustomEmoji,
     EmulatorSave,
     EmulatorSaveGeneration,
     InviteToken,
@@ -181,6 +182,14 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     attachment_file = upload_root / 'chat-attachments' / attachment_name
     attachment_file.parent.mkdir(parents=True)
     attachment_file.write_bytes(b'attachment')
+    emoji_name = f'{uuid4().hex}.webp'
+    emoji_file = upload_root / 'chat-emoji' / emoji_name
+    emoji_file.parent.mkdir(parents=True)
+    emoji_file.write_bytes(b'emoji')
+    custom_emoji = CustomEmoji(
+        slug=f'del-{suffix}', label='Private uploaded emoji', file_name=emoji_name,
+        uploaded_by_user_id=victim_id,
+    )
     message = ChatMessage(
         channel_id=channel.id,
         user_id=victim_id,
@@ -228,7 +237,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     )
     db_session.add_all([
         request, victim_invite, used_invite, attract_settings,
-        duplicate_log, unlinked_duplicate_log, prior_audit, attachment, owned_save,
+        duplicate_log, unlinked_duplicate_log, prior_audit, attachment, custom_emoji, owned_save,
         victim_shared_save, shared_save,
     ])
     db_session.flush()
@@ -247,6 +256,7 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     db_session.commit()
     request_id, game_uuid = request.id, game.uuid
     attachment_id, message_id, owned_save_id = attachment.id, message.id, owned_save.id
+    custom_emoji_id = custom_emoji.id
     victim_invite_id, used_invite_id = victim_invite.id, used_invite.id
     attract_id, duplicate_id, unlinked_duplicate_id, prior_audit_id = (
         attract_settings.id, duplicate_log.id, unlinked_duplicate_log.id, prior_audit.id,
@@ -274,6 +284,8 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert surviving_invite is not None and surviving_invite.used_by is None
     assert db_session.get(UserAttractModeSettings, attract_id) is None
     assert db_session.get(ChatMessageAttachment, attachment_id) is None
+    assert db_session.get(CustomEmoji, custom_emoji_id) is None
+    assert not emoji_file.exists()
     retained_message = db_session.get(ChatMessage, message_id)
     assert retained_message is not None
     assert retained_message.user_id is None

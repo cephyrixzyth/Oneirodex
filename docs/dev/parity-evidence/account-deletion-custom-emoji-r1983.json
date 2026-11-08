@@ -1,0 +1,20 @@
+{
+  "review_id": "R1983",
+  "title": "Delete user-owned custom emoji on account deletion",
+  "owner_decision": "Delete user data and owned files after the account-deletion database commit; retain household chat messages with anonymized authors.",
+  "classification": "Confirmed by source inspection: deleting an uploader nulled CustomEmoji.uploaded_by_user_id but retained the user-uploaded emoji row and file.",
+  "change": {
+    "database": "Account deletion explicitly removes custom emoji rows uploaded by that account.",
+    "files": "The existing managed cleanup queue captures valid chat-emoji filenames before deletion and purges them after commit. Files still referenced by another row are preserved."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q",
+    "result": "passed: 6 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "coverage": "The deletion regression verifies the uploaded emoji row and file are removed, alongside avatar/thumbnail, chat attachment, save and history cleanup, while household chat messages remain with an anonymous author. FK inventory matches the fresh migrated schema.",
+    "database": "Fresh oneirodexemoji_test database upgraded from Alembic baseline through head; dropped after verification. TEST_DATABASE_URL was process-scoped; root .env unchanged."
+  },
+  "limits": [
+    "The test covers immediate post-commit emoji file cleanup; it does not inject an emoji-specific unlink failure. The generic retry worker was separately exercised in R1978.",
+    "Other retained user-authored fields still require classification, and the deployed operator schema has not been compared."
+  ]
+}
