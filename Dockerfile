@@ -1,6 +1,9 @@
 # SPA bundles contain only static assets. Build them on the native build
 # platform so an arm64 image does not run npm install/build through QEMU.
+ARG ONEIRODEX_BUILD_SHA=""
 FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS frontend-build
+ARG ONEIRODEX_BUILD_SHA
+ENV ONEIRODEX_BUILD_SHA=$ONEIRODEX_BUILD_SHA
 
 WORKDIR /build
 
@@ -29,6 +32,8 @@ COPY tsconfig.base.json ./
 # has to be on disk for the vite builds — `COPY frontend/` stages it (and
 # dockerStagedImports.test.js enforces that a COPY covers it).
 COPY frontend/ ./frontend/
+COPY scripts/build-native-spas.mjs scripts/
+COPY scripts/native-spa-generation.mjs scripts/
 
 # admin-app re-exports theme SoT (../../../oneirodex/... from src/); stage those
 # files before the vite build. dockerStagedImports.test.js enforces this list.
@@ -36,15 +41,9 @@ COPY oneirodex/setup/default_theme/js/stageECandidates.js oneirodex/setup/defaul
 COPY oneirodex/setup/default_theme/js/unmatchedTriage.js oneirodex/setup/default_theme/js/
 COPY oneirodex/setup/default_theme/js/scanJobsDom.js oneirodex/setup/default_theme/js/
 
-# vite writes each bundle to oneirodex/static/dist/<app>/ (outDir is resolved
-# from the app dir in its vite.config); `npm run build` per workspace runs the
-# app's `tsc --noEmit && vite build`.
-RUN mkdir -p oneirodex/static/dist/member-app oneirodex/static/dist/admin-app oneirodex/static/dist/admin-pilot oneirodex/static/dist/ops-glance \
-    && npm run build --workspace=member-app \
-    && npm run build:auth-pilot --workspace=member-app \
-    && npm run build --workspace=admin-app \
-    && npm run build:pilot --workspace=admin-app \
-    && npm run build --workspace=ops-glance
+# Use the same Node 22 five-target build contract as native installers. The
+# orchestrator stages, inventories and hashes all output before promotion.
+RUN npm run build:native-spas
 
 FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 
@@ -97,11 +96,7 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-COPY --from=frontend-build /build/oneirodex/static/dist/member-app /app/oneirodex/static/dist/member-app
-COPY --from=frontend-build /build/oneirodex/static/dist/member-auth /app/oneirodex/static/dist/member-auth
-COPY --from=frontend-build /build/oneirodex/static/dist/admin-app /app/oneirodex/static/dist/admin-app
-COPY --from=frontend-build /build/oneirodex/static/dist/admin-pilot /app/oneirodex/static/dist/admin-pilot
-COPY --from=frontend-build /build/oneirodex/static/dist/ops-glance /app/oneirodex/static/dist/ops-glance
+COPY --from=frontend-build /build/oneirodex/static/dist /app/oneirodex/static/dist
 
 # Runtime storage belongs to the non-root app identity used by Unraid and the
 # Docker entrypoint. Empty named volumes inherit this ownership on first mount.

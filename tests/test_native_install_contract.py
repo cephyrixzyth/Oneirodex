@@ -30,4 +30,19 @@ def test_native_install_validator_checks_exactly_five_spa_entrypoints_without_fl
         assert f"'{target}'" in validator
     assert 'create_app(' not in validator
     assert 'NativeRuntimeContext(' in validator
-    assert "PACKAGE_ROOT / 'static' / 'dist' / target / entry" in validator
+    assert 'server-ui-manifest.json' in validator
+    assert 'validate_assets(args.root)' in validator
+
+
+def test_native_spa_build_stages_five_outputs_and_promotes_only_after_validation():
+    script = (ROOT / 'scripts' / 'build-native-spas.mjs').read_text(encoding='utf-8')
+
+    assert "major !== 22" in script
+    assert 'ONEIRODEX_NATIVE_DIST_ROOT: stageRoot' in script
+    assert "'server-ui-manifest.json'" in script
+    assert 'package_lock_sha256' in script
+    assert 'source_commit' in script
+    assert 'validateManifest()' in script
+    assert 'validateManifest()\n  promoteGeneration({ current: distRoot, staged: stageRoot, backup: backupRoot })' in script
+    for target in ('member-app', 'member-auth', 'admin-app', 'admin-pilot', 'ops-glance'):
+        assert f"['{target}'" in script

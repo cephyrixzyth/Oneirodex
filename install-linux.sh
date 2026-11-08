@@ -906,7 +906,7 @@ validate_installation() {
     if [ -d "$SCRIPT_DIR/venv" ]; then
         source "$SCRIPT_DIR/venv/bin/activate"
 
-        if python3 "$SCRIPT_DIR/scripts/validate-native-install.py" >/dev/null 2>&1; then
+        if python3 "$SCRIPT_DIR/scripts/validate-native-install.py"; then
             print_success "Native runtime and frontend assets validated"
         else
             print_error "Native runtime or frontend asset validation failed"

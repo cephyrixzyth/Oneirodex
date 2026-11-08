@@ -1,0 +1,79 @@
+{
+  "review_id": "R1999",
+  "title": "Five-target server UI build and manifest contract",
+  "reviewed_on": "2026-11-08",
+  "scope": [
+    "Node 22 source builds for member, member-auth, admin, admin-pilot, and ops-glance",
+    "staged SPA output inventory and file-integrity manifest",
+    "native installer and Docker build integration",
+    "runtime Python manifest validation without Flask or Node"
+  ],
+  "owner_decision": "Build all five SPAs from source with Node 22",
+  "implementation": {
+    "build_command": "npm run build:native-spas",
+    "node_major": 22,
+    "manifest_schema": 1,
+    "manifest_file": "server-ui-manifest.json",
+    "manifest_fields": [
+      "source_commit when available",
+      "root package-lock SHA-256",
+      "per-target entrypoint",
+      "per-file path, SHA-256, and byte size"
+    ],
+    "promotion": "Build into a clean staging directory; validate five exact inventories and hashes before promotion; restore the prior dist directory if stage promotion fails",
+    "integrations": [
+      "Windows installer",
+      "Linux installer",
+      "macOS installer",
+      "Docker Node 22 frontend-build stage"
+    ]
+  },
+  "verification": {
+    "docker_frontend_build": "passed",
+    "docker_base": "node:22-alpine pinned by digest",
+    "built_targets": {
+      "member-app": 65,
+      "member-auth": 3,
+      "admin-app": 3,
+      "admin-pilot": 3,
+      "ops-glance": 3
+    },
+    "manifest_package_lock_sha256": "130a7280cea19944f9a275febf6ed1e8615368aeb2d95883150d8412bd6bfbdf",
+    "manifest_source_commit": null,
+    "manifest_source_commit_note": "The local Docker verification did not pass ONEIRODEX_BUILD_SHA and the build context excludes .git. CI may provide the commit through the build argument.",
+    "focused_python_tests": "31 passed",
+    "promotion_recovery_node_tests": "2 passed",
+    "node_syntax_check": "passed"
+  },
+  "findings": [
+    {
+      "claim": "Native installers and Docker build all required entry surfaces from source using Node 22.",
+      "status": "confirmed",
+      "evidence": "Pinned Node 22 Docker frontend build completed all five targets; focused installer and Docker contract tests passed."
+    },
+    {
+      "claim": "Incomplete, stale, or altered asset output cannot be promoted as a valid generation.",
+      "status": "confirmed",
+      "evidence": "Manifest tests reject each missing target, missing and digest-mismatched files, unlisted stale files, and lockfile mismatch; promotion failure restores the prior generation."
+    },
+    {
+      "claim": "Native installer completion and cross-platform install/upgrade behavior are qualified.",
+      "status": "still unknown",
+      "evidence": "The Docker build verifies the shared build contract only. This host has Node 26 on PATH; native installers were not run on Windows, macOS, or Linux."
+    }
+  ],
+  "limits": [
+    "No clean native install or upgrade journey was run.",
+    "No browser render or five-surface runtime smoke was run.",
+    "Local verification manifest has no source commit because no build SHA was supplied to Docker.",
+    "Vite reported existing large-chunk warnings and runtime theme CSS paths that are expected to resolve at runtime."
+  ],
+  "related_paths": [
+    "scripts/build-native-spas.mjs",
+    "scripts/native-spa-generation.mjs",
+    "scripts/validate-native-install.py",
+    "tests/test_native_asset_manifest.py",
+    "tests/native-spa-generation.test.mjs",
+    "tests/test_native_install_contract.py"
+  ]
+}

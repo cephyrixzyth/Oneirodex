@@ -401,7 +401,7 @@ validate_installation() {
     source "$SCRIPT_DIR/.env"
     set +a
 
-    if python3 scripts/validate-native-install.py >/dev/null 2>&1; then
+    if python3 scripts/validate-native-install.py; then
         print_success "Native runtime and frontend assets validated"
     else
         print_error "Native runtime or frontend asset validation failed — see $LOG_FILE"

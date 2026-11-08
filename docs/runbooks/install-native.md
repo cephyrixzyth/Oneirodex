@@ -27,6 +27,14 @@ not install Node.js for you. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
 
+The shared `npm run build:native-spas` command builds into a clean staging
+generation, records the source commit (when available), root lockfile digest,
+and SHA-256/size for each output file in `server-ui-manifest.json`, then
+validates all five targets before promotion. A failed build or promotion keeps
+the last working bundle. Docker uses the same Node 22 build contract. The native
+runtime installer validates the manifest and files without importing Flask or
+requiring Node at server startup.
+
 For linked-store and saved admin integration credentials, provide a separate
 operator-managed key-ring JSON file and set
 `ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to its absolute path (the old

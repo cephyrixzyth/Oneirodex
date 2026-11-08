@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-Oneirodex dispatches HTTP requests through the FastAPI ASGI runtime, with three React SPAs and a typed HTTP client. Flask route modules remain as development-time compatibility and parity references; the runtime image no longer installs Flask or Jinja. This page is the map, not a rewrite of [ADR 0005](../adr/0005-api-client-is-the-requester.md) or [agent-locks.md](agent-locks.md).
+Oneirodex dispatches HTTP requests through the FastAPI ASGI runtime, with three React SPA workspaces producing five server entry surfaces (member, member-auth, admin, admin-pilot and ops-glance) plus a typed HTTP client. Native installers and Docker use the same Node 22 staged build and SHA-256 manifest contract; the runtime validates the manifest without loading Node or Flask. Flask route modules remain as development-time compatibility and parity references; the runtime image no longer installs Flask or Jinja. This page is the map, not a rewrite of [ADR 0005](../adr/0005-api-client-is-the-requester.md) or [agent-locks.md](agent-locks.md).
 
 The migration notes below are dated implementation checkpoints; their interim
 runtime descriptions may be superseded by the current status above and in the
