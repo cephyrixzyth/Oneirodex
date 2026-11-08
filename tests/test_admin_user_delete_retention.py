@@ -2,10 +2,12 @@ import hashlib
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from pathlib import Path
 
 from oneirodex.models import (
+    ApiToken,
     DownloadRequest,
     DuplicateFixLog,
     Game,
@@ -18,6 +20,8 @@ from oneirodex.models import (
     InviteToken,
     Library,
     Newsletter,
+    PersistentLoginSession,
+    StoreAccount,
     SystemEvents,
     User,
     UserDeletionFileJob,
@@ -178,6 +182,51 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
         event_level='information',
         audit_user=victim_id,
     )
+    # Account deletion must revoke every credential tied to the departing
+    # identity without disturbing another household member's credentials.
+    now = datetime.now(timezone.utc)
+    victim_session = PersistentLoginSession(
+        id=uuid4().hex,
+        user_id=victim_id,
+        secret_hash=hashlib.sha256(uuid4().hex.encode()).hexdigest(),
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(days=30),
+    )
+    victim_token = ApiToken(
+        user_id=victim_id,
+        name=f'deletion token {suffix}',
+        token_prefix=f'del-{suffix[:8]}',
+        token_hash=hashlib.sha256(uuid4().hex.encode()).hexdigest(),
+        scopes=['read:library'],
+    )
+    victim_store = StoreAccount(
+        user_id=victim_id,
+        store='steam',
+        external_account_id=f'victim-{suffix}',
+        credential_ciphertext='encrypted synthetic credential',
+    )
+    admin_session = PersistentLoginSession(
+        id=uuid4().hex,
+        user_id=admin_id,
+        secret_hash=hashlib.sha256(uuid4().hex.encode()).hexdigest(),
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(days=30),
+    )
+    admin_token = ApiToken(
+        user_id=admin_id,
+        name=f'survivor token {suffix}',
+        token_prefix=f'surv-{suffix[:8]}',
+        token_hash=hashlib.sha256(uuid4().hex.encode()).hexdigest(),
+        scopes=['read:library'],
+    )
+    admin_store = StoreAccount(
+        user_id=admin_id,
+        store='gog',
+        external_account_id=f'admin-{suffix}',
+        credential_ciphertext='encrypted surviving credential',
+    )
     attachment_name = f'{uuid4().hex}.png'
     attachment_file = upload_root / 'chat-attachments' / attachment_name
     attachment_file.parent.mkdir(parents=True)
@@ -238,6 +287,8 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     db_session.add_all([
         request, victim_invite, used_invite, attract_settings,
         duplicate_log, unlinked_duplicate_log, prior_audit, attachment, custom_emoji, owned_save,
+        victim_session, victim_token, victim_store,
+        admin_session, admin_token, admin_store,
         victim_shared_save, shared_save,
     ])
     db_session.flush()
@@ -261,6 +312,12 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     attract_id, duplicate_id, unlinked_duplicate_id, prior_audit_id = (
         attract_settings.id, duplicate_log.id, unlinked_duplicate_log.id, prior_audit.id,
     )
+    victim_session_id, victim_token_id, victim_store_id = (
+        victim_session.id, victim_token.id, victim_store.id,
+    )
+    admin_session_id, admin_token_id, admin_store_id = (
+        admin_session.id, admin_token.id, admin_store.id,
+    )
 
     original_unlink = Path.unlink
     failed_once = {'path': avatar_file.resolve()}
@@ -278,6 +335,13 @@ def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(
     assert error is None
     assert db_session.get(User, victim_id) is None
     assert db_session.get(DownloadRequest, request_id) is None
+    assert db_session.get(PersistentLoginSession, victim_session_id) is None
+    assert db_session.get(ApiToken, victim_token_id) is None
+    assert db_session.get(StoreAccount, victim_store_id) is None
+    surviving_session = db_session.get(PersistentLoginSession, admin_session_id)
+    assert surviving_session is not None and surviving_session.revoked_at is None
+    assert db_session.get(ApiToken, admin_token_id) is not None
+    assert db_session.get(StoreAccount, admin_store_id) is not None
     assert db_session.query(Game).filter_by(uuid=game_uuid).one_or_none() is not None
     assert db_session.get(InviteToken, victim_invite_id) is None
     surviving_invite = db_session.get(InviteToken, used_invite_id)
