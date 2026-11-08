@@ -998,6 +998,15 @@ fn mark_install_stage_ready(parent: &Path, name: &str, suffix: &str) -> Result<P
     Ok(marker_path)
 }
 
+#[cfg(test)]
+fn exit_at_archive_install_test_point(point: &str) {
+    if std::env::var("ONEIRODEX_ARCHIVE_CRASH_TEST_POINT").as_deref() == Ok(point) {
+        // `exit` skips Rust destructors, matching a process disappearing at
+        // this durable filesystem boundary without abort-dialog behavior.
+        std::process::exit(86);
+    }
+}
+
 fn configured_archive_limit(raw: Option<&str>, default: u64) -> u64 {
     raw.and_then(|value| value.trim().parse::<u64>().ok())
         .filter(|value| *value > 0)
@@ -1239,6 +1248,8 @@ fn extract_zip_to_dir_with_space_budget(
         }
     }
 
+    #[cfg(test)]
+    exit_at_archive_install_test_point("after_extract_before_ready");
     let ready_marker = mark_install_stage_ready(parent, name, &suffix)?;
     let mut marker_cleanup = RecoveryMarkerCleanup {
         path: ready_marker.clone(),
@@ -1249,6 +1260,8 @@ fn extract_zip_to_dir_with_space_budget(
     let had_destination = destination.exists();
     if had_destination {
         fs::rename(destination, &backup).map_err(|error| error.to_string())?;
+        #[cfg(test)]
+        exit_at_archive_install_test_point("after_previous_rename");
     }
     if let Err(error) = fs::rename(&staging, destination) {
         if had_destination && fs::rename(&backup, destination).is_err() {
@@ -1259,6 +1272,8 @@ fn extract_zip_to_dir_with_space_budget(
         }
         return Err(error.to_string());
     }
+    #[cfg(test)]
+    exit_at_archive_install_test_point("after_stage_promotion");
     marker_cleanup.keep = true;
     let mut previous_removed = !had_destination;
     if had_destination {
@@ -2150,6 +2165,17 @@ mod tests {
     }
 
     #[test]
+    fn archive_install_crash_fixture_child() {
+        let Ok(root) = std::env::var("ONEIRODEX_ARCHIVE_CRASH_TEST_ROOT") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        let archive = root.join("bundle.zip");
+        let destination = root.join("install");
+        let _ = extract_zip_to_dir(&archive, &destination);
+    }
+
+    #[test]
     fn managed_process_waiter_reaps_a_short_lived_child() {
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
@@ -2611,6 +2637,51 @@ mod tests {
 
         extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(9)).unwrap();
         assert_eq!(fs::read(destination.join("game.bin")).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn process_exit_at_archive_promotion_boundaries_recovers_on_next_install() {
+        for (point, expected) in [
+            ("after_extract_before_ready", b"old".as_slice()),
+            ("after_previous_rename", b"old".as_slice()),
+            ("after_stage_promotion", b"new".as_slice()),
+        ] {
+            let work = tempdir().unwrap();
+            let archive = work.path().join("bundle.zip");
+            write_zip(&archive, &[("game.bin", b"new")]);
+            let destination = work.path().join("install");
+            fs::create_dir_all(&destination).unwrap();
+            fs::write(destination.join("game.bin"), b"old").unwrap();
+
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::archive_install_crash_fixture_child",
+                    "--nocapture",
+                ])
+                .env("ONEIRODEX_ARCHIVE_CRASH_TEST_ROOT", work.path())
+                .env("ONEIRODEX_ARCHIVE_CRASH_TEST_POINT", point)
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(86), "child did not exit at {point}");
+
+            recover_interrupted_install(&destination).unwrap();
+            assert_eq!(
+                fs::read(destination.join("game.bin")).unwrap(),
+                expected,
+                "{point}"
+            );
+            assert!(
+                fs::read_dir(work.path()).unwrap().all(|entry| {
+                    let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+                    !name.starts_with(".install.staging-")
+                        && !name.starts_with(".install.previous-")
+                        && !name.starts_with(".install.oneirodex-ready-")
+                        && !name.starts_with(".install.ready-pending-")
+                }),
+                "recovery residue after {point}"
+            );
+        }
     }
 
     #[test]
