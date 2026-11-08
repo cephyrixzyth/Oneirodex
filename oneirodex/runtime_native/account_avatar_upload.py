@@ -1,6 +1,7 @@
 """Native multipart upload for a member's account avatar."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Any, Callable
@@ -52,6 +53,37 @@ class AccountAvatarUploadData:
         from oneirodex.runtime_native.db_session import native_db as db
 
         db.session.rollback()
+
+
+async def _save_avatar_cancellable(data, file, user, flask_app, previous_path):
+    """Finish and roll back staged avatar work before propagating cancellation.
+
+    Starlette's thread-pool await can be cancelled while its synchronous worker
+    keeps running. Avatar writes are staged before the route commits the user
+    pointer, so let the worker finish, roll back its ORM mutation, and remove
+    its newly written files before the request scope closes.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    worker = asyncio.create_task(run_in_threadpool(data.save, file, user, flask_app))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        try:
+            path, _error = await asyncio.shield(worker)
+        except BaseException:
+            data.rollback()
+            raise
+        try:
+            data.rollback()
+        finally:
+            if path:
+                from oneirodex.utils.avatar import finalize_avatar_change
+
+                finalize_avatar_change(
+                    flask_app, previous_path, path, committed=False,
+                )
+        raise
 
 
 def create_account_avatar_upload_router(
@@ -106,9 +138,9 @@ def create_account_avatar_upload_router(
                     response = JSONResponse(payload, status_code=status)
                 else:
                     previous_path = getattr(auth.user, 'avatarpath', None)
-                    from starlette.concurrency import run_in_threadpool
-
-                    path, error = await run_in_threadpool(data.save, file, auth.user, flask_app)
+                    path, error = await _save_avatar_cancellable(
+                        data, file, auth.user, flask_app, previous_path,
+                    )
                     if error:
                         payload, status = api_error_payload(error, code='unprocessable')
                         response = JSONResponse(payload, status_code=status)
@@ -194,9 +226,9 @@ def create_account_avatar_upload_router(
                             _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
                     else:
                         previous_path = getattr(auth.user, 'avatarpath', None)
-                        from starlette.concurrency import run_in_threadpool
-
-                        path, error = await run_in_threadpool(data.save, file, auth.user, flask_app)
+                        path, error = await _save_avatar_cancellable(
+                            data, file, auth.user, flask_app, previous_path,
+                        )
                         if error:
                             _flash(auth.session_data, 'error', error)
                         else:

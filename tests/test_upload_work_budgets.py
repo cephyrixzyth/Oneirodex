@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
+from threading import Event
 
 from PIL import Image
 import pytest
@@ -10,6 +12,7 @@ from oneirodex.utils.image_upload_limits import (
     GAME_IMAGE_WORKER,
     IMAGE_DECODE_WORKER,
     ImageWorkBusy,
+    image_decode_work_slot,
     normalize_library_image,
     prepare_game_image,
 )
@@ -83,5 +86,44 @@ def test_art_pack_fallback_decodes_and_closes_generated_inputs(tmp_path, monkeyp
         assert cover.format == 'JPEG'
     with Image.open(result['default_library']) as library:
         assert library.format == 'JPEG'
+    assert IMAGE_DECODE_WORKER.acquire(blocking=False)
+    IMAGE_DECODE_WORKER.release()
+
+
+def test_native_threadpool_cancellation_keeps_gate_until_image_cleanup():
+    """A cancelled native request cannot free its slot before worker cleanup."""
+    from starlette.concurrency import run_in_threadpool
+
+    worker_started = Event()
+    allow_worker_cleanup = Event()
+    worker_cleaned = Event()
+
+    def gated_image_work():
+        try:
+            with image_decode_work_slot():
+                worker_started.set()
+                assert allow_worker_cleanup.wait(timeout=5)
+        finally:
+            worker_cleaned.set()
+
+    async def scenario():
+        task = asyncio.create_task(run_in_threadpool(gated_image_work))
+        try:
+            assert await asyncio.to_thread(worker_started.wait, 5)
+            task.cancel()
+            await asyncio.sleep(0)
+
+            # Cancellation may return before a synchronous worker can stop, but
+            # that worker must retain the shared slot until cleanup completes.
+            assert task.done()
+            assert not IMAGE_DECODE_WORKER.acquire(blocking=False)
+        finally:
+            allow_worker_cleanup.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert await asyncio.to_thread(worker_cleaned.wait, 5)
+
+    asyncio.run(scenario())
     assert IMAGE_DECODE_WORKER.acquire(blocking=False)
     IMAGE_DECODE_WORKER.release()

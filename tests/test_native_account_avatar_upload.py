@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from io import BytesIO
+from threading import Event
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -127,6 +128,54 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
     assert data.commits == 1
     assert data.rollbacks == 0
     assert response.headers['x-content-type-options'] == 'nosniff'
+
+
+def test_cancelled_avatar_upload_waits_for_worker_then_rolls_back_and_cleans(monkeypatch):
+    from oneirodex.runtime_native import account_avatar_upload
+
+    worker_started = Event()
+    finish_worker = Event()
+    app_marker = object()
+    previous_path = 'old.png'
+    cleanup_calls = []
+
+    class Data:
+        rollbacks = 0
+
+        def save(self, _file, _user, _app):
+            worker_started.set()
+            assert finish_worker.wait(timeout=5)
+            return 'new.png', None
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    data = Data()
+    monkeypatch.setattr(
+        'oneirodex.utils.avatar.finalize_avatar_change',
+        lambda *args, **kwargs: cleanup_calls.append((args, kwargs)),
+    )
+
+    async def scenario():
+        task = asyncio.create_task(account_avatar_upload._save_avatar_cancellable(
+            data, object(), object(), app_marker, previous_path,
+        ))
+        try:
+            assert await asyncio.to_thread(worker_started.wait, 5)
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done()
+        finally:
+            finish_worker.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+    assert data.rollbacks == 1
+    assert cleanup_calls == [(
+        (app_marker, previous_path, 'new.png'), {'committed': False},
+    )]
 
 
 @pytest.mark.parametrize('overflow', ['fields', 'files'])
