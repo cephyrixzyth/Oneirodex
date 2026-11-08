@@ -15,6 +15,7 @@ from oneirodex.utils.image_upload_limits import (
     image_decode_work_slot,
     normalize_library_image,
     prepare_game_image,
+    run_image_work_in_threadpool,
 )
 
 
@@ -90,10 +91,8 @@ def test_art_pack_fallback_decodes_and_closes_generated_inputs(tmp_path, monkeyp
     IMAGE_DECODE_WORKER.release()
 
 
-def test_native_threadpool_cancellation_keeps_gate_until_image_cleanup():
-    """A cancelled native request cannot free its slot before worker cleanup."""
-    from starlette.concurrency import run_in_threadpool
-
+def test_image_threadpool_cancellation_waits_for_worker_cleanup():
+    """The image worker helper defers request cancellation until cleanup."""
     worker_started = Event()
     allow_worker_cleanup = Event()
     worker_cleaned = Event()
@@ -107,15 +106,13 @@ def test_native_threadpool_cancellation_keeps_gate_until_image_cleanup():
             worker_cleaned.set()
 
     async def scenario():
-        task = asyncio.create_task(run_in_threadpool(gated_image_work))
+        task = asyncio.create_task(run_image_work_in_threadpool(gated_image_work))
         try:
             assert await asyncio.to_thread(worker_started.wait, 5)
             task.cancel()
             await asyncio.sleep(0)
 
-            # Cancellation may return before a synchronous worker can stop, but
-            # that worker must retain the shared slot until cleanup completes.
-            assert task.done()
+            assert not task.done()
             assert not IMAGE_DECODE_WORKER.acquire(blocking=False)
         finally:
             allow_worker_cleanup.set()
@@ -125,5 +122,59 @@ def test_native_threadpool_cancellation_keeps_gate_until_image_cleanup():
         assert await asyncio.to_thread(worker_cleaned.wait, 5)
 
     asyncio.run(scenario())
+    assert IMAGE_DECODE_WORKER.acquire(blocking=False)
+    IMAGE_DECODE_WORKER.release()
+
+
+def test_anyio_cancellation_is_deferred_until_image_worker_finishes():
+    import anyio
+
+    worker_started = Event()
+    allow_worker_cleanup = Event()
+    cancellation_received = None
+    cancellation_cleanup = []
+
+    def gated_image_work():
+        with image_decode_work_slot():
+            worker_started.set()
+            assert allow_worker_cleanup.wait(timeout=5)
+            return 'image-result'
+
+    async def scenario():
+        nonlocal cancellation_received
+        scope_ready = anyio.Event()
+        cancellation_done = anyio.Event()
+        cancel_scope_holder = {}
+
+        async def request_work():
+            nonlocal cancellation_received
+            with anyio.CancelScope() as cancel_scope:
+                cancel_scope_holder['scope'] = cancel_scope
+                scope_ready.set()
+                try:
+                    await run_image_work_in_threadpool(
+                        gated_image_work,
+                        on_cancel=lambda result: cancellation_cleanup.append(result),
+                    )
+                except asyncio.CancelledError:
+                    cancellation_received = True
+                finally:
+                    cancellation_done.set()
+
+        async with anyio.create_task_group() as group:
+            group.start_soon(request_work)
+            await scope_ready.wait()
+            assert await anyio.to_thread.run_sync(worker_started.wait, 5)
+            cancel_scope_holder['scope'].cancel()
+            await anyio.sleep(0.01)
+            assert not cancellation_done.is_set()
+            assert not IMAGE_DECODE_WORKER.acquire(blocking=False)
+            assert cancellation_cleanup == []
+            allow_worker_cleanup.set()
+            await cancellation_done.wait()
+
+    anyio.run(scenario)
+    assert cancellation_received is True
+    assert cancellation_cleanup == ['image-result']
     assert IMAGE_DECODE_WORKER.acquire(blocking=False)
     IMAGE_DECODE_WORKER.release()

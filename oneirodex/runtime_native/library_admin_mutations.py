@@ -518,9 +518,9 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                             image = None
                             if raw_image is not None:
                                 try:
-                                    from starlette.concurrency import run_in_threadpool
+                                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-                                    await run_in_threadpool(validate_library_image_header, raw_image)
+                                    await run_image_work_in_threadpool(validate_library_image_header, raw_image)
                                     image = raw_image
                                 except ImageWorkBusy:
                                     message = 'Image processing is busy. Try again shortly.'
@@ -535,10 +535,10 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     response_status = 500
                             if message is None:
                                 try:
-                                    from starlette.concurrency import run_in_threadpool
+                                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
                                     if action == 'create':
-                                        await run_in_threadpool(data.create,
+                                        await run_image_work_in_threadpool(data.create,
                                             name=name, platform=platform, scan_depth=depth,
                                             watch_enabled=watch, image_bytes=image,
                                             user=auth.user, config=app.config,
@@ -557,7 +557,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                                 status_code=404,
                                             )
                                         else:
-                                            await run_in_threadpool(data.update,
+                                            await run_image_work_in_threadpool(data.update,
                                                 library, name=name, platform=platform,
                                                 scan_depth=depth, watch_enabled=watch,
                                                 image=(filename, image) if image is not None else None,
@@ -762,9 +762,9 @@ async def _preview_cropped_image(request, data):
         )
         return JSONResponse(payload, status_code=status)
     try:
-        from starlette.concurrency import run_in_threadpool
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-        preview_url = await run_in_threadpool(data.preview_image, model.image_data)
+        preview_url = await run_image_work_in_threadpool(data.preview_image, model.image_data)
     except ImageWorkBusy:
         return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:
@@ -802,9 +802,9 @@ async def _create(request, app, data, user):
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            from starlette.concurrency import run_in_threadpool
+            from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-            await run_in_threadpool(validate_library_image_header, content)
+            await run_image_work_in_threadpool(validate_library_image_header, content)
         except ImageWorkBusy:
             return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
         except ValueError as exc:
@@ -812,9 +812,9 @@ async def _create(request, app, data, user):
         except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        from starlette.concurrency import run_in_threadpool
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-        result = await run_in_threadpool(data.create, name=name, platform=platform, scan_depth=depth,
+        result = await run_image_work_in_threadpool(data.create, name=name, platform=platform, scan_depth=depth,
                              watch_enabled=watch, image_bytes=image[1] if image else None,
                              user=user, config=app.config,
                              root_path=request.scope.get('root_path', ''))
@@ -852,9 +852,9 @@ async def _update(request, app, data, user, library_uuid):
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            from starlette.concurrency import run_in_threadpool
+            from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-            await run_in_threadpool(validate_library_image_header, content)
+            await run_image_work_in_threadpool(validate_library_image_header, content)
         except ImageWorkBusy:
             return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
         except ValueError as exc:
@@ -862,9 +862,9 @@ async def _update(request, app, data, user, library_uuid):
         except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        from starlette.concurrency import run_in_threadpool
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-        result = await run_in_threadpool(data.update,
+        result = await run_image_work_in_threadpool(data.update,
             library, name=name, platform=platform, scan_depth=depth,
             watch_enabled=watch, image=image, app=app, user=user,
         )

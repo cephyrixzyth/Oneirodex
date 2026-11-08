@@ -308,9 +308,11 @@ def create_admin_art_studio_action_router(
             response = _api_error('game_uuid is required for game mode', 'bad_request')
         else:
             try:
-                from starlette.concurrency import run_in_threadpool
+                from oneirodex.utils.image_upload_limits import (
+                    run_image_work_in_threadpool,
+                )
 
-                result = await run_in_threadpool(service.apply,
+                result = await run_image_work_in_threadpool(service.apply,
                     flask_app, pack_id, mode, game_uuid, library_uuid,
                     (body.filename or '').strip() or None,
                 )

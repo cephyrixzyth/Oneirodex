@@ -1,8 +1,9 @@
 """Resource limits for administrator supplied image uploads."""
 
+import asyncio
+from contextlib import contextmanager
 from io import BytesIO
 from threading import BoundedSemaphore
-from contextlib import contextmanager
 
 LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 LIBRARY_IMAGE_MAX_PIXELS = 16_000_000
@@ -19,6 +20,39 @@ CUSTOM_EMOJI_MAX_PIXELS = 4_000_000
 
 class ImageWorkBusy(RuntimeError):
     """Raised when the process image-work slot is already occupied."""
+
+
+async def run_image_work_in_threadpool(func, *args, on_cancel=None, **kwargs):
+    """Run bounded image work without letting cancellation orphan its worker.
+
+    Cancelling Starlette's thread-pool await does not stop a synchronous worker.
+    Wait for that worker to finish before propagating cancellation so its image
+    cleanup and any request-scoped database use complete before the scope closes.
+    """
+    import anyio
+    from starlette.concurrency import run_in_threadpool
+
+    worker = asyncio.create_task(run_in_threadpool(func, *args, **kwargs))
+    direct_cancel = False
+    with anyio.CancelScope(shield=True):
+        try:
+            result = await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            # Direct Task.cancel() bypasses AnyIO's cancellation shield.
+            direct_cancel = True
+            result = await asyncio.shield(worker)
+
+    if direct_cancel:
+        if on_cancel is not None:
+            on_cancel(result)
+        raise asyncio.CancelledError
+    try:
+        await anyio.lowlevel.checkpoint()
+    except asyncio.CancelledError:
+        if on_cancel is not None:
+            on_cancel(result)
+        raise
+    return result
 
 
 @contextmanager

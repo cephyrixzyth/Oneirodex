@@ -391,9 +391,11 @@ def create_admin_image_mutation_router(
                                 response = JSONResponse(payload, status_code=status)
                             else:
                                 try:
-                                    from starlette.concurrency import run_in_threadpool
+                                    from oneirodex.utils.image_upload_limits import (
+                                        run_image_work_in_threadpool,
+                                    )
 
-                                    result = await run_in_threadpool(
+                                    result = await run_image_work_in_threadpool(
                                         data.upload_single,
                                         flask_app, game_uuid, upload.filename or '', image_type, raw,
                                     )

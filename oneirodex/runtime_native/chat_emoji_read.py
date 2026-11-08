@@ -303,9 +303,9 @@ def create_chat_emoji_router(
                         )
                     slug = str(first_form_value(form, 'slug') or '')
                     label = str(first_form_value(form, 'label') or '')
-                    from starlette.concurrency import run_in_threadpool
+                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
-                    row = await run_in_threadpool(data.upload,
+                    row = await run_image_work_in_threadpool(data.upload,
                         slug=slug, label=label, file=file, uploader=auth.user,
                         upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
                     )
@@ -468,10 +468,11 @@ def create_chat_emoji_router(
                                 content_type=upload.content_type,
                             )
                         try:
-                            from starlette.concurrency import run_in_threadpool
-                            from oneirodex.utils.image_upload_limits import ImageWorkBusy
+                            from oneirodex.utils.image_upload_limits import (
+                                ImageWorkBusy, run_image_work_in_threadpool,
+                            )
 
-                            row = await run_in_threadpool(data.upload,
+                            row = await run_image_work_in_threadpool(data.upload,
                                 slug=str(first_form_value(form, 'slug') or ''),
                                 label=str(first_form_value(form, 'label') or ''), file=file,
                                 uploader=auth.user,
