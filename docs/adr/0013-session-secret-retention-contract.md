@@ -29,6 +29,10 @@ Account deletion now has
 a PostgreSQL-verified relation inventory, a transactional managed-file job
 queue, and a retry worker; deployment-schema, restart, and restore qualification
 remain pending.
+An offline standalone backup command now produces a versioned, checksummed
+bundle and refuses completion when reusable plaintext credentials remain or a
+referenced reusable-secret key ID is unavailable. Docker/Unraid capture and
+restore qualification remain open.
 
 ## Decision
 
@@ -122,6 +126,12 @@ remain pending.
    A versioned save keyring and standalone-move key-ID contract are implemented
    in the candidate; a synthetic PostgreSQL rotation test passed, while a
    protected-backup restore and operator migration are still required.
+6. The initial offline standalone backup reuses the stopped-application move
+   snapshot and writes a completion marker only after re-hashing its dump and
+   managed files. Its manifest records required key IDs and excluded roots,
+   while key material stays in the separate protected operator backup.
+   Docker/Unraid capture, concurrent-traffic qualification outside standalone,
+   and restore rehearsal remain pending.
 
 Each step requires focused database-backed verification and operator-facing
 documentation before it can be marked complete.

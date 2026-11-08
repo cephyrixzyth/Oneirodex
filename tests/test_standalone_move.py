@@ -465,6 +465,68 @@ def test_export_refuses_without_an_install_or_into_a_used_folder(tmp_path):
     assert (tmp_path / 'out' / 'keep.txt').read_text() == 'mine'
 
 
+def test_export_refuses_while_the_standalone_database_is_running(tmp_path, monkeypatch):
+    from oneirodex_standalone import launcher, postgres
+
+    root = tmp_path / 'data'
+    root.mkdir()
+    (root / launcher.STATE_FILE).write_text('{}', encoding='utf-8')
+
+    class RunningPostgres:
+        def __init__(self, **_kwargs):
+            pass
+
+        def initialized(self):
+            return True
+
+        def in_use(self):
+            return True
+
+    monkeypatch.setattr(launcher, 'load_state', lambda _root: {
+        'db_port': 5432, 'db_password': 'synthetic', 'secret_key': 'synthetic',
+    })
+    monkeypatch.setattr(postgres, 'BundledPostgres', RunningPostgres)
+    args = type('A', (), {
+        'data_dir': root, 'to': str(tmp_path / 'backup'), 'pg_home': tmp_path, 'root': None,
+    })
+
+    with pytest.raises(Refused, match='Oneirodex is running'):
+        move.export(args)
+
+
+def test_database_snapshot_lists_secret_key_ids_without_secret_values(app, db_session, monkeypatch):
+    from oneirodex.models.misc import GlobalSettings
+
+    db_session.add(GlobalSettings(
+        smtp_password='odrc:v1:secret-key-1:context:synthetic-ciphertext',
+        arr_settings={'prowlarr_api_key': 'odrc:v1:arr-key-2:context:synthetic-ciphertext'},
+    ))
+    db_session.flush()
+    connection = db_session.connection()
+
+    class ConnectionContext:
+        def __enter__(self):
+            return connection
+
+        def __exit__(self, *_args):
+            return False
+
+    class EngineProxy:
+        def connect(self):
+            return ConnectionContext()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(move, '_engine', lambda _url: EngineProxy())
+    with app.app_context():
+        snapshot = move.snapshot_db('postgresql://synthetic/test', {})
+
+    assert snapshot['reusable_secret_key_ids'] == ['arr-key-2', 'secret-key-1']
+    assert snapshot['legacy_reusable_secret_count'] == 0
+    assert 'synthetic-ciphertext' not in repr(snapshot)
+
+
 def test_cli_refusals_exit_1_and_usage_errors_exit_2(tmp_path, capsys):
     assert move.main(['import', str(tmp_path / 'not-a-bundle'), '--expect', '0123456789abcdef']) == 1
     assert 'REFUSED' in capsys.readouterr().err

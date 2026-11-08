@@ -150,6 +150,8 @@ operator retention policy with no duration set here. A full review of retained f
 open. Shared library/game files, shared chat spaces, shared emojis, and reference
 sets must not be removed merely because an account is deleted; uploader/author references are
 cleared where supported. Full server restart/redeployment and restore reapplication remain open work.
+The verified offline backup flow currently covers standalone installs only; see
+[Backup and restore](../runbooks/backup-restore.md) for its inclusion and exclusion boundary.
 Deleting a game removes its
 play sessions and per-game progress; game requests, owned-title matches, and linked game-server
 records remain with their game reference cleared where the schema defines `SET NULL`.

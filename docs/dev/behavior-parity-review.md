@@ -218,6 +218,12 @@ The audit snapshot's Windows launcher used four Uvicorn workers. The current che
 
 **Verification:** `tests/test_startup_worker_defaults.py` checks both Windows and Unix launcher defaults and confirms the worker variable reaches the Uvicorn command. The source check is static; no multiworker integration test was run.
 
+### P2-11 standalone backup bundle
+
+The standalone CLI now has an explicit `backup` command that reuses the existing stopped-application move snapshot. It records a versioned backup section with source commit (when available), PostgreSQL major, schema revision, save/history table identity digests, excluded roots, and reusable/save key IDs while keeping key material outside the bundle. Completion is published only after the DB dump and every managed file are re-hashed; the existing importer requires and verifies the completion marker for backup manifests. Backup creation refuses remaining plaintext reusable credentials or missing referenced reusable-secret keys.
+
+**Verification:** `tests/test_standalone_backup.py`: **7 passed** for manifest binding, database/file tampering, missing completion markers, and plaintext-secret refusal. `tests/test_standalone_move.py`: **61 passed, 2 skipped**, including a database-backed check that snapshots reusable-secret key IDs without values and a regression that refuses export while standalone PostgreSQL is running. Python compilation and `git diff --check` passed. No full standalone package backup/restore journey was run. Docker/Unraid and external-PostgreSQL backup barriers, backup restore rehearsal, operator backup-media recovery, and integrity/authenticity beyond the printed manifest hash remain open.
+
 ### BE-008 / P2-05–P2-06 persistent browser sessions
 
 The confirmed stateless-cookie gap is addressed in the current candidate. Every successful Flask or native session/remember-cookie issuance now carries a random per-login secret whose SHA-256 digest is stored with user, created, last-seen, expiry and revocation fields. Auth resolution rejects legacy identities without a server record, invalid hashes, revoked rows, sessions older than 30 days, and sessions idle for 7 days. Password changes and disabling an account revoke active records. Members can list sessions and revoke one or all through CSRF-protected account routes; current/all revocation clears the browser cookies. Existing legacy cookies therefore require a fresh sign-in at cutover.

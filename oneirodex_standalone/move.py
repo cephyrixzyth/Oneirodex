@@ -250,6 +250,69 @@ def snapshot_db(url: str, roots: dict[str, str]) -> dict:
                     "size_bytes, encrypted), ',' ORDER BY user_id, game_uuid COLLATE \"C\", slot_name COLLATE \"C\"), '')) "
                     "FROM emulator_saves")).one()._asdict(),
             }
+            reusable_secret_key_ids: set[str] = set()
+            legacy_reusable_secret_count = 0
+
+            def record_secret(value, prefix: str) -> None:
+                nonlocal legacy_reusable_secret_count
+                if not isinstance(value, str) or not value:
+                    return
+                if not value.startswith(prefix):
+                    legacy_reusable_secret_count += 1
+                    return
+                key_id = value[len(prefix):].split(':', 1)[0]
+                if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', key_id):
+                    reusable_secret_key_ids.add(key_id)
+                else:
+                    legacy_reusable_secret_count += 1
+
+            global_columns = {column for column, _ in tables.get('global_settings', [])}
+            secret_fields = (
+                'smtp_password', 'igdb_client_secret', 'oidc_client_secret',
+                'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
+                'mobygames_api_key', 'thegamesdb_api_key', 'retroachievements_api_key',
+            )
+            present_fields = [field for field in secret_fields if field in global_columns]
+            if 'global_settings' in tables and present_fields:
+                projection = ', '.join(_quote(field) for field in present_fields)
+                for row in conn.execute(text(f'SELECT {projection} FROM global_settings')):
+                    for field in present_fields:
+                        record_secret(row._mapping[field], 'odrc:v1:')
+            if 'store_accounts' in tables:
+                store_columns = {column for column, _ in tables['store_accounts']}
+                store_fields = [field for field in ('credential', 'credential_ciphertext') if field in store_columns]
+                if store_fields:
+                    projection = ', '.join(_quote(field) for field in store_fields)
+                    for row in conn.execute(text(f'SELECT {projection} FROM store_accounts')):
+                        if 'credential' in store_fields and row._mapping['credential']:
+                            legacy_reusable_secret_count += 1
+                        if 'credential_ciphertext' in store_fields:
+                            record_secret(row._mapping['credential_ciphertext'], 'odsc:v1:')
+            if 'global_settings' in tables and 'arr_settings' in global_columns:
+                import json
+
+                arr_fields = (
+                    'prowlarr_api_key', 'jackett_api_key', 'qbittorrent_password',
+                    'transmission_password', 'deluge_password', 'sabnzbd_api_key',
+                    'nzbget_password', 'real_debrid_token', 'alldebrid_api_key',
+                    'premiumize_api_key', 'torbox_api_key', 'challenge_token_api_key',
+                    'hyperion_token', 'ha_token',
+                )
+                for row in conn.execute(text('SELECT arr_settings FROM global_settings')):
+                    value = row.arr_settings
+                    if isinstance(value, str):
+                        try:
+                            value = json.loads(value)
+                        except ValueError:
+                            legacy_reusable_secret_count += 1
+                            continue
+                    if isinstance(value, dict):
+                        for field in arr_fields:
+                            record_secret(value.get(field), 'odrc:v1:')
+                        if isinstance(value.get('indexers'), list):
+                            for indexer in value['indexers']:
+                                if isinstance(indexer, dict):
+                                    record_secret(indexer.get('api_key'), 'odrc:v1:')
             behind = {}
             for table, columns in tables.items():
                 if not any(c == 'id' for c, _ in columns):
@@ -264,7 +327,9 @@ def snapshot_db(url: str, roots: dict[str, str]) -> dict:
     finally:
         engine.dispose()
     return {'alembic_revision': revision, 'tables': digests, 'path_columns': sorted(f'{t}.{c}' for t, c in path_cols),
-            'unrooted_paths': unrooted, 'identity': identity, 'sequences_behind': behind}
+            'unrooted_paths': unrooted, 'identity': identity, 'sequences_behind': behind,
+            'reusable_secret_key_ids': sorted(reusable_secret_key_ids),
+            'legacy_reusable_secret_count': legacy_reusable_secret_count}
 
 
 def database_is_empty(url: str) -> bool:
@@ -547,6 +612,21 @@ def export(args) -> int:
             raise Refused(str(exc)) from None
         try:
             db = snapshot_db(pg.url(), roots)
+            if getattr(args, 'require_no_plaintext_secrets', False):
+                if db['legacy_reusable_secret_count']:
+                    raise Refused(
+                        'migrate remaining reusable plaintext credentials before creating a protected backup'
+                    )
+                required_secret_keys = set(db['reusable_secret_key_ids'])
+                if required_secret_keys:
+                    try:
+                        from oneirodex.utils.store_credentials import load_store_credential_keyring
+
+                        keyring = load_store_credential_keyring()
+                    except Exception:  # noqa: BLE001 - do not expose operator key paths or values
+                        raise Refused('restore the protected reusable-secret keyring before backup') from None
+                    if not required_secret_keys.issubset(keyring.keys):
+                        raise Refused('the reusable-secret keyring is missing required key IDs')
             pg_dump = pg.bin_dir / f'pg_dump{EXE}'
             dump_major = _major(subprocess.run([str(pg_dump), '--version'], env=pg.env(),
                                                capture_output=True, text=True).stdout)
@@ -755,6 +835,10 @@ def verify(url: str, manifest: dict, new_roots: dict[str, str], library: Path, t
 def import_(args) -> int:
     bundle = Path(args.bundle).resolve()
     manifest = check_bundle(bundle, args.expect)
+    if manifest.get('backup'):
+        from oneirodex_standalone.backup import verify_complete_backup
+
+        manifest = verify_complete_backup(bundle)
     url = os.environ.get('DATABASE_URL')
     if not url:
         raise UsageError('no target database: set DATABASE_URL to a new, empty database')
@@ -766,6 +850,16 @@ def import_(args) -> int:
         extra = sorted(set(new_roots) - set(old_roots))
         raise Refused(f'--root must name exactly the folders named at export: missing {missing}, unknown {extra}')
     target_key = None
+    required_reusable_secret_key_ids = set(manifest.get('required_reusable_secret_key_ids') or [])
+    if required_reusable_secret_key_ids:
+        try:
+            from oneirodex.utils.store_credentials import load_store_credential_keyring
+
+            reusable_keyring = load_store_credential_keyring()
+        except Exception:  # noqa: BLE001 - refuse before restore without exposing paths or key values
+            raise Refused('restore the protected reusable-secret keyring before importing this backup') from None
+        if not required_reusable_secret_key_ids.issubset(reusable_keyring.keys):
+            raise Refused('the configured reusable-secret keyring is missing required key IDs')
     required_save_key_ids = manifest.get('required_save_key_ids') or []
     if required_save_key_ids:
         try:
