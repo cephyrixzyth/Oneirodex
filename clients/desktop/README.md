@@ -62,7 +62,7 @@ For all three platforms in one go, use [`scripts/build-installers.sh`](../../scr
 
 1. Enter your **server base URL** (e.g. `https://oneirodex.example.com`).
 2. Enter a personal **API token** (`gt_<hexprefix>_<urlsafe-secret>`; secret may include `_`/`-`) from **Account → API tokens** (or Admin). Full companion needs the **Desktop companion** preset (`read:library` + **`write:download`**). Thin uses the **Thin client** preset (no download).
-3. Click **Connect** — validates via `GET /api/collections`, then loads a library preview via search.
+3. Click **Connect** — validates via `GET /api/collections`, then loads a 12-title library preview via search. Click **Open full library** to open the server's `/library` catalog when you need titles outside the preview; the webview uses the site session and receives no companion API token.
 4. Non-secret settings (base URL) are saved to app data as JSON; the API token goes to the OS credential store:
 
    - Windows: `%APPDATA%\com.oneirodex.desktop\config.json` (base URL only) + Windows Credential Manager (`com.oneirodex.desktop` / `api_token`)
@@ -118,11 +118,11 @@ While connected, the desktop companion POSTs `POST /api/client/heartbeat` every 
 
 The server uses recent heartbeats (5-minute TTL) to set `client_connected: true` on browse/discover/game-details responses so the web UI enables Install/Update/Uninstall actions when the companion is online.
 
-After **two consecutive heartbeat failures**, the UI switches to **Offline**. Its Installed shelf contains only titles that were previously returned for the same verified server account and companion device, and that still have a local install record. Download, Update, mod and patch actions are unavailable; Play and Reveal use local files. The cache keeps only game UUIDs and names, plus the server/account/device binding and a SHA-256 fingerprint of the credential held in the OS keychain. It does not store the bearer token. The UI explains that server access can change while disconnected and that local file access follows OS permissions. Reconnect to refresh the shelf and current server access. Queued web commands remain pending until the companion is reachable.
+After **two consecutive heartbeat failures**, the UI switches to **Offline**. Its Installed shelf contains only titles that were previously returned for the same verified server account and companion device, and that still have a local install record and launchable lifecycle state. Play and Reveal use local files; Download, Update, mods, and patches require a server connection. **Open full library** hands off to the server's `/library` page and may need a site sign-in. The cache keeps only game UUIDs and names, plus the server/account/device binding and a SHA-256 fingerprint of the credential held in the OS keychain. It does not store the bearer token. The UI explains that server access can change while disconnected and that local file access follows OS permissions. Reconnect to refresh the shelf and current server access. Queued web commands remain pending until the companion is reachable.
 
 ## Friends window
 
-**Open friends window** creates or focuses a compact bottom-right always-on-top Tauri label `social` (~360×560, work-area anchored) pointed at `{baseUrl}/social-companion`. Capability file `capabilities/social.json` grants only `core:default` (no FS / launch ACL). Main window keeps create/focus/always-on-top/close permissions so a Server URL change can recreate the webview. Friends open uses the **form Server URL** (Connect not required); companion heartbeat Offline does not block Friends.
+**Open friends window** creates or focuses a compact bottom-right always-on-top Tauri label `social` (~360×560, work-area anchored) pointed at `{baseUrl}/social-companion`. **Open full library** creates or focuses label `full-library` at `{baseUrl}/library`; it opens the server's site login as needed and does not put the companion token in the URL. Both site webviews use `capabilities/social.json`, which grants only `core:default` (no install, launch, or filesystem ACL). Main window keeps create/focus/always-on-top/close permissions so a Server URL change can recreate a webview. Friends and full-library opens use the **form Server URL** (Connect not required); companion heartbeat Offline does not disable either handoff.
 
 ## Project layout
 

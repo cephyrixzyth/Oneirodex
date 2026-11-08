@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "social",
-  "description": "Least-privilege Friends companion webview — site browse only, no install/launch FS ACL",
-  "windows": ["social"],
+  "description": "Least-privilege site webviews — Friends and full library, without install/launch filesystem ACLs",
+  "windows": ["social", "full-library"],
   "permissions": [
     "core:default"
   ]

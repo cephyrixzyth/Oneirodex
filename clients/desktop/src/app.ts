@@ -33,6 +33,7 @@ import {
   validateConnection,
 } from './connect.js'
 import { loadStoredConfig, saveStoredConfig } from './config-store.js'
+import { openFullLibraryWindow } from './library-window.js'
 import { openSocialCompanionWindow } from './social-window.js'
 import { keychainAdapter } from './keychain.js'
 import {
@@ -881,6 +882,7 @@ export async function mountApp(root: HTMLElement): Promise<void> {
             <input id="token" name="token" type="password" placeholder="gt_… (paste from Account → API tokens)" autocomplete="off" />
           </label>
           <button id="connect-btn" type="submit" class="primary">Connect</button>
+          <button id="open-library-btn" type="button" class="secondary">Open full library</button>
           <button id="friends-btn" type="button" class="secondary">Open friends window</button>
         </form>
         <p id="status" class="status" data-tone="info" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -934,6 +936,32 @@ export async function mountApp(root: HTMLElement): Promise<void> {
       .catch((err) => {
         const message = err instanceof Error ? err.message : 'Could not open Friends window'
         console.error('[friends]', message, err)
+        setStatus(message, 'error')
+      })
+  })
+  root.querySelector('#open-library-btn')!.addEventListener('click', () => {
+    const base = normalizeBaseUrl(els.baseUrl.value)
+    if (!base) {
+      setStatus('Enter a Server URL before opening the full library.', 'error')
+      return
+    }
+    const serverCheck = checkServerUrl(base)
+    if (!serverCheck.ok) {
+      setStatus(serverCheck.message, 'error')
+      return
+    }
+    void openFullLibraryWindow(base)
+      .then((how) => {
+        setStatus(
+          how === 'focused'
+            ? 'Full library window focused.'
+            : 'Full library opened — sign in if prompted.',
+          'info',
+        )
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : 'Could not open full library'
+        console.error('[library]', message, error)
         setStatus(message, 'error')
       })
   })
