@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from pathlib import Path
 
+import pytest
+
 from oneirodex.models import (
     ApiToken,
     DownloadRequest,
@@ -461,6 +463,144 @@ def test_native_admin_deletion_database_failure_preserves_account_and_files(
     assert avatar_file.read_bytes() == b'preserve-uncommitted-account-file'
     assert thumbnail.read_bytes() == b'preserve-uncommitted-thumbnail'
     assert db.session.query(UserDeletionFileJob).count() == 0
+
+
+@pytest.mark.parametrize(
+    'failure_stage',
+    ('candidates', 'audit', 'relations', 'user_flush', 'cleanup_enqueue', 'commit'),
+)
+def test_native_admin_deletion_precommit_failures_roll_back_all_staged_changes(
+    failure_stage, db_session, tmp_path, monkeypatch,
+):
+    from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+    from oneirodex.utils import user_deletion
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX
+
+    suffix = str(uuid4())[:8]
+    admin = _make_user(f'del_stages_admin_{suffix}', 'admin')
+    victim = _make_user(f'del_stages_member_{suffix}', 'user')
+    upload_root = tmp_path / 'uploads'
+    save_root = tmp_path / 'saves'
+    save_root.mkdir()
+    monkeypatch.setattr(
+        user_deletion, '_storage_roots', lambda: (upload_root.resolve(), save_root.resolve()),
+    )
+    avatar_name = f'{uuid4().hex}.png'
+    victim.avatarpath = AVATAR_URL_PREFIX + avatar_name
+    avatar_file = upload_root / 'images' / 'avatars_users' / avatar_name
+    avatar_file.parent.mkdir(parents=True)
+    avatar_file.write_bytes(b'preserve-before-commit')
+    token = ApiToken(
+        user=victim,
+        name=f'deletion stage token {suffix}',
+        token_prefix=f'stage-{suffix[:8]}',
+        token_hash=hashlib.sha256(uuid4().hex.encode()).hexdigest(),
+        scopes=['read:library'],
+    )
+    audit = SystemEvents(
+        event_type='audit', event_text=f'{victim.name} changed a setting',
+        event_level='information', audit_user=None,
+    )
+    db_session.add_all([admin, victim, token, audit])
+    db_session.flush()
+    audit.audit_user = victim.id
+    admin_id, victim_id, token_id, audit_id = admin.id, victim.id, token.id, audit.id
+    victim_name = victim.name
+    db_session.commit()
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError(f'synthetic {failure_stage} failure')
+
+    def fail_after_call(original):
+        def wrapped(*args, **kwargs):
+            result = original(*args, **kwargs)
+            fail()
+            return result
+        return wrapped
+
+    if failure_stage == 'candidates':
+        monkeypatch.setattr(user_deletion, '_user_file_candidates', fail)
+    elif failure_stage == 'audit':
+        monkeypatch.setattr(
+            user_deletion, 'anonymize_user_audit_events',
+            fail_after_call(user_deletion.anonymize_user_audit_events),
+        )
+    elif failure_stage == 'relations':
+        monkeypatch.setattr(
+            user_deletion, 'delete_user_owned_rows',
+            fail_after_call(user_deletion.delete_user_owned_rows),
+        )
+    elif failure_stage == 'user_flush':
+        monkeypatch.setattr(db_session, 'flush', fail)
+    elif failure_stage == 'cleanup_enqueue':
+        monkeypatch.setattr(
+            user_deletion, '_enqueue_file_candidates',
+            fail_after_call(user_deletion._enqueue_file_candidates),
+        )
+    else:
+        original_commit = db_session.commit
+        failed = {'once': False}
+
+        def fail_commit_once():
+            if not failed['once']:
+                failed['once'] = True
+                fail()
+            return original_commit()
+
+        monkeypatch.setattr(db_session, 'commit', fail_commit_once)
+
+    payload, error = AdminUserMutationData().delete(victim_id, admin_id)
+
+    assert payload is None
+    assert error[:2] == ('Failed to delete user', 'internal')
+    db_session.expire_all()
+    assert db_session.get(User, victim_id) is not None
+    assert db_session.get(ApiToken, token_id) is not None
+    retained_audit = db_session.get(SystemEvents, audit_id)
+    assert retained_audit.audit_user == victim_id
+    assert victim_name in retained_audit.event_text
+    assert avatar_file.read_bytes() == b'preserve-before-commit'
+    assert db_session.query(UserDeletionFileJob).count() == 0
+
+
+def test_file_cleanup_retry_converges_when_unlink_precedes_failed_job_commit(
+    db_session, tmp_path, monkeypatch,
+):
+    from oneirodex.utils.user_deletion import process_pending_file_jobs
+
+    target = tmp_path / 'owned' / 'deleted-file.bin'
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b'owned bytes')
+    root = str(tmp_path.resolve())
+    relative = target.relative_to(tmp_path).as_posix()
+    job = UserDeletionFileJob(
+        path_key=hashlib.sha256(f'{root}\0{relative}'.encode('utf-8')).hexdigest(),
+        root_path=root,
+        relative_path=relative,
+    )
+    db_session.add(job)
+    db_session.commit()
+    job_id = job.id
+
+    original_commit = db_session.commit
+    failed = {'once': False}
+
+    def fail_cleanup_commit_once():
+        if not failed['once']:
+            failed['once'] = True
+            raise RuntimeError('synthetic cleanup-job commit failure')
+        return original_commit()
+
+    monkeypatch.setattr(db_session, 'commit', fail_cleanup_commit_once)
+    with pytest.raises(RuntimeError, match='synthetic cleanup-job commit failure'):
+        process_pending_file_jobs(db_session)
+    db_session.rollback()
+
+    assert not target.exists()
+    assert db_session.get(UserDeletionFileJob, job_id) is not None
+
+    assert process_pending_file_jobs(db_session) == 0
+    assert db_session.get(UserDeletionFileJob, job_id) is None
 
 
 def test_cleanup_worker_startup_retries_a_committed_file_job(app, no_savepoint_db, tmp_path):
