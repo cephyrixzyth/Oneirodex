@@ -1,6 +1,8 @@
 use fs2::{available_space, FileExt};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -793,6 +795,10 @@ const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
 const DEFAULT_GAME_ARCHIVE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
 const GAME_INSTALL_READY_MARKER: &str = ".oneirodex-ready-";
 static NEXT_GAME_ARCHIVE_STAGE: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+thread_local! {
+    static GAME_ARCHIVE_TEST_ENOSPC_AFTER: Cell<Option<u64>> = const { Cell::new(None) };
+}
 
 fn game_install_lock(parent: &Path, name: &str) -> Result<File, String> {
     let path = parent.join(format!(".{name}.install.lock"));
@@ -1220,6 +1226,19 @@ fn extract_zip_to_dir_with_space_budget(
                     "Game archive exceeds the {} GiB expanded-size limit",
                     max_expanded_bytes / (1024 * 1024 * 1024)
                 ));
+            }
+            #[cfg(test)]
+            if let Some(fail_after) = GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(Cell::get) {
+                let before_chunk = expanded_bytes - read as u64;
+                if expanded_bytes > fail_after {
+                    let writable =
+                        fail_after.saturating_sub(before_chunk).min(read as u64) as usize;
+                    if writable > 0 {
+                        out.write_all(&buffer[..writable])
+                            .map_err(|error| error.to_string())?;
+                    }
+                    return Err("simulated disk full: no space left on device".into());
+                }
             }
             out.write_all(&buffer[..read])
                 .map_err(|error| error.to_string())?;
@@ -2476,6 +2495,23 @@ mod tests {
     // extract_zip_to_dir — enclosed_name() / zip-slip handling
     // ---------------------------------------------------------------
 
+    struct ArchiveEnospcGuard;
+
+    impl ArchiveEnospcGuard {
+        fn after(bytes: u64) -> Self {
+            GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(|limit| {
+                assert!(limit.replace(Some(bytes)).is_none());
+            });
+            Self
+        }
+    }
+
+    impl Drop for ArchiveEnospcGuard {
+        fn drop(&mut self) {
+            GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(|limit| limit.set(None));
+        }
+    }
+
     fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
         let file = fs::File::create(path).unwrap();
         let mut zip = ZipWriter::new(file);
@@ -2915,6 +2951,37 @@ mod tests {
                 .count(),
             0,
             "failed extraction must remove staging residue"
+        );
+    }
+
+    #[test]
+    fn simulated_disk_full_after_partial_write_preserves_existing_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("game.zip");
+        write_zip(&archive, &[("game.bin", b"new game bytes")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old game bytes").unwrap();
+
+        let _enospc = ArchiveEnospcGuard::after(3);
+        let error = extract_zip_to_dir(&archive, &destination).unwrap_err();
+
+        assert!(error.contains("simulated disk full"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old game bytes"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+            "ENOSPC failure must discard partial staging"
         );
     }
 
