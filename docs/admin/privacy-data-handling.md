@@ -144,18 +144,26 @@ departing actor's identifiers and absolute paths redacted; household chat messag
 visible with its author anonymized, as selected by the owner. Public and system game collections
 and their items remain available after their owner is deleted, with the owner reference cleared;
 private non-system collections and items are deleted with that account.
-This is an ORM-source inventory, not a comparison against every deployed database schema.
+The retained-text inventory now also covers announcements, related media, PC cheats,
+public/system collection names and descriptions, and game-request/support-ticket text retained
+when another member owns the record. Before account deletion, direct name/email/stable-ID matches
+and detected absolute local paths are redacted from those retained fields, and actor/resolver or
+owner references are cleared in the deletion transaction. Household chat bodies remain intact
+under the selected anonymized-author exception. This is an ORM-source review, not a comparison
+against every deployed database schema; arbitrary unrelated personal facts in free text cannot
+be reliably detected.
 
 The selected policy is to purge user-specific emulator save-state, uploaded avatar, and chat
 attachment bytes after the database deletion commits. The deletion transaction records safe
 managed-root cleanup jobs before it commits; failed unlinks remain retryable, and the deletion
 response reports whether cleanup is pending. A background worker retries pending jobs after
 startup and every minute. Offline backups are outside account deletion and follow a separate
-operator retention policy with no duration set here. A full review of retained free text remains
-open. Shared library/game files, shared chat spaces, shared emojis, and reference
+operator retention policy with no duration set here. The reviewed retained-text fields are
+listed above; unrelated personal facts in arbitrary text remain undetectable. Shared
+library/game files, shared chat spaces, shared emojis, and reference
 sets must not be removed merely because an account is deleted; uploader/author references are
-cleared where supported. A broader review of retained authored content, full server
-restart/redeployment, deployed-schema comparison, and restore reapplication remain open work.
+cleared where supported. Full server restart/redeployment, deployed-schema comparison, and
+restore reapplication remain open work.
 The verified offline backup flow currently covers standalone installs only; see
 [Backup and restore](../runbooks/backup-restore.md) for its inclusion and exclusion boundary.
 Deleting a game removes its

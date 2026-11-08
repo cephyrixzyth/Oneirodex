@@ -105,6 +105,13 @@ qualification remain open.
   fields, and remove links that point to the deleted member profile. The
   retained household chat message body remains governed by the explicit rule
   above.
+- When shared announcements, related-media/cheat records, public collection
+  descriptions, another member's resolved request, or another member's support
+  ticket remain after an author/resolver leaves, clear that reference and scrub
+  exact matches for the departing account's name, email, stable user ID and
+  absolute local paths from retained text. Preserve the shared record; this
+  scrub does not attempt to infer unrelated personal facts. Household chat
+  bodies remain the explicit text-retention exception above.
 - Before local account deletion, attempt remote revocation only when the exact
   stored credential type has a provider-documented revocation operation. A
   missing endpoint, timeout, or provider error must not block deletion of local

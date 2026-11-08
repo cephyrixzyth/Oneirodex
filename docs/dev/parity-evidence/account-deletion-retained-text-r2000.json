@@ -1,0 +1,39 @@
+{
+  "review_id": "R2000",
+  "title": "Retained authored text after account deletion",
+  "reviewed_on": "2026-11-08",
+  "claim": "Retained records with a departing user's actor/resolver/owner reference could preserve the deleted account's direct identifiers in authored text.",
+  "classification": "confirmed by current model and deletion-service review",
+  "owner_policy": {
+    "general": "Delete user data and retain security/audit logs.",
+    "shared_chat_exception": "Retain household messages with an anonymized author and preserve message text.",
+    "shared_content": "Retain approved public/system content with ownership removed; redact direct account identifiers and absolute local paths from retained non-chat text."
+  },
+  "reviewed_retained_fields": [
+    "announcement title and body",
+    "game-related media title, creator, summary, and URLs",
+    "PC cheat label, payload, and notes",
+    "public/system collection name and description",
+    "another member's game-request title and notes when the deleted account resolved it",
+    "another member's support-ticket title, body, metadata text, URLs, and logs when the deleted account resolved it",
+    "unmatched-folder feedback, notifications, duplicate-fix notes, system-event audit text, and household chat messages"
+  ],
+  "implementation": "Before deleting the user, retained authored/resolver text is scrubbed for exact case-insensitive name, email, and stable user ID matches plus absolute local paths. Actor/resolver references are cleared in the same transaction. Public/system collections remain ownerless. Household chat message bodies remain unchanged under the explicit exception.",
+  "verification": {
+    "database": "fresh disposable PostgreSQL test database",
+    "schema": "Alembic head e1f2a3b4c5d6",
+    "tests": [
+      "test_deleted_resolver_and_author_identifiers_are_redacted_from_retained_text",
+      "test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup"
+    ],
+    "result": "2 passed",
+    "database_cleanup": "disposable database dropped after the run",
+    "root_env_read_or_modified": false
+  },
+  "limits": [
+    "Text is scrubbed when it exactly contains the account name, email, stable user ID, or a detected absolute path; other personal facts written in free text cannot be reliably inferred or removed.",
+    "This does not change the explicit household-chat text retention exception.",
+    "No deployed schema, operator data, or production restart was inspected."
+  ],
+  "evidence_path": "tests/test_admin_user_delete_retention.py"
+}

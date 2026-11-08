@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from oneirodex.models import (
+    Announcement,
     ApiToken,
     DownloadRequest,
     DuplicateFixLog,
@@ -19,11 +20,16 @@ from oneirodex.models import (
     CustomEmoji,
     EmulatorSave,
     EmulatorSaveGeneration,
+    GameCollection,
+    GameRelatedMedia,
+    GameRequest,
     InviteToken,
     Library,
     Newsletter,
     PersistentLoginSession,
+    PcCheat,
     StoreAccount,
+    SupportTicket,
     SystemEvents,
     UnmatchedFolder,
     User,
@@ -105,6 +111,115 @@ def test_admin_route_deletes_child_and_retains_anonymized_audit_event(client, db
     assert retained_unlinked is not None
     assert victim_email.casefold() not in retained_unlinked.event_text.casefold()
     assert '[deleted account]' in retained_unlinked.event_text
+
+
+def test_deleted_resolver_and_author_identifiers_are_redacted_from_retained_text(db_session):
+    suffix = str(uuid4())[:8]
+    departing = _make_user(f'retained_admin_{suffix}', 'admin')
+    survivor = _make_user(f'retained_member_{suffix}', 'user')
+    library = Library(
+        name=f'Retained content {suffix}',
+        platform=LibraryPlatform.NES,
+        display_order=1,
+    )
+    db_session.add_all([departing, survivor, library])
+    db_session.flush()
+    game = Game(
+        uuid=str(uuid4()),
+        name=f'Retained content game {suffix}',
+        library_uuid=library.uuid,
+        full_disk_path=f'/test/retained-content/{suffix}.nes',
+    )
+    db_session.add(game)
+    db_session.flush()
+
+    email = departing.email
+    name = departing.name
+    announcement = Announcement(
+        title=f'News from {name}',
+        body=f'Contact {email} at /srv/private/notice.txt',
+        author_user_id=departing.id,
+    )
+    cheat = PcCheat(
+        game_uuid=game.uuid,
+        method='note',
+        label=f'By {name}',
+        payload=f'Use the account {email}',
+        notes=r'C:\Users\private\cheats.txt',
+        created_by_user_id=departing.id,
+    )
+    related_media = GameRelatedMedia(
+        game_uuid=game.uuid,
+        media_kind='book',
+        relation='tie_in',
+        title=f'{name} recommendation',
+        summary=f'Contact {email}',
+        external_url=f'https://example.test/member/{email}',
+        created_by_user_id=departing.id,
+    )
+    collection = GameCollection(
+        name=f"{name}'s public shelf",
+        description=f'Curated by {email}',
+        owner_user_id=departing.id,
+        is_public=True,
+        is_system=False,
+    )
+    request = GameRequest(
+        user_id=survivor.id,
+        title='Requested title',
+        notes=f'Resolved by {name} ({email})',
+        status='resolved',
+        resolved_by_user_id=departing.id,
+    )
+    ticket = SupportTicket(
+        user_id=survivor.id,
+        title=f'Resolved by {name}',
+        body=f'Admin contact {email}',
+        logs=r'C:\Users\private\support.log',
+        resolved_by_user_id=departing.id,
+    )
+    db_session.add_all([announcement, cheat, related_media, collection, request, ticket])
+    db_session.commit()
+    ids = {
+        'announcement': announcement.id,
+        'cheat': cheat.id,
+        'related_media': related_media.id,
+        'collection': collection.id,
+        'request': request.id,
+        'ticket': ticket.id,
+        'departing': departing.id,
+    }
+
+    from oneirodex.utils.user_deletion import delete_user_account
+
+    delete_user_account(db_session, departing)
+    db_session.expire_all()
+
+    assert db_session.get(User, ids['departing']) is None
+    announcement_row = db_session.get(Announcement, ids['announcement'])
+    cheat_row = db_session.get(PcCheat, ids['cheat'])
+    media_row = db_session.get(GameRelatedMedia, ids['related_media'])
+    collection_row = db_session.get(GameCollection, ids['collection'])
+    request_row = db_session.get(GameRequest, ids['request'])
+    ticket_row = db_session.get(SupportTicket, ids['ticket'])
+    retained_rows = [
+        announcement_row, cheat_row, media_row, collection_row, request_row, ticket_row,
+    ]
+    assert all(retained_rows)
+    assert announcement_row.author_user_id is None
+    assert cheat_row.created_by_user_id is None
+    assert media_row.created_by_user_id is None
+    assert collection_row.owner_user_id is None
+    assert request_row.resolved_by_user_id is None
+    assert ticket_row.resolved_by_user_id is None
+    for row in retained_rows:
+        assert row is not None
+        for value in vars(row).values():
+            if isinstance(value, str):
+                assert name.casefold() not in value.casefold()
+                assert email.casefold() not in value.casefold()
+                assert 'C:\\Users\\private' not in value
+                assert '/srv/private' not in value
 
 
 def test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup(

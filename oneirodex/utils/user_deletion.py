@@ -397,10 +397,51 @@ def _redact_notification_payload(value, identifiers: list[str], user_id: int, ke
 
 
 def anonymize_user_retained_content(session, user) -> None:
-    """Keep shared feedback/notifications while removing the departing actor's IDs."""
-    from oneirodex.models import UnmatchedFolder, UserNotification
+    """Keep shared records while removing direct identifiers from retained text."""
+    from oneirodex.models import (
+        Announcement,
+        GameCollection,
+        GameRelatedMedia,
+        GameRequest,
+        PcCheat,
+        SupportTicket,
+        UnmatchedFolder,
+        UserNotification,
+    )
 
     identifiers = [value for value in (user.name, user.email, user.user_id) if value]
+    retained_text = (
+        (Announcement, Announcement.author_user_id, ('title', 'body')),
+        (GameRelatedMedia, GameRelatedMedia.created_by_user_id,
+         ('title', 'creator', 'summary', 'external_url', 'cover_url')),
+        (PcCheat, PcCheat.created_by_user_id, ('label', 'payload', 'notes')),
+        (GameRequest, GameRequest.resolved_by_user_id, ('title', 'notes')),
+        (SupportTicket, SupportTicket.resolved_by_user_id,
+         ('title', 'body', 'area', 'role_at_submit', 'deploy_hint', 'client_hint',
+          'url_hint', 'logs', 'github_issue_url')),
+    )
+    for model, actor_column, fields in retained_text:
+        rows = session.execute(
+            select(model).where(actor_column == user.id).with_for_update()
+        ).scalars()
+        for row in rows:
+            for field in fields:
+                value = getattr(row, field)
+                if isinstance(value, str):
+                    setattr(row, field, _redact_account_text(value, identifiers))
+            setattr(row, actor_column.key, None)
+
+    public_collections = session.execute(
+        select(GameCollection).where(
+            GameCollection.owner_user_id == user.id,
+            or_(GameCollection.is_public.is_(True), GameCollection.is_system.is_(True)),
+        ).with_for_update()
+    ).scalars()
+    for collection in public_collections:
+        collection.name = _redact_account_text(collection.name, identifiers) or 'Collection'
+        collection.description = _redact_account_text(collection.description, identifiers)
+        collection.owner_user_id = None
+
     feedback = session.execute(
         select(UnmatchedFolder).where(
             UnmatchedFolder.bad_match_by_user_id == user.id,
