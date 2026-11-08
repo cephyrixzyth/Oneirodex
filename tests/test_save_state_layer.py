@@ -334,6 +334,53 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
     assert stale.get_json()['detail']['current_revision'] == 2
 
 
+def test_bounded_repeated_replacements_keep_every_committed_generation(
+    client, db_session, configured_install, tmp_path, app,
+):
+    """A short burst of sequential writes must retain a complete readable chain."""
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+    committed_paths = []
+
+    for revision in range(20):
+        payload = f'committed-generation-{revision}'.encode()
+        response = client.post(
+            f'/api/games/{game.uuid}/saves',
+            data={
+                'slot': 'stress-slot',
+                'expected_revision': str(revision),
+                'file': (BytesIO(payload), f'gen-{revision}.state'),
+            },
+            content_type='multipart/form-data',
+        )
+        assert response.status_code == 201, response.get_json()
+        db_session.expire_all()
+        active = db_session.query(EmulatorSave).filter_by(
+            user_id=user.id, game_uuid=game.uuid, slot_name='stress-slot',
+        ).one()
+        assert active.revision == revision + 1
+        assert Path(active.storage_path).read_bytes() == payload
+        committed_paths.append(active.storage_path)
+
+    history = db_session.query(EmulatorSaveGeneration).filter_by(save_id=active.id).all()
+    assert {item.storage_path for item in history} == set(committed_paths[:-1])
+    assert {
+        item.filename: Path(item.storage_path).read_bytes()
+        for item in history
+    } == {
+        f'gen-{index}.state': f'committed-generation-{index}'.encode()
+        for index in range(19)
+    }
+    audit = audit_save_storage(db_session, tmp_path)
+    assert audit['complete'] is True
+    assert audit['mutated_files'] is False
+    assert audit['referenced_files'] == 20
+    assert audit['unreferenced_files'] == 0
+
+
 def test_directory_sync_failure_keeps_old_pointer_and_is_reported_as_orphan(
     client, db_session, configured_install, tmp_path, app, monkeypatch,
 ):
