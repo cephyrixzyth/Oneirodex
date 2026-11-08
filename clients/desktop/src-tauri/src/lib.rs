@@ -1,3 +1,4 @@
+use fs2::available_space;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -783,13 +784,44 @@ fn extract_zip_within_roots(
 ) -> Result<ExtractZipResult, String> {
     ensure_path_under_root(archive, downloads)?;
     ensure_path_strictly_under_root(destination, installs)?;
-    extract_zip_to_dir(archive, destination)
+    extract_zip_to_dir_with_configured_budget(archive, destination)
 }
 
 const MAX_GAME_ARCHIVE_FILE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const MAX_GAME_ARCHIVE_ENTRIES: u64 = 250_000;
 const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
+const DEFAULT_GAME_ARCHIVE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
 static NEXT_GAME_ARCHIVE_STAGE: AtomicU64 = AtomicU64::new(0);
+
+fn configured_archive_limit(raw: Option<&str>, default: u64) -> u64 {
+    raw.and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+fn extract_zip_to_dir_with_configured_budget(
+    archive: &Path,
+    destination: &Path,
+) -> Result<ExtractZipResult, String> {
+    let max_expanded_bytes = configured_archive_limit(
+        std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_EXPANDED_BYTES")
+            .ok()
+            .as_deref(),
+        MAX_GAME_ARCHIVE_EXPANDED_BYTES,
+    );
+    let reserve_bytes = std::env::var("ONEIRODEX_DESKTOP_GAME_ARCHIVE_RESERVE_BYTES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_GAME_ARCHIVE_RESERVE_BYTES);
+    extract_zip_to_dir_with_space_budget(
+        archive,
+        destination,
+        MAX_GAME_ARCHIVE_ENTRIES,
+        max_expanded_bytes,
+        reserve_bytes,
+        None,
+    )
+}
 
 fn validate_game_zip_limits(
     zip: &mut ZipArchive<File>,
@@ -828,6 +860,7 @@ fn validate_game_zip_limits(
 /// Split out from `extract_zip_archive` so the zip-slip / `enclosed_name()`
 /// handling is unit-testable without a `tauri::AppHandle`. The command wrapper
 /// still owns the app-root containment check on `archive` / `destination`.
+#[cfg(test)]
 fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipResult, String> {
     extract_zip_to_dir_with_limits(
         archive,
@@ -837,11 +870,30 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
     )
 }
 
+#[cfg(test)]
 fn extract_zip_to_dir_with_limits(
     archive: &Path,
     destination: &Path,
     max_entries: u64,
     max_expanded_bytes: u64,
+) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_space_budget(
+        archive,
+        destination,
+        max_entries,
+        max_expanded_bytes,
+        0,
+        None,
+    )
+}
+
+fn extract_zip_to_dir_with_space_budget(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+    reserve_bytes: u64,
+    available_bytes_override: Option<u64>,
 ) -> Result<ExtractZipResult, String> {
     if !archive.is_file() {
         return Err(format!("Archive not found: {}", archive.display()));
@@ -857,12 +909,36 @@ fn extract_zip_to_dir_with_limits(
     let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
     // Validate the central directory and declared expanded sizes before
     // removing an existing installation at the destination.
-    validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
+    let declared_expanded_bytes =
+        validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
 
     let parent = destination
         .parent()
         .ok_or_else(|| "Install destination has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let required_bytes = declared_expanded_bytes
+        .checked_add(reserve_bytes)
+        .ok_or_else(|| "Game archive free-space requirement overflow".to_string())?;
+    let available_bytes = match available_bytes_override {
+        Some(bytes) => bytes,
+        None => available_space(parent).map_err(|_| {
+            "Could not determine free space for the install destination".to_string()
+        })?,
+    };
+    if available_bytes < required_bytes {
+        let gib = 1024 * 1024 * 1024;
+        let expanded_gib = declared_expanded_bytes / gib
+            + if declared_expanded_bytes % gib == 0 {
+                0
+            } else {
+                1
+            };
+        return Err(format!(
+            "Not enough free space for this game archive: needs {} GiB plus reserve, has {} GiB available",
+            expanded_gib,
+            available_bytes / gib,
+        ));
+    }
     let name = destination
         .file_name()
         .and_then(|name| name.to_str())
@@ -2263,6 +2339,51 @@ mod tests {
         assert!(!destination.join("existing.bin").exists());
         assert_eq!(fs::read(destination.join("one.bin")).unwrap(), b"1234");
         assert_eq!(fs::read(destination.join("two.bin")).unwrap(), b"5678");
+    }
+
+    #[test]
+    fn free_space_preflight_preserves_existing_install_without_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("game.bin", b"12345678")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let error =
+            extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(8))
+                .unwrap_err();
+
+        assert!(error.contains("Not enough free space"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+        );
+
+        extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(9)).unwrap();
+        assert_eq!(fs::read(destination.join("game.bin")).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn large_game_expanded_limit_override_accepts_positive_value() {
+        assert_eq!(
+            configured_archive_limit(Some("536870912000"), 200),
+            536_870_912_000
+        );
+        assert_eq!(configured_archive_limit(Some("0"), 200), 200);
+        assert_eq!(configured_archive_limit(Some("invalid"), 200), 200);
+        assert_eq!(configured_archive_limit(None, 200), 200);
     }
 
     #[test]
