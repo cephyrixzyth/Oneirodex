@@ -15,7 +15,7 @@ from oneirodex.schemas.collections import (
     CreateCollectionBody,
     ReorderCollectionItemsBody,
 )
-from oneirodex.utils.library_acl import user_can_access_game
+from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_game
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.api_tokens import require_api_token_scope
 

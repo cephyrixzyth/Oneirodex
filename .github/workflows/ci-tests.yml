@@ -73,6 +73,9 @@ jobs:
           # branch red with no repo change behind it.
           pip install -r requirements-dev.txt
 
+      - name: Check production Python for undefined names
+        run: python scripts/check_undefined_names.py
+
       - name: Set up Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

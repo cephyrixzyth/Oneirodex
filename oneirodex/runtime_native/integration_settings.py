@@ -34,7 +34,6 @@ class IntegrationSettingsData:
     def oidc_read(self) -> dict:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.oidc import oidc_readiness_report
-        from oneirodex.utils.secret_store import write_global_secret
 
         row = global_settings_row()
         return {'settings': _oidc_public_settings(row), 'readiness': oidc_readiness_report(row)}
@@ -44,6 +43,7 @@ class IntegrationSettingsData:
         from oneirodex.utils.cache import cache
         from oneirodex.utils.event_logging import log_system_event
         from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import write_global_secret
         from oneirodex.utils.oidc import oidc_readiness_report
 
         row = global_settings_row_or_create()

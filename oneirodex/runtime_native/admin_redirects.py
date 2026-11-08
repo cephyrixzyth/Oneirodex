@@ -99,6 +99,7 @@ def create_admin_redirect_router(
 
     @router.api_route('/delete_filter/{filter_id:int}', methods=['GET', 'HEAD'])
     def delete_filter_notice(request: Request, filter_id: int):
+        from .admin_pilot import _native_auth_backend
         from .acquire_status import _login_redirect, _set_session_cookie
         from .admin_pilot import _native_json_error
         from .request_auth import request_auth_context

@@ -27,6 +27,7 @@ def make_app():
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='test-admin-redirect-secret',
+        TESTING=True,
         SESSION_COOKIE_SECURE=False,
         CSP_ENABLED=False,
         HSTS_SECONDS=0,

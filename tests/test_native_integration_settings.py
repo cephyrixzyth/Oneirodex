@@ -89,6 +89,65 @@ def test_oidc_write_validates_https_and_passes_complete_payload_to_adapter():
     assert data.oidc_saved['oidc_issuer_url'] == 'https://id.example.test'
 
 
+def test_oidc_data_adapter_encrypts_a_supplied_secret(monkeypatch):
+    import sys
+
+    row = SimpleNamespace(
+        oidc_enabled=False, oidc_display_name=None, oidc_issuer_url=None,
+        oidc_client_id=None, oidc_client_secret=None, oidc_redirect_uri=None,
+        oidc_scopes=None, oidc_role_claim=None, oidc_role_map={},
+        last_updated=None,
+    )
+    recorded = {}
+    readiness = {'ready': True}
+    monkeypatch.setattr(
+        'oneirodex.utils.global_settings.global_settings_row_or_create',
+        lambda: row,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.secret_store.write_global_secret',
+        lambda target, name, value: (
+            recorded.update(row=target, name=name, plaintext=value),
+            setattr(target, name, 'odrc:v1:test:encrypted'),
+        ),
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.secret_store.has_global_secret', lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.oidc.oidc_readiness_report', lambda _row: readiness,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.cache.cache.delete', lambda _key: None,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event', lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.runtime_native.db_session',
+        SimpleNamespace(native_db=SimpleNamespace(session=SimpleNamespace(commit=lambda: None))),
+    )
+
+    from oneirodex.runtime_native.integration_settings import IntegrationSettingsData
+
+    result = IntegrationSettingsData().oidc_save({
+        'oidc_enabled': True,
+        'oidc_display_name': ' SSO ',
+        'oidc_issuer_url': 'https://id.example.test',
+        'oidc_client_id': 'client',
+        'oidc_client_secret': 'canary-secret',
+        'oidc_redirect_uri': 'https://app.example.test/callback',
+        'oidc_scopes': 'openid email profile',
+        'oidc_role_claim': 'groups',
+        'oidc_role_map': {'admins': 'admin'},
+    })
+
+    assert recorded == {'row': row, 'name': 'oidc_client_secret', 'plaintext': 'canary-secret'}
+    assert row.oidc_client_secret == 'odrc:v1:test:encrypted'
+    assert result['readiness'] is readiness
+
+
 def test_community_write_validates_and_normalizes_url(monkeypatch):
     from oneirodex.utils import security
 

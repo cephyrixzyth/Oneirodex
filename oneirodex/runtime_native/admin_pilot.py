@@ -11,7 +11,7 @@ from .form_compat import first_form_value
 from html import escape
 import inspect
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Request

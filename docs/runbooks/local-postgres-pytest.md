@@ -60,6 +60,30 @@ The name guard cannot establish that a server is safe by itself. Application cre
 also validates the configured test URI before initializing extensions or probing
 PostgreSQL, and connection diagnostics no longer include a URI.
 
+Before testing against a new or reused database, run the guarded schema upgrade:
+
+```bash
+python scripts/upgrade_test_schema.py
+```
+
+It reads `TEST_DATABASE_URL`, requires a loopback PostgreSQL host and a database
+name containing `test`, uses that URL for Alembic only inside its own process,
+then verifies the save revision column and history table. It withholds connection
+details. If the database claims Alembic head but its tables do not match, the
+command stops; create a fresh test-named database rather than trying to use the
+stale schema. For example, create `oneirodexschema_test` in the review container,
+then set `TEST_DATABASE_URL` in the current shell to that loopback database before
+running the upgrade and pytest. This leaves the root `.env` untouched. Never point
+this command at a live application database.
+
+```bash
+docker exec oneirodex-review-db createdb -U postgres oneirodexschema_test
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/oneirodexschema_test
+python scripts/upgrade_test_schema.py
+python -m pytest tests/test_whatever.py
+unset TEST_DATABASE_URL
+```
+
 Run the guard regressions without loading the app, `.env`, or a database:
 
 ```bash
