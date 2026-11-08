@@ -41,6 +41,16 @@ app rejects group- or world-readable key-ring files. On Windows, use an NTFS ACL
 that grants read access only to the Oneirodex service account and administrators.
 The portable permission check cannot validate Windows ACLs.
 
+Encrypted emulator saves use a separate operator-managed keyring at
+`ONEIRODEX_SAVE_KEYRING_FILE`. Create a protected file with
+`python scripts/migrate_emulator_save_keys.py --initialize-keyring <protected-output>`
+while the existing `SECRET_KEY` is available, then configure the absolute path
+in the install's `.env`. Back up this keyring separately from database and
+library backups. The app writes new encrypted saves using a versioned key ID;
+the ring also keeps the legacy key needed to read existing `GTENC1` saves.
+Restore matching key IDs from the protected backup before restoring encrypted
+saves. Do not rotate `SECRET_KEY` as a substitute for save-key rotation.
+
 After updating the schema with the new release, stop every old app writer and
 take a protected database backup before running both
 `python scripts/migrate_reusable_secrets.py` and

@@ -75,6 +75,33 @@ def test_encrypted_saves_are_recorded_by_content_and_rekeyed_for_the_server(tmp_
     assert move.rekey_saves(lib, {'files': files, 'save_key': server}, server) == 0, 'same key: nothing to do'
 
 
+def test_versioned_save_move_records_key_id_without_key_material(tmp_path, monkeypatch):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring
+    from oneirodex.utils.save_keyring import load_save_keyring
+    from scripts.migrate_emulator_save_keys import initialize_keyring
+
+    lib = _library(tmp_path)
+    keyring_path = tmp_path / 'protected-save-keyring.json'
+    initialize_keyring(keyring_path, 'legacy-server-secret')
+    monkeypatch.setenv('ONEIRODEX_SAVE_KEYRING_FILE', str(keyring_path))
+    keyring = load_save_keyring()
+    save = lib / 'saves/1/g/slot1.sav'
+    save.write_bytes(_encrypt_with_keyring(b'new-format-save', keyring))
+
+    files = move.snapshot_files(lib, move.save_key_for('legacy-server-secret'))
+    entry = next(e for e in files if e['path'] == 'saves/1/g/slot1.sav')
+
+    assert entry['plain_sha256'] == move._sha256(b'new-format-save')
+    assert entry['save_key_id'] == keyring.active_key_id
+    manifest = move._save_manifest_fields({keyring.active_key_id})
+    assert manifest == {
+        'required_save_key_ids': [keyring.active_key_id],
+        'save_key': None,
+    }
+    raw_key = json.loads(keyring_path.read_text(encoding='utf-8'))['keys'][keyring.active_key_id]
+    assert raw_key not in json.dumps(manifest)
+
+
 def test_rekey_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
     lib = _library(tmp_path)
     source, server = move.save_key_for('standalone'), move.save_key_for('server')

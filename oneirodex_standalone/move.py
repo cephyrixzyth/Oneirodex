@@ -16,14 +16,14 @@ may travel over a share, and a restore runs its SQL on the server, so the
 folder is trusted only when it matches what you exported. The import checks
 the folder, restores the database in one transaction, copies the files into
 the server's library, rewrites machine paths (--root NAME=PATH for every folder
-named at export), re-encrypts encrypted saves for the server's key, and
+named at export), validates encrypted saves against a separate keyring, and
 verifies the result against the manifest row for row. If anything after the
 restore fails, the files it copied are removed; drop the target database to
 roll back, and run it again when ready.
 
-The folder holds your saves, members' password hashes and settings, and, when
-any saves are encrypted, the key that opens them: keep it private and delete it
-afterwards.
+The folder holds members' password hashes, settings and saves. New encrypted
+saves remain encrypted in the bundle; their key IDs are listed, while key
+material stays in the separate protected operator keyring.
 
 Exit status: 0 moved and verified; 1 refused or verification failed (see the
 message); 2 usage error.
@@ -54,6 +54,7 @@ USER_FOLDERS = ('images', 'generated', 'saves', 'chat-attachments', 'chat-emoji'
 PRESET_MARKER_KEY = 'oneirodex_preset'
 #: oneirodex/utils/save_crypto.py: encrypted save files start with this.
 SAVE_MAGIC = b'GTENC1:'
+KEYED_SAVE_MAGIC = b'GTENC2:'
 #: Columns holding machine paths (P05 audit). Any other text column named
 #: *path* or *folder* is picked up at run time, so a new one is not missed.
 KNOWN_PATH_COLUMNS = {
@@ -442,8 +443,22 @@ def snapshot_files(library: Path, save_key: str | None) -> list[dict]:
                 except InvalidToken:
                     raise Refused(f'{rel.as_posix()} is marked encrypted but does not open with this install\'s key; '
                                   'remove or replace that save, then export again') from None
+            elif data.startswith(KEYED_SAVE_MAGIC):
+                from oneirodex.utils.save_crypto import maybe_decrypt
+
+                try:
+                    key_id = data[len(KEYED_SAVE_MAGIC):].partition(b':')[0].decode('ascii')
+                    entry['plain_sha256'] = _sha256(maybe_decrypt(data))
+                    entry['save_key_id'] = key_id
+                except Exception:  # noqa: BLE001 - do not disclose key paths or values
+                    raise Refused(f'{rel.as_posix()} needs its protected save keyring to export') from None
         entries.append(entry)
     return entries
+
+
+def _save_manifest_fields(required_key_ids: set[str]) -> dict:
+    """Keep new move bundles keyless; required key IDs are metadata only."""
+    return {'save_key': None, 'required_save_key_ids': sorted(required_key_ids)}
 
 
 def _safe_join(base: Path, rel: str, where: str) -> Path:
@@ -546,17 +561,44 @@ def export(args) -> int:
 
         save_key = save_key_for(state['secret_key'])
         files = snapshot_files(library, save_key)
+        from oneirodex.utils.save_crypto import _encrypt_with_keyring, maybe_decrypt
+        from oneirodex.utils.save_keyring import load_save_keyring
+
+        try:
+            save_keyring = load_save_keyring()
+        except Exception:  # noqa: BLE001 - the ring is only needed for keyed/legacy encrypted saves
+            save_keyring = None
+        required_key_ids = set()
         for entry in files:
             target = work / 'files' / entry['path']
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(library / entry['path'], target)
+            source = library / entry['path']
+            data = source.read_bytes() if entry['path'].startswith('saves/') else None
+            if data is not None and data.startswith(SAVE_MAGIC):
+                if save_keyring is None:
+                    raise Refused('encrypted saves need a protected save keyring before export')
+                payload = _encrypt_with_keyring(maybe_decrypt(data), save_keyring)
+                target.write_bytes(payload)
+                entry['sha256'] = _sha256(payload)
+                entry['size'] = len(payload)
+                entry['save_key_id'] = save_keyring.active_key_id
+                entry['plain_sha256'] = _sha256(maybe_decrypt(payload))
+                required_key_ids.add(save_keyring.active_key_id)
+            else:
+                shutil.copy2(source, target)
+                if data is not None and data.startswith(KEYED_SAVE_MAGIC):
+                    required_key_ids.add(entry['save_key_id'])
+                    entry['sha256'] = _sha256(data)
+                    entry['size'] = len(data)
+                if entry.get('save_key_id'):
+                    required_key_ids.add(entry['save_key_id'])
         encrypted = any('plain_sha256' in e for e in files)
         manifest = {
             'format': FORMAT, 'roots': roots, 'db': db, 'files': files,
             'db_dump': {'size': (work / 'db.dump').stat().st_size, 'sha256': _sha256(work / 'db.dump'),
                         'pg_major': dump_major},
-            # Only when there is something it opens. See the module docstring.
-            'save_key': save_key if encrypted else None,
+            # Key material stays in the separate protected operator keyring.
+            **_save_manifest_fields(required_key_ids),
         }
         raw = json.dumps(manifest, indent=2, sort_keys=True)
         (work / 'manifest.json').write_text(raw, encoding='utf-8')
@@ -571,7 +613,7 @@ def export(args) -> int:
 
     rows = sum(t['rows'] for t in db['tables'].values())
     print(f'exported: {len(db["tables"])} tables, {rows} rows, {len(files)} files'
-          f'{", encrypted saves (key included)" if encrypted else ""} -> {out}')
+          f'{", encrypted saves (keyring backup required separately)" if encrypted else ""} -> {out}')
     print(f'fingerprint: {fingerprint}')
     print('  Keep this line: the import asks for it (--expect) to prove the folder arrived unchanged.')
     outside = {k: v for k, v in db['unrooted_paths'].items() if v}
@@ -634,6 +676,14 @@ def _file_conflicts(manifest: dict, library: Path, target_key: str | None = None
         if (target.is_file() and 'plain_sha256' in entry and target_key
                 and _opens_to(target, target_key, entry['plain_sha256'])):
             continue  # this save, already re-encrypted for this server by an earlier import
+        if target.is_file() and 'save_key_id' in entry:
+            try:
+                from oneirodex.utils.save_crypto import maybe_decrypt
+
+                if _sha256(maybe_decrypt(target.read_bytes())) == entry['plain_sha256']:
+                    continue
+            except Exception:  # noqa: BLE001 - an unreadable existing save is a conflict
+                pass
         conflicts.append(entry['path'])
     return conflicts
 
@@ -685,6 +735,15 @@ def verify(url: str, manifest: dict, new_roots: dict[str, str], library: Path, t
         path = _safe_join(library, entry['path'], 'server library')
         if not path.is_file():
             problems.append(f'missing file {entry["path"]}')
+        elif 'save_key_id' in entry:
+            try:
+                from oneirodex.utils.save_crypto import maybe_decrypt
+
+                data = path.read_bytes()
+                if _sha256(maybe_decrypt(data)) != entry['plain_sha256']:
+                    problems.append(f'save {entry["path"]} does not match its plaintext digest')
+            except Exception:  # noqa: BLE001 - do not print local key paths or values
+                problems.append(f'save {entry["path"]} cannot be opened with the configured save keyring')
         elif 'plain_sha256' in entry and target_key and manifest.get('save_key'):
             if not _opens_to(path, target_key, entry['plain_sha256']):
                 problems.append(f'save {entry["path"]} does not open with the server key')
@@ -707,6 +766,29 @@ def import_(args) -> int:
         extra = sorted(set(new_roots) - set(old_roots))
         raise Refused(f'--root must name exactly the folders named at export: missing {missing}, unknown {extra}')
     target_key = None
+    required_save_key_ids = manifest.get('required_save_key_ids') or []
+    if required_save_key_ids:
+        try:
+            from oneirodex.utils.save_keyring import load_save_keyring
+
+            configured_ring = load_save_keyring()
+        except Exception:  # noqa: BLE001 - refuse before importing the database
+            raise Refused('restore the protected save keyring before importing this move folder') from None
+        missing_key_ids = sorted(set(required_save_key_ids) - set(configured_ring.keys))
+        if missing_key_ids:
+            raise Refused('the configured save keyring is missing required key IDs; restore its protected backup')
+        try:
+            from oneirodex.utils.save_crypto import maybe_decrypt
+
+            for entry in manifest['files']:
+                if entry.get('save_key_id'):
+                    candidate = _safe_join(bundle / 'files', entry['path'], 'move folder')
+                    if _sha256(maybe_decrypt(candidate.read_bytes())) != entry['plain_sha256']:
+                        raise Refused('an encrypted save does not match its manifest plaintext digest')
+        except Refused:
+            raise
+        except Exception:  # noqa: BLE001 - fail before database restore without exposing paths or keys
+            raise Refused('the configured save keyring cannot open one or more encrypted saves') from None
     if manifest.get('save_key'):
         secret = os.environ.get('SECRET_KEY')
         if not secret:

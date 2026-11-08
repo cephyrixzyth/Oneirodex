@@ -22,6 +22,8 @@ credential envelope and conversion tooling are implemented in the candidate;
 focused tests and an independent source review passed. Synthetic database
 conversion and recovery from a separate operator-backup copy are qualified;
 live operator database conversion and a protected-backup restore drill remain
+pending. Save encryption now has a separate versioned keyring candidate and
+legacy read path; database-backed rotation and restore qualification remain
 pending. Account deletion now has
 a PostgreSQL-verified relation inventory, a transactional managed-file job
 queue, and a retry worker; deployment-schema, restart, and restore qualification
@@ -54,11 +56,16 @@ remain pending.
   integration as unavailable until the operator restores the matching key.
   Never fall back to plaintext or a built-in key.
 - Cookie signing, reusable-credential encryption and save encryption have
-  separate key purposes. Current save encryption still derives its key from
-  `SECRET_KEY`; the standalone move path carries the source save key in its
-  protected move package. This decision does not make `SECRET_KEY` rotation a
-  safe save-key rotation. P2-18 must specify and verify save-key recovery and
-  rotation before that migration can be called complete.
+  separate key purposes. New encrypted saves use a versioned key ID from a
+  dedicated operator-managed keyring; retain old key IDs while any current
+  save or supported encrypted backup needs them. Legacy `GTENC1` data remains
+  readable with its original `SECRET_KEY`-derived key or the protected legacy
+  key entry. Do not treat a `SECRET_KEY` rotation as save-key rotation.
+- Restore save-encryption key material from a protected operator backup stored
+  separately from database, library and move bundles. If a key is unavailable,
+  preserve ciphertext and report the save as unreadable until its matching key
+  is restored. Key retirement remains explicit and requires evidence that no
+  current save or supported backup references the key ID.
 
 ### Account deletion and backups
 
@@ -90,7 +97,7 @@ remain pending.
 |---|---|
 | Cookie-signing key | Old signed sessions become invalid; members authenticate again. Do not reuse a different key as a silent fallback. |
 | Reusable-credential key ring | Restore the matching key IDs from the independently protected operator backup. If unavailable, preserve ciphertext and mark dependent integrations unavailable. |
-| Save-encryption key | Keep the existing standalone move compatibility path. New key custody and rotation remain a P2-18 acceptance gate; do not rotate `SECRET_KEY` as a substitute. |
+| Save-encryption keyring | Restore matching protected key IDs separately from database, library and move bundles. Keep encrypted bytes unchanged if a key is missing. Legacy `GTENC1` reads still need the original derived key. |
 
 ## Migration order
 
@@ -111,6 +118,9 @@ remain pending.
    retried; deployed-schema and restart-level qualification remain open.
 5. Include key identifiers and restore checks in backup/restore work. Keep
    save encryption migration separate from reusable integration credentials.
+   A versioned save keyring and standalone-move key-ID contract are implemented
+   in the candidate; database-backed rotation and isolated restore checks are
+   still required.
 
 Each step requires focused database-backed verification and operator-facing
 documentation before it can be marked complete.

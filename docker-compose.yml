@@ -67,6 +67,7 @@ services:
       - UPLOAD_FOLDER=/app/oneirodex/static/library
       - SECRET_KEY=${SECRET_KEY}
       - ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE=${ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE:-${ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE:-/run/secrets/oneirodex-store-credential-keyring.json}}
+      - ONEIRODEX_SAVE_KEYRING_FILE=${ONEIRODEX_SAVE_KEYRING_FILE:-/run/secrets/oneirodex-save-keyring.json}
       - DEV_MODE=${DEV_MODE:-false}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -183,6 +184,9 @@ services:
       # file first, then uncomment and set ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH.
       # Keep the host file and its protected backup outside DB/library backup payloads.
       # - "${ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH}:/run/secrets/oneirodex-store-credential-keyring.json:ro"
+      # Optional, separate key ring for encrypted emulator saves. Back it up
+      # independently; do not place it inside the database/library backup.
+      # - "${ONEIRODEX_SAVE_KEYRING_HOST_PATH}:/run/secrets/oneirodex-save-keyring.json:ro"
     depends_on:
       db:
         condition: service_healthy

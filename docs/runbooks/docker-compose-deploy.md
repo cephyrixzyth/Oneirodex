@@ -146,6 +146,7 @@ Do **not** conflate games (scan root) with library/uploads. Compose header has a
 | Optional WebRetro cores | `WEBRETRO_CORES_HOST_PATH` (uncomment in compose) | `/app/oneirodex/static/vendor/webretro/cores` | rw | Operator WASM cores — [webretro-cores.md](webretro-cores.md) |
 | Postgres | Compose volume `db_data` | `/var/lib/postgresql/data/pgdata` | rw | DB |
 | Store credential key ring | `ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH` (uncomment in compose) | `/run/secrets/oneirodex-store-credential-keyring.json` | **ro** | Dedicated key file; back it up separately from database/library data |
+| Emulator save key ring | `ONEIRODEX_SAVE_KEYRING_HOST_PATH` (uncomment in compose) | `/run/secrets/oneirodex-save-keyring.json` | **ro** | Separate from integration and cookie keys; protect and back it up separately |
 | pg_hba | `./docker/postgres/pg_hba.conf` | `/etc/oneirodex/pg_hba.conf` | ro | App↔db TCP without SSL (scram still required), private source ranges only |
 
 If app loops on `no pg_hba.conf entry … no encryption`, recreate `db` with current Compose or use the one-liner in [container-wont-start.md](container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption).
@@ -178,6 +179,31 @@ Members can still save an account
 identifier without a token, import a list, or disconnect; existing links and
 title history are retained. Some operator household-token paths that do not
 persist refreshed credentials remain usable.
+
+### Save keyring
+
+Encrypted emulator saves use a distinct keyring configured with
+`ONEIRODEX_SAVE_KEYRING_FILE` and mounted read-only at
+`/run/secrets/oneirodex-save-keyring.json`. Create it with
+`python scripts/migrate_emulator_save_keys.py --initialize-keyring <protected-output>`
+while the existing `SECRET_KEY` is available. The generated ring retains the
+legacy derived key for reading `GTENC1` saves and writes new saves with a
+versioned key ID. Do not store key material in `.env`, the database, or a move
+bundle. Keep the ring and its protected backup outside database and library
+backup payloads. Linux keyring files must be mode `0600`; on Windows, restrict
+the NTFS ACL to the service account and administrators.
+
+To rotate keys, prepare a second file with
+`python scripts/migrate_emulator_save_keys.py --rotate-keyring-from <current-ring> --write-keyring <new-ring>`.
+Preserve both protected rings, point the app at the new one, stop save writers,
+then run `python scripts/migrate_emulator_save_keys.py --migrate --root <save-root>`
+for a report-only inventory. Repeat with `--apply` to re-encrypt current and
+retained generations. The migration changes ciphertext paths only after the
+database commit; it keeps each save generation and never schedules history
+garbage collection. Retain old key IDs for encrypted backups that still need
+them. The command does not contact providers or load `.env`; set `DATABASE_URL`
+for an external database or use the embedded database environment described
+by the script.
 
 #### Convert existing credentials after upgrading
 
