@@ -2883,6 +2883,42 @@ mod tests {
     }
 
     #[test]
+    fn filesystem_write_failure_keeps_existing_install_and_cleans_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("conflicting-paths.zip");
+        write_zip(
+            &archive,
+            &[("blocked", b"file"), ("blocked/child.bin", b"payload")],
+        );
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let error = extract_zip_to_dir(&archive, &destination).unwrap_err();
+
+        assert!(
+            !error.is_empty(),
+            "filesystem entry conflict must fail extraction"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+            "failed extraction must remove staging residue"
+        );
+    }
+
+    #[test]
     fn extract_rejects_parent_traversal_before_replacing_destination() {
         let work = tempdir().unwrap();
         let archive = work.path().join("evil.zip");
