@@ -28,9 +28,11 @@ R1974 keyboard review confirmed that dismissing the one-time token secret remove
 
 R1975 adds focused token-panel checks for list failure, create failure, populated rows after revoke failure, and one-time-secret dismissal; the component suite passes 4/4 with mocked token APIs. A native API regression confirms an expired bearer is rejected before personal-token listing; `python -m pytest --noconftest -o addopts= tests/test_native_account_tokens.py -q` passes 12/12 without database access. The native test fixture now sets `TESTING=True` so its legacy session cookies match the test-mode auth policy. Evidence: `docs/dev/parity-evidence/token-states-r1975.json`. Exact-image failure/populated parity and database failures at the production error-handler boundary remain open.
 
+R1976 injects persistence exceptions into native token list, create, and revoke calls with the production ASGI exception handlers installed. All three returned the generic internal API error without exposing synthetic database diagnostics. The full DB-free native token route suite passes 13/13. Evidence: `docs/dev/parity-evidence/token-db-failure-envelope-r1976.json`. This verifies the ASGI error boundary with adapter faults; live SQLAlchemy connection failure and exact-image response parity remain unverified.
+
 ## Next execution batches
 
-1. Compare remaining token failure, populated, keyboard, and accessibility states on the exact images. Source/component regressions and current native expiry rejection now have focused coverage; exact-image states and database-failure handling at the production error boundary remain open.
+1. Compare remaining token failure, populated, keyboard, and accessibility states on the exact images. Source/component regressions, expired-bearer rejection, and redacted native persistence-error envelopes now have focused coverage; paired exact-image states, real SQLAlchemy connection faults, and screen-reader review remain open.
 2. Continue through shared routes in risk-ranked families; keep synthesized HEAD/OPTIONS explicit and verify current-only operations on their own track.
 3. For every mismatch, decide whether it is a confirmed regression or an owner-approved improvement, implement only supported corrections, and rerun the affected exact-image cases.
 4. Run the targeted regression/security checks for accepted fixes, refresh the route ledger and hub status, and make small local commits.

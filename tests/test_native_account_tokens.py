@@ -132,7 +132,10 @@ class FakeFlaskApp:
         'SESSION_COOKIE_SECURE': False,
         'SESSION_COOKIE_SAMESITE': 'Lax',
         }
-        self.logger = SimpleNamespace(error=lambda *args, **kwargs: None)
+        self.logger = SimpleNamespace(
+            error=lambda *args, **kwargs: None,
+            exception=lambda *args, **kwargs: None,
+        )
 
     def app_context(self):
         return nullcontext()
@@ -165,6 +168,8 @@ def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True)
         data_access=data,
         policy=policy,
     )
+    data._test_app = app
+    data._test_flask_app = flask_app
     return TestClient(app), data, touched
 
 
@@ -376,3 +381,51 @@ def test_expired_bearer_cannot_list_personal_tokens():
     assert response.status_code == 302
     assert response.headers['location'].startswith('/login?next=%2Fapi%2Ftokens')
     assert data.rows == []
+
+
+def test_database_failures_return_redacted_api_errors():
+    import asyncio
+
+    import httpx
+
+    from asgi import _install_native_api_error_handlers
+
+    user = FakeUser()
+    _client, data, _ = make_client(user=user)
+    app = data._test_app
+    _install_native_api_error_handlers(
+        app, data._test_flask_app.config, data._test_flask_app.logger,
+    )
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError('private-database-connection-string')
+
+    async def check_failure(method, path, *, json_body=None):
+        data_method = {
+            'GET': 'list_for_user', 'POST': 'create', 'DELETE': 'revoke',
+        }[method]
+        setattr(data, data_method, fail)
+        credentials = browser_credentials(user)
+        cookie = credentials['Cookie'].split('=', 1)[1]
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url='http://testserver',
+        ) as async_client:
+            async_client.cookies.set('session', cookie)
+            response = await async_client.request(
+                method,
+                path,
+                headers={'X-CSRFToken': credentials['X-CSRFToken']},
+                json=json_body,
+            )
+        assert response.status_code == 500
+        assert response.json()['error_code'] == 'internal'
+        assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+        assert 'private-database-connection-string' not in response.text
+
+    async def run():
+        await check_failure('GET', '/api/tokens')
+        await check_failure('POST', '/api/tokens', json_body={'name': 'CLI', 'preset': 'thin'})
+        await check_failure('DELETE', '/api/tokens/1')
+
+    asyncio.run(run())

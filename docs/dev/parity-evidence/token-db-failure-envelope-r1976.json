@@ -1,0 +1,23 @@
+{
+  "review_id": "R1976",
+  "title": "Native personal-token persistence failure envelope",
+  "source_evidence": "docs/dev/parity-evidence/review-bundle-r1972/token-ui-lifecycle-r1972-full.json",
+  "classification": "The native application error boundary safely handles injected persistence failures for the personal-token API.",
+  "method": {
+    "application": "FastAPI personal-token routes with the production ASGI exception handlers installed.",
+    "fault": "Injected adapter exceptions in list, create, and revoke operations; synthetic error text stood in for database diagnostics.",
+    "assertions": [
+      "all three routes return HTTP 500 with the internal error code",
+      "the response uses the generic user-facing error message",
+      "synthetic database diagnostics do not appear in the response"
+    ]
+  },
+  "verification": {
+    "command": "python -m pytest --noconftest -o addopts= tests/test_native_account_tokens.py -q",
+    "result": "passed: 13 tests; no database connections"
+  },
+  "limits": [
+    "Fault injection used a RuntimeError from the test adapter, not a live SQLAlchemy connection failure.",
+    "Paired exact-image failure responses were not captured."
+  ]
+}
