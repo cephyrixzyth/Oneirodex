@@ -14,6 +14,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
+  if (event.data?.type === 'od-vr-retired') {
+    event.waitUntil(caches.delete(RETIRED_CACHE).then(() => {
+      event.ports[0]?.postMessage('od-vr-retired');
+    }));
+    return;
+  }
   if (event.data === 'od-clear-caches' || event.data?.type === 'od-clear-caches') {
     event.waitUntil(caches.delete(RETIRED_CACHE));
   }

@@ -15,3 +15,5 @@ Dockerfile text eol=lf
 
 # Prevent CRLF issues on Windows
 * text=auto
+# Historical browser-worker fixtures are byte-pinned to their Git source.
+tests/fixtures/*-legacy-*.js text eol=lf

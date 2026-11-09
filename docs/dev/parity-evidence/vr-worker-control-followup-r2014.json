@@ -1,0 +1,133 @@
+{
+  "review_id": "R2014",
+  "doc_status": "Reference",
+  "title": "Legacy VR controller migration and private-read gate",
+  "classification": "Confirmed synthetic local cross-account cache disclosure; focused fix verified; full app/headset acceptance remains open",
+  "source_head_before_change": "e26eb687d4606307c5bb2f5e8a46179ef19a2e8e",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "oneirodex/static/js/od_pwa_install.js": "8aeb0160e9a9847ad0582a0e99abd1c91b5ea3995f977bafec39e464323be680",
+    "oneirodex/static/app-sw.js": "1630abe9ae3cb5c4b3c0c99a343fd5e33361955e99fd1f0691c3da3d4fb9bf21",
+    "oneirodex/static/vr-sw.js": "89525d2adc4126085b53892e5baa2a4fce38931a414cad2c11316897d504a2b7",
+    "frontend/member-app/src/api/vr.ts": "5321bf5ade21b07f55c6ad9d850a8aae6f71e32f03559a01c1bf0cedc779aace",
+    "frontend/member-app/src/api/vr.test.ts": "0e4e0c80eaa7c5653737c32b9302a54709b5b2677e739778098966e281ff1b05",
+    "frontend/member-app/src/pages/VrPage.tsx": "db46b7f487007a0c788be7d12271802a896dca4638a6acb4925f22169a0ecba3",
+    "frontend/member-app/src/pages/VrPage.test.tsx": "b602be7358e25f680b36cb76a5cb53fffe0dbf4b6bfe0e014f145101d2419772",
+    "tests/test_browser_privacy_workers.py": "26a51a46015f5baa60e30a6fce9952663736dd773103ab4f749702150751010d",
+    "tests/fixtures/browser_workers.py": "20488a68c4c400b538982449ef28d557968fcefacabc1a8e93280bf96a7b4fae",
+    "tests/fixtures/vr-sw-legacy-fd2683e5.js": "21f298241242f4239ac7f23c70944b067d410a642c2b011667ba73bdb6666abd",
+    "tests/fixtures/app-sw-legacy-e26eb687.js": "4200198c1f475f3e483bd56766397a07471446ff47e64f607879c060a1ea27c1",
+    "tests/test_pwa_install.py": "edf8f78434a83aadb6ded9af877cf522e9ffa959e768c28e3b71fff34e643186",
+    ".gitattributes": "24bf4319eb82df66a7fa5075ff04b76b4a0eb742940b257e1d0e36712c61021f"
+  },
+  "environment": {
+    "platform": "Windows",
+    "browser": "Chromium 156.0.8078.4, fresh headless contexts",
+    "fixture": "Owned ephemeral loopback static server, synthetic adult/child data; external page requests blocked; no application/database/operator credentials",
+    "application_python": "3.12.16 for source checks",
+    "browser_tool_python": "3.14",
+    "frontend_node": "22"
+  },
+  "checks": {
+    "syntax0": {
+      "exit_code": 0,
+      "seconds": 0.15,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "syntax1": {
+      "exit_code": 0,
+      "seconds": 0.14,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "syntax2": {
+      "exit_code": 0,
+      "seconds": 0.14,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "types": {
+      "exit_code": 0,
+      "seconds": 11.92,
+      "log_sha256": "25d5ecc6b6b5009b339e3e88739e15ef55546604ce6cb8ee6a164c53b1a9fc20"
+    },
+    "unit": {
+      "exit_code": 0,
+      "seconds": 7.87,
+      "log_sha256": "83c6b98c35873980febd81a5b9560e71adde96a6ee4aa198b5820da2f3c15f45"
+    },
+    "lint": {
+      "exit_code": 0,
+      "seconds": 3.74,
+      "log_sha256": "c56e8650724ae84110c58270c02d689e2b5f353603abe2c37f48bf7d103053ea"
+    },
+    "css": {
+      "exit_code": 0,
+      "seconds": 0.44,
+      "log_sha256": "0dcefb129c2ff420e04f891e5d49207e3ad44e69e2417e4ff65cf21dd36dd399"
+    },
+    "envelope": {
+      "exit_code": 0,
+      "seconds": 14.8,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    },
+    "pwa": {
+      "exit_code": 0,
+      "seconds": 2.24,
+      "log_sha256": "a0df62338ab0e4daa3b804cf85b2132b1af1d6d59cf561eaec0d5df95573b7a1"
+    },
+    "bundle": {
+      "exit_code": 0,
+      "seconds": 1.45,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 15.0,
+      "log_sha256": "10ca1e3a970d414d2b2fdaf3079dd5e190a97765ed967a34c729046dd5a8b19e"
+    },
+    "member-suite": {
+      "exit_code": 0,
+      "seconds": 201.89,
+      "log_sha256": "30d0b25a2d1d16fbb5a83685745c975da16c59a6ab05982504bf2c17612b2139"
+    },
+    "browser_final": {
+      "exit_code": 0,
+      "seconds": 54.59,
+      "log_sha256": "0f5502577f788b587934d5339e49e747363222702e6b1022b3dfb7ae4f9b9127"
+    }
+  },
+  "original_trigger": {
+    "legacy_source": "fd2683e5:oneirodex/static/vr-sw.js",
+    "legacy_sha256": "21f298241242f4239ac7f23c70944b067d410a642c2b011667ba73bdb6666abd",
+    "observation": "Actual old /vr worker remained controller after settled root registration; cached synthetic adult VR response remained readable offline after logout and simulated account switch. Four mitigation regression cases initially failed."
+  },
+  "verification": {
+    "browser_cases": 12,
+    "member_suite_cases": 1243,
+    "member_suite_files": 130,
+    "focused_cases_included_in_member_suite": 376,
+    "pwa_source_cases": 9,
+    "browser_scope": "Owned /vr and /vr/ registrations, query-bearing scripts, root absent/already active, delayed old response, logout link/button, first load/no worker support, failed legacy update, rejected/hung optional root install, unrelated registration/cache preservation, versioned asset caching, private/API/cover exclusion, data-free offline shell and post-logout offline network failure",
+    "review": "Fresh isolated read-only investigator and one fresh candidate reviewer; reviewer found optional-install fallback regression, reproduced as two browser failures then corrected and passed. Child usage excluded from root model comparison.",
+    "cleanup": "Fresh browser contexts/browsers closed; owned loopback servers stopped and joined; no product/database/prod mutations",
+    "pinned_fixture_line_endings": "Explicit LF checkout rule preserves byte-pinned legacy scripts on Windows; git check-attr verifies both paths."
+  },
+  "design": [
+    "Shared installer updates owned legacy registrations and verifies safe replacement control before private VR catalog/detail requests; page stops recreating retired scope.",
+    "A data-free retirement controller can stay attached until navigation; policy acknowledgement establishes safe control, then a navigation selects the root worker.",
+    "Root claim acknowledgement supports an already-active root; logout directly deletes owned caches even without a controller and preserves unrelated caches.",
+    "Unknown/unsafe legacy control fails closed; optional root installation failure does not block browsing once control is verified safe."
+  ],
+  "rework": [
+    "Initial unit harness omitted its shell provider; corrected before valid reproduction. Private fetch assertions were narrowed to VR requests rather than unrelated loading-icon requests.",
+    "Consolidated overlapping installer/API edits observed during continuation. Initial implementation accidentally nested readiness setup and failed browser execution; corrected.",
+    "An assumed root-controller transition was too strong for the actual unregistered retirement lifecycle; explicit policy acknowledgement plus subsequent navigation is verified.",
+    "Polling the old active worker with messages interfered with activation; probe once before updating, then acknowledge the replacement.",
+    "Post-logout clears the offline fallback too, so offline navigation may fail rather than render that page. Tests distinguish pre-logout data-free fallback from post-logout network failure."
+  ],
+  "limitations": [
+    "Synthetic browser account fixtures do not establish authenticated Oneirodex/headset acceptance, deployed cookie/session/ACL behavior, or all supported browser versions.",
+    "A fully offline client with only old code cannot receive migration until online.",
+    "No full-route parity promotion, production deployment, release, default-branch alert resolution, or full unrestricted Python/coverage acceptance.",
+    "Member suite emitted existing React act warnings; build emitted existing bundle warnings."
+  ]
+}

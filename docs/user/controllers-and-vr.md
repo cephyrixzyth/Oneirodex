@@ -38,7 +38,7 @@ A PSVR2 is a SteamVR headset once the PlayStation VR2 PC adapter and the *PlaySt
 
 Android APK is a spike only.
 
-The VR PWA does not keep signed-in pages or catalogue responses for offline use. An older VR worker may remain until the browser checks for its update; its replacement removes the former `oneirodex-vr-v1` cache and unregisters itself. Reopen `/vr` online after an update so the browser can retire that worker.
+The VR PWA does not keep signed-in pages or catalogue responses for offline use. Reopen `/vr` online after an update so the shared installer can retire the older private-data worker. Catalogue and details requests wait for that privacy update. If it cannot finish, reconnect and reload before browsing. A failed optional app installation does not prevent browsing once browser control is safe. Already-offline clients cannot receive the update until they reconnect.
 
 ### How a title plays in VR (`vr_compat`)
 

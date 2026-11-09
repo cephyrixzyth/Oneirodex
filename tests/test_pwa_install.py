@@ -149,7 +149,7 @@ def test_worker_only_caches_urls_that_change_when_their_bytes_change():
     assert 'CACHEABLE_PREFIXES.some' in SW
     assert 'if (url.pathname.startsWith(THEME_PREFIX)) return true;' not in SW
     # Bumped so installs holding the unversioned copies drop them on activate.
-    assert "const VERSION = 'v2'" in SW
+    assert "const VERSION = 'v3'" in SW
 
 
 def test_worker_drops_superseded_caches_on_activate():

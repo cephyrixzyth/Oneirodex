@@ -40,6 +40,8 @@ The admin RetroAchievements match API also stops reading JSON once its 8 KiB req
 
 Container startup passes parsed database connection settings to its probe as environment data rather than interpolating them into Python source.
 
+The browser PWA caches versioned public assets and a data-free offline page, not private pages, APIs or covers. Startup retires the former VR worker before private VR requests proceed; sign-out removes owned caches even when no worker controls the page. Unrelated application caches remain intact. Fully offline legacy installations need an online update before these protections can apply. Focused Chromium migration fixtures are verified; authenticated application/headset acceptance remains open.
+
 ## What can leave the machine (only if you turn it on)
 
 | Channel | When | What goes out |
