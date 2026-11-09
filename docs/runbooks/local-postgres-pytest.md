@@ -200,3 +200,13 @@ Dispatch/download checks use the production identity issuer and shaped synthetic
 fingerprints rather than bypassing persistent-session policy. Keep household,
 foreign-key, concurrency and transaction assertions on the PostgreSQL fixture;
 this serial SQLite fixture does not establish those properties.
+
+
+For native save failure checks, import `household` and `household_loop` from the
+shared household helper. `tests/fixtures/faults.py::fail_next_save_io` scopes its
+write/fsync/rename/directory-sync overrides to the save module and restores them
+on exit. The commit seam selects pending save changes so the real bearer-token
+last-used commit still runs. `tests/test_native_save_fault_fixtures.py` verifies
+sanitized failures, preserved committed bytes, report-only orphan detection and
+successful retries against PostgreSQL. These seams do not establish actual disk
+exhaustion, crash recovery or loss after a real server commit.

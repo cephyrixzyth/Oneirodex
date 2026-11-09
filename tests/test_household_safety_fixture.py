@@ -1,26 +1,11 @@
 """Real PostgreSQL/filesystem checks for the shared P0-02 seed fixture."""
-import asyncio
 from pathlib import Path
 
 import httpx
-import pytest
 from fastapi import FastAPI
+# Imports register the reusable fixture dependencies in this module.
+from tests.fixtures.household_safety import household, household_loop
 
-
-@pytest.fixture
-def household_loop():
-    # Windows creates a private loopback socket pair for its event loop. Build
-    # it before the fixture network boundary; no general loopback exception.
-    with asyncio.Runner() as runner:
-        runner.get_loop()
-        yield runner
-
-
-@pytest.fixture
-def household(app, db_session, tmp_path, monkeypatch, household_loop):
-    from tests.fixtures.household_safety import seed_household
-
-    return seed_household(app, db_session, tmp_path, monkeypatch)
 
 
 def test_household_has_real_roles_grants_scopes_and_persistent_identities(household, db_session):

@@ -1,12 +1,14 @@
 """Opt-in P0-02 fixtures; never select an operator database or service."""
 from __future__ import annotations
 
+import asyncio
 from ipaddress import ip_address
 import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.engine import make_url
 
 from database_test_guard import validate_test_database_url
@@ -160,3 +162,17 @@ def seed_household(app, session, tmp_path: Path, monkeypatch) -> Household:
     ])
     session.commit()
     return Household(users, games, root, legacy, unrelated, identities, bearers)
+
+
+@pytest.fixture
+def household_loop():
+    # Windows creates a private loopback socket pair for its event loop. Build
+    # it before the fixture network boundary; no general loopback exception.
+    with asyncio.Runner() as runner:
+        runner.get_loop()
+        yield runner
+
+
+@pytest.fixture
+def household(app, db_session, tmp_path, monkeypatch, household_loop):
+    return seed_household(app, db_session, tmp_path, monkeypatch)

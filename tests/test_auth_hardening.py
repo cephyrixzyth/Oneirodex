@@ -11,11 +11,11 @@ See docs/strategy/security-legal-playbook.md.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from flask import Flask, g
+from flask_login import login_user
 
 from oneirodex.models import ApiToken, User
 from oneirodex.utils import api_tokens
@@ -180,50 +180,55 @@ class TestTokenExpiry:
         assert public['expires_at'] == '2026-01-01T01:00:00'
 
 
+@pytest.fixture
+def scope_request(app):
+    """Exercise the real Flask request-local token and login proxies."""
+    with app.test_request_context('/api/thing'):
+        g.api_token = None
+        yield
+
+
+def _login_scope_actor(role):
+    # Scope-policy unit checks need no database identity lookup. LoginManager
+    # receives a real model, and stores the current user in the real request.
+    login_user(User(id=1, role=role, password_hash='synthetic-scope-fixture', state=True))
+
+
 # --- S10: session-cookie scopes -------------------------------------------
 
 class TestSessionScopes:
     @pytest.fixture(autouse=True)
-    def _no_bearer_token(self, app, monkeypatch):
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=None))
+    def _session_request(self, scope_request):
+        pass
 
-    def _as(self, monkeypatch, role):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role=role),
-        )
+    def _as(self, role):
+        _login_scope_actor(role)
 
     @pytest.mark.parametrize('scope', ['admin', 'write:library', 'write:download'])
-    def test_child_is_denied_write_and_admin_scopes(self, monkeypatch, scope):
-        self._as(monkeypatch, 'child')
+    def test_child_is_denied_write_and_admin_scopes(self, scope):
+        self._as('child')
         assert user_has_scope(scope) is False
 
     @pytest.mark.parametrize('scope', ['read:library', 'read:social', 'write:presence'])
-    def test_child_keeps_read_and_presence(self, monkeypatch, scope):
-        self._as(monkeypatch, 'child')
+    def test_child_keeps_read_and_presence(self, scope):
+        self._as('child')
         assert user_has_scope(scope) is True
 
     @pytest.mark.parametrize('scope', ['read:library', 'write:library', 'write:download'])
-    def test_member_keeps_every_non_admin_scope(self, monkeypatch, scope):
-        self._as(monkeypatch, 'user')
+    def test_member_keeps_every_non_admin_scope(self, scope):
+        self._as('user')
         assert user_has_scope(scope) is True
 
-    def test_member_is_still_denied_admin(self, monkeypatch):
-        self._as(monkeypatch, 'user')
+    def test_member_is_still_denied_admin(self):
+        self._as('user')
         assert user_has_scope('admin') is False
 
-    def test_admin_gets_everything(self, monkeypatch):
-        self._as(monkeypatch, 'admin')
+    def test_admin_gets_everything(self):
+        self._as('admin')
         assert user_has_scope('admin') is True
         assert user_has_scope('write:library') is True
 
-    def test_anonymous_gets_nothing(self, monkeypatch):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=False, role=None),
-        )
+    def test_anonymous_gets_nothing(self):
         assert user_has_scope('read:library') is False
 
 
@@ -237,12 +242,7 @@ class TestScopeDecoratorEnvelope:
 
         return handler
 
-    def test_unauthenticated_returns_the_envelope(self, app, monkeypatch):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=False, role=None),
-        )
+    def test_unauthenticated_returns_the_envelope(self, app):
         with app.test_request_context('/api/thing'):
             response, status = self._route(app)()
             assert status == 401
@@ -250,14 +250,10 @@ class TestScopeDecoratorEnvelope:
             assert body['ok'] is False
             assert body['error_code'] == 'unauthorized'
 
-    def test_missing_scope_returns_the_envelope(self, app, monkeypatch):
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=None))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='user'),
-        )
+    def test_missing_scope_returns_the_envelope(self, app):
         with app.test_request_context('/api/thing'):
+            g.api_token = None
+            _login_scope_actor('user')
             response, status = self._route(app)()
             assert status == 403
             body = response.get_json()
@@ -326,29 +322,21 @@ def child_user(db_session):
 
 
 class TestBearerRoleScopes:
-    def test_child_bearer_cannot_use_denied_scopes_even_when_token_has_them(
-        self, monkeypatch,
-    ):
-        token = SimpleNamespace(has_scope=lambda scope: True)
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=token))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='child'),
-        )
+    @pytest.fixture(autouse=True)
+    def _bearer_request(self, scope_request):
+        pass
+
+    def test_child_bearer_cannot_use_denied_scopes_even_when_token_has_them(self):
+        g.api_token = ApiToken(scopes=['admin'])
+        _login_scope_actor('child')
         assert user_has_scope('write:download') is False
         assert user_has_scope('write:library') is False
         assert user_has_scope('admin') is False
         assert user_has_scope('read:library') is True
 
-    def test_member_bearer_keeps_write_download(self, monkeypatch):
-        token = SimpleNamespace(has_scope=lambda scope: scope == 'write:download')
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=token))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='user'),
-        )
+    def test_member_bearer_keeps_write_download(self):
+        g.api_token = ApiToken(scopes=['write:download'])
+        _login_scope_actor('user')
         assert user_has_scope('write:download') is True
 
 
