@@ -9861,7 +9861,6 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
 ):
     from flask import redirect
     from flask_login import logout_user
-    from http.cookies import SimpleCookie
     from oneirodex.runtime_native.session_compat import load_session_cookie
 
     _flask_app, runtime = _runtime(monkeypatch)
@@ -9929,16 +9928,15 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
     )
 
     def cookies(response):
-        jar = SimpleCookie()
+        from tests.cookie_helpers import parse_set_cookies
+
         values = (
             response.headers.get_list('set-cookie')
             if hasattr(response.headers, 'get_list')
             else response.headers.getlist('set-cookie')
         )
-        for value in values:
-            jar.load(value)
         result = {}
-        for name, morsel in jar.items():
+        for name, (morsel, partitioned) in parse_set_cookies(values).items():
             payload = morsel.value
             if name == session_cookie_name:
                 payload = load_session_cookie(
@@ -9947,7 +9945,7 @@ def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
             result[name] = (
                 payload, morsel['path'], morsel['domain'], morsel['secure'],
                 morsel['httponly'], morsel['samesite'], morsel['max-age'],
-                morsel['partitioned'],
+                partitioned,
             )
         return result
 
@@ -10635,7 +10633,6 @@ def test_lazy_asgi_login_form_preserves_legacy_forbidden_flash_categories(
 
 def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
     from flask import Flask, session as flask_session
-    from http.cookies import SimpleCookie
 
     user = SimpleNamespace(get_id=lambda: '7:fp')
     monkeypatch.setattr(
@@ -10674,13 +10671,12 @@ def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
     legacy = legacy_app.test_client().get('/set-session')
 
     def cookie_attributes(values):
-        jar = SimpleCookie()
-        for value in values:
-            jar.load(value)
-        cookie = jar['session']
+        from tests.cookie_helpers import parse_set_cookies
+
+        cookie, partitioned = parse_set_cookies(values)['session']
         return (
             cookie['path'], cookie['domain'], cookie['secure'],
-            cookie['httponly'], cookie['samesite'].lower(), cookie['partitioned'],
+            cookie['httponly'], cookie['samesite'].lower(), partitioned,
         )
 
     assert current.status_code == 302

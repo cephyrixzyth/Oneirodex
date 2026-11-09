@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
+from .cookie_compat import set_cookie as set_response_cookie
 from .request_auth import RequestAuthContext, request_auth_context, require_bearer_scope
 from .response_compat import add_vary_header, flask_redirect_response
 from .query_compat import first_query_value
@@ -359,7 +360,8 @@ def _set_session_cookie(response, flask_app, auth_context):
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
+    set_response_cookie(
+        response,
         cookie_name,
         dump_session_cookie(
             session_data,

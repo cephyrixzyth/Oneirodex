@@ -7,7 +7,6 @@ zero-Flask runtime.
 """
 from __future__ import annotations
 
-from .form_compat import first_form_value
 from html import escape
 import inspect
 from pathlib import Path
@@ -18,6 +17,8 @@ from fastapi import FastAPI, Request
 from starlette.responses import Response
 
 from . import ADMIN_STATIC_ROUTES, ADMIN_BOOTSTRAP_ROUTE
+from .cookie_compat import set_cookie as set_response_cookie
+from .form_compat import first_form_value
 
 
 def legacy_chrome_fields(user) -> dict:
@@ -387,7 +388,8 @@ def create_admin_pilot(
             )
             lifetime = config['PERMANENT_SESSION_LIFETIME']
             expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') else None
-            response.set_cookie(
+            set_response_cookie(
+                response,
                 cookie_name,
                 cookie_value,
                 expires=expires,

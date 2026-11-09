@@ -9,6 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
+from .cookie_compat import delete_cookie as delete_response_cookie
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
@@ -48,10 +49,14 @@ def create_account_sessions_router(
 
     def _delete_cookies(response):
         config = flask_app.config
-        response.delete_cookie(
-            config.get('SESSION_COOKIE_NAME', 'session'),
+        delete_response_cookie(
+            response, config.get('SESSION_COOKIE_NAME', 'session'),
             path=config.get('SESSION_COOKIE_PATH') or config.get('APPLICATION_ROOT') or '/',
             domain=config.get('SESSION_COOKIE_DOMAIN'),
+            secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
+            httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
+            samesite=config.get('SESSION_COOKIE_SAMESITE'),
+            partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
         )
         response.delete_cookie(
             config.get('REMEMBER_COOKIE_NAME', 'remember_token'),

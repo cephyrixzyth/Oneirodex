@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from fastapi import APIRouter, FastAPI, Request
 
+from .cookie_compat import delete_cookie as delete_response_cookie
 from .response_compat import flask_http_exception_response, flask_redirect_response
 
 
@@ -90,7 +91,8 @@ def create_auth_logout_router(flask_app: FastAPI, *, database_scope=None):
 
         response = flask_redirect_response('/login')
         if clear_remember:
-            response.delete_cookie(
+            delete_response_cookie(
+                response,
                 remember_name,
                 path=config.get('REMEMBER_COOKIE_PATH') or '/',
                 domain=config.get('REMEMBER_COOKIE_DOMAIN'),
@@ -106,7 +108,8 @@ def create_auth_logout_router(flask_app: FastAPI, *, database_scope=None):
                     SimpleNamespace(session_data=session_data, should_set_session_cookie=True),
                 )
             else:
-                response.delete_cookie(
+                delete_response_cookie(
+                    response,
                     cookie_name,
                     path=config.get('SESSION_COOKIE_PATH') or config.get('APPLICATION_ROOT') or '/',
                     domain=config.get('SESSION_COOKIE_DOMAIN'),

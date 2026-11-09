@@ -31,7 +31,9 @@ jobs:
   pytest-core:
     name: Pytest (core)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # The expanded suite reached 70% at the former 35-minute job limit.
+    # Keep the selection/coverage gate intact and allow it time to finish.
+    timeout-minutes: 90
 
     services:
       postgres:

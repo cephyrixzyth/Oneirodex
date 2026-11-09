@@ -40,6 +40,12 @@ the actual connection peer against `TRUSTED_PROXY_CIDRS`.
 | `SESSION_COOKIE_SECURE` | `true` by default; `false` only for deliberate direct HTTP access (authentication cookies then cross the network) |
 | `REMEMBER_COOKIE_SECURE` | Same as above for remember-me cookies |
 
+When `SESSION_COOKIE_PARTITIONED` is enabled, native session creation and deletion
+preserve `Partitioned` and force `Secure`, including on Python 3.12. Current-device
+and all-device revocation clear the session using its configured path/domain and
+cookie flags. Partitioned cookies require HTTPS even if `SESSION_COOKIE_SECURE`
+is otherwise false.
+
 OIDC settings stored in `global_settings` may override OIDC env defaults when set. Proxy hop and peer trust remain container environment settings.
 
 ## Authentik checklist (production)
