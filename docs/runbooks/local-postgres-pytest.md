@@ -192,3 +192,11 @@ The guard-only module can also run with `--noconftest`. The seeded checks use re
 native ACL/auth/save adapters and PostgreSQL/file persistence; they cover selected
 child save and denial paths, not concurrent locking, provider failures or browser
 service-worker behavior. See [R2010](../dev/parity-evidence/shared-review-fixtures-r2010.json).
+
+
+`tests/fixtures/native_auth.py` is the smaller opt-in dispatch fixture: importing
+its autouse `persistent_login_store` creates a disposable SQLite session table.
+Dispatch/download checks use the production identity issuer and shaped synthetic
+fingerprints rather than bypassing persistent-session policy. Keep household,
+foreign-key, concurrency and transaction assertions on the PostgreSQL fixture;
+this serial SQLite fixture does not establish those properties.

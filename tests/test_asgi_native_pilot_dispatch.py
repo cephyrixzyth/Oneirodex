@@ -8,6 +8,9 @@ from fastapi import APIRouter, FastAPI
 from starlette.responses import PlainTextResponse
 import asgi
 from oneirodex import app_version
+from oneirodex.utils.persistent_sessions import issue_login_identity
+# Import registers the shared autouse storage fixture in this module.
+from tests.fixtures.native_auth import persistent_login_store
 from oneirodex.runtime_native import (
     admin_pilot,
     is_email_confirmation_page_route,
@@ -737,7 +740,7 @@ def test_setup_state_keeps_in_progress_settings_on_signed_admin_session(monkeypa
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     actor = SimpleNamespace(
         id=7, user_id='admin-guid', role='admin', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: actor if user_id == 7 else None,
@@ -750,7 +753,7 @@ def test_setup_state_keeps_in_progress_settings_on_signed_admin_session(monkeypa
         'smtp_password_configured': True,
     })
     cookie = dump_session_cookie(
-        {'_user_id': '7:fresh', '_fresh': True}, app.config['SECRET_KEY'],
+        {'_user_id': issue_login_identity(actor), '_fresh': True}, app.config['SECRET_KEY'],
     )
 
     async def run():
@@ -815,7 +818,7 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     actor = SimpleNamespace(
         id=9, user_id='admin-9', role='admin', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: actor if user_id == 9 else None,
@@ -1192,7 +1195,7 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
         'create',
         lambda _self, body, actor_id: ({'section': {'name': body.name, 'actor': actor_id}}, None),
     )
-    session_data = {'_user_id': '9:fresh', '_fresh': True}
+    session_data = {'_user_id': issue_login_identity(actor), '_fresh': True}
     csrf = generate_csrf_token(session_data, app.config['SECRET_KEY'])
     cookie = dump_session_cookie(session_data, app.config['SECRET_KEY'])
 
@@ -1540,7 +1543,7 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     user = SimpleNamespace(
         id=7, user_id='user-guid', role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: user if user_id == 7 else None,
@@ -1562,7 +1565,7 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
             self.saved.append((authenticated_user.id, payload))
     data = Data()
     monkeypatch.setattr(attract_mode_reads, 'AttractModeData', lambda: data)
-    session_data = {'_user_id': '7:fresh', '_fresh': True}
+    session_data = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf_token = generate_csrf_token(session_data, app.config['SECRET_KEY'])
     signed_cookie = dump_session_cookie(session_data, app.config['SECRET_KEY'])
 
@@ -2101,7 +2104,7 @@ def test_login_with_existing_session_uses_native_auth_page(monkeypatch, tmp_path
     shell.write_text('<html><body><div id="member-auth-root"></div></body></html>')
     actor = SimpleNamespace(
         id=42, role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(asgi, 'create_app', lambda: app)
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
@@ -2111,7 +2114,7 @@ def test_login_with_existing_session_uses_native_auth_page(monkeypatch, tmp_path
         lambda _token: None,
     ))
     cookie = dump_session_cookie(
-        {'_user_id': '42:fresh', '_fresh': True}, app.config['SECRET_KEY'],
+        {'_user_id': issue_login_identity(actor), '_fresh': True}, app.config['SECRET_KEY'],
     )
 
     async def run():
@@ -2139,7 +2142,7 @@ def test_confirmation_page_with_session_keeps_queued_flash(monkeypatch, tmp_path
     shell.write_text('<html><body><div id="member-auth-root"></div></body></html>')
     actor = SimpleNamespace(
         id=43, role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(asgi, 'create_app', lambda: app)
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
@@ -2150,7 +2153,7 @@ def test_confirmation_page_with_session_keeps_queued_flash(monkeypatch, tmp_path
     ))
     cookie = dump_session_cookie(
         {
-            '_user_id': '43:fresh', '_fresh': True,
+            '_user_id': issue_login_identity(actor), '_fresh': True,
             '_flashes': [('success', 'Email address confirmed.')],
         },
         app.config['SECRET_KEY'],

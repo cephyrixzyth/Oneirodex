@@ -6,38 +6,22 @@ import hashlib
 from contextlib import nullcontext
 from types import SimpleNamespace
 
-import pytest
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
-
+import pytest
 import oneirodex
+
 from asgi import LazyASGIApp
+# Import registers the shared autouse storage fixture in this module.
+from tests.fixtures.native_auth import persistent_login_store
 from oneirodex.runtime_native import admin_pilot, db_session
 from oneirodex.runtime_native.auth_resolver import encode_remember_cookie, session_identifier
 from oneirodex.runtime_native.session_compat import dump_session_cookie
-from oneirodex.models import PersistentLoginSession
 from oneirodex.utils.persistent_sessions import (
     issue_login_identity,
     revoke_login_session,
     session_id_from_identity,
 )
 
-
-@pytest.fixture(autouse=True)
-def _persistent_login_store(monkeypatch):
-    # Exercise production identity issuance/hash/revocation without requiring
-    # the shared PostgreSQL fixture or bypassing the persistent-session policy.
-    # SQLite here does not establish PostgreSQL FK/locking behavior.
-    engine = create_engine('sqlite://', poolclass=StaticPool)
-    PersistentLoginSession.__table__.create(engine)
-    try:
-        with Session(engine) as store:
-            monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=store))
-            yield store
-    finally:
-        engine.dispose()
 
 
 def _configure_native_auth(monkeypatch, app, user, token=None):

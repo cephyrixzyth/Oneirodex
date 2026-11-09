@@ -11390,7 +11390,17 @@ def test_lazy_asgi_dispatches_admin_provider_catalogs_natively(monkeypatch):
     assert calls == [('artwork',), ('patch', True)]
 
 
-def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch):
+@pytest.mark.parametrize('keyring_available', [False, True])
+def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch, tmp_path, keyring_available):
+    from cryptography.fernet import Fernet
+
+    keyring = tmp_path / 'synthetic-operator-keyring.json'
+    if keyring_available:
+        keyring.write_text(json.dumps({
+            'active_key_id': 'fixture',
+            'keys': {'fixture': Fernet.generate_key().decode('ascii')},
+        }), encoding='utf-8')
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(keyring))
     calls = []
     data = SimpleNamespace(inventory=lambda: calls.append(('inventory',)) or [
         {'id': 'igdb', 'configured': True},
@@ -11405,6 +11415,13 @@ def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch):
         'integrations': [{'id': 'igdb', 'configured': True}],
         'count': 1,
         'hub_href': '/admin/integrations',
+        'credential_storage': {
+            'available': keyring_available,
+            'message': None if keyring_available else (
+                'Encrypted integration credentials are unavailable. Restore the operator-managed '
+                'key-ring backup; if no matching backup exists, reconnect affected integrations.'
+            ),
+        },
     }
     assert calls == [('inventory',)]
 

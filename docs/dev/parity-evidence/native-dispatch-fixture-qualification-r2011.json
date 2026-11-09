@@ -1,0 +1,69 @@
+{
+  "review_id": "R2011",
+  "doc_status": "Reference",
+  "title": "Qualify native dispatch fixtures against persistent identity and inventory contracts",
+  "classification": "Confirmed stale fixtures/expectations repaired; no production authentication or key-ring policy changes",
+  "source_head_before_change": "2e3949b117371488f02e7a99ffa076029c8332da",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/fixtures/native_auth.py": "76e6ea2fd2961915c33c0fb6ee18c2ccd89bff82dcb6ff8f2da0f3f9fc61a4d3",
+    "tests/test_asgi_download_auth.py": "1709cb16884a953c2d4798b0d869cd7d4198ac463b987ed5d67cf712bd4c6025",
+    "tests/test_asgi_native_pilot_dispatch.py": "c99af2de3a9fc03375491978d7fcf91628f40a06dcb31fd2a4fbaf24a10fc673",
+    "tests/test_asgi_native_browse.py": "f69d479f34d6e435dc552a8f24f6680d9d959c2fc4c3be4638a7279991684b37"
+  },
+  "checks": {
+    "full-after-cookie-repair": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 1570.6,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "disposable_database_removed": true,
+      "log_sha256": "1b2ff69af4cbc2e6481cf31e2a47b7abcd4a1993935593ac633ac8998730c9ea"
+    },
+    "dispatch-fixtures-green": {
+      "status": "failed",
+      "exit_code": 2,
+      "seconds": 9.27,
+      "source_head_at_start": "2e3949b117371488f02e7a99ffa076029c8332da",
+      "disposable_database_removed": null,
+      "log_sha256": "0d6707cb9abb94e4a05daa8d930427128f5659aec2629feab66af98dc42d9b13"
+    },
+    "dispatch-fixtures-verified": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 23.7,
+      "source_head_at_start": "2e3949b117371488f02e7a99ffa076029c8332da",
+      "disposable_database_removed": null,
+      "log_sha256": "dc14bbab30d5b6ceabf4ba65a56c9bc788b3d2506248fedf9df5a0fc0794e1d7"
+    },
+    "dispatch-fingerprint-verified": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 28.14,
+      "source_head_at_start": "2e3949b117371488f02e7a99ffa076029c8332da",
+      "disposable_database_removed": null,
+      "log_sha256": "a23a85b7880f26c4b4144b8efa35d72bb2f7b6a150aea1e73e1070c1f9f4b1dd"
+    }
+  },
+  "root_causes": [
+    "Four dispatch tests constructed retired user:fingerprint cookies; their fake fingerprints were also too short for current persisted identity validation. Use the production issuer and a valid synthetic fingerprint with real session rows.",
+    "Integration inventory now includes credential_storage readiness; assert its complete available/unavailable shape using an ephemeral test key ring or a missing fixture file, never an operator key."
+  ],
+  "verification": {
+    "python": "3.12.16",
+    "focused_cases_passed": 53,
+    "persistent_store": "Disposable SQLite; real session issuance, hashing, validation and revocation; synthetic account callbacks",
+    "baseline_before_repair": "770 passed, 5 failed, 1 warning; maxfail diagnostic stopped; owned PostgreSQL database removed",
+    "production_changes": false,
+    "coverage_limits": "SQLite does not prove PostgreSQL FKs/locking or concurrent requests; route backends in dispatch tests remain faked."
+  },
+  "rework": [
+    "First extraction removed pytest/oneirodex imports still used by download tests; restored after collection failed.",
+    "First persisted-identity run still rejected short fake fingerprints; retained four failing cases, corrected synthetic actor fingerprints and passed 53 cases."
+  ],
+  "remaining": [
+    "Unrestricted single-run Python baseline and exact-head CI qualification remain required.",
+    "Continue remaining-module failure discovery without replaying the already-exercised large modules; such a diagnostic is not full-suite acceptance.",
+    "Original browser/platform/transaction/retention acceptance gaps remain open; no new fully verified parity route."
+  ]
+}
