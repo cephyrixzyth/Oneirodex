@@ -22,6 +22,8 @@ from oneirodex.utils.indexer_registry import (
     presets_path,
 )
 
+pytestmark = pytest.mark.usefixtures('reusable_secret_keyring')
+
 
 TORZNAB_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
@@ -113,10 +115,16 @@ def test_stub_torznab_search_returns_hit(app, db_session, monkeypatch):
             'api_key': 'test-key',
             'enabled': True,
         })
+        stored = db_session.execute(
+            select(GlobalSettings).order_by(GlobalSettings.id).limit(1)
+            .execution_options(populate_existing=True),
+        ).scalar_one()
+        assert stored.arr_settings['indexers'][0]['api_key'].startswith('odrc:v1:')
 
         def fake_fetch(method, url, **kwargs):
             assert method.lower() == 'get'
             assert 't' in (kwargs.get('params') or {})
+            assert kwargs['params']['apikey'] == 'test-key'
             return _FakeResp(TORZNAB_XML)
 
         monkeypatch.setattr(arr_connectors, 'fetch_with_challenge_retry', fake_fetch)

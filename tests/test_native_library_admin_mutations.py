@@ -21,6 +21,8 @@ from oneirodex.runtime_native.library_admin_mutations import (
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token,
 )
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
 
 LIBRARY_UUID = '00000000-0000-0000-0000-000000000001'
 
@@ -138,8 +140,10 @@ def native_client():
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
     )
     users = {
-        7: SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True),
-        8: SimpleNamespace(id=8, name='Member', role='user', state=True, is_active=True),
+        7: SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True,
+                           session_fingerprint=lambda: '0123456789abcdef'),
+        8: SimpleNamespace(id=8, name='Member', role='user', state=True, is_active=True,
+                           session_fingerprint=lambda: '0123456789abcdef'),
     }
     data = FakeLibraryAdminMutations()
     database_scope = lambda _app: nullcontext()
@@ -148,7 +152,7 @@ def native_client():
         flask_app, find_user=lambda user_id: users.get(user_id), find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
         load_user_id=lambda user_id: users.get(int(user_id.split(':', 1)[0]))
-        if user_id in ('7:fp', '8:fp') else None,
+        if user_id.split(':', 1)[0] in ('7', '8') else None,
         login_manager=SimpleNamespace(login_view='/login'),
         data_access=data,
         database_scope=database_scope,
@@ -157,7 +161,8 @@ def native_client():
 
 
 def _session_cookie(user_id=7):
-    session = {'_user_id': f'{user_id}:fp', '_fresh': True}
+    user = SimpleNamespace(id=user_id, session_fingerprint=lambda: '0123456789abcdef')
+    session = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf = generate_csrf_token(session, 'library-admin-secret')
     return dump_session_cookie(session, 'library-admin-secret'), csrf
 
@@ -176,6 +181,20 @@ def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csr
                     form_data = {**form_data, 'csrf_token': csrf}
             return await client.request(method, path, json=json, headers=request_headers, files=files, data=form_data)
     return asyncio.run(send())
+
+
+def test_retired_session_identity_cannot_reach_library_mutation_adapter(native_client):
+    runtime, data = native_client
+    session = {'_user_id': '7:0123456789abcdef', '_fresh': True}
+    csrf = generate_csrf_token(session, 'library-admin-secret')
+    cookie = dump_session_cookie(session, 'library-admin-secret')
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries', cookie=False,
+        json={'name': 'Untrusted legacy login', 'platform': 'PCWIN'},
+        headers={'Cookie': f'session={cookie}', 'X-CSRFToken': csrf},
+    )
+    assert response.status_code == 401
+    assert data.calls == []
 
 
 def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
@@ -915,7 +934,8 @@ def test_non_admin_rejected_and_no_adapter_calls(native_client):
     runtime, data = native_client
     # Remove the valid session, then send a valid member session under the same signature.
     from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
-    member = SimpleNamespace(id=9, name='Member', role='user', state=True, is_active=True)
+    member = SimpleNamespace(id=9, name='Member', role='user', state=True, is_active=True,
+                             session_fingerprint=lambda: '0123456789abcdef')
     # A second independently mounted app keeps this setup local and fake-only.
     other = Flask('native-library-member-tests')
     other.config.update(SECRET_KEY='member-secret', SESSION_PROTECTION='none',
@@ -924,10 +944,10 @@ def test_non_admin_rejected_and_no_adapter_calls(native_client):
     member_runtime.include_router(create_library_admin_mutations_router(
         other, find_user=lambda _id: member, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: member if user_id == '9:fp' else None,
+        load_user_id=lambda user_id: member if user_id.split(':', 1)[0] == '9' else None,
         data_access=data,
     ))
-    session = {'_user_id': '9:fp', '_fresh': True}
+    session = {'_user_id': issue_login_identity(member), '_fresh': True}
     csrf = generate_csrf_token(session, 'member-secret')
     response = _request(member_runtime, 'POST', '/api/admin/libraries/batch/delete',
                         json={'uuids': ['lib-1'], 'force': True}, cookie=False,

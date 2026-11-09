@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 import json
+import os
 from cryptography.fernet import Fernet
 from flask import Flask
 from flask_login import LoginManager, UserMixin
@@ -25,6 +26,8 @@ def harness(monkeypatch, tmp_path):
     keyring.write_text(json.dumps({
         'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
     }), encoding='utf-8')
+    if os.name != 'nt':
+        keyring.chmod(0o600)
     monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(keyring))
     app = Flask(__name__)
     app.config.update(TESTING=True, SECRET_KEY='smtp-api-test-only')

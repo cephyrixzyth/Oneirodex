@@ -210,3 +210,27 @@ last-used commit still runs. `tests/test_native_save_fault_fixtures.py` verifies
 sanitized failures, preserved committed bytes, report-only orphan detection and
 successful retries against PostgreSQL. These seams do not establish actual disk
 exhaustion, crash recovery or loss after a real server commit.
+
+
+## Encryption and native library-adapter fixture prerequisites
+
+Tests that write indexer or other reusable credentials must request the
+`reusable_secret_keyring` fixture. It generates a temporary keyring and sets the
+process-local test keyring variable; POSIX fixtures use mode `0600`. Standalone
+SMTP tests that run without conftest create their own equally protected test
+keyring. Keep missing-key and recovery cases explicit: do not supply a global
+production fallback or load operator keys to make tests pass.
+
+An encrypted-save roundtrip must initialize its own temporary save keyring,
+independently of the reusable-credential keyring. The roundtrip checks persisted
+`GTENC3` bytes and the recovered save; the indexer check verifies a stored
+`odrc:v1` envelope and the original synthetic key at mocked provider transport.
+
+Library-admin adapter tests import the shared `persistent_login_store` fixture
+from `tests/fixtures/native_auth.py` and issue identities through
+`issue_login_identity`. A two-field historical identity must still be rejected
+before reaching a mutation adapter; a valid member identity reaches the role
+check and is denied there. Those SQLite checks cover the authentication/adapter
+boundary, not real filesystem deletion, PostgreSQL concurrency or full-app
+acceptance. The [fixture qualification record](../dev/parity-evidence/encryption-library-fixture-qualification-20261109.json)
+keeps the focused outcomes separate from the incomplete broader baseline.

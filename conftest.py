@@ -14,6 +14,8 @@ def reusable_secret_keyring(tmp_path, monkeypatch):
         'active_key_id': 'pytest',
         'keys': {'pytest': Fernet.generate_key().decode('ascii')},
     }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
     monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 # Load .env file to ensure TEST_DATABASE_URL is available
