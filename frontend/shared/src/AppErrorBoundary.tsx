@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from './Button'
 import './AppErrorBoundary.css'
 
 interface AppErrorBoundaryProps {
@@ -37,9 +38,9 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
           <section className="od-app-error__card" role="alert" aria-labelledby="od-app-error-title">
             <h1 id="od-app-error-title">Oneirodex hit a problem</h1>
             <p>The page could not finish loading. Reload Oneirodex to try again.</p>
-            <button type="button" className="od-btn od-btn--primary" onClick={this.reload}>
+            <Button type="button" variant="primary" onClick={this.reload}>
               Reload Oneirodex
-            </button>
+            </Button>
           </section>
         </main>
       )

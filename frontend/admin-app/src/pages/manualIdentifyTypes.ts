@@ -15,3 +15,14 @@ export const TAXONOMIES = [
   ['platforms', 'Platforms', 'platform_ids'],
   ['player_perspectives', 'Player perspectives', 'player_perspective_ids'],
 ] as const
+
+export function providerName(source: string) {
+  const names: Record<string, string> = {
+    steam: 'Steam',
+    gog: 'GOG',
+    rawg: 'RAWG',
+    mobygames: 'MobyGames',
+    thegamesdb: 'TheGamesDB',
+  }
+  return names[source.toLowerCase()] || source
+}

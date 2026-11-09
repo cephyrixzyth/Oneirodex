@@ -1,0 +1,207 @@
+{
+  "review_id": "R2009",
+  "doc_status": "Reference",
+  "title": "Admin component qualification without changing behavior or widening ratchets",
+  "source_head_before_change": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+  "uncommitted_changes_at_capture": true,
+  "classification": "Confirmed size/raw-button CI gate violations repaired; broader review acceptance incomplete",
+  "source_sha256": {
+    "frontend/admin-app/src/pages/useManualIdentify.ts": "b7230885be18c93c3ee6a541092fc40b94c64c2307e6b20d67f80b5c858197bd",
+    "frontend/admin-app/src/pages/ManualIdentifyPage.tsx": "6b591153008fba67579ead2ea0b4b5199f2d41ca110efaf373e6e13e40c00dbb",
+    "frontend/admin-app/src/pages/useScans.ts": "52c536593e305e459aef1e1bc7618ea757e6a68244486bb63560ad46b94f3196",
+    "frontend/admin-app/src/pages/ScansPage.tsx": "50993bef30a7ae68995d52c48d321cb8c5fcbc2f21207c6e3df61f9738b0338e",
+    "frontend/admin-app/src/pages/ScanFolderBrowser.tsx": "a430757dca5692404005f2898f49952b43ad63e583dea7a12bbc42ee9c16f35c",
+    "frontend/admin-app/src/pages/ScanControlsPage.tsx": "ad8a78fb9f36c5eff482034a5090d71180fa0ada44200db5822b7636a58dcd29",
+    "frontend/admin-app/src/pages/scanUnmatchedTypes.ts": "75ae80db3e3547a937f62baf0a42f058d49b010a50343af1be0ee83f3efa4107",
+    "frontend/admin-app/src/pages/useScanUnmatchedData.ts": "a7fcb220fe80dc2335d7836e4035872f923810b6ab687271d0946981e01f653b",
+    "frontend/admin-app/src/pages/useScanUnmatchedActions.ts": "40739533031ef254a444ad5a7ad791e37254025e80b4ac039a359f067d2d1098",
+    "frontend/admin-app/src/pages/ScanUnmatchedFilters.tsx": "db4cab4c17bc5f2c9a65afb0987fb75071b1f1da10277bbe0d9a3dd7b97d272d",
+    "frontend/admin-app/src/pages/ScanUnmatchedTable.tsx": "9001475793230258be625ed5e91e314be80b2fd6eb2826b28d95726443086b64",
+    "frontend/admin-app/src/pages/ScanUnmatchedPage.tsx": "6b78354a6ec1c06a0d441665a9a3769311c7b8c7919cf4a667638d069e8be412",
+    "frontend/admin-app/src/pages/manualIdentifyTypes.ts": "47dcb88c07dd35174c8f25a817a87e7daa9b13d30c9eff1526d7374f70870f5b",
+    "frontend/shared/src/AppErrorBoundary.tsx": "b6a4175bc7d7526ec426091f3d13ab86d01cb64934dae595c3d25978ecad7b56"
+  },
+  "physical_lines": {
+    "frontend/admin-app/src/pages/useManualIdentify.ts": 482,
+    "frontend/admin-app/src/pages/ManualIdentifyPage.tsx": 564,
+    "frontend/admin-app/src/pages/useScans.ts": 336,
+    "frontend/admin-app/src/pages/ScansPage.tsx": 393,
+    "frontend/admin-app/src/pages/ScanFolderBrowser.tsx": 100,
+    "frontend/admin-app/src/pages/ScanControlsPage.tsx": 570,
+    "frontend/admin-app/src/pages/scanUnmatchedTypes.ts": 33,
+    "frontend/admin-app/src/pages/useScanUnmatchedData.ts": 263,
+    "frontend/admin-app/src/pages/useScanUnmatchedActions.ts": 372,
+    "frontend/admin-app/src/pages/ScanUnmatchedFilters.tsx": 281,
+    "frontend/admin-app/src/pages/ScanUnmatchedTable.tsx": 422,
+    "frontend/admin-app/src/pages/ScanUnmatchedPage.tsx": 196,
+    "frontend/admin-app/src/pages/manualIdentifyTypes.ts": 28,
+    "frontend/shared/src/AppErrorBoundary.tsx": 52
+  },
+  "checks": {
+    "admin-pages-before": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 51.03,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "08bdaafce08a99d9090f30958651eab345768be0a6d45a4cbf34ec42a6818f38"
+    },
+    "admin-pages-after": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 42.64,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "4e900f077773868e29a763b7017907ad555278bdcb6c1db86aea5924b16a8a76"
+    },
+    "admin-types-after": {
+      "exit_code": 2,
+      "status": "failed",
+      "seconds": 15.88,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "7942adf492bc179160d1da8b141c610d4a9750d264ad0ec1ad3f10049f64251c"
+    },
+    "admin-types-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 16.37,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "fbc73478586c35c7d12b99dd852a71697c5d29c69cfeebfbee46872fd2018e50"
+    },
+    "admin-lint-after": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 27.43,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "5a2e2ebd1b8556d67b47088eeba9a3ad3db877b2f42a17a979b18aa7995d10ca"
+    },
+    "admin-lint-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 33.79,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "d89ab67d086a1bb58a0d9cd87a42ad767d1e3b10fa6e500c59985524b335513a"
+    },
+    "admin-suite-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 212.81,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "9546cecdfaf102d81773d4710eb59490ffac4850da2f6707c6555543deb42149"
+    },
+    "admin-build-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 25.57,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "8ba73b6daf4b5efe206e489f01c5d5b745a103f8f3670d428ea900765d86b3ee"
+    },
+    "admin-gates-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 3.06,
+      "source_head_at_start": "3290bd57cd5546bfa4be6e8d20c5977f3b6b3f99",
+      "log_sha256": "03eb4fcab124a84e9eeed46d8df7eb72b6408d4abcf214b87e765865d84e0809"
+    },
+    "boundary-green": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 5.09,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "log_sha256": "3680134cb5da1514239efa4d266b33ee7b79b61b3427b53231a294f9aa37abae"
+    }
+  },
+  "structure_review": {
+    "render-structure-check": {
+      "method": "TypeScript syntax tree comparison after expanding three extracted components; ignore indentation, comments and redundant parentheses; string/identifier/numeric values retained. Behavioral suites remain authoritative.",
+      "results": [
+        {
+          "page": "ManualIdentify",
+          "section": "RETURN",
+          "equal": true,
+          "before_sha256": "d653d922d3e653a327e9b78fa3d7ed2889f405ab2499f6a588484d31fce6cb89",
+          "after_sha256": "d653d922d3e653a327e9b78fa3d7ed2889f405ab2499f6a588484d31fce6cb89"
+        },
+        {
+          "page": "Scans",
+          "section": "conflictDialogs",
+          "equal": true,
+          "before_sha256": "c9255d1a87ec15862c9b8deda894411c3f0864d94cd90dbe9aeb7009db7cb868",
+          "after_sha256": "c9255d1a87ec15862c9b8deda894411c3f0864d94cd90dbe9aeb7009db7cb868"
+        },
+        {
+          "page": "Scans",
+          "section": "content",
+          "equal": true,
+          "before_sha256": "4b827ab966b4d8684ea63b72373159923135ced2a672b251d9a68d16425c421a",
+          "after_sha256": "4b827ab966b4d8684ea63b72373159923135ced2a672b251d9a68d16425c421a"
+        },
+        {
+          "page": "Scans",
+          "section": "RETURN",
+          "equal": true,
+          "before_sha256": "ce8a2643a6a5e6806536290ba5ee1f736b40f0c5e46cc3af0ed3a3b90e0cfa13",
+          "after_sha256": "ce8a2643a6a5e6806536290ba5ee1f736b40f0c5e46cc3af0ed3a3b90e0cfa13"
+        },
+        {
+          "page": "ScanControls",
+          "section": "RETURN",
+          "equal": true,
+          "before_sha256": "b1b4bf1b062a5e198e673439c8965c399a36c7e1c8a760a52faa9918c88e9ff4",
+          "after_sha256": "b1b4bf1b062a5e198e673439c8965c399a36c7e1c8a760a52faa9918c88e9ff4"
+        },
+        {
+          "page": "ScanUnmatched",
+          "section": "RETURN",
+          "equal": true,
+          "before_sha256": "39334cd69d12ebe0712cfaccdec33d707cb0b9104dc2825989fd4af51ac05e95",
+          "after_sha256": "39334cd69d12ebe0712cfaccdec33d707cb0b9104dc2825989fd4af51ac05e95"
+        }
+      ],
+      "artifact_sha256": "9d91c323ac6d8936588f6c4fb10f5fb788d3d4aa4ed8ec60beefa88513af34f9"
+    },
+    "runtime-statements-check": {
+      "method": "Compare TypeScript-transpiled runtime tokens for each extracted hook, removing only the export/destructuring boundary; types/comments erased, runtime string/numeric tokens retained.",
+      "results": [
+        {
+          "hook": "useManualIdentify",
+          "runtime_statements_equal": true
+        },
+        {
+          "hook": "useScans",
+          "runtime_statements_equal": true
+        },
+        {
+          "hook": "useScanUnmatchedData",
+          "runtime_statements_equal": true
+        },
+        {
+          "hook": "useScanUnmatchedActions",
+          "runtime_statements_equal": true
+        }
+      ],
+      "artifact_sha256": "94c04307423bc15f0e76742012e7a1774ca9ca04adbb965b36a9115fdb843754"
+    }
+  },
+  "verification": {
+    "node_major": 22,
+    "admin_tests": 714,
+    "admin_test_files": 99,
+    "focused_page_cases_before_and_after": 60,
+    "error_boundary_cases": 2,
+    "lint_errors": 0,
+    "existing_lint_warnings": 36,
+    "build": "passed; existing large-chunk warning",
+    "ratchets": "component-size, raw-button, CSS-token, explicit-any passed; no baseline changes"
+  },
+  "rework": [
+    "Initial extracted hook omitted a provider label helper also used by render; type checking caught it, and both now import the existing helper from the shared page types module.",
+    "Removed five extraction-only unused bindings; final lint returned to the 36 pre-existing warnings.",
+    "Corrected one Windows-default encoded dash in the preceding report heading to UTF-8."
+  ],
+  "capture": "Skipped: identical rendered structure/classes/copy/actions; no visual behavior change. Static comparison is not browser focus/dialog evidence.",
+  "limitations": [
+    "No promotion of original route parity coverage.",
+    "Independent browser accessibility and remaining original acceptance criteria stay open.",
+    "Unrestricted Python run remains a separate live diagnostic; no complete suite claim.",
+    "PR remains draft and exact-commit CI still required."
+  ]
+}

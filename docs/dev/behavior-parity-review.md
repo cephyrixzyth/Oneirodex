@@ -1,334 +1,673 @@
 # Behavior parity review
 
+
+
 > **Doc status:** Active
+
+
 
 ## Goal
 
+
+
 Establish and verify 100% behavior parity between the exact official v1.1.8 release and the current FastAPI/React application. Compare every shared route and method across permissions, state changes, validation and failure responses, redirects, cookies, direct navigation, and relevant UI states. Retain newer behavior when it is better and owner-approved, document the evidence, and verify current-only operations separately. Do not declare completion while any in-scope route or material behavior is partial or unexplained.
+
+
 
 Work in risk-ranked route-family batches. Reuse evidence only when exact image identity and scope are proven. Fix confirmed regressions, then run focused verification. Keep independent clean-main fixes reviewable. The owner authorized pushing the review branches on 2026-11-06 and expanded authorization on 2026-11-08 to merge, release, and deploy the app after remediation and verification gates pass. Follow the release checklist and deployment preflight; authorization does not establish readiness or permit Unraid OS, array, or pool changes.
 
+
+
 ## Current evidence status — 2026-11-08
+
+
 
 The current pinned images are official v1.1.8 `sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e` and current source image `00b0bf2a` (`sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1`, source revision `00b0bf2ab06b531938476d9d765c4c4e99a706b3`).
 
+
+
 The exact-image route inventory contains 1,545 shared method/path pairs: all 1,545 are structurally dispatched, while current-image behavior is fully verified for 0, partially verified for 10, and unverified for 1,535. Structural coverage does not establish behavior parity. The 160 current-only method/path pairs include 81 non-synthesized operations; 2 are partially exercised and 158 remain unverified. The compressed, sanitized full matrix and its manifest are in `docs/dev/parity-evidence/review-bundle-r1972/`.
+
+
 
 GitHub REST alert records were retrieved read-only on 2026-11-07. The default branch still has 108 open Dependabot records (13 critical, 54 high, 40 moderate, 1 low), representing 59 unique advisories across Pillow, Authlib, `zip`, Vite, and `@vitest/mocker` (package capitalization accounts for duplicate labels). Fourteen records are fixed; one is dismissed and one auto-dismissed. The review branch pins Pillow 13.0.0, Authlib 1.9.1, `zip` 9.1.2, Vite 6.4.5, and `@vitest/mocker` 4.1.12, at or above the patched versions reported by the open default-branch records. This is source-lockfile evidence only: the alerts remain open on `main` because the review branch has not been merged. Merge/release authorization was subsequently granted on 2026-11-08, with verification gates still pending. `npm audit --workspaces --audit-level=low` on this branch reports zero vulnerabilities. A RustSec advisory disposition is recorded below; it is not a claim that all Rust warnings are fixed.
 
+
+
 R1967 added 29 exact-image comparisons for personal API-token list/create/revoke behavior. All status, normalized body, and redirect-location comparisons matched. Cases include member/other/admin/child roles, missing CSRF, malformed JSON, invalid name type, unknown preset, scope restrictions, ownership, repeat revocation, and active/revoked bearer use. Mutations stayed in disposable cloned databases; external egress was blocked; cleanup passed. These are selected cases, so the three API routes remain partial. Sanitized evidence and the follow-up ledger are in `docs/dev/parity-evidence/review-bundle-r1972/`.
+
+
 
 R1969 captured direct `/tokens` navigation and the signed-in account-menu token panel on both exact images at 1440px and 390px. Both returned 200, showed matching token-page headings and empty state, opened the API tokens dialog, and produced zero page errors. Document/body width matched the viewport. R1970 confirmed in fresh 390×844 contexts that the legacy rail is visible over content while current hides it off-canvas and marks it aria-hidden. The owner approved keeping current rail behavior on 2026-11-06. `GET /tokens` remains partial because its other behavior and UI states are not fully verified; see the sanitized R1969 reports and R1970 fresh-mobile evidence in `docs/dev/parity-evidence/review-bundle-r1972/`.
 
+
+
 R1972 compared the mobile token lifecycle in the signed-in account panel on both exact images at 390×844. Create returned 201; the one-time secret was shown in the expected format, copied, then cleared on Done; thin scopes persisted; revoke returned 200 and the cloned database row was marked revoked. The account panel and `GET /api/tokens` continued to list the revoked token on both images. No page errors occurred, and all disposable apps, databases, volumes, proxies, and network resources were removed. The lifecycle outcomes matched. Screenshot bounds for the visible account panel match on both images (x=16, y=155, width=358, height=534). The earlier DOM metric compared different elements: legacy placed `role=dialog` on the visible panel, while current placed it on the full-screen scrim. The shared modal now places the dialog role and `aria-modal` on the visible panel, which also contains the focus trap. Focus entry, containment, Escape, and restoration have shared component regression coverage; screen-reader and exact-image focus behavior remain unverified. Sanitized evidence: `docs/dev/parity-evidence/token-ui-lifecycle-r1972.json`. The account panel and route remain partial while other states and semantics are unverified.
+
+
 
 R1973 source follow-up confirmed that the shared modal exposed the scrim as the dialog while placing focus handling inside the visible panel. The role, modal state, and accessible name now sit on the visible panel; backdrop dismissal remains on the scrim. `npm test --workspace frontend/shared -- src/Modal.test.tsx` passed 9/9, covering dialog placement, naming, focus entry/containment/restoration, Escape, and backdrop handling. Evidence: `docs/dev/parity-evidence/token-dialog-semantics-r1973.json`. This is source and component-test evidence; screen-reader/browser behavior and exact-image lifecycle replay were not repeated, and token routes remain partial.
 
+
+
 R1974 keyboard review confirmed that dismissing the one-time token secret removed the focused Done button without moving focus. Done now clears the secret and focuses the token-name field. `npm test --workspace frontend/shared -- src/account/TokensPanel.test.tsx` passed 1/1 with mocked API responses, checking both removal and focus restoration. Evidence: `docs/dev/parity-evidence/token-secret-focus-r1974.json`. This remains component-test evidence; exact-image lifecycle replay and real-browser assistive-technology review remain open.
+
+
 
 R1975 adds focused token-panel checks for list failure, create failure, populated rows after revoke failure, and one-time-secret dismissal; the component suite passes 4/4 with mocked token APIs. A native API regression confirms an expired bearer is rejected before personal-token listing; the then-current `python -m pytest --noconftest -o addopts= tests/test_native_account_tokens.py -q` run passed 12/12 without database access. The native test fixture now sets `TESTING=True` so its legacy session cookies match the test-mode auth policy. Evidence: `docs/dev/parity-evidence/token-states-r1975.json`. Exact-image failure/populated parity and failure against the configured application database remain open; generic handler fault coverage is extended in R1976 and R1980.
 
+
+
 R1976 injects persistence exceptions into native token list, create, and revoke calls with the production ASGI exception handlers installed. All three returned the generic internal API error without exposing synthetic database diagnostics. R1980 additionally makes the list adapter open a SQLAlchemy/psycopg2 PostgreSQL connection to an unavailable loopback port; the actual driver failure is redacted by the same production handlers. The full DB-free native token route suite passes 14/14. Evidence: `docs/dev/parity-evidence/token-db-failure-envelope-r1976.json` and `docs/dev/parity-evidence/token-sqlalchemy-connect-failure-r1980.json`. A failure against the configured application database and exact-image response parity remain unverified.
+
+
 
 ## Next execution batches
 
+
+
 1. Compare remaining token failure, populated, keyboard, and accessibility states on the exact images. Source/component regressions, expired-bearer rejection, and redacted native persistence-error envelopes now have focused coverage; paired exact-image states, failure against the configured application database, and screen-reader review remain open.
+
 2. Continue through shared routes in risk-ranked families; keep synthesized HEAD/OPTIONS explicit and verify current-only operations on their own track.
+
 3. For every mismatch, decide whether it is a confirmed regression or an owner-approved improvement, implement only supported corrections, and rerun the affected exact-image cases.
+
 4. Run the targeted regression/security checks for accepted fixes, refresh the route ledger and hub status, and make small local commits.
+
 5. Report verified cases separately from route completion; no route is complete solely because its tested subset passed.
+
+
 
 ## Independent clean-main fixes
 
+
+
 The clean-main review branch `codex/parity-indexer-https-guard` contains separate commits for native indexer HTTPS enforcement and metadata-provider API-key redaction. Those commits are not ancestors of this review branch, but equivalent behavior and focused regressions are already present here: native indexer save/use rejects HTTP, and GiantBomb/RetroAchievements transport errors omit credential-bearing URLs. Re-ran the matching database-independent checks on this branch: **3 passed**. No provider request was made. The branch-specific commits were not cherry-picked because that would duplicate the existing fixes.
+
+
 
 ## Independent repository review handoff — 2026-11-07
 
+
+
 The supplied independent review package evaluates snapshot `fd2683e5` and explicitly forbids implementation by itself. The current user handoff authorizes incorporating its claims, correcting confirmed issues in the existing parity/security scope, and updating evidence. Its attached audit prompt is treated as historical evaluation scope, not as an instruction to restart the whole audit or implement its broad roadmap.
+
+
 
 ### Claims checked against the current checkout
 
+
+
 Documentation reconciliation on 2026-11-08 retains the complete independent
+
 assessment and its original evidence separately from this maintained disposition
+
 table. All 35 findings and four validation candidates are represented below;
+
 UC-003 and UC-004 share a row but retain separate meanings. The local private
+
 documentation index connects the original feature catalog, phase tasks and
+
 decision proposals to current guides and recorded owner choices. Its import does
+
 not rerun application checks, close findings or parity, accept proposed decisions,
+
 or authorize the implementation program. Historical test results below remain
+
 limited to their recorded source revisions and environments.
 
+
+
 | Finding                                          | Audit evidence classification                                                   | Current disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
 | ------------------------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+
 | BE-001 save slot overwrite / commit loss         | Reproduced at audit snapshot and confirmed in current source before remediation | Core replacement and collision failures fixed in this checkout; focused PostgreSQL tests pass. Save blobs use unique opaque names and atomic staging; prior committed generations are retained and charged to quota. Explicit delete removes retained generations after DB commit. On a failed or ambiguous commit, the unique new blob is preserved as an unreferenced recovery candidate; the old committed pointer and bytes remain intact. Optional monotonic revisions and stale-write 409 handling are additive. Three real-PostgreSQL simultaneous-write cases now cover the per-game slot cap, aggregate quota, and optimistic revision conflict. Save writes now fsync the containing directory after atomic publication where supported, before committing the DB pointer. `scripts/audit_emulator_saves.py` provides a bounded, report-only count of referenced, missing, outside-root, symlink, and unreferenced entries; it does not delete files or report paths. The schema-current loopback DB run of `tests/test_save_state_layer.py` passed 19/19; a bounded 20-generation sequential replacement regression passed 1/1 and verified retained bytes through PostgreSQL rereads plus a report-only audit. An initial run against the default `oneirodextest` schema failed before handlers because its `revision` column was missing; that is a stale test-fixture schema, not a product failure. Sustained concurrent stress, legacy shared-path/missing-file inventory on operator data, and deployed restart/recovery qualification remain open before the full P0-03/P0-04 acceptance gate. |
+
 | BE-002 favorites adapter error                   | Reproduced at audit snapshot                                                    | Resolved in current source. The real PostgreSQL adapter and WSGI/native response contracts are covered by `tests/test_native_favorites_data.py`: 7 passed on the isolated loopback test schema, including empty/populated results, child library ACL, pagination, and matching error handling. |
+
 | BE-003 password validation error                 | Reproduced at audit snapshot                                                    | Already resolved in current source: `_validated_body` imports its formatter locally.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
 | BE-004 export truncation/filter order            | Reproduced with 501 fixtures at audit snapshot                                  | Fixed in native and compatibility exports: the platform predicate and user ACL are applied before iteration, order is stable by name/UUID, and the silent 500-row cap is removed. Iteration uses 250-row ORM batches and generator serialization. Fresh PostgreSQL fixture exports 502 games, selects the final PSX title specifically, and verifies a child sees only its allowed 501-title library.                                                                                                                                                                                                                                         |
+
 | BE-005 missing-image scan repair                 | Undefined-name defect reproduced at audit snapshot                              | Already resolved in current helper: it uses explicit `app.app_context()` and scan orchestration adds repair outcomes to scan status. New PostgreSQL regression with real `Image` rows and a temporary image directory confirms existing artwork is skipped, the missing downloaded image is queued, and status is successful.                                                                                                                                                                                                                                                                                                                 |
+
 | BE-006 blocking cover search / skipped cleanup   | Blocking and cleanup defect reproduced in isolation at audit snapshot           | Fixed in this checkout: single and batch provider calls use Starlette's bounded thread pool; exception paths return a redacted 500 and `_finish` closes the native DB scope. Focused tests confirm provider work is off the event loop and both failure paths release scope. Production latency remains unmeasured.                                                                                                                                                                                                                                                                                                                           |
+
 | BE-007 reusable credentials in database fields   | Source and independent review passed; synthetic database conversion and key-backup recovery qualified; live operator conversion pending | Added a context-bound `odrc:v1` envelope for scalar GlobalSettings secrets and enumerated *arr/debrid/indexer JSON credentials, routed provider/config writes and reads through the helper, widened scalar storage columns, and added a rerunnable verified conversion/rotation command. Focused synthetic-canary tests cover storage, context binding, missing keys, reruns, rotation, failure preservation, and restoring the matching key ring from a separate operator-backup copy. No live database or secret values were inspected; actual operator database conversion and a restore drill using its protected backup remain pending. |
+
 | BE-008 persistent remember cookie age/revocation | Reproduced with synthetic clock at audit snapshot; independent candidate review found a legacy-cookie rewrite bypass and two issuance regressions | Fixed in current source. Hashed-secret session records enforce 30-day absolute and 7-day idle limits with single/all-device revocation. Generic native writers strip rejected legacy identities; demo login and first-admin setup now explicitly issue persistent identities. Classic logout resolves remember-cookie identity before revoking. Focused regressions cover the five generic writers, demo login, both first-admin setup paths, logout and the remember-duration cap. Focused PostgreSQL tests pass; migration-head evidence is separate from the capture DB warning documented below. |
+
 | BE-009 user deletion foreign-key failure         | Reproduced on SQLite; native route gap confirmed against PostgreSQL             | Owner selected deletion of user data while retaining security/audit logs, immediate post-commit file purge, and a separate backup policy with no fixed duration. Flask and native handlers share relation cleanup and audit anonymization. Current-schema PostgreSQL tests compare all 50 current user-FK columns and seven managed-file classes; the suite covers retry, shared-path preservation and traversal rejection. R1981 preserves household message bodies with a null author reference and anonymous `member` label while deleting the uploader's attachment row/file. R1982 fixed retained duplicate-log path and identifier leakage; R1983 preserves shared custom emoji with uploader reference cleared. R1985 verifies departing-account credentials are removed while a surviving admin's remain. R1989 populated all 50 user-FK columns; R1990 corrected five ORM/database cascade mismatches. R1992 injects failures at six pre-commit stages and after unlink/before cleanup-job commit. R1993 redacts departing-account identifiers and absolute paths from retained unmatched-folder feedback and survivor notifications while preserving the explicit chat-message exception. R1994 retains public/system collections and items ownerless while deleting private collections and items. The final fresh-schema PostgreSQL deletion, inventory, and admin-race suite passed 19/19 through Alembic head e1f2a3b4c5d6; its full relation fixture now deletes a child-role account through the shared service. R1997 replays the authenticated native admin route against a fresh PostgreSQL schema: an admin deletes a child account and its retained audit row is anonymized. The legacy Flask route also has a child-role replay. Owner approved documented provider revocation before local deletion when the exact credential flow supports it. R1998 reviewed the current Steam, GOG, Epic, Amazon Games, Xbox and PSN adapters: Steam stores only an external ID; the other member credentials use unofficial or mismatched flows with no matching documented revocation call. Epic EOS documents a separate OAuth v2 revocation endpoint, but the current Launcher device-auth flow does not match that contract. No provider request was made; local deletion proceeds regardless of remote support or availability. Reassess if an adapter or provider contract changes (evidence: `docs/dev/parity-evidence/account-deletion-provider-revocation-r1998.json`). R2000 completes source review and focused tests for identified retained authored text; unrelated personal facts in arbitrary text remain undetectable. Deployed-schema comparison, restore reapplication, production restart/redeployment qualification, and provider reassessment if adapters change remain open. Evidence: `docs/dev/parity-evidence/account-deletion-asgi-restart-r1978.json`, `docs/dev/parity-evidence/account-deletion-audit-casefold-r1979.json`, `docs/dev/parity-evidence/account-deletion-chat-retention-r1981.json`, `docs/dev/parity-evidence/account-deletion-duplicate-log-redaction-r1982.json`, `docs/dev/parity-evidence/account-deletion-custom-emoji-r1983.json`, `docs/dev/parity-evidence/account-deletion-credential-isolation-r1985.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1986.json`, `docs/dev/parity-evidence/admin-native-deletion-race-r1987.json`, `docs/dev/parity-evidence/account-deletion-db-failure-r1988.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1989.json`, `docs/dev/parity-evidence/account-deletion-orm-cascade-r1990.json`, `docs/dev/parity-evidence/account-deletion-tabletop-r1991.json`, `docs/dev/parity-evidence/account-deletion-failure-convergence-r1992.json`, `docs/dev/parity-evidence/account-deletion-retained-content-r1993.json`, `docs/dev/parity-evidence/account-deletion-public-collections-r1994.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1994.json`, `docs/dev/parity-evidence/account-deletion-native-child-route-r1997.json`. |
+
 | BE-010 delegated bearer scopes                   | Reproduced at audit snapshot                                                    | Already resolved in current source: exports and VR catalogue/detail require `read:library`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
 | BE-011 child save entitlement                    | Product policy observation; desired behavior undecided at audit time            | Owner selected own saves for currently accessible games. Implemented with `write:saves`, while general child library writes remain denied; focused native session/API and token-policy tests pass.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
 | BE-012 undefined-name branches | Static branch observations | Fixed: unmatched-folder rollback/logging and Art Studio preview imports were repaired; the native delete-filter handler now resolves its auth backend; collection access filtering and integration-secret save imports are present. The new Pyflakes F821 check reports zero undefined names across 725 production modules. Focused F821/native redirect/admin pilot/integration settings/collection wiring selection: 126 passed. On 2026-11-07, a fresh Alembic-head PostgreSQL database forced an unmatched-folder constraint failure; the handler rolled back and committed the warning event successfully, with no unmatched row left behind (`tests/test_scanning_unmatched_error_recovery.py`: 1 passed). The disposable database was removed.
+
 | BE-013 native theme upload Flask-only call       | Reproduced with actual adapter and temporary files at audit snapshot            | Already resolved in current source: Flask flash is guarded by request-context detection, and upload staging/reserved destination cleanup runs in `finally`. Added a filesystem-only regression that completes the copy, injects a post-copy `OSError`, and verifies both the reserved theme directory and extraction staging directory are removed. `tests/test_theme_upload_safety.py`: 9 passed. The route adapter remains separately covered; no production theme files were touched.                                                                                                                                                                                                 |
+
 | FE-001 VR service-worker private cache           | Synthetic exact-worker reproduction; browser exploit not demonstrated           | Confirmed and fixed in this checkout; real-browser/headset cleanup remains unverified.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
 | FE-002 librarian version cleanup control         | Source/API permission mismatch at audit snapshot                                | Fixed with explicit `can_cleanup_versions` capability in the authorized game-details payload, now consumed by both button rendering and the action guard. Cleanup endpoint continues to enforce librarian/admin role, token scope, and game/library ACL independently. PostgreSQL role payload tests pass 4/4; GameDetails UI/action tests pass 21/21; member-app typecheck passes. Additional exact role/scope/browser parity remains open. |
+
 | FE-003 mods error state disappears               | Deterministic source control-flow defect at audit snapshot                      | Fixed: fetch failures now keep the Mods section visible, show its alert, and offer Retry; successful empty/disabled cases still hide as before. Focused ModsPanel suite passes 11 tests, including fail-then-retry recovery; member-app TypeScript typecheck passes. |
+
 | FE-004 profile navigation stale identity/error   | Source state-transition defect at audit snapshot                                   | Fixed: profile state is keyed to the route user ID; old identity content is hidden immediately during navigation, late responses are ignored, errors reset per request, and Retry reloads the profile. Focused React Router tests pass 3/3, including stale-profile suppression, A-error-to-B-success, and retry; member-app typecheck passes. |
+
 | FE-005 related-media modal focus handling        | Source accessibility gap at audit snapshot                                       | Fixed by adopting the shared accessible `Modal`: the dialog is labelled by its visible title, focus enters on open, Tab/Shift+Tab stay inside, Escape closes, scroll locks, background roots become inert and aria-hidden, and focus returns to the launcher. Shared modal and RelatedMediaStrip tests pass (11 total); shared/member typechecks pass. VoiceOver/NVDA verification remains open. |
+
 | FE-006 calendar query/display window mismatch    | Source/data-window mismatch at audit snapshot                                   | Fixed in Month view: dates outside the returned relative window are disabled and announced as outside the loaded window; entirely out-of-window months explain how to expand Ahead/Behind. If the returned count reaches the provider limit, the UI warns results may be incomplete. Focused CalendarPage suite passes 13/13; member-app typecheck and CSS-token lint pass. Month query pagination remains a known cap rather than a completeness guarantee. |
+
 | FE-007 shared-browser recent titles              | Synthetic localStorage reproduction at audit snapshot                           | Fixed in this checkout: local names are no longer written/read, the legacy key is removed on member-app mount and logout, and delayed suggestion responses are discarded after viewer changes. Focused unit coverage passes; real multi-account browser verification remains open.                                                                                                                                                                                                                                                                                                                                                            |
+
 | FE-008 missing React error boundary              | Absence confirmed by source search; crash impact inferred                           | Fixed with shared `AppErrorBoundary` around member, standalone game-details, admin, and StaticPilot roots. Render failures show an accessible safe fallback with manual Reload; no automatic loop or remote telemetry. Focused render-failure and rejected-lazy-import tests pass 2/2; shared, member, and admin typechecks plus CSS-token lint pass. A browser smoke against an actual stale deployed chunk remains unverified. |
+
 | DT-001 concurrent install record loss            | Forced interleaving reproduced at audit snapshot                                | Fixed for concurrent operations in the current companion runtime: saves are serialized, apply only per-game changes against the latest map, snapshot requested values, and reject maps that were not loaded first. Four focused persistence regressions and 66 adjacent desktop workflow tests pass; desktop TypeScript/build passes. Cross-process/multi-window races and packaged Tauri restart persistence remain unverified. |
+
 | DT-002 cold offline launch limitation | Source-based; packaged runtime journey pending | The Installed shelf remains bound to a previously verified server/account/device and credential fingerprint, and filters to local installs with launchable states. The companion now adds **Open full library** to open `/library` in a separate site-only Tauri webview or browser fallback, using the current form Server URL without placing the API token in the URL. The new `full-library` label receives only `core:default` through the site-view capability. Together, the shelf, offline-gating and full-library handoff checks pass 12 focused desktop tests; the desktop TypeScript/Vite build and Windows Tauri `--no-bundle` release build pass with existing Vite chunking and Rust dead-code warnings. Packaged cold-offline launch, real account/device switching, server revocation while offline, OS file access, and end-to-end discovery beyond preview remain open.
+
 | DT-003 lifecycle write non-atomicity             | Source-based; crash/disk failure pending                                        | Fixed at the current persistence boundary: config and lifecycle JSON use the existing same-directory atomic writer; lifecycle snapshots are serialized, rejected writes are caught, and the companion shows a visible storage/permissions error. Focused lifecycle and adjacent workflow tests pass 55/55; native atomic-writer tests pass 7/7; desktop build passes. Process-crash/disk-full injection and packaged restart recovery remain open. |
+
 | DT-004 nested patch/mod staging failure          | Source contract mismatch at audit snapshot                                      | Fixed in Rust path canonicalization: missing nested staging components are checked from the closest existing ancestor before creation, while existing symlink targets remain canonicalized for containment. Rust containment tests pass 7/7 on Windows; patch/mod orchestration tests pass 34/34. Unix symlink escape regressions also passed in the macOS/Linux native Rust suites in run 42525201207; packaged first-run smoke remains open. |
+
 | DT-005 archive resource/destination risk         | Source-based; hostile archive not run                                           | Partially fixed: archives are capped at 100 GiB compressed, 250,000 entries and 200 GiB expanded by default; unsafe paths are rejected during preflight; extraction runs in a sibling staging directory and promotes only after successful reads, preserving the previous destination on validation/read failure. The destination-volume preflight requires declared expanded bytes plus a default 1 GiB reserve, and operators can configure the entry-count and expanded-byte ceilings and reserve. R2003 adds `ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES` with the existing 250,000-entry default; positive operator overrides apply before preflight, while missing/invalid/zero values retain the default. Per-destination locks and recovery markers reconcile interrupted staging/promotion on the next install attempt; ambiguous states fail closed and preserve recovery data. Rust recovery, extraction and preflight tests pass. Windows child-process regressions exit at three real filesystem boundaries and verify recovery; a test-only thread-local ENOSPC injection also fails a partial file write and verifies old-install preservation and stage cleanup. Actual volume exhaustion and installed game-launch smoke on all platforms remain open. |
+
 | DT-006 child-process reaping                     | Source/Rust contract verified in Windows/macOS/Linux native CI    | Fixed for direct children launched by the native companion: a waiter thread owns each `Child`, calls `wait()`, and records completion for the existing poller; exited records are removed when observed. The short-lived child regression passed explicitly in the native Rust suite on Windows (98 tests), macOS (102), and Linux (102) in GitHub Actions run 42525201207. Wrapper/descendant behavior, app exit/restart, PID reuse, and packaged game-launch journeys remain open. Evidence: `docs/dev/parity-evidence/managed-child-reaping-r2005.json`. |
+
 | DT-007 twelve-title companion preview | Preview cap observed; full-browse handoff proposed by P3-09 | Implemented as a full-library handoff in the companion: **Open full library** opens the server `/library` route in its own site-only webview or browser. The current server form URL is used; no API token is passed to the window; the `full-library` label receives only `core:default` permissions. URL, browser fallback, window creation, server switch and empty-URL tests pass (6 focused cases). The destination is the existing full member catalog; no duplicate catalog is embedded in the companion. The built Windows app was compiled but the new window was not launched against a populated server, so end-to-end discovery beyond preview remains unverified.
+
 | OP-001 native installer/factory mismatch         | Source plus factory import reproduced at audit snapshot                         | Confirmed and partially fixed: the three native installers require Node 22, run the locked root workspace install, and invoke the shared five-target build. All three now validate native runtime configuration and built assets instead of the retired Flask factory. All five bundles and the native validator passed under Node 22.23.4 on Windows. A staged Windows installer run on 2026-11-08 passed Node/Python checks and `-SkipDb`, then stopped at pip's pip-upgrade step because PyPI connections failed with Windows socket error 10013; npm install/build, native validation, and `.env` generation were not reached. The checkout `.env` and database were untouched. Evidence: `docs/dev/parity-evidence/native-installer-staging-r1977.json`. A normal online end-to-end installer run and other target systems remain unverified. |
+
 | OP-002 Windows worker count                      | Source-based; multiworker test pending                                          | Already resolved in the current checkout: Windows honors `UVICORN_WORKERS` and defaults to one, matching Unix and Docker. Added a static entrypoint-default regression; process-local multiworker behavior remains outside this default check. |
+
 | OP-003 container root privilege                  | Confirmed in the original Docker runtime contract                              | Fixed and runtime-verified 2026-11-07. Final image `sha256:26a56e00d5e50c0fd864847cf14d66b0d3cb0a97fe85cf5bdc88f7cd2494e8ac` built successfully. Isolated external-DB and embedded-DB runs both returned HTTP 200 from `/awake`; ASGI ran as UID/GID `99:100`, `CapEff=0`, `NoNewPrivs=1`; a library-volume write as that identity succeeded. The external run corrected ownership of a pre-existing root-owned file on a replacement library volume; recreating the container with that same volume did not repeat the recursive migration. Embedded PostgreSQL accepted connections; its data/secrets were `99:100` mode `0700`. Container stop exited 0 after app shutdown and PostgreSQL stop. External-mode `PUID=0` and unsafe `/opt` and `/app/oneirodex` library paths were rejected. The ownership marker includes the library mount device/inode and is stored on that persistent mount. Scope: embedded mode keeps a root supervisor for PostgreSQL lifecycle; Python startup and ASGI run without capabilities. `/storage` remains outside ownership migration. |
+
 | OP-004 incomplete build pinning/integrity | Source/build trust observation; no compromise found | Fixed and locally build-verified 2026-11-07. Node/Python bases use manifest digests, apt uses a dated Debian snapshot, Python installs from a complete hash lock, npm uses its integrity lock, EmulatorJS and font fallback assets are digest-checked, and the publish workflow checks tracked licence records and pinned licence digests, enables SBOM/provenance, and records the image digest with its source commit. Final local image: sha256:872e2f0b23f4ae84ab1f2fd0a847e9d0123cd99f03f70d141bdbf1e3bb7e0db8. Focused tests and the image build passed; no GitHub publish workflow ran, so remote attestations are configured but not generated. No upstream compromise was found in the review evidence. Individual Dependabot records were retrieved on 2026-11-07 and are summarized above; default-branch alert state remains open until a separately authorized merge; generated SBOM/license output for a published image remains pending release.
+
 | OP-005 dependency advisory matches and current GitHub records | Confirmed at the audit snapshot; review-branch lockfiles contain patched versions; default branch remains exposed until merge | `requirements.lock` pins Pillow 13.0.0 and Authlib 1.9.1; the Cargo lock pins `zip` 9.1.2; `package-lock.json` pins Vite 6.4.5 and `@vitest/mocker` 4.1.12. The open GitHub records identify older default-branch versions. REST returned 108 open records / 59 unique advisories, not 108 distinct vulnerabilities. A targeted source audit found `glib` 0.18.5 only through the Linux GTK3/Tauri dependency graph. The dismissed GitHub alert #2 is RUSTSEC-2024-0429 (reason `tolerable_risk`). The advisory affects `VariantStrIter` methods; search of product source and downloaded locked Rust dependencies found no call sites beyond `glib`'s own docs/tests. Verdict: not actionable for the currently reviewed app call graph, with medium confidence; no dependency patch or blanket suppression was added. The transitive crate remains vulnerable if future code or dependencies invoke those methods, so recheck on GTK/Tauri updates. `cargo audit` still reports unmaintained-crate warnings, which are not resolved by this disposition. The review branch has not been merged, and default-branch alerts remain open. |
+
 | OP-006 docs/validation lag | Documentation and validation drift confirmed at audit snapshot | Partially fixed 2026-11-07: CONTRIBUTING and agent locks now describe the ASGI-native runtime and truthfully scope CI; the Postgres pytest runbook adds a loopback-only Alembic schema preflight and fresh-database recovery instructions. A repository-wide read-only scan checked 112 tracked public Markdown files and 754 local links, corrected six broken references in admin and operator guides, and then found zero missing targets. The CI F821 gate reports zero undefined names across production Python; focused adapter selection passed 126 tests. The configured `oneirodextest` database was stamped at Alembic head but lacked `emulator_saves.revision`; the guarded preflight detects that drift and requires a fresh test database. The 2026-11-08 documentation reconciliation preserves the complete independent review, maps every original finding/candidate, feature and task-document reference to the current documentation collection, and retains later owner choices without accepting original proposals. OP-006 remains partial: vertical contract coverage for each critical journey is still open.
+
 | OP-007 template sync failure                     | Confirmed current mismatch: public template is 1.1.8 while repository `main` is 1.1.9 | Read-only current-state check found `unraid-templates/main/oneirodex/oneirodex.xml` still advertises 1.1.8; `Oneirodex/main/VERSION` is 1.1.9. The historical v1.1.9 workflow job (run 38867272166, job 116875451030) confirms Docker publication succeeded, then template sync failed because `UNRAID_TEMPLATES_TOKEN` was empty. The workflow's readback comparison and actionable missing-token error are present. No external template write or release action was performed in that check. The later owner authorization permits release after verification gates pass; updating the feed and verifying the scoped token or documented CLI permission remain pending.
+
 | UC-001 request/image work budgets                 | Candidate; missing caps were conditional on runtime paths                       | Partially addressed: library, game-art, custom-emoji, and avatar uploads enforce their documented streamed/compressed byte ceilings and decoder-identified formats/dimensions. Avatar, library-art, uploaded/downloaded game art, custom emoji, and Art Studio fallback reads share one per-process gate. Native image workers now defer AnyIO cancellation until synchronous work and request-scoped database use finish; direct asyncio task cancellation is handled too. Avatar cancellation additionally rolls back the uncommitted pointer and removes staged replacement files. Focused worker/avatar checks pass. An earlier broader native route batch was inconclusive: 110 collected, 48 passed and 62 returned fixture-level 401/404 responses before the target handlers could be verified. Supported NAS peak-work measurements remain open.                                                                                                                                                                                                    |
+
 | UC-002 avatar replacement ordering | Confirmed at the audit snapshot; current native route preserves prior files on commit failure | `tests/test_avatar_upload_hardening.py` covers helper cleanup, and an added native-route regression uses real transformed avatar files with a forced commit failure; prior avatar and thumbnail survive and staged replacement files are removed. Flask and native avatar upload/stock paths now queue old managed avatar and thumbnail cleanup before committing the pointer change. A PostgreSQL test simulates interruption after that commit, then replays the worker and verifies stale files are purged; shared paths remain untouched. A generic child-process worker-startup test passes; avatar-specific server restart and concurrent replacement qualification remain open. |
+
 | UC-003 save key rotation and UC-004 support-forward boundary | UC-003 partially implemented; real operator backup restore and migration remain unverified. UC-004 remains an unvalidated candidate | New encrypted writes use `GTENC3` with a dedicated versioned save keyring and authenticated owner/game/slot/generation context; cross-owner and cross-generation copies fail. `GTENC1` and `GTENC2` remain readable, while the restartable migration publishes new immutable `GTENC3` generations and retains old keys for backups. New move and standalone-backup manifests use format version 2; the current importer still accepts version 1 and rejects context-bound saves mislabeled as version 1. Focused PostgreSQL keyring tests: 8 passed; combined save, standalone backup and move suites: 101 passed, 2 skipped. The Linux Docker proof E exercises encrypted legacy-save conversion and context-bound restore using the version 2 manifests. Real operator database migration, restore using actual protected media, deployed rotation, interrupted-rotation crash injection, and concurrent writer qualification remain open. UC-004 destination and redaction behavior remain unknown; retain it without claiming a defect. |
+
+
 
 ### R2000 retained authored text
 
+
+
 The source review enumerated retained user-linked fields with `ON DELETE SET NULL`. Several shared records could keep an account name, email, stable ID, or local path in free text after their author/resolver reference was cleared. Account deletion now scrubs those values from retained announcements, related-media and cheat metadata, public/system collections, other members' resolved requests, and resolved support tickets. Existing unmatched-folder, notification, duplicate-log, and audit redaction remains in place. Household chat message bodies remain unchanged under the owner's explicit exception. Two fresh PostgreSQL regressions passed on Alembic head `e1f2a3b4c5d6`; the disposable test database was dropped. Exact-identifier matching cannot infer unrelated personal facts phrased differently. Evidence: `docs/dev/parity-evidence/account-deletion-retained-text-r2000.json`.
+
+
 
 ### R2001 Windows Node 22 native SPA build
 
+
+
 The native five-SPA installer build contract was run on Windows using a temporary `node@22` npm runner (Node `22.23.4`); the machine's global Node installation was not changed. All five targets built, the staged generation was promoted, and the installed-runtime Python validator verified the output manifest. The focused native installer and manifest tests passed **12/12**. Existing Vite large-chunk and runtime theme-CSS resolution warnings remain. This verifies the Windows build contract, not a full native install, upgrade, or browser journey. Evidence: `docs/dev/parity-evidence/server-ui-windows-node22-r2001.json`.
+
+
 
 ### R2003 configurable game archive entry count
 
+
+
 DT-005 already had preflight entry/expanded-size checks, streamed expanded-byte enforcement, free-space checks, sibling staging, promotion recovery, and old-install preservation tests. The fixed 250,000-entry cap was the remaining non-configurable preflight limit for legitimately large archives. The desktop process now accepts `ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES`; the default is unchanged and non-positive/invalid values fall back to it. Rust tests passed for the override, archive validation/recovery, traversal rejection, disk-full preservation, read failure cleanup, and free-space preflight. The broader DT-005 package, progress/cancel, cross-platform and actual hostile-archive qualifications remain open. Evidence: `docs/dev/parity-evidence/game-archive-entry-override-r2003.json`.
+
+
 
 The independent report's 35 finding rows and four validation candidates remain distinct from the parity matrix's 1,545 shared route/action pairs. Neither structural route dispatch nor this triage closes parity. GitHub alert records were retrieved and compared with the review-branch lockfiles, but the default branch remains unchanged and its alerts remain open. The independent package's advisory ledger is version evidence only; the RustSec call-graph disposition below is limited to the exact reviewed desktop source and downloaded dependency set.
 
+
+
 ### FE-001 correction
+
+
 
 The VR page still registers `/vr/sw.js` so existing installations can receive the retirement worker. On activation it removes `oneirodex-vr-v1`, claims clients, and unregisters; it has no fetch handler, cache-write path, or offline fallback. Its logout message also clears the retired cache. `tests/test_pwa_install.py` guards these properties. The user guide now describes the online update requirement. No live headset/browser account-switch test was run, so do not claim practical cross-account exposure is eliminated in already-offline clients until their worker updates.
 
+
+
 ### P0-07 correction: remove origin-global title history
+
+
 
 The command palette now renders only recent/popular rows returned by the server for the active viewer. Open-title actions no longer persist names or IDs. The palette clears its old localStorage key on mount and resets/aborts suggestions when closed or when the viewer ID changes; a failed suggestions request reports an unavailable state without restoring old local titles, while title search remains usable. The shared sign-out helper also removes the legacy key before attempting service-worker messaging. `CommandPalette.test.tsx` and `recentTitles.test.ts` cover legacy-key removal, suggestion failure, normal search and stale-response rejection after an account switch. User guides now describe server-authorized suggestions and no browser history.
 
+
+
 **Verification:** Node `22.23.4` via the temporary `node@22` runner: member-app command palette/history tests **22 passed** and member-app TypeScript typecheck passed. Python `3.14.10` (not the planned 3.12): PostgreSQL 17.6 disposable review DB on the isolated `oneirodex-review` Compose project; focused password/favorites/export/VR tests **33 passed**. Database guard tests **27 passed** with `--noconftest`; PWA worker/logout assertions **2 passed** with `--noconftest`. These tests do not replace a real Chromium/headset cross-account cache/recents check.
+
+
 
 **P0-01 baseline remains partial:** Node 22 and the isolated review PostgreSQL service are available. `uv python install 3.12` could not fetch its CPython archive from Astral/GitHub, but a staged CPython 3.12.16 runtime is now available locally. `uv run --python <staged-runtime> --with-requirements requirements-dev.txt` resolved an isolated pinned environment; the focused image/cancellation slice passed 25 tests and the focused account-deletion modules passed 24 tests on Python 3.12.16, including the fresh-schema PostgreSQL replay. `python -m pip check` in that isolated Python 3.12.16 environment reported no broken requirements. This replaces the earlier 3.14-only Python evidence but does not establish a full baseline. The separate machine Python 3.14 environment's `pip check` still reports Playwright 1.64.1 requires `pyee<15` while 16.0.1 is installed, plus an incomplete `~uvicorn` distribution warning. The five source-built SPA targets and native static/runtime validator pass under Node 22.23.4; the full baseline suite, native installer end-to-end runs, and target-specific qualification remain outstanding. The subsequent P0-01 baseline slice below records fresh desktop full/thin builds and native tests. No root `.env` values were printed or file changes made; Compose may load `.env` for interpolation, while the review DB prefix and port were explicitly set for this isolated database-only service.
 
+
+
 ### P0-01 reproducible baseline — 2026-11-08
 
+
+
 Implementation started against `daa5e00be6422a75869d0cf096ef51b69f71bfa1`
+
 with existing local work preserved. Python 3.12.16 and Node 22.23.4 were reused
+
 from isolated tooling. A fresh test-named database on the loopback review
+
 PostgreSQL service migrated through `e1f2a3b4c5d6`; the database guard passed
+
 27 tests. Dotenv loading was disabled, inherited application credentials were
+
 excluded, and Python external connections were blocked for this baseline run.
 
+
+
 All 8,390 Python tests collected. The initial core run used the current CI
+
 marker/deselection selection and coverage flags, with an explicit early-stop
+
 and elapsed-time bound; it is not full-suite or release acceptance. Its first
+
 download-auth failures used retired cookie identities. The adapter fixture now
+
 uses production persistent-session issuance/validation against an isolated
+
 SQLite store, retains explicit legacy-cookie rejection, and verifies revocation
+
 and disabled-user rejection. The download/auth-resolver/request-auth/session
+
 selection passed **34 tests**, with persistent-session integration on a separate
+
 fresh PostgreSQL test database. SQLite results do not establish PostgreSQL
+
 foreign-key or locking behavior.
 
+
+
 Desktop JavaScript tests passed **288/288** and native Rust library tests passed
+
 **98/98**. Both desktop full/thin builds and the shared five-target server SPA
+
 build passed under Node 22. The latter validated and promoted its generation
+
 manifest. The framework-free Python runtime validator accepted it; 12 installer-contract/manifest checks passed. Existing Vite mixed-import/chunk warnings remain. Shared UI tests
+
 passed **172/172** and API-client tests passed **110/110**.
 
+
+
 The initial member/admin suite runs exposed two stale fixture assumptions:
+
 tile actions intentionally tab through Preview before Download, and opening the
+
 Ops full-log dialog leaves a URL hash that survived component teardown. The tile
+
 assertion now checks that complete sequence; each Ops scenario starts at its
+
 own URL. Two intentional URL-control-character rejection expressions received
+
 narrow lint explanations; validation behavior and the global rule are unchanged.
+
 Lint then reported zero errors, with 36 existing warnings. Focused card/button
+
 checks passed 24 tests and Ops checks passed 21 tests. Full reruns passed
+
 **1,237/1,237 member tests** and **714/714 admin tests**. Member, admin and shared
+
 typechecks, the CSS-token and API-envelope ratchets, and formatting checks for
+
 the touched frontend files passed. The initial Python core run reached its
+
 900-second bound and remains incomplete; it was collected before these fixture
+
 repairs, so it is not post-repair core verification. Its remaining owned processes
+
 and both disposable test databases were removed; the review DB service remains.
+
 The [baseline evidence](parity-evidence/review-program-baseline-20261108.json)
+
 records outcomes and limits. P0-01 and the broader P0-02 fixture program remain
+
 partial until their remaining acceptance criteria are demonstrated.
+
+
 
 The post-repair follow-up matched all five changed-source hashes to the prior baseline, then passed 11 download-auth tests, 24 card/button tests, 21 Ops tests, touched-file formatting, and lint with zero errors and 36 existing warnings. The R1972 validator passed. A fresh disposable-database core run now records per-test progress and stack diagnostics; it was still running when the [follow-up evidence](parity-evidence/review-program-baseline-followup-20261108.json) was captured. These focused checks do not complete the core/full Python baseline.
 
+
+
 ### Review-branch ancestry reconciliation — 2026-11-08
+
+
 
 Draft PR [281](https://github.com/cephyrixzyth/Oneirodex/pull/281) initially reported merge conflicts. Published `main` snapshot `fd2683e5` has the exact complete tracked-file tree of reachable review-branch ancestor `b255444b`. Merge commit `f048be20` records that published history into the review branch using the `ours` strategy. Before/after review tree IDs are identical and the first-parent file diff is empty: this resolves ancestry without replacing the current descendant source or invalidating its running source tests. [R2006 evidence](parity-evidence/published-release-ancestry-r2006.json) records the tree IDs and assertions. The PR remains a draft while remediation and acceptance gates are incomplete.
 
+
+
 ### CI qualification repairs — 2026-11-08
+
+
 
 CI run [42532186849](https://github.com/cephyrixzyth/Oneirodex/actions/runs/42532186849) passed its member, shared, desktop, API-client and Ops-glance suites and Alembic upgrade/check, but failed formatting, the explicit-`any` ratchet and the early store-transaction checks. Admin vitest itself passed; the job failed at its subsequent type ratchet. The core pytest step was not reached.
 
+
+
 Normal store fixtures now use the production encrypted credential writer. That exposed a confirmed runtime regression: the scheduler snapshotted only the retired plaintext column and skipped encrypted GOG/Epic/Amazon member links. Three new cases first reproduced the skipped sync with real stored encrypted credentials and no household token, then passed after the scheduler switched to the existing presence-only helper. Provider calls remain faked, while the storage, registry and job paths are real. The combined connection/encryption selection passed **60 tests, 3 skipped** on SQLite and **61 tests, 2 skipped** on disposable PostgreSQL 17.6; the adjacent PostgreSQL poller module passed **11 tests** with one nested-transaction warning. Both disposable PostgreSQL databases were removed. Plaintext/corrupt-ciphertext refusal regressions remain intact.
+
+
 
 The 47 formatting candidates passed Prettier semantic debug checks before application; three components replace new explicit-`any` sites with callback, session, input and library-row types without widening the ratchet baseline. [R2007 evidence](parity-evidence/encrypted-store-poller-ci-r2007.json) records verification and scope. The local post-repair core run was intentionally stopped before changing already collected source after the CI failures were confirmed; its partial output is not a passing baseline. Full core/full-suite and release acceptance remain incomplete and require the repaired source to be tested.
 
+
+
 ### Owner decisions received
 
+
+
 - **D-P0-01 save history:** preserve prior committed generations; defer automatic garbage collection until the owner selects a time/space budget. This permits recoverable writes but means storage growth must be measured and surfaced.
+
 - **D-P1-04 child personal progress:** allow a child's own save operations only for games currently accessible to that child, using a narrow save-specific permission and retaining existing library-write restrictions. Implemented after core R02 save-safety work.
+
 - **D-P2-01 persistent sessions:** owner selected a 30-day maximum and 7-day inactivity limit, with current-device and all-device revocation. Implementation is in the review branch; the independent candidate review's confirmed cookie-rewrite bypass is fixed and focused verification passes. Broader release qualification remains open; see the BE-008 section below.
+
 - **D-P2-02 key custody/recovery:** owner selected recovery of reusable integration-secret keys from an operator-managed backup protected independently from database backups. ADR 0013 records the separation and missing-key behavior; synthetic conversion and key-backup recovery are verified, while migration and restore against the operator database remain open.
+
 - **D-P2-03 account deletion:** owner selected deleting live private user data while retaining security/audit logs, purging user-owned files after DB commit, and keeping offline backups under a separate policy with no fixed duration. ADR 0013 records the decisions, including retaining household chat messages with an anonymized author, shared custom emoji with uploader reference cleared, and public/system collections with owner reference cleared. The R1994 relation manifest classifies all 50 user-FK columns and seven managed-file classes, compares ORM metadata to live test-schema introspection, and populates every relation column. R1990 fixed five ORM/database cascade mismatches. R1993 redacts departing identifiers and absolute paths from retained unmatched-folder notes and survivor notifications. R1994 retains public/system collection items ownerless and deletes private collections/items. Its full relation fixture deletes a child-role account through the shared service; R1997 also verifies authenticated admin-route deletion of a child account. The final fresh-schema PostgreSQL deletion/inventory/admin-race suite passed 19/19 through Alembic head e1f2a3b4c5d6. The owner selected documented remote revocation before local deletion where supported; current credential shapes have no documented matching endpoint, so no undocumented requests are made and local deletion proceeds. Cleanup jobs cover avatars, thumbnails, emulator saves and generations, and chat attachments; failures remain retryable. R2000 completes review and focused tests for identified retained authored fields; unrelated personal facts in arbitrary text remain undetectable. Deployed-schema comparison, restore reapplication, production restart/redeployment qualification, and provider reassessment if adapters change remain open; do not describe account deletion as fully qualified.
+
 - **BE-007 source follow-up:** the original finding was confirmed: linked-store credentials had encrypted storage, while SMTP, OIDC, IGDB, provider API keys and enumerated *arr/debrid/indexer credentials could be stored as plaintext. The implementation routes scalar and JSON credential reads/writes through a versioned context-bound envelope, expands scalar columns to fit ciphertext, and adds `scripts/migrate_reusable_secrets.py` for row-by-row verified encryption and key rotation. Focused synthetic canaries qualify committed database conversion, repeat runs, preservation on missing key, restore from a separate operator-backup copy, and rotation after recovery. No live secrets were read and no live database was modified. A real operator migration and restore drill remain pending. Save encryption has its separate P2-18 gate: new encrypted writes use the dedicated keyring and context-bound `GTENC3`; legacy `GTENC1` reads still require the original `SECRET_KEY`-derived key or protected legacy key entry. See [ADR 0013](../adr/0013-session-secret-retention-contract.md) and the UC-003 disposition above for current evidence and remaining migration/restore limits.
+
 - **BE-009 source follow-up:** the native handler previously skipped Flask cleanup, so existing `DownloadRequest` rows could block deletion and its audit event included the target's name/email. Both routes now use one deletion service that transactionally anonymizes audit rows, removes private relations, and queues managed-file cleanup before commit. The owner selected preservation of shared household chat messages with an anonymized author; `chat_messages.user_id` now permits NULL and uses `ON DELETE SET NULL`, while uploaded attachment rows/files remain user-owned and are deleted after commit. The additive Alembic migration refuses downgrade if anonymized message authors are present. Focused PostgreSQL tests compare all 50 ORM user-FK columns to the test database and cover account relations, retained chat body/anonymous author, uploaded avatar/thumbnail, shared custom emoji, chat attachment, save generations, shared-path preservation, injected unlink failure/retry, and traversal rejection. On 2026-11-07, four focused modules passed 18/18 on a fresh disposable database migrated to Alembic head; the database was removed afterward. R1978 drives a fresh child process through the real Uvicorn ASGI lifespan and confirms a committed failed cleanup job and file are removed at startup; unrelated schedulers are stubbed. R1979 first reproduced a retained unlinked security event leaking an account email when its letter case differed from the stored email, then verified the case-insensitive, escaped lookup. R1982 first reproduced leakage of an actor-owned absolute folder path from `DuplicateFixLog`; the regression also checks mixed-case identifiers in notes and unlinked matching rows. R1983 reviewed custom emoji as shared household content under ADR 0013; the current FK policy intentionally retains the row and file with a null uploader reference. On 2026-11-08 the owner explicitly confirmed that household messages remain with an anonymized author; ADR 0013 and the R1981 migration already implement that decision. R1985 added active session, API token, and linked-store credential rows for both the deleted account and a surviving admin; the fresh PostgreSQL run passed all 7 focused tests and confirmed only the departing account's credentials were removed. R1989 populates synthetic rows for all 50 user-FK columns and seven file classes, and verifies each disposition against live test-schema introspection. R1990 fixes the ORM/database cascade mismatches found in play sessions, both friendship references, detail-layout presets, and saved filters; the 19-test deletion/inventory/admin-race slice passes on a fresh PostgreSQL schema. R1992 covers six injected pre-commit failure stages and retry convergence after unlink succeeds but the job commit fails. R1993 covers retained unmatched-folder notes and survivor notifications, with actor IDs, identifiers, absolute paths and profile links removed; explicit chat content remains preserved. R1994 corrects the public-collection cascade disposition and verifies public retain/private delete through the full 50-relation fixture. The final focused three-module suite passed 19/19 on a fresh PostgreSQL schema through e1f2a3b4c5d6. R1991 records the child/adult/admin/shared-channel-owner/departed-download-history/external-store-disconnect tabletop; R1994 tests child-role deletion through the shared service and R1997 verifies the authenticated native admin route. The owner selected supported remote revocation before local deletion; source review found no documented endpoint matching current stored credential types, so no undocumented request is made. Deleted-account audit text and matching duplicate logs redact absolute Windows, UNC, and POSIX paths. These tests use the current ORM/Alembic schema, not a deployed schema; R2000 retained-text source review and focused verification are complete, while deployed-schema comparison, restore reapplication, and production restart/redeployment qualification remain open. Unrelated personal facts in arbitrary text remain undetectable. Evidence: `docs/dev/parity-evidence/account-deletion-asgi-restart-r1978.json`, `docs/dev/parity-evidence/account-deletion-audit-casefold-r1979.json`, `docs/dev/parity-evidence/account-deletion-chat-retention-r1981.json`, `docs/dev/parity-evidence/account-deletion-duplicate-log-redaction-r1982.json`, `docs/dev/parity-evidence/account-deletion-custom-emoji-r1983.json`, `docs/dev/parity-evidence/account-deletion-credential-isolation-r1985.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1986.json`, `docs/dev/parity-evidence/admin-native-deletion-race-r1987.json`, `docs/dev/parity-evidence/account-deletion-db-failure-r1988.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1989.json`, `docs/dev/parity-evidence/account-deletion-orm-cascade-r1990.json`, `docs/dev/parity-evidence/account-deletion-tabletop-r1991.json`, `docs/dev/parity-evidence/account-deletion-failure-convergence-r1992.json`, `docs/dev/parity-evidence/account-deletion-retained-content-r1993.json`, `docs/dev/parity-evidence/account-deletion-public-collections-r1994.json`, `docs/dev/parity-evidence/account-deletion-relation-manifest-r1994.json`, `docs/dev/parity-evidence/account-deletion-native-child-route-r1997.json`.
+
 - **D-P1-01 native installer delivery:** owner selected building all five SPA targets from source with Node 22. `scripts/build-native-spas.mjs` builds member, member-auth, admin, admin-pilot and ops-glance in a clean staged generation, records source commit, root lockfile digest and per-file SHA-256/size in `server-ui-manifest.json`, validates exact inventories, then promotes with restoration of the previous bundle on failure. Docker and all three native installers use this shared command; the runtime Python validator checks the manifest without Flask or Node. The pinned Node 22 Docker build completed all five targets and manifest validation. On 2026-11-08 the Windows build also completed under Node 22.23.4 via a temporary npm runner; the native runtime validator passed and focused install-contract/manifest tests passed 12/12. This verifies the Windows build contract, not a full install or upgrade. macOS/Linux native installer runs and clean-install/upgrade journeys remain open. Evidence: `docs/dev/parity-evidence/server-ui-asset-contract-r1999.json`, `docs/dev/parity-evidence/server-ui-windows-node22-r2001.json`.
+
 - **D-P3-03 offline Installed shelf:** owner selected a verified server/account/device-bound shelf, with local Play/Reveal usable offline and a clear disclosure that possession/access to local files is governed by the OS account. The companion now persists only title UUID/name plus server/account/device binding and a one-way credential fingerprint; loading requires the same URL, device ID, and keychain credential. It displays only cached titles with both a local install record and a launchable state. Unit tests pass, but packaged cold-offline launch, account/device switching, server revocation while offline, and OS-level file-access journeys remain open.
+
 - **BE-012/013 source follow-up:** current unmatched-folder rollback and Art Studio preview validation branches were repaired with scoped imports and focused tests. A real PostgreSQL constraint violation now verifies unmatched-scan rollback followed by warning-event commit; the disposable test database was removed after the 1/1 pass. Theme upload avoids Flask-only flash calls outside a request and cleans incomplete staging; the 2026-11-07 post-copy `OSError` regression confirms partial theme and extraction cleanup.
+
 - **FE-004 profile transitions:** requests now reset state per user ID, suppress late results after navigation, and expose Retry. Focused tests cover old-identity suppression while loading, error-to-success navigation, and same-profile retry.
+
 - **FE-002 version cleanup capability:** game details now exposes the librarian/admin cleanup capability and the UI uses it for both visibility and action guarding. The cleanup route retains its own authorization and library-access checks. PostgreSQL payload tests (4/4) and focused GameDetails tests (21/21) pass.
+
 - **FE-003 Mods recovery:** fetch errors now take precedence over hidden/empty early returns and expose the shared Retry action. The component regression confirms a failed initial request stays visible and a retry restores content; the existing disabled/empty tests still pass.
+
 - **FE-008 application recovery:** added shared error boundary to the member, standalone details, admin and StaticPilot roots. It displays a safe accessible message and user-triggered reload; no automatic retry loop or remote stack reporting. Render and rejected-lazy-import regressions pass; browser smoke against a stale deployed chunk remains open. Evidence: `docs/dev/parity-evidence/app-error-boundary-lazy-import-r2002.json`.
+
 - **FE-006 calendar coverage:** Month view now distinguishes unqueried dates from empty dates, disables dates outside the loaded range, explains fully out-of-range months, and warns when the provider limit is reached. Focused CalendarPage tests pass 13/13; member-app typecheck and CSS-token lint pass.
+
 - **FE-005 related-media dialog:** replaced the hand-built dialog with shared `Modal`; Focused Vitest confirms focus entry/trap/return, Escape close, and background inertness. VoiceOver/NVDA verification remains open.
+
+
 
 ### BE-001 / P0-03 save-integrity remediation
 
+
+
 The current writer was rechecked before the fix: sanitized slot labels could map different slots to the same blob path, replacement truncated that path in place, and the old path was removed before the database commit. The revised writer validates the 64-character slot limit without truncating, stages bytes in a same-directory temporary file, fsyncs the file, and atomically publishes to a unique opaque filename. Each replacement records the prior committed blob metadata in `emulator_save_generations`; retained generations count toward the user quota and remain until the slot is explicitly deleted. A commit exception rolls back SQL but leaves the unique blob as an unreferenced recovery candidate because the commit outcome can be ambiguous. Optional `expected_revision` checks return 409 with the current revision; callers omitting it keep serialized last-committed-write behavior. No old legacy paths are rewritten during migration.
+
+
 
 **Concurrent verification:** `tests/test_save_concurrency.py` uses independent PostgreSQL connections and synchronized writers against the disposable `oneirodexsaveaudit_test` database. **4 passed**: simultaneous creation cannot exceed ten slots, two 600 KiB uploads cannot exceed a 1 MiB member quota, two replacements with the same expected revision produce one commit and one `SaveRevisionConflict(current_revision=2)` while retaining the prior bytes, and four concurrent writer contexts complete 32 same-slot replacements with revision 32, 31 readable retained generations, unique storage paths, and no missing or extra save blobs. This is a bounded concurrency stress case, not representative long-duration production load. The shared local `oneirodextest` database is marked at Alembic head but lacks the `revision` column; it was not repaired or used for this run.
 
+
+
 **Verification:** Combined focused PostgreSQL tests across `test_save_state_layer.py`, `test_native_emulator_mutations.py`, `test_native_account_tokens.py`, and child token policy: **65 passed**. This includes sanitized-label collision isolation, retained replacement bytes, quota behavior, stale revision conflict, simulated commit failure preserving the old committed path, accessible-game child save authorization, and narrow token scope behavior. Member saved-state UI tests: **4 passed**; member-app typecheck and targeted Prettier check passed. A separate fresh empty PostgreSQL database upgraded through Alembic to sole head `a42c7b10d8e1`; the new schema includes `emulator_save_generations` and `emulator_saves.revision`. Four synchronized/concurrent PostgreSQL writer cases are recorded above. The report-only audit covers missing and unreferenced files; a new regression confirms explicit slot deletion preserves a legacy blob while another slot references it and removes it after the final reference is deleted. Legacy-storage inventory, longer-duration load, and restart-level recovery qualification remain open. The user decision defers history GC, so no generation pruning is scheduled or implied.
+
+
 
 ### BE-005 / BE-006 current-source verification
 
+
+
 `tests/test_utils_game_core.py::TestMissingImageProcessing::test_missing_downloaded_artwork_is_discovered_and_requeued`: **1 passed** against the disposable PostgreSQL database and temporary artwork directory. `tests/test_native_admin_cover_search.py`: **4 passed**, including non-event-loop provider execution, redacted single/batch provider failures, and DB-scope exit on both error paths. No provider was contacted in the test; production timing under load remains unknown.
+
+
 
 ### BE-004 current-source verification
 
+
+
 `tests/test_native_library_exports.py`: **4 passed**. Its PostgreSQL case exports 501 NES titles plus a final PSX title, checks all 502 appear in an unfiltered export, confirms a PSX-only export returns the final matching UUID, and verifies the compatibility query shares the same no-cap/filter-before-iteration behavior. A child with only the NES library grant receives exactly those 501 titles. Output parsers consume the generated XML; no live frontend import was performed.
+
+
 
 ### OP-005 current-source dependency check
 
+
+
 The audit's advisory ledger records Pillow 12.3.0 and Authlib 1.8.0, below the published fixed versions. Current `requirements.txt` pins Pillow 13.0.0 and Authlib 1.9.1. Pillow's upstream 13.0.0 release notes list the audited decoder/parser fixes, and the Authlib advisory identifies 1.9.1 as patched ([Pillow 13.0.0 release notes](https://github.com/python-pillow/Pillow/blob/main/docs/releasenotes/13.0.0.rst), [Authlib empty-HMAC-key advisory](https://github.com/advisories/GHSA-8m4g-j4wp-wgcg)). Current status: resolved in source dependency pins. The host interpreter reports Pillow 13.0.0 and Authlib 1.9.5; no clean Python 3.12 image build/SBOM was produced, so deployed image identity remains part of P2-16. GitHub Dependabot alerts remain a separate untriaged set.
+
+
 
 **RustSec triage (2026-11-07):** `cargo audit` scanned 530 locked dependencies against 1,422 advisories and reported no vulnerable crates, plus 10 warnings: nine unmaintained crates and one unsound crate. `glib 0.18.5` is in the Linux Tauri/GTK/Wry graph and is covered by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html), which identifies unsound `VariantStrIter` methods and a fix in `glib >=0.20.0`. No direct use of that iterator was found in Oneirodex Rust sources; transitive GTK behavior was not proven absent. The five `unic-*` warnings are reached through `urlpattern -> tauri-utils`; `proc-macro-error` is reached through GTK macros. These are maintenance warnings, not vulnerable-crate reports. `zbus_names`, `zvariant`, and `zvariant_derive` appear in the lockfile audit but have no active path in `cargo tree --locked --all-features --target all`; they may be stale lock entries. Follow-up remains to update or explicitly accept the Linux GTK stack warning and confirm whether unused lock entries can be safely removed.
 
+
+
 **Python/npm dependency audit (2026-11-07):** `pip-audit` found no known vulnerabilities in 74 runtime requirements or 90 development requirements; `npm audit` found zero advisories in the root lockfile/workspace graph. These source-declared dependency results do not replace a clean release-image SBOM, and they do not provide package-level details for GitHub Dependabot alerts.
+
+
 
 The shared streamed artwork response reader enforces a 25 MiB decoded-byte cap before images are returned or written. Focused mocked verification for AI artwork and provider image fetch passed **21 tests** (`tests/test_ai_artwork.py` plus `test_provider_image_fetch_streams_and_enforces_shared_limit`); the full `tests/test_ssrf_hardening.py` regression passed **220 tests**. GitHub Dependabot alert records remain inaccessible to the configured CLI/connector, so their package-specific triage and the repository's reported alert count remain unresolved.
 
+
+
 **Additional SEC-01 source checks (2026-11-07):** built-in fonts are copied from the shipped bundle first; missing-font network fallback uses the validated outbound HTTP client, an 8 MiB response cap, and atomic file publication. `tests/test_boot_assets.py` and `tests/test_font_bundle.py`: **20 passed**. The admin scan-job renderer uses text nodes/escaping for hostile values and only links validated provider URLs; `tests/js/admin_html_injection.test.mjs`: **1 passed**. This closes these source areas only; the overall security review remains partial.
+
+
 
 **Combined focused verification:** PostgreSQL save, native mutation, child-token, cover-search, missing-image, and library-export tests: **75 passed** on Python 3.14.10 against the disposable `oneirodexsave_test` database. `TEST_DATABASE_URL` was scoped to the pytest command. One existing SQLAlchemy `DISTINCT ON` deprecation warning remains. An initial run without that override hit the stale `oneirodextest` schema, which lacks `emulator_saves.revision`; the runbook's disposable test database was selected and the same slice passed. This does not include the broad auth-hardening module, which has known stale monkeypatch setup failures. The saved-state UI test and button-language ratchet passed **6 tests**; member-app typecheck and API-client build passed.
 
+
+
 ### P0-11 / UC-001 image and body budget progress
+
+
 
 The native ASGI app applies a streamed 128 MiB outer request ceiling by default, while authentication JSON, multipart avatar, chat emoji, library preview, and several write routes have smaller per-route byte limits. The Flask crop-preview validator now accepts an explicit byte ceiling and reads only `limit + 1` bytes before JSON validation, including when no `Content-Length` is present. Library image paths share a decoder-header policy: GIF/JPEG/PNG/WebP content is accepted by detected format, dimensions are capped at 16 megapixels, and stored library art is normalized to PNG. The legacy library form and preview had been missing pixel and streamed-body checks; their format, dimension, and body checks are now covered by regressions.
 
+
+
 **Verification:** `tests/test_utils_validation.py`, `tests/test_legacy_library_image_limits.py`, `tests/test_native_library_admin_mutations.py`, `tests/test_pydantic_admin_crop.py`, `tests/test_native_bounded_request_body.py`, `tests/test_routes_apis_library.py`, and `tests/test_routes_library.py`: **131 passed** on Python 3.14.10 against disposable `oneirodexsave_test`. This is not the complete P0-11 gate: representative NAS memory measurements, bounded image-work concurrency/health responsiveness, cancellation cleanup under load, and the separate 60-megapixel game-art upload path remain to be measured or aligned.
+
+
 
 ### P0-11 / UC-001 game-art decoder contract progress
 
+
+
 Both Flask and native game-art upload paths now select the stored JPG/PNG/GIF suffix from Pillow's decoded format, reject unsupported decoded formats even when the client uses an allowed suffix, and apply the shared existing 3 MiB and 60-megapixel limits before resize/copy work. The shared helper caps transforms at one per process, releases its slot on every exit, and retains original bytes for images that do not need cover resizing. Native transform/database work runs in the thread pool so the event loop can serve health requests. The 60-megapixel ceiling and one-slot default remain provisional until representative NAS peak-work profiles are measured.
+
+
 
 R1995 source follow-up reproduced another data-integrity gap in the legacy per-game upload route: replacing a singular image deleted the prior row/file and committed that deletion before publishing the replacement. The route now fsyncs a same-directory staged image, publishes it under a unique name, replaces the row in one database transaction, and only unlinks old files after commit and a remaining-reference check. If the database commit is ambiguous, the old committed bytes remain and the new file is retained as a recovery candidate. A fresh PostgreSQL run of `tests/test_image_upload_hardening.py` passed 17/17; it covers stage-write failure, DB-commit failure, successful cover replacement and another game sharing the old image path. Representative NAS memory measurements and broader cancellation-under-load qualification remain open.
 
+
+
 **Verification:** `tests/test_image_upload_hardening.py`, `tests/test_native_admin_image_mutations.py`, and `tests/test_upload_work_budgets.py`: **32 passed** on Python 3.14.10 against disposable `oneirodexsave_test`. The run emitted two Werkzeug temporary-file cleanup `ResourceWarning`s. Compilation, API-envelope lint, and the R1972 bundle validator passed. This slice does not close P0-11 acceptance criteria for cancellation-under-load cleanup or measured profile-specific defaults.
+
+
 
 ### P0-11 / UC-001 custom-emoji decoder contract progress
 
+
+
 Custom emoji now accepts only decoder-identified PNG/JPEG/WebP content regardless of suffix, checks dimensions before pixel loading, rejects multi-frame inputs, and normalizes static output to WebP. This keeps the current 256 KiB and 4-megapixel ceilings. Custom emoji processing shares the one-operation process gate and both native upload handlers offload transformation and storage to the thread pool. The health-responsiveness regression directly exercises the game-art adapter. R1984 adds cancellation cleanup to both native custom-emoji upload paths: after the worker finishes, the exact row and file it created are removed before the request database scope closes. The cancellable adapter regression and custom-emoji discard helper tests pass; direct client-disconnect and emoji-route health probes remain open.
+
+
 
 **Verification:** `tests/test_custom_emoji.py`: **11 passed** on Python 3.14.10 against a fresh PostgreSQL 17.6 database migrated to Alembic head. The tests cover exact-row cancellation discard and retry-job processing after an injected file-unlink failure. The combined native emoji, generic image-work-budget, and legacy emoji API modules passed **28 tests** on Python 3.14.10, including native JSON route wiring and task-cancellation cleanup. Five SQLAlchemy nested-transaction warnings from the shared database fixture were emitted; no test failed. Emoji-route health responsiveness and real client-disconnect behavior remain open.
 
+
+
 ### P0-11 / UC-001 avatar decoder and work-budget progress
+
+
 
 Avatar uploads now select JPEG/PNG/GIF/WebP handling from the decoded format, stage under an opaque temporary name, and publish files with a matching suffix. Unsupported decoded formats are rejected, existing byte/frame/pixel caps remain, and avatar transforms use the shared process gate. Native avatar handlers run the transform in the thread pool; a busy slot leaves no staged or replacement files. On request cancellation, the native route waits for the worker, rolls back the uncommitted avatar pointer, and removes the new avatar/thumbnail before leaving the database scope. A focused regression covers that path. R1996 repaired the native game-art route fixture, which still used retired session identities, and verified that a canceled authenticated ASGI upload waits for its worker before leaving the database scope ([evidence](parity-evidence/native-game-image-cancel-order-r1996.json)). If cancellation arrives after a successful commit, the upload remains committed even though the caller may miss the response. Other native image route outcomes remain unverified. Supported NAS peak-work measurements remain open.
 
+
+
 **Verification:** Python 3.12 disposable container with pinned `requirements-dev.txt`, isolated `oneirodextest`: `tests/test_native_account_avatar_upload.py` **15 passed** and `tests/test_upload_work_budgets.py` **7 passed**, including direct task and AnyIO cancel-scope regressions. Native avatar success asserts work runs outside an event loop; file-format, unsupported-content, gate-busy cleanup, prior commit-failure preservation, and cancellation cleanup passed. A broader native image-route batch collected 110 tests; 48 passed and 62 failed with fixture-level 401/404 responses. R1996 corrects the retired-session fixture only in `test_native_admin_image_mutations.py`; the broader batch was not rerun, so its other route assertions remain unverified. Compilation, API-envelope lint, and diff checks passed.
+
+
 
 R1996 focused verification: `tests/test_native_admin_image_mutations.py` and `tests/test_upload_work_budgets.py` passed **25/25** using the pinned `requirements-dev.txt` on Python 3.12.16. The ASGI cancellation regression verifies worker completion before request-scope exit; it does not simulate a real client disconnect or assert rollback of a successfully committed upload.
 
+
+
 ### P0-11 / UC-001 library-art work-budget progress
+
+
 
 Library-art preview/create/update paths now share one decoder-identified PNG normalization helper guarded by the process image-work gate. Native preview and mutation adapters run in the thread pool, while Flask compatibility paths return a retry message when the slot is occupied. Debug prints that exposed local upload paths were removed. This does not cover internal cover-paint/quality or other non-upload Pillow callers.
 
+
+
 **Verification:** The previous library-art checks cover native create-adapter thread-pool behavior, compressed size/decoded format/dimension checks, and shared-gate rejection. The current run routes library create/update/preview work through the cancellation-aware worker helper. The focused helper tests pass; the new native library route paths were not verified because the broader route fixtures returned 401/404 before the handlers ran.
+
+
 
 Downloaded cover qualification uses the shared gate and rejects decoded images over the existing 60-megapixel game-art ceiling before loading pixels. If the slot is busy, downloaded bytes remain on disk and qualification returns a retryable failure without replacing the cover. Art Studio fallback application gates and dimensions-checks its generated pack inputs; native apply now waits for its worker before request cancellation unwinds and closes both decoded images on every exit. The remaining direct Pillow decode in system-mark conversion consumes a fixed-size PNG generated by Oneirodex. A source sweep classified all current `Image.open` callers: externally supplied or downloaded image bytes enter the shared work gate; remaining system-mark bytes are internally generated. Cancellation tests cover the shared gate and avatar route. Art Studio/library/emoji/game-art route outcomes remain unverified because the broader route fixture batch returned 401/404 before their handlers ran. Supported NAS peak-work measurements remain open.
 
+
+
 ### P0-05 / UC-002 avatar replacement progress
+
+
 
 The native `/api/account/avatar` route was exercised with the real `save_avatar` file transform and a forced commit failure. The route rolled back the pointer, retained the prior avatar and thumbnail bytes, and removed the staged replacement and thumbnail. Flask and native upload/stock paths now enqueue prior avatar and thumbnail paths before commit, in the same transaction as the new pointer. A PostgreSQL test simulates a stop after commit but before inline cleanup and confirms the persisted job removes stale bytes on replay; a second test confirms another user's reference protects a shared file. Generic child-process cleanup-worker startup has a focused regression below; full ASGI/service restart and concurrent avatar replacement races remain unqualified.
 
+
+
 **Verification:** `tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q`: **6 passed** on disposable PostgreSQL `oneirodexsaveaudit_test`, including a child process that creates a fresh app/worker and clears a persisted failed job. This verifies worker startup across a process boundary, not the production ASGI lifespan or a service restart/redeployment. Earlier focused account-deletion/avatar coverage passed **29 tests** across `test_admin_user_delete_retention.py`, `test_user_deletion_inventory.py`, `test_avatar_upload_hardening.py`, and `test_native_account_avatar_upload.py`.
+
+
 
 ### DT-001 desktop install registry concurrency
 
+
+
 The independent review's R08 reproduction forced two different game operations to load the same whole install map and then overwrite one another; this matches the former `persistInstallRecord` source path. Install saves now queue in the shared desktop module, reload the latest persisted map inside the queue, and merge only keys changed or deleted relative to the caller's loaded snapshot. The requested map is cloned when save is called so later mutations cannot change an already queued write. Calls that bypass `loadInstallsFromDisk` fail closed rather than replacing unrelated records. The update path now mutates the loaded map directly so it retains that snapshot.
+
+
 
 **Verification:** `clients/desktop/src/install-store.test.ts`: **4 passed**, covering two concurrent independent additions, a deletion concurrent with another record update, mutation after save request, and rejection of unbased replacement. Adjacent download/install/launch/uninstall/update/lifecycle suites: **66 passed**. `npm run build` in `clients/desktop` passed TypeScript and Vite production build. These checks exercise the JavaScript persistence boundary with mocked Tauri commands; they do not qualify concurrent writes across separate app processes/windows or a packaged restart journey. The Rust atomic file replacement remains in place.
 
+
+
 ### DT-004 nested desktop staging directories
+
+
 
 The review described a mismatch between the Rust path guard and directory creation for first-time patch/mod staging. Current source confirms it: path validation canonicalized only the immediate parent, which does not exist for paths such as `patches/<game>/<patch>` or `mods/<game>/<mod>/<file>`. `canonicalize_path` now walks to the closest existing ancestor, canonicalizes it to resolve existing symlinks, and appends the missing components before the existing root-containment decision. The write command still performs directory creation only after containment succeeds.
 
+
+
 **Verification:** Rust `cargo test --lib under_root_`: **7 passed** on the Windows host, including nested missing-directory acceptance and existing containment/traversal guards. Patch and mod JS orchestration tests: **34 passed**. `cargo fmt -- --check` initially reported only formatting for the new expression; formatting was applied. The Unix-only existing-symlink escape regression is included but could not execute on this Windows host, and a packaged fresh-profile patch/mod journey remains open.
+
+
 
 ### DT-003 desktop lifecycle and config durability
 
+
+
 The review's source claim is confirmed: config and lifecycle JSON used direct `fs::write`, and lifecycle registry notifications discarded persistence promises. Both native JSON saves now use the existing same-directory `install_recovery::atomic_write`, which writes and syncs a temporary file before replacement and preserves the selected file when replacement fails. The lifecycle registry serializes queued snapshots so an older asynchronous write cannot finish after a newer one. Rejected writes are consumed and reported through a callback; the companion displays a visible message to check local storage space and permissions. Corrupt JSON still returns a load error rather than silently resetting to an empty registry.
+
+
 
 **Verification:** lifecycle state/store and adjacent download/install/uninstall/update tests: **55 passed**, including a rejected-write error-reporting regression. The desktop TypeScript/Vite production build passed. Existing Rust atomic writer tests: **7 passed**, covering replacement, restart readability, and failed replacement preserving the existing generation. Process termination at each filesystem boundary, disk-full injection, and packaged offline restart were not run; UI state can reflect an operation before the asynchronous disk write completes, but failure is now surfaced.
 
+
+
 ### DT-005 base archive extraction safety
+
+
 
 Current source already imposed hard caps of 100 GiB for the compressed archive, 250,000 entries, and 200 GiB expanded data. The review's destructive ordering and unsafe-entry behavior were confirmed: extraction removed the existing install before opening the archive, and traversal entries were silently skipped while returning success. Extraction now validates the central directory, declared entry count/size, and every enclosed path before touching the destination. It writes into a unique sibling staging directory, enforces the expanded-byte limit while reading, and promotes the stage only when all reads succeed. The prior destination is moved aside during promotion and restored if publishing the staged directory fails; abandoned staging directories are cleaned on ordinary errors. Failure to remove the superseded directory is logged while the successfully promoted install remains usable.
 
+
+
 **Verification:** focused Rust extraction tests cover normal extraction, entry/expanded-size limits preserving the old destination, traversal rejection before replacement, corrupt payload read failure, a filesystem entry-creation failure, simulated ENOSPC after a partial staging write, and root containment; failed extraction preserves the old destination and cleans staging. Windows child-process tests terminate without running destructors at three install boundaries and verify recovery on the next install attempt. With Cargo lock enforcement, `cargo fmt -- --check` passed and the full `cargo test --lib --locked` suite passed **96 tests**. The Windows `npm run tauri:build` previously completed and produced the unsigned x64 NSIS package with the fail-closed guard included. This is host-native test evidence plus a package build, not installed-app smoke. Actual volume exhaustion, real install/launch smoke and macOS/Linux packaging remain open; this finding is only partially closed.
+
+
 
 **Progress and cancellation follow-up (R2004):** ZIP extraction now emits byte progress tagged with its operation ID to the game card and exposes **Cancel install**. Extraction runs on Tauri's blocking pool so cancellation remains responsive. The native extractor checks cancellation during streaming and immediately before promotion; cancellation discards staging and leaves the previous generation intact. A focused Rust regression cancels after a partial staging write and confirms the old generation survives with no staging directory left. Desktop helper tests cover operation-scoped progress subscription and listener cleanup, plus the cancellation command. GitHub Actions run **42523873947** passed Rust fmt/Clippy/tests and unsigned Windows, macOS, and Linux full/thin builds; release-asset attachment was skipped for this push. This closes the missing progress/cancel behavior in DT-005; installed-app/game-launch smoke across platforms, actual disk exhaustion, and hostile-archive execution remain open.
 
+
+
 ### DT-006 direct child process reaping
+
+
 
 The source claim is confirmed for direct launches: `launch_game` spawned a `Child`, returned its PID, and dropped the handle. Native launches now register the PID and move the owned `Child` into a waiter thread. The thread calls `wait()` independent of webview polling, then marks the process exited in the managed registry. The existing `is_process_running` command returns managed completion to the JS watcher, which uses an idempotent stop path for the playtime session; exited registry entries are removed when observed. Unknown PIDs retain the existing OS liveness check.
 
+
+
 **Verification:** GitHub Actions run [42525201207](https://github.com/cephyrixzyth/Oneirodex/actions/runs/42525201207), source `7435f797`, explicitly ran `cargo test --lib --locked` in each full platform job: Windows **98 passed**, macOS **102 passed**, Linux **102 passed**. Each log names `managed_process_waiter_reaps_a_short_lived_child` as passing. The earlier run 42523873947 tested Rust only in its separate Linux job; its full platform Unit tests steps invoked `npm test`. The added Native Rust tests step supplies the previously missing evidence. The test launches the Rust test binary as a child, observes running state, and waits for the managed registry to report its reaped exit. This verifies the direct-child source contract on Windows, macOS, and Linux; it does not exercise a packaged game launch. Wrapper programs that exit while a descendant game remains open, app exit/restart, PID reuse, and packaged runtime behavior remain unqualified.
+
+
 
 ### OP-002 Windows worker default
 
+
+
 The audit snapshot's Windows launcher used four Uvicorn workers. The current checkout already defaults `UVICORN_WORKERS` to one, while still allowing an explicit operator override, matching the Unix and Docker entrypoint defaults. This corrects the mismatch but does not establish that process-local event and rate-limit state is safe under an operator-selected multiworker setting.
+
+
 
 **Verification:** `tests/test_startup_worker_defaults.py` checks both Windows and Unix launcher defaults and confirms the worker variable reaches the Uvicorn command. The source check is static; no multiworker integration test was run.
 
+
+
 ### P2-11 standalone backup bundle
+
+
 
 The standalone CLI now has an explicit `backup` command that reuses the existing stopped-application move snapshot. It records a versioned backup section with source commit (when available), PostgreSQL major, schema revision, save/history table identity digests, excluded roots, and reusable/save key IDs while keeping key material outside the bundle. Completion is published only after the DB dump and every managed file are re-hashed; the existing importer requires and verifies the completion marker for backup manifests. Backup creation refuses remaining plaintext reusable credentials or missing referenced reusable-secret keys.
 
+
+
 **Verification:** `tests/test_standalone_backup.py`: **8 passed** for manifest binding, version compatibility, database/file tampering, missing completion markers, and plaintext-secret refusal. `tests/test_standalone_move.py`: **64 passed, 2 skipped**, including a database-backed check that snapshots reusable-secret key IDs without values and regressions for v1 compatibility, unsupported versions, and rejecting context-bound saves mislabeled as v1. The combined save, standalone backup and move suites passed **101 tests, 2 skipped** on the isolated PostgreSQL test schema; `python scripts/upgrade_test_schema.py` verified the loopback schema before the run. The disposable Linux Docker proof E completed end to end on 2026-11-07 after updating its completion-marker fixture to format version 2: it refused backup while the app was running, created a populated backup with 18 managed files, rejected a non-empty destination, missing save keyring, wrong roots, non-empty DB, conflicting files, altered file/fingerprint, and changed completion marker; imported 83 tables and 270 rows, verified all 18 files and encrypted save readability, rolled back and repeated import, confirmed standalone DB/files remained stable (comparing encrypted saves by plaintext digest and key ID because exports use fresh nonces), and started the server to serve a restored file. The proof restored a synthetic save keyring from a separate backup volume mounted read-only; missing-key refusal and readability after recovery both passed. The first run after the format bump found and corrected the stale proof marker; the final rerun passed. `python -m py_compile`, Git Bash syntax validation, and `git diff --check` passed. This validates the current Linux Docker/PostgreSQL 17 package path and a synthetic separate-keyring restore only. Docker/Unraid deployment and external-PostgreSQL backup barriers, recovery from real operator backup media, Windows/macOS package behavior, and integrity/authenticity against an attacker able to replace both manifest and printed hash remain open.
+
+
 
 ### BE-008 / P2-05–P2-06 persistent browser sessions
 
+
+
 The confirmed stateless-cookie gap is addressed in the current candidate. Every successful Flask or native session/remember-cookie issuance now carries a random per-login secret whose SHA-256 digest is stored with user, created, last-seen, expiry and revocation fields. Auth resolution rejects legacy identities without a server record, invalid hashes, revoked rows, sessions older than 30 days, and sessions idle for 7 days. Password changes and disabling an account revoke active records. Members can list sessions and revoke one or all through CSRF-protected account routes; current/all revocation clears the browser cookies. Existing legacy cookies therefore require a fresh sign-in at cutover.
 
+
+
 The independent candidate review found that an unauthenticated native redirect could rewrite a valid old `uid:fingerprint` session cookie and have the generic writer create a persistent server record for it. Confirmed and fixed: all five native session-cookie writers now drop authentication fields for identities that do not contain a persistent session ID. A focused regression serializes the rejected cookie through each writer and verifies the rewritten session is anonymous. The independent reviewer then found that demo login and first-admin setup still issued legacy-format IDs. Confirmed and fixed: those credential-checked paths explicitly issue persistent identities before the cookie writer runs; regressions cover JSON and form setup paths and demo login. The remembered-cookie-only classic logout regression confirms the current persistent row is revoked before the browser cookie is cleared. The admin remember-cookie writer's requested duration is capped at 30 days, with a regression for a 60-day request.
+
+
 
 **Verification:** The five BE-008 modules (`test_native_auth_resolver.py`, `test_native_request_auth.py`, `test_native_account_password.py`, `test_native_admin_user_mutations.py`, `test_persistent_sessions.py`): **51 passed** against the disposable PostgreSQL test database. Three focused demo/setup transition regressions also passed. Coverage includes secret hashing, absolute and idle expiry, wrong-secret rejection, individual/all-device revocation, user scoping, password-change revocation, disable/re-enable revocation, legacy-cookie rejection across all five native writers, persistent identity issuance for demo and initial-admin setup, remembered-cookie-only classic logout, remember-duration cap, session and remember-cookie enforcement, and existing password/admin regressions. `TokensPage.test.tsx` plus the button-language ratchet: **8 passed**; member-app typecheck, CSS-token lint, Python compileall, and `git diff --check` passed. A separate fresh PostgreSQL migration upgrade to Alembic head `b7c2d3e4f5a6` was verified earlier in this task. A populated local capture instance then exercised the account sessions API: missing CSRF returned 400 without mutation, individual revocation returned 200 and removed the other session, and all-device revocation returned 200, expired the browser cookie, and left no active records for the signed-in admin; the unrelated synthetic member retained its own row. The real browser screenshot is `docs/media/screenshots/api-tokens.png`. Capture startup logged an existing Alembic baseline warning for the capture DB after `create_all` pre-created `emulator_saves.revision`; the session table existed and the route flow passed, but this capture DB was not used as migration-head evidence. The independent candidate review's auth bypass was fixed, then the review found and reported the first-login regressions; both regressions are now fixed and covered. Release qualification and broader parity remain open.
 
 
-### Native cookie compatibility follow-up � 2026-11-09
+
+
+
+### Native cookie compatibility follow-up — 2026-11-09
+
+
 
 The unrestricted local baseline stopped after **650 passed / 5 failed**: its first failures exposed Python 3.12 cookie parsing and Starlette's Python-3.14-only `partitioned` argument. CI run [42534095194](https://github.com/cephyrixzyth/Oneirodex/actions/runs/42534095194) separately reached 70% before its 35-minute job deadline; cancellation is incomplete evidence, not a test pass or failure. The core observation window is now 90 minutes with the same selection and coverage floor.
 
+
+
 Native writers and logout now use a shared compatibility adapter that preserves Starlette escaping and appends the fixed `Partitioned` flag, forcing `Secure` like Flask. Four additional wire tests reproduced missing session-deletion flags on current/all-device revocation; both paths now retain configured flags. The corrected test parser retains the partition flag explicitly on Python 3.12. **23 focused cookie checks and 44 adjacent authentication/session checks passed**, the latter on a disposable PostgreSQL database which was removed. The four deletion wire cases stub database operations and do not themselves prove revocation persistence; the adjacent suite covers real authentication/session state. [R2008 evidence](parity-evidence/native-cookie-compatibility-r2008.json) records source and logs. Admin component-size qualification, the complete baseline, and broader original acceptance work remain open.
+
+
+
+### Admin qualification follow-up - 2026-11-09
+
+The four size-gate violations are decomposed into typed state/action hooks and focused folder-browser, unmatched-filter and unmatched-table components. The error boundary uses the shared Button with the same rendered classes and action. No ratchet baseline was raised. All **714 admin tests across 99 files**, the production build, touched-file Prettier and the component-size/button/CSS/explicit-any ratchets passed; lint reports **0 errors / 36 existing warnings**. The 60 affected-page tests passed before and after extraction; admin type checking also passed. Separate syntax comparisons match six rendered sections after expanding the three extracted components, and all four extracted hooks' runtime statement tokens. These static checks support the refactor review and do not replace browser acceptance. [R2009 evidence](parity-evidence/admin-component-qualification-r2009.json) records hashes, outcomes and limits. Capture was skipped because layout, copy, classes and rendered structure are unchanged; this does not close independent mobile dialog/focus, whole-route parity or packaged desktop acceptance. The unrestricted Python baseline and exact-commit CI qualification remain pending.

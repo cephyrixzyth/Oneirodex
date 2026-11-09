@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
+import { ScanFolderBrowser } from './ScanFolderBrowser'
 
+import { Button, PageStatus } from '@oneirodex/ui'
 import { useLocation } from 'react-router-dom'
-import { Button, Modal, PageStatus } from '@oneirodex/ui'
+import { AdminLink } from '../components/AdminLink'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
-import { useScanControls, type Schedule } from './useScanControls'
 import './ScanControlsPage.css'
-import { AdminLink } from '../components/AdminLink'
+import { useScanControls, type Schedule } from './useScanControls'
 
 export function ScanControlsPage() {
   const { hash, search } = useLocation()
@@ -533,72 +534,21 @@ export function ScanControlsPage() {
           <PageStatus announcement="status">{linkStatus}</PageStatus>
         ) : null}
       </section>
-      {browseOpen ? (
-        <Modal
-          open
-          onClose={() => setBrowseOpen(false)}
-          labelledBy={browseTitleId}
-          initialFocusRef={closeBrowseRef}
-          lockScroll
-        >
-          <header className="od-scan-controls__browser-head">
-            <div>
-              <h2 id={browseTitleId}>Choose a scan folder</h2>
-              <p className="od-admin-lede">Browse folders mounted inside Oneirodex.</p>
-            </div>
-            <Button ref={closeBrowseRef} onClick={() => setBrowseOpen(false)}>
-              Close
-            </Button>
-          </header>
-          <nav className="od-library-browser__crumbs" aria-label="Folder path">
-            <Button onClick={() => void browse('')}>{activeRoot?.path || 'Scan location'}</Button>
-            {browseParts.map((part, index) => (
-              <Button
-                key={`${part}-${index}`}
-                onClick={() => void browse(browseParts.slice(0, index + 1).join('/'))}
-              >
-                {part}
-              </Button>
-            ))}
-          </nav>
-          {browseError ? (
-            <PageStatus error={browseError} errorMessage="Unable to browse scan folders." />
-          ) : null}
-          <div className="od-scan-controls__browser-list" aria-busy={browseBusy}>
-            {browseBusy ? (
-              <p className="od-admin-lede">Loading folders…</p>
-            ) : browseItems.length ? (
-              browseItems.map((item) => (
-                <Button
-                  key={item.name}
-                  className="od-library-browser__folder"
-                  onClick={() => void browse([...browseParts, item.name].join('/'))}
-                >
-                  {item.name}
-                </Button>
-              ))
-            ) : (
-              <p className="od-admin-lede">No folders here.</p>
-            )}
-          </div>
-          <footer className="od-admin-panel__toolbar">
-            <span className="od-admin-lede">
-              {activeRoot?.path}
-              {browsePath ? `/${browsePath}` : ''}
-            </span>
-            <Button
-              variant="primary"
-              onClick={() => {
-                invalidateManualPreview()
-                setFolder(browsePath)
-                setBrowseOpen(false)
-              }}
-            >
-              Use this folder
-            </Button>
-          </footer>
-        </Modal>
-      ) : null}
+      <ScanFolderBrowser
+        browseOpen={browseOpen}
+        setBrowseOpen={setBrowseOpen}
+        browseTitleId={browseTitleId}
+        closeBrowseRef={closeBrowseRef}
+        browse={browse}
+        activeRoot={activeRoot}
+        browseParts={browseParts}
+        browseError={browseError}
+        browseBusy={browseBusy}
+        browseItems={browseItems}
+        browsePath={browsePath}
+        invalidateManualPreview={invalidateManualPreview}
+        setFolder={setFolder}
+      />
       <ScanConflictModal
         open={conflictOpen}
         busy={scanning}
