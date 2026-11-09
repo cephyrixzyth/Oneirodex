@@ -112,7 +112,8 @@ def test_library_and_scan_destinations_are_separate_react_routes():
     for path in ("path=\"/libraries\"", "path=\"/scan_management\"", "path=\"/admin/scan-jobs\""):
         assert path in routes
     assert 'function ScanManagementRoute()' in routes
-    assert "if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />" in routes
+    assert "if (tab === 'jobs') return <ScansPage />" in routes
+    assert "if (['auto', 'manual'].includes(tab)) return <ScanControlsPage />" in routes
     assert "if (tab === 'tools' || tab === 'libraries') return <NativeLibrariesPage />" in routes
     assert 'return <ScanControlsPage />' in routes
 
@@ -121,7 +122,8 @@ def test_manual_scan_and_jobs_render_as_single_page_sections():
     controls = _read(SCAN_CONTROLS)
     controller = _read(SCAN_CONTROL_HOOK)
     jobs = _read(SCANS_PAGE)
-    assert 'Manual scan' in controls or 'Manual Scan' in controls
+    assert 'id="manual-identify"' in controls
+    assert 'id="od-manual-identify-title">Manual identify</h2>' in controls
     assert 'queue_policy: queuePolicy' in controller
     assert "chooseManualConflict(policy: 'queue' | 'force')" in controller
     assert '<DataTable' in jobs
@@ -136,7 +138,8 @@ def test_library_tools_and_refresh_all_are_owned_by_react_components():
         assert workflow in panel
     for workflow in ('Rename one game', 'Tidy folder names'):
         assert workflow in _read(ROOT / 'frontend' / 'admin-app' / 'src' / 'components' / ('RenameGamePanel.tsx' if workflow == 'Rename one game' else 'LibraryDoctorPanel.tsx'))
-    assert '<LibrariesPanel />' in page
+    assert '<LibrariesPanel' in page
+    assert 'managementActions={' in page
     assert 'Refresh all libraries' in page
     assert 'useLibraryRefreshAll' in page
 
@@ -193,7 +196,8 @@ def test_image_queue_has_its_own_react_data_loader():
 def test_scan_management_legacy_urls_dispatch_to_react_pages():
     routes = _read(ADMIN_ROUTES)
     assert "const tab = new URLSearchParams(search).get('active_tab') || 'auto'" in routes
-    assert "if (['auto', 'manual', 'jobs'].includes(tab)) return <ScanControlsPage />" in routes
+    assert "if (tab === 'jobs') return <ScansPage />" in routes
+    assert "if (['auto', 'manual'].includes(tab)) return <ScanControlsPage />" in routes
     for tab in ('tools', 'libraries', 'unmatched', 'scan_filters', 'file_extensions', 'image_queue'):
         assert f"tab === '{tab}'" in routes
     assert 'return <ScanControlsPage />' in routes
@@ -221,7 +225,8 @@ def test_libraries_panel_is_not_a_card_inside_the_page_card():
     libraries table was a second frame — the nested-tables complaint."""
     markup = _read(LIBRARIES)
     panel = _read(LIBRARIES_PANEL)
-    assert '<LibrariesPanel />' in markup
+    assert '<LibrariesPanel' in markup
+    assert 'managementActions={' in markup
     assert 'card' not in panel.lower()
     route = _read(ROOT / 'oneirodex' / 'routes_library.py')
     assert "render_admin_spa(title='Libraries & scans - Oneirodex Admin')" in route

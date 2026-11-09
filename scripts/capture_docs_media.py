@@ -26,8 +26,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from playwright.sync_api import sync_playwright
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from capture_common import (  # noqa: E402
     BASE,
@@ -324,6 +322,8 @@ def main() -> int:
     if not todo:
         print("no matching shots; known:", ", ".join(s.name for s in SHOTS))
         return 2
+
+    from playwright.sync_api import sync_playwright
 
     print("base:", BASE)
     with sync_playwright() as p:

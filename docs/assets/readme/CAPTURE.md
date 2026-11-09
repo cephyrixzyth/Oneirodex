@@ -1,5 +1,7 @@
 # Capture (README / docs media)
 
+> **Doc status:** Active
+
 Every screenshot, poster, banner and how-to clip under `docs/assets/readme/`
 and `docs/media/` is produced by four scripts against a **throwaway local
 instance**. Nothing here is a mock-up: if a surface cannot be photographed
@@ -11,6 +13,10 @@ backend image and frontend bundle identity in the private evidence; verify the
 settings are empty or synthetic and mask any non-empty credential controls
 before copying a screenshot into `docs/media/`. This exception does not refresh
 the README product slots unless a matching slot is intentionally replaced.
+
+Listing available stills with `python scripts/capture_docs_media.py --list` does
+not require Playwright or a running capture server. Actual screenshot capture
+still requires Playwright Chromium and the isolated populated instance below.
 
 | Script | Produces |
 |---|---|
