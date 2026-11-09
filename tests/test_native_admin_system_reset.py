@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.product import RESET_CONFIRM_PHRASE
 from oneirodex.runtime_native.admin_system_reset import create_admin_system_reset_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -38,7 +40,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=7, user_id='admin', role=role, state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -46,7 +48,7 @@ def _client(*, role='admin'):
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '7:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     reset = FakeReset()
     events = []

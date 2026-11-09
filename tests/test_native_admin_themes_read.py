@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect, request as flask_request
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_themes_read import create_admin_themes_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -46,7 +48,7 @@ def _client(*, role='admin'):
     user = SimpleNamespace(
         id=95, user_id='theme-user', role=role, is_active=True,
         state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -69,7 +71,7 @@ def _client(*, role='admin'):
     app.include_router(router)
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie(
-        {'_user_id': '95:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+        {'_user_id': login_identity_for(95), '_fresh': True}, flask_app.config['SECRET_KEY'],
     ))
     return client, data
 
@@ -106,7 +108,7 @@ def test_theme_writes_require_csrf_before_data_access():
 
 def test_theme_upload_and_delete_use_native_adapter_after_csrf():
     client, data = _client()
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
     upload = client.post(
@@ -125,7 +127,7 @@ def test_theme_upload_and_delete_use_native_adapter_after_csrf():
 
 def test_default_theme_reset_preserves_json_contract_and_actor():
     client, data = _client()
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
 
@@ -144,7 +146,7 @@ def test_default_theme_reset_checks_csrf_before_auth_and_redacts_filesystem_erro
     assert missing_csrf.status_code == 400
     assert data.write_calls == []
 
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     # The first rejected request may refresh or clear the browser session.
     # Start the authorized retry with the explicit signed session fixture.
@@ -159,7 +161,7 @@ def test_default_theme_reset_checks_csrf_before_auth_and_redacts_filesystem_erro
 
 def test_default_theme_reset_form_request_redirects_with_flash():
     client, data = _client()
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
 
@@ -186,7 +188,7 @@ def test_default_theme_reset_uses_flask_json_media_type_classification():
         assert flask_request.is_json is False
 
     client, data = _client()
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
     headers = {'X-CSRFToken': csrf}
@@ -211,7 +213,7 @@ def test_default_theme_reset_uses_flask_json_media_type_classification():
 
 def test_classic_theme_upload_and_delete_forms_dispatch_natively():
     client, data = _client()
-    session = {'_user_id': '95:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(95), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-themes-read-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-themes-read-secret'))
 

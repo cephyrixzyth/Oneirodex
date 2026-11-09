@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_cover_apply import create_admin_cover_apply_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -30,7 +32,7 @@ def _client():
     )
     user = SimpleNamespace(
         id=8, user_id='admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -38,7 +40,7 @@ def _client():
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '8:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(8), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     service = FakeCoverApply()
     app = FastAPI()

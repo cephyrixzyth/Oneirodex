@@ -234,3 +234,5 @@ check and is denied there. Those SQLite checks cover the authentication/adapter
 boundary, not real filesystem deletion, PostgreSQL concurrency or full-app
 acceptance. The [fixture qualification record](../dev/parity-evidence/encryption-library-fixture-qualification-20261109.json)
 keeps the focused outcomes separate from the incomplete broader baseline.
+
+Native admin fake-adapter modules can use `login_identity_for(user_id)` from the same fixture module when their synthetic user exposes its matching 16-character fingerprint. This helper issues a real persisted random-secret identity. In mixed modules, tests that request `db_session` retain that real transaction; the login fixture uses its small SQLite store only for fake-only checks. [R2015](../dev/parity-evidence/native-admin-auth-fixtures-r2015.json) qualifies 117 native-admin cases, including real PostgreSQL account creation, plus 103 existing direct fixture consumers. These counts remain separate from full-suite and installed-runtime acceptance.

@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_theme_fonts import create_admin_theme_font_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -34,7 +36,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=12, user_id='operator', role=role, state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -42,7 +44,7 @@ def _client(*, role='admin'):
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    csrf_data = {'_user_id': '12:fingerprint', '_fresh': True}
+    csrf_data = {'_user_id': login_identity_for(12), '_fresh': True}
     token = generate_csrf_token(csrf_data, flask_app.config['SECRET_KEY'])
     store = FakeFontStore()
     router = create_admin_theme_font_router(

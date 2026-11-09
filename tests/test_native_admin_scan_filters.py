@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_scan_filters import create_admin_scan_filters_router
 from oneirodex.runtime_native.response_compat import flask_redirect_response
 from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
@@ -38,7 +40,7 @@ def make_client(data=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-scan-filters-secret', WTF_CSRF_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    user = SimpleNamespace(id=15, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: 'fp')
+    user = SimpleNamespace(id=15, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef')
     manager = SimpleNamespace(login_view='login.login', blueprint_login_views={}, login_message='Please log in.', login_message_category='message', localize_callback=None, session_protection='basic')
     app = FastAPI()
     app.include_router(create_admin_scan_filters_router(
@@ -48,7 +50,7 @@ def make_client(data=None):
         login_manager=manager, data_access=data or FakeFilters(),
     ))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '15:fp', '_fresh': True}, 'native-scan-filters-secret'))
+    client.cookies.set('session', dump_session_cookie({'_user_id': login_identity_for(15), '_fresh': True}, 'native-scan-filters-secret'))
     return client
 
 

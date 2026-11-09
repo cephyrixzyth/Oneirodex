@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_image_queue_read import (
     create_admin_image_queue_read_router,
 )
@@ -37,7 +39,7 @@ def _client(*, role='admin'):
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=9, user_id='operator', role=role, state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -55,7 +57,7 @@ def _client(*, role='admin'):
     ))
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie(
-        {'_user_id': '9:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+        {'_user_id': login_identity_for(9), '_fresh': True}, flask_app.config['SECRET_KEY'],
     ))
     return client
 

@@ -12,6 +12,8 @@ from oneirodex.runtime_native.admin_art_studio_actions import (
     create_admin_art_studio_action_router,
 )
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
 
 
 class FakeActions:
@@ -53,12 +55,13 @@ class FakeActions:
 def _client():
     flask_app = Flask(__name__)
     flask_app.root_path = '/app/oneirodex'
+    flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.config.update(
         SECRET_KEY='native-art-actions', CSP_ENABLED=False, WTF_CSRF_ENABLED=True,
     )
     user = SimpleNamespace(
         id=18, user_id='admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -66,7 +69,7 @@ def _client():
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     actions = FakeActions()
     events = []
@@ -159,3 +162,14 @@ def test_art_studio_apply_and_batch_alias_keep_validations_and_results():
     assert [row[0] for row in actions.calls] == ['apply', 'batch-generate', 'batch-generate']
     assert actions.apply_had_running_loop is False
     assert events
+
+
+def test_retired_identity_cannot_reach_art_generation():
+    client, actions, events = _client()
+    session = {'_user_id': '18:0123456789abcdef', '_fresh': True}
+    csrf = generate_csrf_token(session, 'native-art-actions')
+    client.cookies.set('session', dump_session_cookie(session, 'native-art-actions'))
+    response = client.post('/admin/api/art-studio/generate', json={'title': 'Denied'}, headers={'X-CSRFToken': csrf}, follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers['location'].startswith('/login')
+    assert actions.calls == [] and events == []

@@ -9,6 +9,8 @@ from flask import Flask
 
 from oneirodex.runtime_native.admin_artwork_batch import create_admin_artwork_batch_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
 
 
 class FakeArtworkBatch:
@@ -31,7 +33,7 @@ def _client(*, enabled):
     )
     user = SimpleNamespace(
         id=13, user_id='admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -39,7 +41,7 @@ def _client(*, enabled):
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '13:fingerprint', '_fresh': True}
+    session = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     data = FakeArtworkBatch(enabled)
     app = FastAPI()

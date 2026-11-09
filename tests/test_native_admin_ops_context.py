@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native import admin_ops_reads
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token, load_session_cookie,
@@ -84,7 +86,7 @@ def test_admin_ops_member_denial_redirects_instead_of_raising():
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     member = SimpleNamespace(
         id=9, role='member', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Sign in',
@@ -97,7 +99,7 @@ def test_admin_ops_member_denial_redirects_instead_of_raising():
         find_user=lambda user_id: member if user_id == 9 else None,
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: member if value == '9:fingerprint' else None,
+        load_user_id=lambda value: member if value.split(':', 1)[0] == '9' else None,
         login_manager=manager,
         data_access=SimpleNamespace(logs=lambda _limit: (_ for _ in ()).throw(
             AssertionError('member reached admin Ops data'),
@@ -105,7 +107,7 @@ def test_admin_ops_member_denial_redirects_instead_of_raising():
         database_scope=lambda _app: nullcontext(),
     ))
     client = TestClient(native, follow_redirects=False)
-    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(9), '_fresh': True}
     client.cookies.set('session', dump_session_cookie(session, app.config['SECRET_KEY']))
 
     response = client.get('/admin/api/ops/logs')
@@ -120,7 +122,7 @@ def test_ops_limit_uses_first_value_when_query_parameter_is_repeated():
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     admin = SimpleNamespace(
         id=9, role='admin', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     calls = []
     data = SimpleNamespace(
@@ -143,7 +145,7 @@ def test_ops_limit_uses_first_value_when_query_parameter_is_repeated():
     client = TestClient(native_app)
     client.cookies.set(
         'session', dump_session_cookie(
-            {'_user_id': '9:fingerprint', '_fresh': True}, app.config['SECRET_KEY'],
+            {'_user_id': login_identity_for(9), '_fresh': True}, app.config['SECRET_KEY'],
         ),
     )
 
@@ -185,7 +187,7 @@ def test_ops_summary_route_passes_database_scope_to_queue_drain():
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     admin = SimpleNamespace(
         id=9, role='admin', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     calls = []
     scope = lambda _app: nullcontext()
@@ -197,7 +199,7 @@ def test_ops_summary_route_passes_database_scope_to_queue_drain():
     router = admin_ops_reads.create_admin_ops_reads_router(
         app, find_user=lambda user_id: admin if user_id == 9 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: admin if value == '9:fingerprint' else None,
+        load_user_id=lambda value: admin if value.split(':', 1)[0] == '9' else None,
         login_manager=SimpleNamespace(
             login_view='login.login', blueprint_login_views={}, login_message='Sign in',
             login_message_category='message', localize_callback=None,
@@ -209,7 +211,7 @@ def test_ops_summary_route_passes_database_scope_to_queue_drain():
     native.include_router(router)
     client = TestClient(native)
     client.cookies.set('session', dump_session_cookie(
-        {'_user_id': '9:fingerprint', '_fresh': True}, app.config['SECRET_KEY'],
+        {'_user_id': login_identity_for(9), '_fresh': True}, app.config['SECRET_KEY'],
     ))
 
     response = client.get('/admin/api/ops/summary')
@@ -224,7 +226,7 @@ def test_image_refresh_poll_preserves_cached_job_status_and_envelopes_missing_jo
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=9, user_id='ops-admin', role='admin', is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint', name='Ops Admin',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef', name='Ops Admin',
     )
 
     class FakeOps:
@@ -256,7 +258,7 @@ def test_image_refresh_poll_preserves_cached_job_status_and_envelopes_missing_jo
     native_app = FastAPI()
     native_app.include_router(router)
     client = TestClient(native_app)
-    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(9), '_fresh': True}
     client.cookies.set('session', dump_session_cookie(session, app.config['SECRET_KEY']))
 
     anonymous = TestClient(native_app).get(
@@ -318,7 +320,7 @@ def test_clear_system_logs_requires_csrf_audits_actor_and_matches_failure_contra
     app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=9, user_id='ops-admin', role='admin', is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint', name='Ops Admin',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef', name='Ops Admin',
     )
 
     class FakeOps:
@@ -351,7 +353,7 @@ def test_clear_system_logs_requires_csrf_audits_actor_and_matches_failure_contra
     native_app.include_router(router)
     client = TestClient(native_app)
     session = {
-        '_user_id': '9:fingerprint', '_fresh': True,
+        '_user_id': login_identity_for(9), '_fresh': True,
         'permission_check_failed': True, 'permission_errors': ['read-only'],
         'permission_check_path': '/games',
     }

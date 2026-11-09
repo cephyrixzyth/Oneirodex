@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 import pytest
 from werkzeug.exceptions import NotFound
 from werkzeug.utils import redirect
@@ -46,7 +48,7 @@ def _client(shell_path=None):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='whitelist-admin', role='admin', is_active=True,
-        state=True, is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
         name='Admin fixture',
     )
     manager = SimpleNamespace(
@@ -68,7 +70,7 @@ def _client(shell_path=None):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(18), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     return client, data, csrf

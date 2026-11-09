@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_newsletters import create_admin_newsletters_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -35,7 +37,7 @@ def _client(data=None):
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=4, role='admin', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fp',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -55,7 +57,7 @@ def _client(data=None):
         database_scope=lambda _app: nullcontext(),
     ))
     client = TestClient(app)
-    session = {'_user_id': '4:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(4), '_fresh': True}
     client.csrf_token = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     client.adapter = adapter
