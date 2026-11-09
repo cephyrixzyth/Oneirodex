@@ -164,3 +164,31 @@ authentication. SQLite does not qualify PostgreSQL foreign keys, locking or
 migrations; use `tests/test_persistent_sessions.py` with the isolated PostgreSQL
 database for that integration boundary. Current baseline outcomes and remaining
 limits are recorded in the [maintained review](../dev/behavior-parity-review.md).
+
+
+## Shared review fixtures
+
+`tests/fixtures/household_safety.py` provides an opt-in seed for active/disabled
+members, children with no/some library grants, librarian/admin accounts, each API
+scope, persistent identities and synthetic legacy save collisions. Call
+`seed_household(app, db_session, tmp_path, monkeypatch)` with the normal rolled-back
+PostgreSQL fixture; it rejects non-loopback/non-test targets before inserting rows.
+It owns only a child of the supplied pytest temporary directory and never drops a
+schema or broadly deletes files. The runner owns disposable database removal.
+
+The fixture blocks socket connect/connect_ex and DNS except the loopback database
+port, including local SMTP ports. It does not constrain separately launched tools;
+the runner must guard them. For asynchronous in-process ASGI tests on Windows,
+create the event loop before installing this boundary: asyncio uses a private
+socket pair. Do not permit arbitrary loopback connections to accommodate it.
+
+After applying the database safeguards above, run:
+
+```bash
+python -m pytest -o addopts= tests/test_safety_fixture_guards.py tests/test_household_safety_fixture.py tests/test_test_database_guard.py -q
+```
+
+The guard-only module can also run with `--noconftest`. The seeded checks use real
+native ACL/auth/save adapters and PostgreSQL/file persistence; they cover selected
+child save and denial paths, not concurrent locking, provider failures or browser
+service-worker behavior. See [R2010](../dev/parity-evidence/shared-review-fixtures-r2010.json).
