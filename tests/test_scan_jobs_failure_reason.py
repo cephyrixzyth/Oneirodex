@@ -1,11 +1,7 @@
-"""A failed scan job has to say why, on the page operators actually use.
+"""Scan Jobs API preserves operator failure reasons and processed counts.
 
-`/scan_management` is the classic surface the admin SPA points at for scan work.
-Its table translated two specific `error_message` values into friendly statuses
-and let every other reason fall through to a bare "Failed" — so a job reclaimed
-because its owner process had died showed nothing at all. That is precisely the
-confusion the scan-ownership fix set out to end, and this surface was still
-hiding it.
+React ScansPage and scanJobsDom component tests cover the visible caption,
+reason and progress calculation; the server now returns the shared SPA shell.
 """
 
 from datetime import datetime, timezone
@@ -80,14 +76,10 @@ def failed_job(db_session):
 
 def test_reclaimed_job_states_its_reason(admin_client, failed_job):
     """The reason the ownership sweep records must reach the operator."""
-    response = admin_client.get('/scan_management')
-    body = response.get_data(as_text=True)
-
+    response = admin_client.get('/api/scan_jobs_status?status=all')
     assert response.status_code == 200
-    assert 'no longer running' in body, (
-        'a Failed job rendered without its error_message — the operator sees a '
-        'queue that stopped with no explanation'
-    )
+    mine = next(row for row in response.get_json() if row['id'] == failed_job.id)
+    assert mine['error_message'] == RECLAIM_MESSAGE
 
 
 def test_progress_counts_failures_not_just_successes(admin_client, failed_job):
@@ -97,11 +89,14 @@ def test_progress_counts_failures_not_just_successes(admin_client, failed_job):
     success + failed. The template counted successes alone, so a job with any
     failed folder showed one number on load and a different one a poll later.
     """
-    body = admin_client.get('/scan_management').get_data(as_text=True)
+    response = admin_client.get('/api/scan_jobs_status?status=all')
+    assert response.status_code == 200
+    row = next(row for row in response.get_json() if row['id'] == failed_job.id)
 
     # 2 success + 1 failed of 9.
-    assert '3/9' in body
-    assert '2/9' not in body
+    assert row['folders_success'] + row['folders_failed'] == 3
+    assert row['folders_processed'] == 3
+    assert row['total_folders'] == 9
 
 
 def test_sort_key_uses_the_same_processed_count(admin_client, failed_job):
@@ -110,10 +105,12 @@ def test_sort_key_uses_the_same_processed_count(admin_client, failed_job):
     If that attribute counted only successes it would order the table by a
     number the operator cannot see and that disagrees with the caption.
     """
-    body = admin_client.get('/scan_management').get_data(as_text=True)
+    response = admin_client.get('/api/scan_jobs_status?status=all')
+    assert response.status_code == 200
+    row = next(row for row in response.get_json() if row['id'] == failed_job.id)
 
     # 3 of 9 processed == 33.3%, not 22.2%.
-    assert 'data-sort-progress="33.3"' in body
+    assert round(row['progress_percentage'], 1) == 33.3
 
 
 def test_ops_summary_carries_the_failure_reason(app, db_session, failed_job):
@@ -190,10 +187,12 @@ def test_library_tools_live_on_scan_management(admin_client):
     assert "tab === 'tools' || tab === 'libraries'" in routes
 
 
-def test_libraries_tab_redirects_to_libraries_page(admin_client):
+def test_libraries_tab_uses_the_react_libraries_panel(admin_client):
     response = admin_client.get('/scan_management?active_tab=libraries')
-    assert response.status_code == 302
-    assert '/libraries' in response.headers['Location']
+    assert response.status_code == 200
+    assert 'id="admin-app-root"' in response.get_data(as_text=True)
+    routes = (Path(__file__).resolve().parents[1] / 'frontend/admin-app/src/components/AdminRoutes.tsx').read_text(encoding='utf-8')
+    assert "tab === 'tools' || tab === 'libraries'" in routes
 
 
 def test_library_tools_page_redirects_to_the_scan_tab(admin_client):

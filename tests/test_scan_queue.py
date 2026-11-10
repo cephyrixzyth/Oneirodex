@@ -424,6 +424,14 @@ class TestStartOrQueueScan:
 
 class TestLibraryScanApi:
     @pytest.fixture
+    def api_scan_path(self, app, tmp_path, monkeypatch):
+        folder = tmp_path / 'games' / 'pc'
+        folder.mkdir(parents=True)
+        for key in ('DATA_FOLDER_GAMES', 'BASE_FOLDER_POSIX', 'BASE_FOLDER_WINDOWS'):
+            monkeypatch.setitem(app.config, key, str(tmp_path))
+        return str(folder)
+
+    @pytest.fixture
     def admin_user(self, db_session):
         unique = uuid4().hex[:8]
         admin = User(
@@ -454,9 +462,9 @@ class TestLibraryScanApi:
         return user
 
     def test_api_queues_when_busy(
-        self, client, admin_user, sample_library, running_job, db_session
+        self, client, admin_user, sample_library, running_job, db_session, api_scan_path,
     ):
-        sample_library.last_scan_folder = '/games/pc'
+        sample_library.last_scan_folder = api_scan_path
         db_session.commit()
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -466,7 +474,7 @@ class TestLibraryScanApi:
             '/api/admin/libraries/scan',
             json={
                 'library_uuid': sample_library.uuid,
-                'folder': '/games/pc',
+                'folder': api_scan_path,
             },
         )
         assert resp.status_code == 200
@@ -476,7 +484,7 @@ class TestLibraryScanApi:
         assert body['position'] >= 1
 
     def test_api_force_parallel_admin(
-        self, client, admin_user, sample_library, running_job, db_session
+        self, client, admin_user, sample_library, running_job, db_session, api_scan_path,
     ):
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -487,7 +495,7 @@ class TestLibraryScanApi:
                 '/api/admin/libraries/scan',
                 json={
                     'library_uuid': sample_library.uuid,
-                    'folder': '/games/pc',
+                    'folder': api_scan_path,
                     'force_parallel': True,
                 },
             )
@@ -497,7 +505,7 @@ class TestLibraryScanApi:
         assert 'risk' in body or 'parallel' in body['message'].lower()
 
     def test_api_accepts_auto_form_options_for_native_clients(
-        self, client, admin_user, sample_library, db_session
+        self, client, admin_user, sample_library, db_session, api_scan_path,
     ):
         from unittest.mock import patch
 
@@ -511,7 +519,7 @@ class TestLibraryScanApi:
                 '/api/admin/libraries/scan',
                 json={
                     'library_uuid': sample_library.uuid,
-                    'folder': '/games/pc',
+                    'folder': api_scan_path,
                     'scan_mode': 'files',
                     'remove_missing': False,
                     'download_missing_images': True,
@@ -525,7 +533,7 @@ class TestLibraryScanApi:
             )
         assert resp.status_code == 200
         call = start.call_args.kwargs
-        assert call['folder_path'].replace('\\', '/').endswith('/games/pc')
+        assert call['folder_path'] == api_scan_path
         assert call['scan_mode'] == 'files'
         assert call['remove_missing'] is False
         assert call['download_missing_images'] is True
@@ -535,7 +543,7 @@ class TestLibraryScanApi:
         assert call['schedule_fields']['schedule_kind'] == 'interval'
         assert call['schedule_fields']['schedule_interval_minutes'] == 120
 
-    def test_api_rejects_unknown_scan_mode(self, client, admin_user, sample_library):
+    def test_api_rejects_unknown_scan_mode(self, client, admin_user, sample_library, api_scan_path):
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
@@ -543,7 +551,7 @@ class TestLibraryScanApi:
             '/api/admin/libraries/scan',
             json={
                 'library_uuid': sample_library.uuid,
-                'folder': '/games/pc',
+                'folder': api_scan_path,
                 'scan_mode': 'guess',
             },
         )

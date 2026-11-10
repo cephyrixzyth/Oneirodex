@@ -116,14 +116,16 @@ def test_restart_route_forwards_queue_choice(app, db_session, library, tmp_path,
 
 
 @pytest.fixture
-def worker_stubs(monkeypatch, db_session):
+def worker_stubs(monkeypatch, db_session, app, tmp_path):
+    for key in ('DATA_FOLDER_GAMES', 'BASE_FOLDER_POSIX', 'BASE_FOLDER_WINDOWS'):
+        monkeypatch.setitem(app.config, key, str(tmp_path))
     db_session.add(AllowedFileType(value='.exe'))
     db_session.commit()
-    monkeypatch.setattr(scans, 'load_scanning_filter_patterns', lambda: ([], []))
-    monkeypatch.setattr(scans, 'load_skip_dir_patterns', lambda: [])
-    monkeypatch.setattr(scans, 'load_skip_dir_regex_patterns', lambda: [])
-    monkeypatch.setattr(scans, 'IGDBRateLimiter', Mock)
-    monkeypatch.setattr(scans, '_drain_scan_queue_safe', lambda: None)
+    monkeypatch.setattr('oneirodex.utils.functions.load_scanning_filter_patterns', lambda: ([], []))
+    monkeypatch.setattr('oneirodex.utils.functions.load_skip_dir_patterns', lambda: [])
+    monkeypatch.setattr('oneirodex.utils.functions.load_skip_dir_regex_patterns', lambda: [])
+    monkeypatch.setattr('oneirodex.utils.igdb_api.IGDBRateLimiter', Mock)
+    monkeypatch.setattr(scans, '_drain_scan_queue_safe', lambda *_a, **_k: None)
     monkeypatch.setattr(scans, 'cooperative_yield', lambda: None)
     monkeypatch.setattr('oneirodex.utils.notifications.flush_library_add_digest', lambda *_: None)
     monkeypatch.setattr('oneirodex.utils.shutdown.should_continue_processing', lambda: True)
@@ -139,7 +141,7 @@ def test_empty_success_preserves_recurring_schedule(
                       schedule='8_hours' if kind == 'preset' else None,
                       schedule_interval_minutes=30 if kind == 'interval' else None,
                       schedule_cron='*/5 * * * *' if kind == 'cron' else None)
-    monkeypatch.setattr(scans, 'get_game_names_from_folder', lambda *a, **k: [])
+    monkeypatch.setattr('oneirodex.utils.gamenames.get_game_names_from_folder', lambda *a, **k: [])
     scans.scan_and_add_games(str(tmp_path), library_uuid=library.uuid, existing_job=target)
     db_session.expire_all()
     target = db_session.get(ScanJob, target.id)
@@ -247,13 +249,13 @@ def test_existing_game_force_refresh_is_independent_of_worker_count(
     db_session.commit()
     target = make_job(db_session, library, tmp_path, 'Running', folders_success=0, folders_failed=0)
     monkeypatch.setattr(scans, 'ThreadPoolExecutor', InlinePool)
-    monkeypatch.setattr(scans, 'get_game_names_from_folder', lambda *a, **k: [{'name': game.name, 'full_path': str(game_dir)}])
+    monkeypatch.setattr('oneirodex.utils.gamenames.get_game_names_from_folder', lambda *a, **k: [{'name': game.name, 'full_path': str(game_dir)}])
     updates, extras, hltb = Mock(), Mock(), Mock()
-    monkeypatch.setattr(scans, 'process_game_updates', updates)
-    monkeypatch.setattr(scans, 'process_game_extras', extras)
-    monkeypatch.setattr(scans, 'process_pc_dlc_and_extra_roots', Mock())
+    monkeypatch.setattr('oneirodex.utils.scanning.process_game_updates', updates)
+    monkeypatch.setattr('oneirodex.utils.scanning.process_game_extras', extras)
+    monkeypatch.setattr('oneirodex.utils.scanning.process_pc_dlc_and_extra_roots', Mock())
     monkeypatch.setattr('oneirodex.utils.hltb.update_game_hltb_sync', hltb)
-    monkeypatch.setattr(scans, 'process_game_with_fallback', Mock(side_effect=AssertionError('Existing game must not rematch')))
+    monkeypatch.setattr('oneirodex.utils.scanning.process_game_with_fallback', Mock(side_effect=AssertionError('Existing game must not rematch')))
     scans.scan_and_add_games(str(tmp_path), library_uuid=library.uuid, existing_job=target,
                              force_updates_extras_scan=True, force_hltb_refetch=True)
     updates.assert_called_once()
