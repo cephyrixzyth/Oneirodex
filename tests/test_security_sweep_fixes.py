@@ -145,10 +145,11 @@ def test_oidc_never_links_by_username_or_unverified_email(app, db_session):
     admin_email = admin.email
     by_name = provision_or_update_user(db_session, {'sub': 'idp-1', 'preferred_username': admin.name}, _oidc_config())
     assert by_name.id != admin.id
-    with pytest.raises(ValueError, match='already exists'):
+    with pytest.raises(ValueError, match='Unable to sign in with this SSO identity') as refused:
         provision_or_update_user(
             db_session, {'sub': 'idp-2', 'email': admin_email, 'email_verified': False, 'preferred_username': 'x'},
             _oidc_config())
+    assert admin_email not in str(refused.value)
     db_session.rollback()
     db_session.refresh(admin)
     assert admin.email == admin_email and admin.oidc_subject is None
@@ -393,8 +394,9 @@ def test_an_operator_can_trust_a_provider_that_omits_email_verified(app, db_sess
 
     member = _user(db_session, prefix='ssolegacy')
     claims = {'sub': 'idp-legacy', 'email': member.email, 'preferred_username': member.name}
-    with pytest.raises(ValueError, match='already exists'):
+    with pytest.raises(ValueError, match='Unable to sign in with this SSO identity') as refused:
         provision_or_update_user(db_session, claims, _oidc_config())
+    assert member.email not in str(refused.value)
     db_session.rollback()
     monkeypatch.setitem(app.config, 'OIDC_TRUST_PROVIDER_EMAIL', True)
     assert provision_or_update_user(db_session, claims, _oidc_config()).id == member.id

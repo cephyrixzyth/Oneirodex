@@ -11,6 +11,7 @@ from flask_login import login_user
 from sqlalchemy import select
 
 from oneirodex.models import GlobalSettings, StoreAccount, StoreSyncJob, User, UserOwnedTitle
+from oneirodex.utils.store_credentials import read_store_credential
 
 
 @pytest.fixture(autouse=True)
@@ -65,7 +66,10 @@ def test_connect_bodies_accept_existing_aliases_and_reject_the_rest(client, app,
     _login(client, app, member)
     assert client.post('/api/ownership/gog', json={'user_id': 'me', 'token': 'refresh'}).status_code == 201
     stored = db_session.execute(select(StoreAccount).filter_by(user_id=member.id, store='gog')).scalar_one()
-    assert json.loads(stored.credential) == {'refresh_token': 'refresh'} and stored.updated_at is not None
+    assert stored.credential is None
+    assert stored.credential_ciphertext.startswith('odsc:v1:')
+    assert json.loads(read_store_credential(stored)) == {'refresh_token': 'refresh'}
+    assert stored.updated_at is not None
     assert client.post('/api/ownership/epic', json={'note': 'n', 'device_auth': {'account_id': 'a', 'device_id': 'd', 'secret': 's'}}).status_code == 201
     assert client.post('/api/ownership/amazon', json={'nile_json': {'tokens': {'bearer': {'refresh_token': 'r'}}}, 'device_serial_number': 'S'}).status_code == 201
     response = client.post('/api/ownership/gog', json={'refresh_token': 'x', 'download': True})

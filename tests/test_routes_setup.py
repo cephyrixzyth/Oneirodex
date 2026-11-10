@@ -5,6 +5,8 @@ import pytest
 def _keyring(reusable_secret_keyring):
     return reusable_secret_keyring
 import json
+import re
+from html import unescape
 from unittest.mock import patch, Mock, MagicMock
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -1041,7 +1043,12 @@ class TestSetupFormIntegration:
         # feedback as an escaped alert for the React setup wizard.
         assert response.status_code == 200
         assert b'id="member-auth-root"' in response.data
-        assert b'role="alert"' in response.data
+        notices = self._server_notices(response)
+        assert all(notice['role'] == 'alert' for notice in notices)
+        messages = ' '.join(notice['message'] for notice in notices)
+        assert 'Invalid email address' in messages
+        assert 'Password must be at least 8 characters long' in messages
+        assert 'Passwords must match' in messages
     
     def test_igdb_form_validation_error_handling(self, client, db_session, admin_user):
         """Test how IGDB setup handles real form validation errors."""
@@ -1060,4 +1067,15 @@ class TestSetupFormIntegration:
         # Validation feedback is inserted into the shared auth shell.
         assert response.status_code == 200
         assert b'id="member-auth-root"' in response.data
-        assert b'role="alert"' in response.data
+        notices = self._server_notices(response)
+        assert {'role': 'alert', 'message': 'Client ID: Client ID must be between 20 and 50 characters'} in notices
+        assert {'role': 'alert', 'message': 'Client Secret: Client Secret must be between 20 and 50 characters'} in notices
+
+    @staticmethod
+    def _server_notices(response):
+        # React creates the alert elements from the escaped shell payload.
+        match = re.search(r' data-auth-notices="([^"]+)"', response.get_data(as_text=True))
+        assert match is not None
+        notices = json.loads(unescape(match.group(1)))
+        assert notices
+        return notices

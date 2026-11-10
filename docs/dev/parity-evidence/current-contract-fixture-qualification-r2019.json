@@ -1,0 +1,79 @@
+{
+  "review_id": "R2019",
+  "doc_status": "Reference",
+  "title": "Current image, setup-notice, SSO, store and theme contract qualification",
+  "source_head_before_change": "36f651021be3659f33362781ecc3c13d6a515c2c",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_routes.py": "7c7839c49422b0de6319ff36a7e9d39e1eea1e20318cf3be5242491566aa4656",
+    "tests/test_routes_setup.py": "4f3c5c87d1442399907fb22c6e032175bb86d7494a57174f2d6b2b96346454a0",
+    "tests/test_security_sweep_fixes.py": "a1fab11bc877ab832030a40e29569410b834827e2266c8eceda827b6540a6835",
+    "tests/test_store_connections_app.py": "d8a0190df476c9d42d3ad7d8e49681522b4a4f4947e9f379ac62c20b079c03e7",
+    "tests/test_store_credential_setup_status.py": "165b56fcdf19d925bc5e4fb287d6bbbdc36d6f0680126588013f9f7be7c7a4da",
+    "tests/test_updates_scan_and_shelves.py": "638a57d5fccf4bc1a1a1bf471e4f688ca9e30f2ee6674ade62a82db547b71e59",
+    "tests/test_theme_asset_cache.py": "2f0a1bacc887c70fbc6a23dbfd957dbfb460f90ef83eb987b36e5259f7b5f321",
+    "tests/test_theme_picker_ui.py": "a3f582b021b1e5ef0bc6442e9bbbdd37da97ffa2126d3bfaad98461fe315a3e1",
+    "frontend/member-app/src/AuthApp.test.tsx": "7ec2d6a8ef97e9a77e14d74d1742244f50b84e45e632136428ee441024bf591e"
+  },
+  "classification": "Obsolete tests and missing authentication preconditions repaired; no production behavior change.",
+  "prior_red": "Remaining-module diagnostic at b9d61bce: 34 failed, 420 passed, 2 skipped. R2017 and R2018 repaired separate subsets; these checks target the next confirmed stale-contract families.",
+  "checks": {
+    "format": {
+      "exit_code": 0,
+      "log_sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    "eslint": {
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "contracts-fixtures-green": {
+      "exit_code": 0,
+      "seconds": 87.89,
+      "counts": {
+        "tests": 217,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1,
+        "passed": 216
+      },
+      "owned_database_removed": true,
+      "log_sha256": "ac95275e0ee7814460a36efc480e40e519c2ecb552cf2f247af6537a73b80ad1"
+    },
+    "contracts-auth-ui": {
+      "exit_code": 0,
+      "seconds": 9.87,
+      "passed": 20,
+      "log_sha256": "b7d32dbfc0d9e16c30256d9f6dc7253c7da6162592fe702ae2b1f94f77d60585"
+    },
+    "contracts-theme-ui": {
+      "exit_code": 0,
+      "seconds": 6.66,
+      "passed": 6,
+      "log_sha256": "0df4a4af7f24191eccf356e64ee8b6d1074b0171d984587463c63b4383ba2a39"
+    }
+  },
+  "verified_behavior": [
+    "Actual Pillow JPEG upload publishes readable bytes and a database row; invalid bytes leave rows and files unchanged. Removed retired decoder and globally patched path mocks.",
+    "Escaped auth-shell bootstrap carries actual setup validation messages with alert roles. React renders both status/alert server notices and dismisses them.",
+    "OIDC collision rejection keeps generic non-enumerating copy, email secrecy and original account/linking assertions.",
+    "Store link writes encrypted odsc:v1 ciphertext with no legacy plaintext; production decryptor recovers expected synthetic refresh token. Missing-key/migration errors use actual browser authentication and remain redacted.",
+    "Native scan body-size test uses a persisted identity and reaches 413/valid-request adapter assertions.",
+    "Actual ASGI GETs deliver no-cache for mutable theme and SPA entry files, public one-hour cache for chunks/artwork, and expected bytes. Existing admin component test opens the shared Preferences modal."
+  ],
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "node": "22",
+    "database": "Owned loopback PostgreSQL 17.6 plus disposable SQLite authentication fixture",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "warnings": "23 Python warnings: existing WTForms/Flask-Login deprecations and one nested-transaction deassociation warning from the poller error fixture. One platform-dependent case skipped.",
+  "limits": [
+    "Focused selections overlap earlier evidence and are not unique suite totals.",
+    "Remaining scan utility failures, current CI, unrestricted-suite, deployed/restore, real product browser/headset and installed-platform acceptance remain open.",
+    "No route coverage promotion or UI layout change."
+  ],
+  "capture": "Not applicable: test-only changes; no product UI change.",
+  "post_verification_changes": "Only trailing blank-line normalization in theme cache test before commit."
+}

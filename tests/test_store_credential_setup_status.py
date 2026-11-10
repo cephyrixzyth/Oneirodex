@@ -1,8 +1,7 @@
 """DB-free checks for key-ring readiness and connect error contracts."""
-from types import SimpleNamespace
-
 import pytest
 from flask import Flask
+from flask_login import LoginManager, UserMixin, login_user
 
 from oneirodex.routes_apis import ownership
 from oneirodex.utils.store_connection_status import _derive
@@ -95,7 +94,12 @@ def test_household_paths_that_persist_refreshes_require_keyring(store):
 )
 def test_connect_errors_use_redacted_storage_setup_contract(monkeypatch, error, expected_reason):
     app = Flask(__name__)
-    monkeypatch.setattr(ownership, 'current_user', SimpleNamespace(id=42))
+    app.secret_key = 'synthetic-store-setup-test'
+    LoginManager(app)
+
+    class Member(UserMixin):
+        id = 42
+        role = 'user'
     monkeypatch.setattr(ownership, 'is_ownership_sync_enabled', lambda: True)
     monkeypatch.setattr(
         ownership,
@@ -107,6 +111,7 @@ def test_connect_errors_use_redacted_storage_setup_contract(monkeypatch, error, 
         raise error
 
     with app.test_request_context('/api/ownership/gog'):
+        login_user(Member())
         response, status = ownership._connect_response('gog', fail_connect)
 
     payload = response.get_json()

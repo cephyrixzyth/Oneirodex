@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from flask import Flask
 from flask_login import LoginManager
 from sqlalchemy import select
+from tests.fixtures.native_auth import persistent_login_store, login_identity_for  # noqa: F401
 
 from oneirodex import db
 from oneirodex.models import DiscoverySection, Game, Library, User
@@ -199,11 +200,12 @@ class TestUpdatesScanRoute:
         )
         user = SimpleNamespace(
             id=81, role='user', state=True, is_active=True, is_authenticated=True,
-            session_fingerprint=lambda: 'fp',
+            session_fingerprint=lambda: '0123456789abcdef',
         )
         manager = LoginManager(flask_app)
         manager.login_view = 'login.login'
-        manager.user_loader(lambda identity: user if identity == '81:fp' else None)
+        identity = login_identity_for(user.id)
+        manager.user_loader(lambda value: user if value == identity else None)
         flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
 
         class FakeScan:
@@ -224,7 +226,7 @@ class TestUpdatesScanRoute:
             login_manager=manager, data_access=data,
         ))
         cookie = dump_session_cookie(
-            {'_user_id': '81:fp', '_fresh': True},
+            {'_user_id': identity, '_fresh': True},
             'native-updates-scan-body-limit-test-secret',
         )
 

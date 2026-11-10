@@ -123,4 +123,4 @@ def test_admin_manage_themes_sends_you_to_preferences_to_choose():
     assert 'adminThemeGrid' not in page
     assert 'apply_theme' not in page
     assert 'Choose your theme in Preferences' in page
-    assert '/preferences#themes' in page
+    assert 'onClick={() => void openPreferencesModal()}' in page

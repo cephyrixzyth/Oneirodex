@@ -74,24 +74,28 @@ test('login uses the legacy centered card and stacked account actions', async ()
   ).toHaveLength(3)
 })
 
-test('server login notices follow account actions and can be dismissed', async () => {
-  const mount = document.createElement('div')
-  mount.id = 'member-auth-root'
-  mount.dataset.authNotices = JSON.stringify([
-    { role: 'status', message: 'Please log in to access this page.' },
-  ])
-  document.body.appendChild(mount)
+test.each(['status', 'alert'] as const)(
+  'server login %s notices follow account actions and can be dismissed',
+  async (role) => {
+    const mount = document.createElement('div')
+    mount.id = 'member-auth-root'
+    mount.dataset.authNotices = JSON.stringify([
+      { role, message: 'Please log in to access this page.' },
+    ])
+    document.body.appendChild(mount)
 
-  render(<AuthApp />, { container: mount })
+    render(<AuthApp />, { container: mount })
 
-  const message = await screen.findByText('Please log in to access this page.')
-  const accountActions = screen.getByRole('link', { name: 'Forgot password?' })
-  expect(
-    Boolean(accountActions.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING),
-  ).toBe(true)
-  fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
-  expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
-})
+    const message = await screen.findByText('Please log in to access this page.')
+    expect(message.closest('.auth-pilot__server-notice')).toHaveAttribute('role', role)
+    const accountActions = screen.getByRole('link', { name: 'Forgot password?' })
+    expect(
+      Boolean(accountActions.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
+    expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
+  },
+)
 
 test('password reset request success uses the dismissible login notice', async () => {
   window.history.replaceState({}, '', '/login?password_reset_requested=1')

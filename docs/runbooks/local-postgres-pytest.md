@@ -4,6 +4,13 @@
 
 Native Windows, with Docker Desktop running.
 
+Authentication-sensitive fixtures must issue persisted native login identities and use a fresh
+Flask app context when consecutive bearer requests change identity or scope. A test-wide database
+context otherwise retains Flask-Login's first loaded user. Store-link assertions must inspect
+ciphertext and use the production decryptor with a temporary test key ring; plaintext columns are
+no longer the credential source. Auth-shell validation notices are escaped bootstrap data that
+React renders as alerts, rather than server-rendered alert elements.
+
 **CI:** `.github/workflows/ci-tests.yml` spins up Postgres with
 `POSTGRES_DB=oneirodextest` and runs a *core* pytest subset only. The full suite
 stays local/release — see release-checklist.md.
