@@ -13,6 +13,11 @@ React renders as alerts, rather than server-rendered alert elements.
 Busy scan fixtures must use UTC timestamps so stale-job recovery does not reclaim a newly seeded
 job. Worker fault tests must configure a temporary allowed scan root before testing folder I/O or
 database errors; paths outside configured roots are rejected before those later operations.
+`tests/fixtures/faults.py` also provides an event-controlled delayed provider and a `commit_ack`
+save seam. The latter performs the real commit before raising a synthetic acknowledgement error.
+Cross-request checks use `no_savepoint_db` so another PostgreSQL session can observe the commit;
+release delayed providers in `finally` before joining their worker. These fixtures simulate timing
+and acknowledgement loss; they do not physically drop database connections or contact providers.
 
 **CI:** `.github/workflows/ci-tests.yml` spins up Postgres with
 `POSTGRES_DB=oneirodextest` and runs a *core* pytest subset only. The full suite

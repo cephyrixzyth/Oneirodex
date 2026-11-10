@@ -1,7 +1,8 @@
-"""Test-only deterministic seams around real save I/O and transactions."""
+"""Test-only deterministic provider-return, save-I/O and transaction seams."""
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import errno
+from threading import Event
 
 from sqlalchemy.exc import OperationalError
 
@@ -15,6 +16,26 @@ class Fault:
             self.hits += 1
             raise error
         return original(*args, **kwargs)
+
+
+@dataclass
+class DelayedProvider:
+    """Hold one synthetic provider result until the test permits its return.
+
+    No real request or sleep; the test can commit another request while this
+    boundary is held. Release in a finally block before joining its worker.
+    """
+
+    result: object = field(repr=False)
+    timeout: float = 10
+    entered: Event = field(default_factory=Event, repr=False)
+    release: Event = field(default_factory=Event, repr=False)
+
+    def __call__(self):
+        self.entered.set()
+        if not self.release.wait(timeout=self.timeout):
+            raise TimeoutError('Controlled provider return was not released')
+        return self.result
 
 
 class _Override:
@@ -35,12 +56,14 @@ def fail_next_save_io(monkeypatch, operation, *, session=None):
     Restore every replacement on exit. OS replacements are local to the save
     module, so unrelated application code and the test runner keep real I/O.
     The commit seam targets pending save changes, leaving the real bearer
-    last-used commit intact. This is not physical disk/connection exhaustion.
+    last-used commit intact. ``commit_ack`` commits for real, then raises to
+    simulate a lost success acknowledgement. This does not physically sever
+    a database connection or exhaust the disk.
     """
     from oneirodex.utils import emulator_saves
     from oneirodex.models import EmulatorSave
 
-    if operation not in {'write', 'file_fsync', 'replace', 'directory_fsync', 'commit'}:
+    if operation not in {'write', 'file_fsync', 'replace', 'directory_fsync', 'commit', 'commit_ack'}:
         raise ValueError('Unknown save fault operation')
     fault = Fault()
     error = OSError(errno.ENOSPC, 'synthetic-private-canary')
@@ -80,6 +103,10 @@ def fail_next_save_io(monkeypatch, operation, *, session=None):
                     isinstance(row, EmulatorSave) for row in (*session.new, *session.dirty)
                 )
                 if save_pending:
+                    if operation == 'commit_ack' and fault.hits == 0:
+                        original(*args, **kwargs)
+                        fault.hits += 1
+                        raise error
                     return fault.call(original, error, *args, **kwargs)
                 return original(*args, **kwargs)
 
