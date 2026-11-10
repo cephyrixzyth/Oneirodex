@@ -13,6 +13,10 @@ React renders as alerts, rather than server-rendered alert elements.
 Busy scan fixtures must use UTC timestamps so stale-job recovery does not reclaim a newly seeded
 job. Worker fault tests must configure a temporary allowed scan root before testing folder I/O or
 database errors; paths outside configured roots are rejected before those later operations.
+Scan helper assertions must include the forwarded application, allowed-root and database-scope
+arguments. Enrichment diagnostics use Python logging (`caplog`), rather than stdout. Legacy SMTP
+send tests patch the function-local `flask.flash` import and transport constructors, leaving real
+message construction and TLS upgrade behavior under test.
 `tests/fixtures/faults.py` also provides an event-controlled delayed provider and a `commit_ack`
 save seam. The latter performs the real commit before raising a synthetic acknowledgement error.
 Cross-request checks use `no_savepoint_db` so another PostgreSQL session can observe the commit;

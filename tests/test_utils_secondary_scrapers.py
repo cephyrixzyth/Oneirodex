@@ -1,5 +1,6 @@
 """Unit tests for Steam/RAWG secondary enrichment and VR detection (no DB)."""
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -199,7 +200,8 @@ def test_enrich_game_with_steam_applies_genres(mock_fetch, mock_apply):
 
 @patch('oneirodex.utils.services.game_enrich.apply_enriched_metadata')
 @patch('oneirodex.utils.services.game_enrich.fetch_steam_data')
-def test_enrich_game_with_steam_logs_vr_yes(mock_fetch, mock_apply, capsys):
+def test_enrich_game_with_steam_logs_vr_yes(mock_fetch, mock_apply, caplog):
+    caplog.set_level(logging.INFO, logger='oneirodex.utils.services.game_enrich')
     from oneirodex.utils.game_core import enrich_game_with_steam
 
     game = SimpleNamespace(name='Archery Kings VR', player_perspectives=[])
@@ -212,21 +214,22 @@ def test_enrich_game_with_steam_logs_vr_yes(mock_fetch, mock_apply, capsys):
     mock_apply.return_value = True
 
     enrich_game_with_steam(game)
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "Steam VR: yes" in out
     assert "Archery Kings VR" in out
 
 
 @patch('oneirodex.utils.services.game_enrich.apply_enriched_metadata')
 @patch('oneirodex.utils.services.game_enrich.fetch_steam_data')
-def test_enrich_game_with_steam_logs_vr_no_when_skipped(mock_fetch, mock_apply, capsys):
+def test_enrich_game_with_steam_logs_vr_no_when_skipped(mock_fetch, mock_apply, caplog):
+    caplog.set_level(logging.INFO, logger='oneirodex.utils.services.game_enrich')
     from oneirodex.utils.game_core import enrich_game_with_steam
 
     game = SimpleNamespace(name='Plain Game', player_perspectives=[])
     mock_fetch.return_value = None
 
     enrich_game_with_steam(game)
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "Steam VR: no" in out
     assert "no_steam_data" in out
     mock_apply.assert_not_called()
@@ -235,7 +238,7 @@ def test_enrich_game_with_steam_logs_vr_no_when_skipped(mock_fetch, mock_apply, 
 @patch('oneirodex.utils.services.game_enrich.apply_enriched_metadata')
 @patch('oneirodex.utils.services.game_enrich.fetch_steam_data')
 def test_enrich_game_with_steam_still_enriches_an_already_vr_game(
-    mock_fetch, mock_apply, capsys,
+    mock_fetch, mock_apply, caplog,
 ):
     """Being flagged VR must not skip the rest of the enrichment pass.
 
@@ -243,6 +246,7 @@ def test_enrich_game_with_steam_still_enriches_an_already_vr_game(
     which also skipped the summary / genre / game-mode backfill — VR detection
     is only one part of what this pass does. The flag stays true either way.
     """
+    caplog.set_level(logging.INFO, logger='oneirodex.utils.services.game_enrich')
     from oneirodex.utils.game_core import enrich_game_with_steam
 
     mock_fetch.return_value = {
@@ -267,13 +271,14 @@ def test_enrich_game_with_steam_still_enriches_an_already_vr_game(
 
     assert result['is_vr'] is True
     mock_fetch.assert_called_once()
-    assert 'Steam VR: yes' in capsys.readouterr().out
+    assert 'Steam VR: yes' in caplog.text
 
 
 @patch('oneirodex.utils.services.game_enrich.apply_enriched_metadata')
 @patch('oneirodex.utils.services.game_enrich.fetch_steam_data')
-def test_enrich_game_with_steam_reports_rollback(mock_fetch, mock_apply, capsys):
+def test_enrich_game_with_steam_reports_rollback(mock_fetch, mock_apply, caplog):
     """When the savepoint rolls back, the caller must see applied=False and no perspectives."""
+    caplog.set_level(logging.INFO, logger='oneirodex.utils.services.game_enrich')
     from oneirodex.utils.game_core import enrich_game_with_steam
 
     game = SimpleNamespace(name='Archery Kings VR', player_perspectives=[])
@@ -290,7 +295,7 @@ def test_enrich_game_with_steam_reports_rollback(mock_fetch, mock_apply, capsys)
     assert result['applied'] is False
     assert result['perspectives_added'] == []
     assert result['reason'] == 'enrichment_savepoint_rollback'
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "enrichment_savepoint_rollback" in out
 
 

@@ -156,7 +156,10 @@ class TestTryAddGame:
             sample_scan_job.id,
             sample_library.uuid,
             fetch_hltb=False,
-            settings=None
+            settings=None,
+            app=None,
+            allowed_bases=None,
+            database_scope=None,
         )
     
     @patch('oneirodex.utils.game_core.retrieve_and_save_game')
