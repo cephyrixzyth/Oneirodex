@@ -84,7 +84,7 @@ def test_setup_library_keeps_distinct_path_validation_messages(monkeypatch):
     )
 
 
-def test_setup_integrations_save_only_selected_nonblank_provider_credentials(monkeypatch):
+def test_setup_integrations_save_only_selected_nonblank_provider_credentials(monkeypatch, reusable_secret_keyring):
     import oneirodex.runtime_native.db_session as native_db_session
     import oneirodex.runtime_native.setup_transition as setup_transition
     import oneirodex.utils.global_settings as global_settings
@@ -134,10 +134,13 @@ def test_setup_integrations_save_only_selected_nonblank_provider_credentials(mon
     assert failure is None and new_admin is None
     assert result == {'step': 6, 'next_url': '/setup/library'}
     assert settings.steam_web_api_key == 'existing-steam-key'
-    assert settings.steamgriddb_api_key == 'selected-replacement'
+    from oneirodex.utils.secret_store import read_global_secret
+    assert settings.steamgriddb_api_key.startswith('odrc:v1:')
+    assert read_global_secret(settings, 'steamgriddb_api_key') == 'selected-replacement'
     assert settings.giantbomb_api_key == 'existing-giantbomb-key'
     assert settings.mobygames_api_key == 'existing-moby-key'
-    assert settings.thegamesdb_api_key == 'selected-gamesdb'
+    assert settings.thegamesdb_api_key.startswith('odrc:v1:')
+    assert read_global_secret(settings, 'thegamesdb_api_key') == 'selected-gamesdb'
     assert settings.enable_hltb_integration is True
     assert settings.oidc_enabled is False
     assert calls == [('commit', 6)]

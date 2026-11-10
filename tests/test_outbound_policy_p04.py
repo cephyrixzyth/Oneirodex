@@ -222,6 +222,7 @@ def _patch_requests(monkeypatch, handler):
         return handler(len(calls), url)
 
     monkeypatch.setattr(requests, 'request', fake)
+    monkeypatch.setattr(requests.Session, 'request', lambda _self, method, url, **kwargs: fake(method, url, **kwargs))
     return calls
 
 

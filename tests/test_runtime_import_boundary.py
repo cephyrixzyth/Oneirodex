@@ -218,11 +218,12 @@ def test_asgi_router_startup_does_not_construct_or_import_flask():
                 'import asyncio, sys; '
                 'from types import SimpleNamespace; '
                 'import oneirodex.runtime_native.admin_pilot as admin_pilot; '
-                'user = SimpleNamespace(id=7, name="Admin", role="admin", is_active=True, avatarpath="newstyle/avatars/default.svg", preferences=SimpleNamespace(theme=None, icon_pack="outline"), session_fingerprint=lambda: "fresh"); '
+                'user = SimpleNamespace(id=7, name="Admin", role="admin", is_active=True, avatarpath="newstyle/avatars/default.svg", preferences=SimpleNamespace(theme=None, icon_pack="outline"), session_fingerprint=lambda: "0123456789abcdef"); '
                 'admin_pilot._native_auth_backend = lambda _app: (lambda uid: user if uid == 7 else None, lambda _prefix: None, lambda _token: None); '
                 'from asgi import LazyASGIApp; '
                 'from oneirodex.runtime_native.runtime_context import NativeRuntimeContext; '
-                'runtime = LazyASGIApp(); '
+                'from tests.fixtures.native_runtime_probe import persisted_runtime_probe; '
+                'runtime, identity = persisted_runtime_probe(user); '
                 'asyncio.run(runtime._ensure_flask()); '
                 'import httpx; '
                 'client = httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url="http://localhost"); '
@@ -232,7 +233,7 @@ def test_asgi_router_startup_does_not_construct_or_import_flask():
                 'assert response.headers["location"] == "/login?next=%2Fapi%2Faccount%2Fsummary"; '
                 'runtime._runtime_config["SESSION_PROTECTION"] = "none"; '
                 'from oneirodex.runtime_native.session_compat import dump_session_cookie; '
-                'cookie = dump_session_cookie({"_user_id": "7:fresh", "_fresh": True}, runtime._runtime_config["SECRET_KEY"]); '
+                'cookie = dump_session_cookie({"_user_id": identity, "_fresh": True}, runtime._runtime_config["SECRET_KEY"]); '
                 'client = httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url="http://localhost", cookies={"session": cookie}); '
                 'response = asyncio.run(client.get("/admin/api/runtime-bootstrap")); '
                 'asyncio.run(client.aclose()); '
@@ -472,7 +473,7 @@ user = SimpleNamespace(
     id=7, name='Admin', role='admin', is_active=True,
     avatarpath='newstyle/avatars/default.svg',
     preferences=SimpleNamespace(theme=None, icon_pack='outline'),
-    session_fingerprint=lambda: 'fresh',
+    session_fingerprint=lambda: '0123456789abcdef',
 )
 admin_pilot._native_auth_backend = lambda _app: (
     lambda uid: user if uid == 7 else None,
@@ -480,7 +481,8 @@ admin_pilot._native_auth_backend = lambda _app: (
     lambda _token: None,
 )
 from asgi import LazyASGIApp
-runtime = LazyASGIApp()
+from tests.fixtures.native_runtime_probe import persisted_runtime_probe
+runtime, identity = persisted_runtime_probe(user)
 asyncio.run(runtime._ensure_flask())
 runtime._runtime_config['SESSION_PROTECTION'] = 'none'
 import httpx
@@ -493,7 +495,7 @@ async def main():
         assert anonymous.status_code == 302
         assert anonymous.headers['location'] == '/login?next=%2Fapi%2Faccount%2Fsummary'
         cookie = dump_session_cookie(
-            {'_user_id': '7:fresh', '_fresh': True},
+            {'_user_id': identity, '_fresh': True},
             runtime._runtime_config['SECRET_KEY'],
         )
         client.cookies.set('session', cookie)

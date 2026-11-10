@@ -9,6 +9,10 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from oneirodex.models import User
+from oneirodex.utils.persistent_sessions import issue_login_identity, validate_login_identity
+from tests.fixtures.native_auth import persistent_login_store
+
 from oneirodex.runtime_native.oidc_auth import create_oidc_auth_router
 from oneirodex.runtime_native.session_compat import load_session_cookie
 
@@ -39,11 +43,11 @@ class FakeOidcClient:
 
 
 class FakeOidcData:
-    def __init__(self):
+    def __init__(self, user):
         self.client = FakeOidcClient()
         self.provisioned = []
         self.logged = []
-        self.user = SimpleNamespace(name='User', get_id=lambda: '7:fingerprint')
+        self.user = user
 
     def settings(self):
         return SimpleNamespace(
@@ -66,7 +70,7 @@ class FakeOidcData:
 
 
 @pytest.fixture
-def native_client(monkeypatch):
+def native_client(monkeypatch, persistent_login_store):
     from oneirodex.utils import oidc
 
     monkeypatch.setenv('OIDC_ENABLED', 'true')
@@ -76,13 +80,16 @@ def native_client(monkeypatch):
         SECRET_KEY='oidc-secret', SESSION_PROTECTION='none',
         SESSION_COOKIE_SAMESITE='Lax', OIDC_LOCK_ROLES=True,
     )
-    data = FakeOidcData()
-    user = SimpleNamespace(id=7, name='User', role='user', state=True, is_active=True)
+    User.__table__.create(persistent_login_store.get_bind())
+    user = User(id=7, name='User', email='oidc-user@example.test', role='user', state=True, password_hash='synthetic-oidc-hash')
+    persistent_login_store.add(user)
+    persistent_login_store.commit()
+    data = FakeOidcData(user)
     runtime = FastAPI()
     runtime.include_router(create_oidc_auth_router(
         app, find_user=lambda _id: user, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '7:fingerprint' else None,
+        load_user_id=lambda identity: user if identity.split(':', 1)[0] == '7' else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
         client_factory=lambda _config: data.client,
     ))
@@ -121,6 +128,8 @@ def test_native_oidc_pkce_flow_sets_state_nonce_and_remember_session(native_clie
     assert data.provisioned[0][0]['sub'] == 'subject-1'
     assert data.logged == ['User']
     assert 'remember_token=' in callback.headers.get('set-cookie', '')
+    session = load_session_cookie(callback.cookies['session'], 'oidc-secret', max_age=31_536_000)
+    assert validate_login_identity(session['_user_id'], data.user)
 
 
 @pytest.mark.parametrize('path', ['/login/oidc', '/login/oidc/callback'])
@@ -394,8 +403,9 @@ def test_native_oidc_successful_callback_matches_checked_in_flask_fallback_contr
     }
     data.client.userinfo_claims = claims
 
+    legacy_identity = issue_login_identity(data.user)
     legacy_user = SimpleNamespace(
-        name='User', is_active=True, get_id=lambda: '7:fingerprint',
+        name='User', is_active=True, get_id=lambda: legacy_identity,
     )
     legacy_events = []
     legacy_provisioned = []
@@ -487,7 +497,11 @@ def test_native_oidc_successful_callback_matches_checked_in_flask_fallback_contr
     native_session = load_session_cookie(
         native_session_cookie, 'oidc-secret', max_age=31_536_000,
     )
-    for key in ('_user_id', '_fresh', '_id'):
+    assert legacy_session['_user_id'] != native_session['_user_id']
+    assert legacy_session['_user_id'].split(':')[:2] == native_session['_user_id'].split(':')[:2]
+    assert validate_login_identity(legacy_session['_user_id'], data.user)
+    assert validate_login_identity(native_session['_user_id'], data.user)
+    for key in ('_fresh', '_id'):
         assert legacy_session[key] == native_session[key]
     assert not (
         {'oidc_auth_state', 'oidc_code_verifier', 'oidc_nonce'}
@@ -510,12 +524,12 @@ def test_native_oidc_successful_callback_matches_checked_in_flask_fallback_contr
     assert (
         decode_remember_cookie(
             parsed_legacy['remember_token'].value, 'oidc-secret',
-        ) == '7:fingerprint'
+        ) == legacy_session['_user_id']
     )
     assert (
         decode_remember_cookie(
             parsed_native['remember_token'].value, 'oidc-secret',
-        ) == '7:fingerprint'
+        ) == native_session['_user_id']
     )
     for key in ('path', 'httponly', 'secure', 'samesite'):
         assert parsed_legacy['remember_token'][key] == parsed_native['remember_token'][key]
