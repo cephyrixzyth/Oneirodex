@@ -15,8 +15,8 @@ import './TokensPage.css'
 const PRESET_FALLBACK: Record<string, any> = {
   companion: {
     label: 'Desktop companion',
-    scopes: ['read:library', 'write:download'],
-    hint: 'Library browse + download for the full Tauri companion.',
+    scopes: ['read:library', 'write:download', 'write:presence'],
+    hint: 'Library browse, download and device heartbeat for the full Tauri companion.',
   },
   thin: {
     label: 'Thin client',

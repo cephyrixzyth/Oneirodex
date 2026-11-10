@@ -29,7 +29,7 @@ VALID_SCOPES = frozenset({
 TOKEN_SCOPE_PRESETS: dict[str, dict] = {
     'companion': {
         'label': 'Desktop companion',
-        'scopes': ['read:library', 'write:download'],
+        'scopes': ['read:library', 'write:download', 'write:presence'],
     },
     'thin': {
         'label': 'Thin client',

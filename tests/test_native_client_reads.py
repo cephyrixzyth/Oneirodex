@@ -316,7 +316,7 @@ def test_heartbeat_requires_csrf_for_session_and_accepts_valid_browser_write():
 
 
 def test_heartbeat_requires_presence_scope_and_bearer_bypasses_csrf():
-    reader = make_client(scopes=('read:library',))
+    reader = make_client(scopes=('read:library', 'write:download'))
     denied = reader.post(
         '/api/client/heartbeat', headers={'Authorization': f'Bearer {RAW_TOKEN}'},
         json={'device_id': 'desktop'},
@@ -334,6 +334,20 @@ def test_heartbeat_requires_presence_scope_and_bearer_bypasses_csrf():
     assert response.json()['device_id'] == 'desktop'
     assert writer.data.heartbeat_calls[0][0:3] == (27, 'desktop', None)
     assert writer.data.heartbeat_calls[0][-1] is writer.token
+
+
+def test_desktop_companion_preset_can_send_native_heartbeat():
+    from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS
+
+    client = make_client(scopes=TOKEN_SCOPE_PRESETS['companion']['scopes'])
+    response = client.post(
+        '/api/client/heartbeat', headers={'Authorization': f'Bearer {RAW_TOKEN}'},
+        json={'device_id': 'desktop', 'device_kind': 'companion'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['device_id'] == 'desktop'
+    assert client.data.heartbeat_calls[0][0:3] == (27, 'desktop', 'companion')
 
 
 def test_heartbeat_only_parses_json_media_types():

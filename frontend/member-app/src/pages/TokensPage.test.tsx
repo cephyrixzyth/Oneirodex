@@ -172,6 +172,20 @@ async function createAndRevealSecret(user: any, secret = 'gt_efgh_one-time_secre
   return { secret, field }
 }
 
+test('companion fallback discloses the heartbeat permission', async () => {
+  vi.mocked(tokensApi.listTokens).mockResolvedValue({
+    tokens: [],
+    valid_scopes: [],
+    scope_presets: {},
+  })
+
+  render(<TokensPage />)
+
+  expect(
+    await screen.findByText('Selected scopes: read:library, write:download, write:presence'),
+  ).toBeInTheDocument()
+})
+
 test('lists tokens and creates with companion preset', async () => {
   const user = userEvent.setup()
   await createAndRevealSecret(user, 'gt_efgh_one_time_secret')
