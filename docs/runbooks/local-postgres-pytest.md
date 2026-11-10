@@ -10,6 +10,9 @@ context otherwise retains Flask-Login's first loaded user. Store-link assertions
 ciphertext and use the production decryptor with a temporary test key ring; plaintext columns are
 no longer the credential source. Auth-shell validation notices are escaped bootstrap data that
 React renders as alerts, rather than server-rendered alert elements.
+Busy scan fixtures must use UTC timestamps so stale-job recovery does not reclaim a newly seeded
+job. Worker fault tests must configure a temporary allowed scan root before testing folder I/O or
+database errors; paths outside configured roots are rejected before those later operations.
 
 **CI:** `.github/workflows/ci-tests.yml` spins up Postgres with
 `POSTGRES_DB=oneirodextest` and runs a *core* pytest subset only. The full suite

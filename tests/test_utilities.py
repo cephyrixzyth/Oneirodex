@@ -3,7 +3,7 @@ import os
 import tempfile
 from unittest.mock import Mock, patch, MagicMock, call, ANY
 from uuid import uuid4
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Thread
 import time
 
@@ -192,7 +192,7 @@ class TestHandleAutoScanCore:
             content_type='Games',
             status='Running',
             is_enabled=True,
-            last_run=datetime.now(),
+            last_run=datetime.now(timezone.utc),
             library_uuid=running_library.uuid,
             error_message='',
             total_folders=5,
@@ -297,7 +297,7 @@ class TestHandleManualScanCore:
             content_type='Games',
             status='Running',
             is_enabled=True,
-            last_run=datetime.now(),
+            last_run=datetime.now(timezone.utc),
             library_uuid=library.uuid,
             error_message='',
             total_folders=5,
@@ -354,8 +354,12 @@ class TestHandleManualScanCore:
 class TestUtilitiesWithRealDatabase:
     """Test utilities with actual database integration (faster, focused tests)."""
     
-    def test_scan_job_creation_with_real_db(self, app, db_session, global_settings):
+    def test_scan_job_creation_with_real_db(self, app, db_session, global_settings, tmp_path, monkeypatch):
         """Test that scan job is created properly when library exists."""
+        scan_path = str(tmp_path / 'scan-location')
+        monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_WINDOWS', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_POSIX', str(tmp_path))
         # Create test library
         library = Library(
             uuid=str(uuid4()),
@@ -385,7 +389,7 @@ class TestUtilitiesWithRealDatabase:
             with patch('oneirodex.utilities.is_scan_job_running', return_value=False):
                 with patch('os.path.exists', return_value=False):  # Force folder access failure
                     with patch('os.access', return_value=False):
-                        scan_and_add_games("/nonexistent/path", library_uuid=library.uuid)
+                        scan_and_add_games(scan_path, library_uuid=library.uuid)
                         
                         # Check that scan job was created
                         scan_jobs = db_session.query(ScanJob).filter_by(library_uuid=library.uuid).all()
@@ -404,8 +408,12 @@ class TestUtilitiesWithRealDatabase:
 class TestAdvancedScanScenarios:
     """Test advanced scanning scenarios with deep database integration."""
     
-    def test_existing_job_restart_workflow(self, app, db_session, global_settings):
+    def test_existing_job_restart_workflow(self, app, db_session, global_settings, tmp_path, monkeypatch):
         """Test restarting an existing scan job with proper state management."""
+        scan_path = str(tmp_path / 'scan-location')
+        monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_WINDOWS', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_POSIX', str(tmp_path))
         # Setup test environment
         library = Library(
             uuid=str(uuid4()),
@@ -428,7 +436,7 @@ class TestAdvancedScanScenarios:
         
         # Create existing failed job
         existing_job = ScanJob(
-            folders={"/restart/path": True},
+            folders={scan_path: True},
             content_type='Games',
             status='Failed',
             is_enabled=True,
@@ -438,7 +446,7 @@ class TestAdvancedScanScenarios:
             total_folders=5,
             folders_success=2,
             folders_failed=3,
-            scan_folder='/restart/path'
+            scan_folder=scan_path
         )
         db_session.add(existing_job)
         db_session.commit()
@@ -449,7 +457,7 @@ class TestAdvancedScanScenarios:
             with patch('os.path.exists', return_value=False):
                 with patch('os.access', return_value=False):
                     scan_and_add_games(
-                        "/restart/path",
+                        scan_path,
                         library_uuid=library.uuid,
                         existing_job=existing_job
                     )
@@ -470,11 +478,15 @@ class TestAdvancedScanScenarios:
                     
                     # Verify state preservation and updates
                     assert all_jobs[0].id == existing_job_id
-                    assert all_jobs[0].folders == {"/restart/path": True}
+                    assert all_jobs[0].folders == {scan_path: True}
                     assert all_jobs[0].content_type == 'Games'
 
-    def test_remove_missing_games_functionality(self, app, db_session, global_settings):
+    def test_remove_missing_games_functionality(self, app, db_session, global_settings, tmp_path, monkeypatch):
         """Test the remove missing games feature with database state verification."""
+        scan_path = str(tmp_path / 'scan-location')
+        monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_WINDOWS', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_POSIX', str(tmp_path))
         # Setup test environment
         library = Library(
             uuid=str(uuid4()),
@@ -543,7 +555,7 @@ class TestAdvancedScanScenarios:
                                         
                                         # Configure path existence - only first game exists
                                         def exists_side_effect(path):
-                                            if path == '/scan/path':  # Scan folder
+                                            if path == scan_path:  # Scan folder
                                                 return True
                                             elif path == '/existing/game':  # First game
                                                 return True
@@ -553,7 +565,7 @@ class TestAdvancedScanScenarios:
                                         mock_exists.side_effect = exists_side_effect
                                         
                                         scan_and_add_games(
-                                            "/scan/path",
+                                            scan_path,
                                             library_uuid=library.uuid,
                                             remove_missing=True
                                         )
@@ -587,8 +599,12 @@ class TestAdvancedScanScenarios:
                                         assert scan_job.removed_count == 2
                                         assert scan_job.status == 'Completed'
 
-    def test_database_error_handling_during_scan(self, app, db_session, global_settings):
+    def test_database_error_handling_during_scan(self, app, db_session, global_settings, tmp_path, monkeypatch):
         """Test how scan handles database errors gracefully."""
+        scan_path = str(tmp_path / 'scan-location')
+        monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_WINDOWS', str(tmp_path))
+        monkeypatch.setitem(app.config, 'BASE_FOLDER_POSIX', str(tmp_path))
         # Setup test environment
         library = Library(
             uuid=str(uuid4()),
@@ -621,7 +637,7 @@ class TestAdvancedScanScenarios:
                             # Simulate database error on first commit (ScanJob creation)
                             mock_commit.side_effect = SQLAlchemyError("Database connection lost")
                             
-                            result = scan_and_add_games("/test/path", library_uuid=library.uuid)
+                            result = scan_and_add_games(scan_path, library_uuid=library.uuid)
                             
                             # Verify function returns early on database error
                             assert result is None
@@ -652,7 +668,7 @@ class TestAdvancedScanScenarios:
                                     # The scan function should handle the SQLAlchemy error gracefully
                                     # and continue execution (not raise an exception to the test)
                                     try:
-                                        scan_and_add_games("/test/path", library_uuid=library.uuid)
+                                        scan_and_add_games(scan_path, library_uuid=library.uuid)
                                     except SQLAlchemyError:
                                         # This is expected - the function lets final commit errors propagate
                                         # but handles them at the higher level via try/catch in utilities.py
