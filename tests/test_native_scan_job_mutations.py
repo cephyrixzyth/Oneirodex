@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.scan_job_mutations import create_scan_job_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -43,14 +45,14 @@ def _client(*, role='admin'):
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=9, user_id='scan-user', role=role, is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Sign in',
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(9), '_fresh': True}
     csrf = generate_csrf_token(session, app.config['SECRET_KEY'])
     data = FakeScanJobs()
     native = FastAPI()

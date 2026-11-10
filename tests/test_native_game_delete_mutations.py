@@ -13,6 +13,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from werkzeug.exceptions import NotFound
 
 from oneirodex.runtime_native.game_delete_mutations import (
@@ -82,7 +84,7 @@ def native_client():
         SECRET_KEY='game-delete-secret', SESSION_PROTECTION='none',
         WTF_CSRF_ENABLED=True, WTF_CSRF_SECRET_KEY='game-delete-secret',
     )
-    admin = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True)
+    admin = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef')
     data = FakeGameDeleteData()
     data.admin = admin
     tokens = {}
@@ -91,10 +93,10 @@ def native_client():
     runtime.include_router(create_game_delete_mutation_router(
         flask_app, find_user=lambda _id: admin, find_token=lambda prefix: tokens.get(prefix),
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: admin if user_id == '7:fp' else None,
+        load_user_id=lambda user_id: admin if user_id.split(':', 1)[0] == str(7) else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
     ))
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, 'game-delete-secret')
     cookie = dump_session_cookie(session, 'game-delete-secret')
     return runtime, data, csrf, cookie

@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect, request
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 from werkzeug.exceptions import HTTPException
 
@@ -21,7 +23,7 @@ def _client(*, role='admin', data=None):
     user = SimpleNamespace(
         id=71, user_id='reference-sets-user', role=role,
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     login_manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -49,7 +51,7 @@ def _client(*, role='admin', data=None):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session_data = {'_user_id': '71:fingerprint', '_fresh': True}
+    session_data = {'_user_id': login_identity_for(71), '_fresh': True}
     client.csrf_token = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
     client.cookies.set(
         'session',

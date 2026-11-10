@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 from fastapi.testclient import TestClient
 
@@ -23,17 +25,17 @@ def test_publish_test_event_auth_matches_legacy_flask(identity, monkeypatch):
     users = {
         'member': SimpleNamespace(
             id=8, name='ParityMember', role='member', state=True, is_active=True,
-            is_authenticated=True, session_fingerprint=lambda: 'fp',
+            is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
         ),
         'admin': SimpleNamespace(
             id=7, name='ParityAdmin', role='admin', state=True, is_active=True,
-            is_authenticated=True, session_fingerprint=lambda: 'fp',
+            is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
         ),
     }
     manager = LoginManager(app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda key: next(
-        (user for user in users.values() if key == f'{user.id}:fp'), None,
+        (user for user in users.values() if key.split(':', 1)[0] == str(user.id)), None,
     ))
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     app.register_blueprint(apis_bp, url_prefix='/api')
@@ -51,7 +53,7 @@ def test_publish_test_event_auth_matches_legacy_flask(identity, monkeypatch):
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
         load_user_id=lambda key: next(
-            (user for user in users.values() if key == f'{user.id}:fp'), None,
+            (user for user in users.values() if key.split(':', 1)[0] == str(user.id)), None,
         ),
         login_manager=manager,
         data_access=SimpleNamespace(publish_test_event=lambda user: (
@@ -65,11 +67,11 @@ def test_publish_test_event_auth_matches_legacy_flask(identity, monkeypatch):
     if identity:
         user = users[identity]
         with legacy_client.session_transaction() as session:
-            session['_user_id'] = f'{user.id}:fp'
+            session['_user_id'] = login_identity_for(user.id)
             session['_fresh'] = True
         current_client.cookies.set(
             'session', dump_session_cookie(
-                {'_user_id': f'{user.id}:fp', '_fresh': True}, app.config['SECRET_KEY'],
+                {'_user_id': login_identity_for(user.id), '_fresh': True}, app.config['SECRET_KEY'],
             ),
         )
 

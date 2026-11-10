@@ -9,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.legacy_manual_identify_forms import create_legacy_manual_identify_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -34,13 +36,13 @@ def native_client():
         WTF_CSRF_SECRET_KEY='manual-identify-secret', SESSION_PROTECTION='none',
         MAX_CONTENT_LENGTH=512 * 1024,
     )
-    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True)
+    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef')
     data = FakeManualIdentifyData()
     runtime = FastAPI()
     runtime.include_router(create_legacy_manual_identify_router(
         app, find_user=lambda _id: user, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '9:fp' else None,
+        load_user_id=lambda user_id: user if user_id.split(':', 1)[0] == str(9) else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
     ))
     return runtime, data
@@ -51,7 +53,7 @@ def _request(runtime, path, fields, *, csrf=True):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
         ) as client:
-            session = {'_user_id': '9:fp', '_fresh': True}
+            session = {'_user_id': login_identity_for(9), '_fresh': True}
             token = generate_csrf_token(session, 'manual-identify-secret')
             cookie = dump_session_cookie(session, 'manual-identify-secret')
             values = {'csrf_token': token if csrf else 'invalid', **fields}

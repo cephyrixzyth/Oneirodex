@@ -352,7 +352,7 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     )
     for unsupported_method in unsupported_member_page_methods:
         assert unsupported_method.status_code == 405
-        assert unsupported_method.headers['allow'] == 'HEAD, OPTIONS, GET'
+        assert sorted(method.strip() for method in unsupported_method.headers['allow'].split(',')) == ['GET', 'HEAD', 'OPTIONS']
         assert unsupported_method.headers['content-type'] == 'text/html; charset=utf-8'
         assert unsupported_method.content == expected_405_body
 

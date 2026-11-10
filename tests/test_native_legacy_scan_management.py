@@ -9,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.legacy_scan_management import create_legacy_scan_management_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -77,13 +79,13 @@ def native_client():
         SECRET_KEY='scan-management-secret', WTF_CSRF_ENABLED=True,
         WTF_CSRF_SECRET_KEY='scan-management-secret', SESSION_PROTECTION='none',
     )
-    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True)
+    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef')
     data = FakeScanManagementData()
     runtime = FastAPI()
     runtime.include_router(create_legacy_scan_management_router(
         app, find_user=lambda _id: user, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '9:fp' else None,
+        load_user_id=lambda user_id: user if user_id.split(':', 1)[0] == str(9) else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
     ))
     return runtime, data
@@ -95,7 +97,7 @@ def _request(runtime, action, *, fields=None, csrf=True):
             transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
             follow_redirects=False,
         ) as client:
-            session = {'_user_id': '9:fp', '_fresh': True}
+            session = {'_user_id': login_identity_for(9), '_fresh': True}
             token = generate_csrf_token(session, 'scan-management-secret')
             cookie = dump_session_cookie(session, 'scan-management-secret')
             body = {'submit': action, 'csrf_token': token if csrf else 'invalid', **(fields or {})}

@@ -6,6 +6,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask, request as flask_request
+
+from tests.fixtures.native_auth import login_identity_for
 from flask_login import LoginManager
 from types import SimpleNamespace
 
@@ -14,7 +16,7 @@ from oneirodex.runtime_native.scan_unmatched_mutations import (
     ScanUnmatchedMutationData,
     create_scan_unmatched_mutations_router,
 )
-from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
 def test_explicit_actor_audit_helpers_do_not_require_flask_app_context(monkeypatch):
@@ -195,21 +197,24 @@ def runtime():
         SQLALCHEMY_DATABASE_URI='sqlite://', SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
     oneirodex.db.init_app(flask_app)
+    from oneirodex.models import PersistentLoginSession
+    engine = oneirodex.db._app_engines[flask_app][None]
+    PersistentLoginSession.__table__.create(engine)
     users = {
         'admin': SimpleNamespace(id=1, name='Admin Name', role='admin', state=True,
                                  is_active=True, is_authenticated=True,
-                                 session_fingerprint=lambda: 'fp'),
+                                 session_fingerprint=lambda: '0123456789abcdef'),
         'librarian': SimpleNamespace(id=2, name='Librarian', role='librarian', state=True,
                                      is_active=True, is_authenticated=True,
-                                     session_fingerprint=lambda: 'fp'),
+                                     session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=3, name='Member', role='user', state=True,
                                   is_active=True, is_authenticated=True,
-                                  session_fingerprint=lambda: 'fp'),
+                                  session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeMutationData()
@@ -223,11 +228,12 @@ def runtime():
         database_scope=lambda app: native_session_scope(app, oneirodex.db),
     ))
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
-    cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
-                                  'unmatched-mutation-secret')
-        for name, user in users.items()
-    }
+    with native_session_scope(flask_app, oneirodex.db):
+        cookies = {
+            name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
+                                      'unmatched-mutation-secret')
+            for name, user in users.items()
+        }
     yield app, flask_app, data, users, cookies
     oneirodex.db._app_engines[flask_app][None].dispose()
 
@@ -353,7 +359,7 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
 
     app, flask_app, data, _users, _cookies = runtime
     flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '1:fp', '_fresh': True}
+    session = {'_user_id': load_session_cookie(_cookies['admin'], 'unmatched-mutation-secret', max_age=3600)['_user_id'], '_fresh': True}
     csrf = generate_csrf_token(session, 'unmatched-mutation-secret')
     cookie = dump_session_cookie(session, 'unmatched-mutation-secret')
 
@@ -398,7 +404,7 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
 def test_legacy_unmatched_form_csrf_errors_keep_html_while_json_callers_keep_envelopes(runtime):
     app, flask_app, data, _users, _cookies = runtime
     flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '1:fp', '_fresh': True}
+    session = {'_user_id': load_session_cookie(_cookies['admin'], 'unmatched-mutation-secret', max_age=3600)['_user_id'], '_fresh': True}
     cookie = dump_session_cookie(session, 'unmatched-mutation-secret')
     form_requests = [
         ('/delete_all_unmatched_folders', {}),

@@ -9,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.ownership_actions import (
     create_ownership_actions_router,
 )
@@ -85,7 +87,7 @@ def native_client():
         MAX_CONTENT_LENGTH=1024,
         MAX_UPLOAD_MB=1,
     )
-    user = SimpleNamespace(id=7, role='user', state=True, is_active=True)
+    user = SimpleNamespace(id=7, role='user', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef')
     data = FakeOwnershipActions()
     bearer = {'token': None}
     runtime = FastAPI()
@@ -94,7 +96,7 @@ def native_client():
         find_user=lambda _user_id: user,
         find_token=lambda _prefix: bearer['token'],
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '7:fp' else None,
+        load_user_id=lambda user_id: user if user_id.split(':', 1)[0] == str(7) else None,
         data_access=data,
     ))
     runtime.include_router(create_ownership_provider_router(
@@ -102,7 +104,7 @@ def native_client():
         find_user=lambda _user_id: user,
         find_token=lambda _prefix: bearer['token'],
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '7:fp' else None,
+        load_user_id=lambda user_id: user if user_id.split(':', 1)[0] == str(7) else None,
         data_access=data,
     ))
     runtime._test_bearer = bearer
@@ -111,7 +113,7 @@ def native_client():
 
 
 def _session_cookie(csrf=True):
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     token = generate_csrf_token(session, 'ownership-actions-secret') if csrf else None
     return dump_session_cookie(session, 'ownership-actions-secret'), token
 

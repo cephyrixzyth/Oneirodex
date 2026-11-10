@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.licensed_catalog_reads import (
     create_licensed_catalog_reads_router,
 )
@@ -39,7 +41,7 @@ def _client(*, role='user'):
     user = SimpleNamespace(
         id=62, user_id='catalog-user', name='catalog-user', role=role,
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -61,7 +63,7 @@ def _client(*, role='user'):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '62:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(62), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     return client, data, csrf

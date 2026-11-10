@@ -10,6 +10,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.game_servers import GameServersData, create_game_servers_router
@@ -90,16 +92,16 @@ def runtime():
     )
     users = {
         'admin': SimpleNamespace(id=7, role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=8, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'child': SimpleNamespace(id=9, role='child', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     fake = FakeData()
@@ -116,7 +118,7 @@ def runtime():
         login_manager=manager, data_access=fake,
     ))
     cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+        name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                   'game-servers-test-secret')
         for name, user in users.items()
     }

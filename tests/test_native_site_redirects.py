@@ -9,6 +9,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import persistent_login_store
+from oneirodex.utils.persistent_sessions import issue_login_identity
 from flask_login import LoginManager
 from starlette.requests import Request
 from werkzeug.exceptions import MethodNotAllowed
@@ -64,7 +67,7 @@ def _client(monkeypatch, *, user=None, setup_required=False, setup_in_progress=F
     ))
     cookie = None
     if user:
-        user_id = f'{user.id}:{user.session_fingerprint()}'
+        user_id = issue_login_identity(user)
         cookie = dump_session_cookie({'_user_id': user_id, '_fresh': True}, 'site-redirect-secret')
     return app, cookie
 
@@ -115,7 +118,7 @@ def test_entry_redirects_to_login_or_discover_for_get_post_and_head(monkeypatch)
     )
 
     session_data = {
-        '_user_id': f'{user.id}:{user.session_fingerprint()}',
+        '_user_id': issue_login_identity(user),
         '_fresh': True,
     }
     csrf_token = generate_csrf_token(session_data, 'site-redirect-secret')
@@ -158,7 +161,7 @@ def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monk
     from oneirodex.utils import setup
 
     user = User()
-    user_id = f'{user.id}:{user.session_fingerprint()}'
+    user_id = issue_login_identity(user)
     secret = 'site-redirect-secret'
     session_data = {
         '_user_id': user_id,
@@ -324,7 +327,7 @@ def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monk
 
 def test_authenticated_restricted_target_is_intentional_migration_improvement(monkeypatch):
     user = User()
-    user_id = f'{user.id}:{user.session_fingerprint()}'
+    user_id = issue_login_identity(user)
     secret = 'site-redirect-secret'
     cookie = dump_session_cookie(
         {'_user_id': user_id, '_fresh': True}, secret,

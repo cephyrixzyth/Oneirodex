@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import httpx
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.announcements import create_announcements_router
@@ -30,11 +32,11 @@ def _runtime():
     )
     user = SimpleNamespace(
         id=42, role='admin', state=True, is_active=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fp',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
-    manager.user_loader(lambda identity: user if identity == '42:fp' else None)
+    manager.user_loader(lambda identity: user if identity.split(':', 1)[0] == str(42) else None)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = _AnnouncementData()
     app = FastAPI()
@@ -46,7 +48,7 @@ def _runtime():
         login_manager=manager, data_access=data,
     ))
     cookie = dump_session_cookie(
-        {'_user_id': '42:fp', '_fresh': True},
+        {'_user_id': login_identity_for(42), '_fresh': True},
         'announcements-body-limit-test-secret',
     )
     return app, data, cookie

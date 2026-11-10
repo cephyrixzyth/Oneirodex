@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native import member_meta, playtime, social_writes, wishlist
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -40,7 +42,7 @@ def setup_client():
     )
     user = SimpleNamespace(
         id=7, role='user', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fp',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(login_view='/login', session_protection='basic')
     data = Data()
@@ -58,7 +60,7 @@ def setup_client():
     app.include_router(social_writes.create_social_writes_router(flask_app, data_access=data, **common))
     app.include_router(member_meta.create_member_meta_router(flask_app, data_access=data, **common))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, secret))
+    client.cookies.set('session', dump_session_cookie({'_user_id': login_identity_for(7)}, secret))
     return client, data
 
 

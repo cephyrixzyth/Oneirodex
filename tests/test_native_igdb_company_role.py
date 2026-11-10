@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, urlsplit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.igdb_company_role import (
@@ -53,7 +55,7 @@ def make_client(rows, search_results=None, name_search_results=None):
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=11, role='member', is_active=True, is_authenticated=True,
-        session_fingerprint=lambda: 'company-role-fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     data = CompanyRoleData(rows, search_results, name_search_results)
     app = FastAPI()
@@ -68,7 +70,7 @@ def make_client(rows, search_results=None, name_search_results=None):
     ))
     client = TestClient(app)
     cookie = flask_app.session_interface.get_signing_serializer(flask_app).dumps({
-        '_user_id': '11:company-role-fingerprint', '_fresh': True,
+        '_user_id': login_identity_for(11), '_fresh': True,
     })
     client.cookies.set('session', cookie)
     return client, data

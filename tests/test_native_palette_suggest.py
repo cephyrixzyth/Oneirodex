@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.palette_suggest import create_palette_suggest_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -27,7 +29,7 @@ def _setup(*, authenticated=True):
     user = SimpleNamespace(
         id=91, user_id='palette-user', role='user', state=True,
         is_active=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -51,7 +53,7 @@ def _setup(*, authenticated=True):
     client = TestClient(app)
     if authenticated:
         client.cookies.set('session', dump_session_cookie(
-            {'_user_id': '91:fingerprint', '_fresh': True},
+            {'_user_id': login_identity_for(91), '_fresh': True},
             flask_app.config['SECRET_KEY'],
         ))
     return client, data

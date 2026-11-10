@@ -5,6 +5,8 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from oneirodex.models import User
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+from oneirodex.utils.persistent_sessions import issue_login_identity
 
 
 def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
@@ -26,7 +28,7 @@ def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     member = SimpleNamespace(
         id=9, role='member', state=True, is_active=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Sign in',
@@ -40,7 +42,7 @@ def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
         find_user=lambda user_id: member if user_id == 9 else None,
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: member if value == '9:fingerprint' else None,
+        load_user_id=lambda value: member if value.split(':', 1)[0] == '9' else None,
         login_manager=manager,
         data_access=SimpleNamespace(
             bus_status=lambda: bus_calls.append('status') or {'configured': True},
@@ -49,7 +51,7 @@ def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
         database_scope=lambda _app: nullcontext(),
     ))
     client = TestClient(native, follow_redirects=False)
-    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(9), '_fresh': True}
     csrf = generate_csrf_token(session, app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, app.config['SECRET_KEY']))
 
@@ -99,6 +101,7 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
     )
     db_session.add(flask_user)
     db_session.commit()
+    native_identity = issue_login_identity(flask_user)
 
     def fail_list(*_args, **_kwargs):
         raise failure
@@ -117,14 +120,18 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
         state=True,
         is_active=True,
         is_authenticated=True,
-        session_fingerprint=lambda: 'notification-failure-fingerprint',
+        session_fingerprint=flask_user.session_fingerprint,
     )
+
+    native_calls = []
 
     class FailingNotificationData:
         def list(self, *_args, **_kwargs):
+            native_calls.append('list')
             raise failure
 
         def mark_read(self, *_args, **_kwargs):
+            native_calls.append('mark_read')
             raise failure
 
     native_app = FastAPI()
@@ -145,7 +152,7 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
     asgi._install_native_api_error_handlers(native_app, app.config, app.logger)
     native_cookie = dump_session_cookie(
         {
-            '_user_id': f'{native_user.id}:{native_user.session_fingerprint()}',
+            '_user_id': native_identity,
             '_fresh': True,
         },
         app.config['SECRET_KEY'],
@@ -168,6 +175,7 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
 
     native_list_response, native_write_response = asyncio.run(get_native_responses())
 
+    assert native_calls == ['list', 'mark_read']
     assert wsgi_list_response.status_code == native_list_response.status_code == 500
     assert wsgi_list_response.get_json() == native_list_response.json()
     assert wsgi_write_response.status_code == native_write_response.status_code == 500
@@ -217,6 +225,7 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
     )
     db_session.add(flask_user)
     db_session.commit()
+    native_identity = issue_login_identity(flask_user)
 
     def fail_commit(*_args, **_kwargs):
         raise failure
@@ -236,11 +245,14 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
         is_active=True,
         is_authenticated=True,
         preferences=None,
-        session_fingerprint=lambda: 'notification-preference-failure-fingerprint',
+        session_fingerprint=flask_user.session_fingerprint,
     )
+
+    native_calls = []
 
     class FailingNotificationData:
         def update_preferences(self, _user, _payload):
+            native_calls.append('update_preferences')
             raise failure
 
     native_app = FastAPI()
@@ -261,7 +273,7 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
     asgi._install_native_api_error_handlers(native_app, app.config, app.logger)
     native_cookie = dump_session_cookie(
         {
-            '_user_id': f'{native_user.id}:{native_user.session_fingerprint()}',
+            '_user_id': native_identity,
             '_fresh': True,
         },
         app.config['SECRET_KEY'],
@@ -283,6 +295,7 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
 
     native_response = asyncio.run(post_native_response())
 
+    assert native_calls == ['update_preferences']
     assert wsgi_response.status_code == native_response.status_code == 500
     assert wsgi_response.get_json() == native_response.json()
     assert 'synthetic-secret-db-detail' not in wsgi_response.get_data(as_text=True)

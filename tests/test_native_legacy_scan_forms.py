@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.models import Library
 from oneirodex.platform import LibraryPlatform
 from oneirodex.runtime_native.legacy_scan_forms import (
@@ -71,21 +73,21 @@ def test_legacy_scan_manual_form_checks_hidden_csrf_and_persists_scan_projection
     )
     user = SimpleNamespace(
         id=7, name='Admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Login required',
         login_message_category='message', localize_callback=None, session_protection='none',
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, 'legacy-scan-secret')
     data = FakeScanFormData()
     app = FastAPI()
     app.include_router(create_legacy_scan_form_router(
         flask_app, find_user=lambda uid: user if uid == 7 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: user if value == '7:fp' else None,
+        load_user_id=lambda value: user if value.split(':', 1)[0] == str(7) else None,
         login_manager=manager, data_access=data,
         database_scope=lambda _app: nullcontext(),
     ))
@@ -127,7 +129,7 @@ def test_legacy_scan_manual_form_rejects_unknown_library_before_changing_session
     )
     user = SimpleNamespace(
         id=7, name='Admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Login required',
@@ -135,7 +137,7 @@ def test_legacy_scan_manual_form_rejects_unknown_library_before_changing_session
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     session = {
-        '_user_id': '7:fp', '_fresh': True,
+        '_user_id': login_identity_for(7), '_fresh': True,
         'game_paths': {'Existing': '/safe/Existing'},
         'selected_library_uuid': 'lib-1', 'active_tab': 'auto',
     }
@@ -145,7 +147,7 @@ def test_legacy_scan_manual_form_rejects_unknown_library_before_changing_session
     app.include_router(create_legacy_scan_form_router(
         flask_app, find_user=lambda uid: user if uid == 7 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: user if value == '7:fp' else None,
+        load_user_id=lambda value: user if value.split(':', 1)[0] == str(7) else None,
         login_manager=manager, data_access=data,
         database_scope=lambda _app: nullcontext(),
     ))
@@ -183,7 +185,7 @@ def test_legacy_scan_manual_form_keeps_csrf_and_admin_gates_before_scan_work(mon
     )
     member = SimpleNamespace(
         id=8, name='Member', role='user', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Login required',
@@ -197,7 +199,7 @@ def test_legacy_scan_manual_form_keeps_csrf_and_admin_gates_before_scan_work(mon
         find_user=lambda uid: member if uid == 8 else None,
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: member if value == '8:fp' else None,
+        load_user_id=lambda value: member if value.split(':', 1)[0] == str(8) else None,
         login_manager=manager,
         data_access=data,
         database_scope=lambda _app: nullcontext(),
@@ -220,7 +222,7 @@ def test_legacy_scan_manual_form_keeps_csrf_and_admin_gates_before_scan_work(mon
         'csrf_token': csrf, 'folder_path': '/safe/ROMs', 'library_uuid': 'lib-1',
     }, follow_redirects=False)
 
-    member_session = {'_user_id': '8:fp', '_fresh': True}
+    member_session = {'_user_id': login_identity_for(8), '_fresh': True}
     member_csrf = generate_csrf_token(member_session, 'legacy-scan-secret')
     member_client = TestClient(app)
     member_client.cookies.set(
@@ -279,11 +281,11 @@ def test_manual_identify_session_preview_is_admin_only_and_never_caches_paths(mo
     )
     admin = SimpleNamespace(
         id=7, name='Admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     member = SimpleNamespace(
         id=8, name='Member', role='user', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Login required',
@@ -296,18 +298,18 @@ def test_manual_identify_session_preview_is_admin_only_and_never_caches_paths(mo
         find_user=lambda uid: {7: admin, 8: member}.get(uid),
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: {'7:fp': admin, '8:fp': member}.get(value),
+        load_user_id=lambda value: {'7': admin, '8': member}.get(value.split(':', 1)[0]),
         login_manager=manager,
         database_scope=lambda _app: nullcontext(),
     ))
     path = '/storage/PrivateCandidate/Example Game'
     admin_session = {
-        '_user_id': '7:fp', '_fresh': True,
+        '_user_id': login_identity_for(7), '_fresh': True,
         'game_paths': {'Example Game': path},
         'selected_library_uuid': 'library-1',
     }
     member_session = {
-        '_user_id': '8:fp', '_fresh': True,
+        '_user_id': login_identity_for(8), '_fresh': True,
         'game_paths': {'Example Game': path},
         'selected_library_uuid': 'library-1',
     }

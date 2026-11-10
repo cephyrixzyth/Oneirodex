@@ -7,6 +7,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.library_tools_mutations import (
@@ -224,14 +226,14 @@ def runtime():
                             SECURITY_HEADERS_ENABLED=True, WTF_CSRF_ENABLED=False)
     users = {
         'admin': SimpleNamespace(id=7, name='admin', role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=8, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None))
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeData()
     tokens = {}
@@ -243,7 +245,7 @@ def runtime():
         find_token=lambda prefix: tokens.get(prefix), commit_token_touch=lambda _token: None,
         load_user_id=lambda identity: manager.user_callback(identity), login_manager=manager,
         data_access=data))
-    cookies = {name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+    cookies = {name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                          'mutation-secret') for name, user in users.items()}
     return app, data, cookies
 
@@ -343,7 +345,7 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
 
     app, data, _cookies = runtime
     app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, 'mutation-secret')
     cookie = dump_session_cookie(session, 'mutation-secret')
     with TestClient(app) as client:
@@ -452,7 +454,7 @@ def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):
 
     app, _data, _cookies = runtime
     app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, 'mutation-secret')
     cookie = dump_session_cookie(session, 'mutation-secret')
 

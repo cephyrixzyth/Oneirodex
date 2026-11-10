@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask, request as flask_request
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.patch_catalog_routes import create_patch_catalog_router
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie,
@@ -26,7 +28,7 @@ def test_patch_guide_attach_uses_flask_json_media_type_classification():
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=41, role='admin', is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -54,7 +56,7 @@ def test_patch_guide_attach_uses_flask_json_media_type_classification():
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '41:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(41), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
 

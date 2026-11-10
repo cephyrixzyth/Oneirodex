@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 import pytest
 
 from oneirodex.runtime_native.integrations_inventory import (
@@ -44,7 +46,7 @@ def make_client(*, role='admin', data=None):
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=23, role=role, is_active=True, state=True, is_authenticated=True,
-    )
+    session_fingerprint=lambda: '0123456789abcdef')
     manager = SimpleNamespace(
         login_view='login.login',
         blueprint_login_views={},
@@ -66,7 +68,7 @@ def make_client(*, role='admin', data=None):
     app.include_router(router)
     client = TestClient(app)
     client.cookies.set(
-        'session', dump_session_cookie({'_user_id': '23:fp'}, 'native-inventory-secret')
+        'session', dump_session_cookie({'_user_id': login_identity_for(23)}, 'native-inventory-secret')
     )
     return client
 
