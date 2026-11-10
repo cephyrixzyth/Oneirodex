@@ -18,6 +18,7 @@ from oneirodex.utils.emulator_saves import (
     read_save_bytes,
     store_save,
 )
+from oneirodex.utils.save_crypto import context_for_row, maybe_decrypt
 
 
 def _seed_owner_game(session):
@@ -211,5 +212,10 @@ def test_sustained_concurrent_replacements_preserve_every_committed_generation(
     assert len(generations) == len(expected_payloads) - 1
     all_paths = [current.storage_path, *(row.storage_path for row in generations)]
     assert len(set(all_paths)) == len(expected_payloads)
-    assert {read_save_bytes(row) for row in [current, *generations]} == expected_payloads
+    payloads = {read_save_bytes(current)}
+    payloads.update(
+        maybe_decrypt(Path(row.storage_path).read_bytes(), context=context_for_row(row, owner=current))
+        for row in generations
+    )
+    assert payloads == expected_payloads
     assert len(list(Path(tmp_path).rglob('*.save'))) == len(expected_payloads)

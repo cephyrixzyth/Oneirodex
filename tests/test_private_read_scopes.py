@@ -169,7 +169,7 @@ def test_child_profile_total_excludes_games_outside_their_library_allowlist(
 
 
 def test_child_playtime_summary_requires_library_scope_and_hides_unshared_games(
-    client, db_session,
+    app, client, db_session,
 ):
     suffix = uuid4().hex[:8]
     child = User(
@@ -198,19 +198,21 @@ def test_child_playtime_summary_requires_library_scope_and_hides_unshared_games(
     ])
     db_session.commit()
 
-    denied = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
+    with app.app_context():
+        denied = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
     assert denied.status_code == 403
 
-    response = client.get('/api/playtime/me', headers=bearer(child, ['read:library']))
+    with app.app_context():
+        response = client.get('/api/playtime/me', headers=bearer(child, ['read:library']))
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json()
     payload = response.get_json()
     assert payload['total_seconds'] == 23
     assert [game['game_uuid'] for game in payload['games']] == [visible_game.uuid]
 
 
 def test_child_download_history_requires_library_scope_and_hides_unshared_games(
-    client, db_session,
+    app, client, db_session,
 ):
     suffix = uuid4().hex[:8]
     child = User(
@@ -238,12 +240,14 @@ def test_child_download_history_requires_library_scope_and_hides_unshared_games(
     ])
     db_session.commit()
 
-    denied = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
+    with app.app_context():
+        denied = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
     assert denied.status_code == 403
 
-    response = client.get('/api/my_downloads', headers=bearer(child, ['read:library']))
+    with app.app_context():
+        response = client.get('/api/my_downloads', headers=bearer(child, ['read:library']))
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.get_json()
     payload = response.get_json()
     assert len(payload) == 1
     assert payload[0]['game_name'] == 'Visible download game'

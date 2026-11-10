@@ -1,0 +1,105 @@
+{
+  "review_id": "R2018",
+  "doc_status": "Reference",
+  "title": "Factory-reset preservation of committed file cleanup and retention/read fixture qualification",
+  "source_head_before_change": "d609f4202ef9a203332b65e3eb89679d25b97ee8",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "oneirodex/utils/system_reset.py": "efb4f515eb3170be7d7979ccf6a266d832422c736dcf9363a41b040b5a63a579",
+    "tests/test_system_reset.py": "cafd4198f15c60cd52dd495f29724a8e186af43a3dfa70be1c454fb04deee7e3",
+    "tests/test_private_read_scopes.py": "260149373b4839bbabce375b16f0b0f05818c4f1e0dbd75bff88f395ed27e489",
+    "tests/test_save_concurrency.py": "542e5e34b66b186792ea388a1cb2de3e6c50b73bfd387416cec040097b4e150b"
+  },
+  "classification": {
+    "reset_inventory": "Confirmed missing explicit classification for save generations and persistent sessions; assigned to users.",
+    "queued_cleanup": "Owner approved finishing previously queued account-deletion jobs across factory resets. Explicit preserved-table set and fail-closed cascade guard implemented.",
+    "child_library_reads": "Not reproduced as product denial. Shared fixture app context retained prior bearer identity/scope; fresh per-request app contexts restore real authentication. Wrong-scope denial and child allowlist assertions retained.",
+    "concurrent_save_history": "Obsolete test called current-save reader on generation rows without owner context. Uses production decryption and explicit owning save for generations; retains all 32 payload/revision/path assertions."
+  },
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "postgresql": "17.6 isolated owned loopback test database",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "checks": {
+    "undefined": {
+      "exit_code": 0,
+      "log_sha256": "2ffce1b3aa2e32859ff760a6885f4bfcc1f4e043b7954c59cdabc35af22ed513"
+    },
+    "api-envelope": {
+      "exit_code": 0,
+      "log_sha256": "d84490ea7c07d7552f0499442e7346ff80f259b7879b42d8e1920ba05a10a5b7"
+    },
+    "r1972-validator": {
+      "exit_code": 0,
+      "log_sha256": "fdd37736b91c104c8d8e5fd19a35da0cae2996cdd36a8196acf9405787f7944d"
+    },
+    "reset-retention-red": {
+      "exit_code": 1,
+      "seconds": 4.24,
+      "counts": {
+        "tests": 15,
+        "failures": 3,
+        "errors": 10,
+        "skipped": 0,
+        "passed": 2
+      },
+      "log_sha256": "24e767cd4fbe415edb82b4b37e897aeb4c1990a6937ae1a1730c1835552017cc"
+    },
+    "child-scope-red": {
+      "exit_code": 1,
+      "seconds": 16.03,
+      "counts": {
+        "tests": 2,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "log_sha256": "97273c86bbad7610e52bc1851c4a2ad47d4f0e365567b025bf55c6819ba875b3",
+      "owned_database_removed": true
+    },
+    "retention-read-fixtures-green": {
+      "exit_code": 0,
+      "seconds": 33.51,
+      "counts": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 36
+      },
+      "log_sha256": "93095ea55cef14d5fb560d61aa4bf1546eaa26d86b0afa3540942623e67d8e12",
+      "owned_database_removed": true
+    },
+    "native-reset-retention-green": {
+      "exit_code": 0,
+      "seconds": 5.16,
+      "counts": {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 6
+      },
+      "log_sha256": "b9ebf55e68925abdf74815fd3a2a312568b6a6ec3e7fbf4ef174d4cf790d4369"
+    }
+  },
+  "verified_behavior": [
+    "All scopes together preserve a previously committed failed cleanup job and its file during reset; the actual separate cleanup worker then deletes the file and journal row.",
+    "Real PostgreSQL foreign-key closure stays disjoint from preserved jobs for each scope and all scopes; simulated future cascade is refused.",
+    "Child wrong-scope reads denied, valid scope sees only allowed game playtime/download history.",
+    "Four concurrent writers retain all 32 committed payloads across current save and 31 owner-bound generations."
+  ],
+  "rework": [
+    "Initial DB-free reset red run included database fixture cases: 3 expected failures, 2 passes and 10 missing-fixture errors. Final PostgreSQL run includes the complete reset module and has no errors."
+  ],
+  "limits": [
+    "No production reset performed. No new user files queued by reset.",
+    "Original authenticated browser/headset, deployed-schema/restore/restart, packaged-platform, current CI and unrestricted-suite acceptance remain open.",
+    "No route coverage promotion; R1972 historical bundle unchanged."
+  ],
+  "capture": "Not applicable: backend policy and test fixtures only; no UI layout change."
+}
