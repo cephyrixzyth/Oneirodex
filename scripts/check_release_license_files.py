@@ -23,9 +23,9 @@ REQUIRED_NOTICE_TEXT = (
     "4.2.3 | GPL-3.0",
 )
 PINNED_LICENSE_SHA256 = {
-    "oneirodex/setup/fonts/OFL.txt": "004fc993a3bdaaf0fd443cb58d7e5c2fd09fc3a93b23309d0005421f7b8b7123",
-    "oneirodex/static/vendor/webretro/LICENSE": "ca0b4ec2c39e4ca23545e1181e5fbf2e598c5f646eb1a7b464559f10fcce25e1",
-    "oneirodex/static/vendor/nostalgist/LICENSE": "298d2b528c4ff4d4a1406fe48db90a9fe4c4de7363a4215c9606b9013acbcda2",
+    "oneirodex/setup/fonts/OFL.txt": "705960c3281a5765ecc0b59bd4ed7ca59eed165748076bc2fc3e8fdbfeb944b0",
+    "oneirodex/static/vendor/webretro/LICENSE": "51497184189c3cbeeb327d728b3538afbfd5244429e475141f8343d55d50c196",
+    "oneirodex/static/vendor/nostalgist/LICENSE": "347bc6dbad70de322984d1acafe7208836c848c6d01387ae77d97dcd556f698d",
     "oneirodex/static/vendor/emulatorjs/LICENSE": "a617fab6d251b3302b1cb2c1c94f52d1c584f6fcb2fc218ec1a475bc08053a61",
 }
 

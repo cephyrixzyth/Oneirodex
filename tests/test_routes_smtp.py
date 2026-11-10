@@ -1,4 +1,5 @@
 import pytest
+import os
 import json
 from cryptography.fernet import Fernet
 import json
@@ -17,6 +18,8 @@ def reusable_secret_keyring(tmp_path, monkeypatch):
     path.write_text(json.dumps({
         'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
     }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
     monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 

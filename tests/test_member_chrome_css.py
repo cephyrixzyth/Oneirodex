@@ -148,7 +148,7 @@ def test_topbar_cluster_is_not_a_shared_outline():
     shell = _read('od-shell.css')
     cluster = _rule(appbar, '.od-cbtn-group.od-topbar__cluster')
     assert 'gap:' in cluster
-    child = _blocks_for(appbar, '.od-cbtn-group.od-topbar__cluster > .od-cbtn')
+    child = _blocks_for(appbar, '.od-cbtn-group > .od-cbtn')
     assert 'margin-inline-start: 0' in child
     assert 'border-radius: var(--od-radius-sm)' in child
     filters = _rule(shell, '.od-topbar__cluster .od-pop > .od-cbtn')
@@ -195,16 +195,18 @@ def test_tile_hover_has_no_accent_glow_and_grows_from_center():
     assert '.od-shell:has(.game-card:hover) .od-shell__main' not in shell
     assert '.od-shell:has(.game-card :focus-visible) .od-shell__main' not in shell
     assert 'padding-inline: max(var(--od-gutter), var(--od-tile-hover-bleed-x))' not in shell
-    assert 'padding-inline: calc(var(--od-gutter) + var(--od-tile-hover-pad-x))' in shell
-    assert 'padding: calc(var(--od-topbar-h) + var(--od-stack)) var(--od-gutter)' in shell
-    assert 'overflow-x: clip' in shell
-    assert 'overflow-clip-margin-inline:' in shell
+    grid = _blocks_for(shell, '.od-shell__main:has([data-library-grid])')
+    assert 'padding-inline: var(--od-gutter)' in grid
+    main = _blocks_for(shell, '.od-shell__main')
+    assert 'padding: calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + var(--od-stack)) var(--od-gutter) var(--od-section-gap)' in main
+    assert 'overflow-x: visible' in grid
+    assert 'overflow-clip-margin: 100px' in shell
     assert '#main-content.od-shell__main:has(.od-library-selection)' in shell
-    assert 'calc(var(--od-topbar-h) + 0.15rem)' in shell
-    # Cover is 3:4 — upward growth tracks height; side growth tracks width.
-    # × 1.5 covers auto-fill 1fr stretch past --od-tile-min.
-    assert '* 4 / 3 *' in shell
-    assert '* 1.5 + 12px' in shell
+    assert 'calc(var(--od-topbar-reserve-h, var(--od-topbar-h)) + 0.15rem)' in shell
+    # Current covers are 2:3; upward bleed tracks height, side bleed width.
+    assert 'aspect-ratio: 2 / 3' in components
+    assert '* 3 / 2 *' in grid
+    assert '(var(--od-tile-hover-scale, 1.25) - 1) / 2 + 12px' in grid
     assert '--od-tile-hover-bleed-y:' in shell
     assert '--od-tile-hover-bleed-x:' in shell
     # Catalog Grid shelves must not inherit the Tile hover-pad negative margin

@@ -11400,6 +11400,9 @@ def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch, tmp_p
             'active_key_id': 'fixture',
             'keys': {'fixture': Fernet.generate_key().decode('ascii')},
         }), encoding='utf-8')
+        import os
+        if os.name != 'nt':
+            keyring.chmod(0o600)
     monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(keyring))
     calls = []
     data = SimpleNamespace(inventory=lambda: calls.append(('inventory',)) or [

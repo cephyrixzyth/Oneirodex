@@ -123,8 +123,6 @@ jobs:
           --deselect tests/test_collections_api_wiring.py::test_newsletter_ckeditor_targets_content_field
           --deselect tests/test_collections_api_wiring.py::test_spa_collections_client_covers_new_actions
           --deselect tests/test_library_roots.py::TestParseLibraryRoots::test_windows_drive_letter_is_not_mistaken_for_a_label
-          --deselect tests/test_member_chrome_css.py::test_tile_hover_has_no_accent_glow_and_grows_from_center
-          --deselect tests/test_member_chrome_css.py::test_topbar_cluster_is_not_a_shared_outline
           --deselect tests/test_routes_admin_ext_settings_shell.py::TestSettingsShellSections::test_every_section_deep_link_is_reachable_from_the_react_hub
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_invalid_request_id_zero
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_database_error

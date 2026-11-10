@@ -559,6 +559,12 @@ def test_export_refuses_while_the_standalone_database_is_running(tmp_path, monke
 
 def test_database_snapshot_lists_secret_key_ids_without_secret_values(app, db_session, monkeypatch):
     from oneirodex.models.misc import GlobalSettings
+    from sqlalchemy import text
+
+    # This test's create_all schema need not have migration bookkeeping. Use
+    # session-local metadata without changing a real alembic_version table.
+    db_session.execute(text('CREATE TEMP TABLE alembic_version (version_num varchar(32)) ON COMMIT DROP'))
+    db_session.execute(text("INSERT INTO alembic_version VALUES ('snapshot-fixture')"))
 
     db_session.add(GlobalSettings(
         smtp_password='odrc:v1:secret-key-1:context:synthetic-ciphertext',

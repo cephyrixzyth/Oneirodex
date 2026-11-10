@@ -1,0 +1,131 @@
+{
+  "review_id": "R2023",
+  "doc_status": "Reference",
+  "title": "Unrestricted/CI diagnostic follow-up and portable licence pins",
+  "source_head_before_change": "e9d2cd20793efccabdf29f6c68e15faf61bad05b",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    ".gitattributes": "ea55130a334f9cf8297486188e408c492da0183a6b88a7621b8eb0bbf58875ad",
+    ".github/workflows/ci-tests.yml": "10e45d66df83cf6a80373d83346fa45369592a88ae0e5ef7be2a5b463a46d6c4",
+    "scripts/check_release_license_files.py": "02d407e614a9a42ec3fdc2c8da496de3c388174b6d15e249e7f82c49c78b7e5a",
+    "tests/test_asgi_native_browse.py": "848b7baaf7614be26ae0a5b7f3607a9c075b15b398570e4cdb2c33e974745851",
+    "tests/test_member_chrome_css.py": "8e152833ddc309b8f21dfa24f5e056607e2ec492a2570668aa4b163ca54ad345",
+    "tests/test_routes_apis_scan.py": "1b49a61644e86f008b6bbdd4a08b78338251506739f07eb7170d162e39b0b39a",
+    "tests/test_routes_smtp.py": "a629551d2b7c3f44386048560acb4e348f3d7d7441133d8bc9fbd4904b3fc01b",
+    "tests/test_scan_enrichment_cascade.py": "b5e6ec88e289ddb47fb2569bbf860ed579f9b26c9681fdb866ba435e45618f16",
+    "tests/test_standalone_move.py": "cd208b99044b01f8a3e207456b0d755959af42e6be7aa0f01abc894a9502f182"
+  },
+  "checks": {
+    "unrestricted-r2021": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 5872,
+        "failures": 3,
+        "errors": 7,
+        "skipped": 62,
+        "passed": 5800
+      },
+      "seconds": 1801.83,
+      "database_removed": true,
+      "log_sha256": "46e0df013d652553528ea20015fbff23a9d5d89c3390fceb2f16754bcd9ef78d"
+    },
+    "unrestricted-early-failures-red": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 3,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "seconds": 19.42,
+      "database_removed": true,
+      "log_sha256": "65a1f20e841e821bd06ed68a7afbed684b31b1f4b1790d6dc883437bae44594c"
+    },
+    "unrestricted-fixtures-qualified": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 157,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 2,
+        "passed": 154
+      },
+      "seconds": 84.34,
+      "database_removed": true,
+      "log_sha256": "1bb4a24d2eda0c2bb14f40fc4bde6be84d9fa2fe84c6361fe62bf003500e7626"
+    },
+    "unrestricted-fixtures-final": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 157,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 2,
+        "passed": 155
+      },
+      "seconds": 79.58,
+      "database_removed": true,
+      "log_sha256": "910f9ca1f83597d35056352a049c817cf67522324fdaa999940ecbe483884dc0"
+    },
+    "unrestricted-css-final": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 11
+      },
+      "seconds": 2.74,
+      "database_removed": null,
+      "log_sha256": "0f50d075f03f703e39f960bb06e0b41fda59201576e4a480bfd751eb20797a9a"
+    },
+    "r2023-license": {
+      "exit_code": 0,
+      "script": "scripts/check_release_license_files.py"
+    },
+    "r2023-undefined": {
+      "exit_code": 0,
+      "script": "scripts/check_undefined_names.py"
+    },
+    "r2023-envelope": {
+      "exit_code": 0,
+      "script": "scripts/api_envelope_lint.py"
+    },
+    "r2023-r1972": {
+      "exit_code": 0,
+      "script": "docs/dev/parity-evidence/review-bundle-r1972/validate_review_bundle.py"
+    },
+    "r2023-coordination": {
+      "exit_code": 0,
+      "script": ".agents/coordination/rebuild/validate.py"
+    }
+  },
+  "ci_baseline": {
+    "run": 42761236554,
+    "core_job": 129647227867,
+    "source": "e9d2cd20793efccabdf29f6c68e15faf61bad05b",
+    "result": "7 failed, 7703 passed, 14 skipped, 556 deselected; eight other CI jobs passed; Desktop 42761236488 passed.",
+    "log_sha256": "008d62752119527b8dca43b421c488aebb011891b0b5d9a6e9c85e6fc26c1075"
+  },
+  "classifications": {
+    "css": "Obsolete structural assertions repaired for existing separated controls, 2:3 covers, reserved topbar height and visible hover overflow. Production CSS unchanged; two repaired CI exceptions removed.",
+    "csv": "Test formula contained URL separators, so basename did not start with a formula. Separator-free formula now verified using parsed CSV cells; full path preserved. Production escaping unchanged.",
+    "cascade": "Test tried assigning the native facade session property. Replace the consuming module database dependency only; adapter assertions unchanged.",
+    "keyrings": "POSIX test keyrings lacked mode 0600. Fixtures now protect their files; production permission check unchanged.",
+    "licences": "Digest pins were computed on CRLF checkout bytes. Canonical LF Git content is unchanged; explicit LF attributes and corresponding exact byte hashes now portable.",
+    "snapshot": "Test create_all schema lacked migration bookkeeping. Session-local temporary version table supplies fixture metadata without changing actual migration state; production snapshot strictness unchanged."
+  },
+  "rework": [
+    "First focused repair still exposed additional stale CSS assertions; final combined 155-pass batch includes their correction.",
+    "One focused attempt never started pytest because the review DB had stopped; terminal startup record retained and dedicated container restarted."
+  ],
+  "cleanup": "All terminal diagnostic databases removed; two new wanted-update test files preserved under ignored artifacts rather than deleted. Unrelated local material preserved.",
+  "limits": [
+    "Partial unrestricted diagnostic stopped at maxfail=10; remaining collected tests still need execution.",
+    "Focused selections overlap; no summed unique-suite or full pass claim.",
+    "Linux permissions/current CI need fresh source-specific run; no merge/release/deployment acceptance."
+  ],
+  "capture": "No product UI change; R2022 private actual-app captures inspected separately."
+}
