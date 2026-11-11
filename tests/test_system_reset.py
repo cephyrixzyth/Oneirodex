@@ -265,10 +265,21 @@ class TestResetApi:
 
     def test_user_reset_keeps_the_acting_admin(self, admin_client, db_session, admin_user):
         """Never lock the operator out of the install they just reset."""
-        from oneirodex.models import User
+        from datetime import datetime, timezone
+        from oneirodex.models import User, SupportTicket, SupportDeliveryAttempt, SupportDeliveryCheckBudget
 
         admin_id = admin_user.id
         admin_name = admin_user.name
+        ticket = SupportTicket(user_id=admin_id, title='Synthetic support receipt', body='Kept locally')
+        db_session.add(ticket)
+        db_session.flush()
+        db_session.add_all([
+            SupportDeliveryAttempt(id=str(uuid4()), user_id=admin_id, ticket_id=ticket.id,
+                                   created_at=datetime.now(timezone.utc), repository='example/repo',
+                                   payload_sha256='a' * 64, outcome='unknown'),
+            SupportDeliveryCheckBudget(user_id=admin_id, window_started_at=datetime.now(timezone.utc), count=1),
+        ])
+        db_session.commit()
 
         response = admin_client.post(
             '/admin/api/system/reset',
@@ -284,6 +295,9 @@ class TestResetApi:
         assert survivor is not None
         assert survivor.name == admin_name
         assert db_session.query(User).count() == 1
+        assert db_session.query(SupportTicket).count() == 0
+        assert db_session.query(SupportDeliveryAttempt).count() == 0
+        assert db_session.query(SupportDeliveryCheckBudget).count() == 0
 
     def test_user_reset_preserves_previously_committed_file_cleanup(
         self, admin_client, db_session, tmp_path,

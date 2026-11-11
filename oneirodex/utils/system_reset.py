@@ -161,6 +161,8 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'client_devices',
         'invite_tokens',
         'support_tickets',
+        'support_delivery_attempts',
+        'support_delivery_check_budgets',
         'whitelist',
         'chat_channels',
         'chat_channel_members',

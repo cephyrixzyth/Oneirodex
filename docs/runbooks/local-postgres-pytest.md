@@ -4,6 +4,12 @@
 
 Native Windows, with Docker Desktop running.
 
+The per-test app fixture removes its session and disposes every app-owned engine
+on both success and failure. Removing a session alone leaves idle pooled clients
+alive while pytest retains app objects or tracebacks; do not rely on garbage
+collection or raise PostgreSQL connection limits to hide that leak. The retained-app
+backend-PID regressions in `tests/test_test_harness_resources.py` cover this boundary.
+
 Authentication-sensitive fixtures must issue persisted native login identities and use a fresh
 Flask app context when consecutive bearer requests change identity or scope. A test-wide database
 context otherwise retains Flask-Login's first loaded user. Store-link assertions must inspect

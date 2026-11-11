@@ -114,7 +114,18 @@ def app():
             "Tests cannot proceed with wrong database configuration."
         )
     
-    yield app
+    try:
+        yield app
+    finally:
+        # Pytest can retain app objects via failure tracebacks. Returning a
+        # session connection to its pool is insufficient: that app's idle pool
+        # otherwise keeps PostgreSQL clients alive until nondeterministic GC.
+        with app.app_context():
+            try:
+                db.session.remove()
+            finally:
+                for engine in db.engines.values():
+                    engine.dispose()
 
 # ---------------------------------------------------------------------------
 # Per-test database isolation (spec §3.2)

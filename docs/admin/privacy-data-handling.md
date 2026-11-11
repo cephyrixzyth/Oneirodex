@@ -179,7 +179,9 @@ Admin → System danger-zone reset can wipe catalog / libraries / users / settin
 touches files on disk**.
 Previously committed account-deletion file cleanup jobs survive every reset scope. The separate
 cleanup worker continues those earlier deletions; resetting users does not cancel them. The users
-scope includes persistent login sessions and prior save-generation records. Reset planning refuses
+scope includes persistent login sessions, prior save-generation records, support reports, their
+delivery-attempt journal and lookup budgets. The acting administrator is restored, but those
+personal support records are cleared. Reset planning refuses
 a database cascade that would erase the retained cleanup journal.
 
 ## Adapting this for a real notice

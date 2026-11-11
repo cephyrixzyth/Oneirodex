@@ -2,6 +2,8 @@
 
 > **Doc status:** Active
 
+**Focused palette-privacy QA:** R2035 uses populated native staging and headless Chromium with two synthetic accounts in one shared browser context. Captures qualify the checked adult/child palette, outage and reopened post-revocation states; private hashes are in [R2035](../../dev/parity-evidence/palette-browser-boundary-r2035.json). Production UI did not change, so the existing README slots remain current for this scope. In-flight/already-open cross-tab and offline acceptance remain open.
+
 **Focused support-recovery QA:** R2034 uses current-source populated native staging and headless Chromium to check an existing issue without sending, preview a definite-rejection retry, drop its committed reply and recover the same ticket/attempt. Desktop and settled375px mobile captures, including the retry body, were inspected. Private screenshot hashes are in [R2034](../../dev/parity-evidence/support-retry-reconciliation-r2034.json). All provider transport was intercepted and owned staging resources removed. This Report-page change leaves the Library, Systems and Chat README slots unchanged; full route/platform/independent acceptance remains open.
 
 **Focused support-receipt QA:** R2033 uses current-source populated native staging and headless Chromium to drop a committed response, retry the same UUID, show uncertain delivery, and retain local-only reporting when unconfigured. Desktop and settled375px mobile captures were inspected; private screenshot hashes are in [R2033](../../dev/parity-evidence/support-delivery-receipts-r2033.json). No real external issue was sent. This focused change does not replace the Library, Systems or Chat README slots; explicit rejection retry/reconciliation remains open.
