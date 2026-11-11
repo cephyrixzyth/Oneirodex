@@ -68,11 +68,14 @@ def test_member_support_ticket_creation_validates_rate_limit_and_envelope():
     assert data.created[1]['sync_to_github'] is False
 
 
-def test_member_support_ticket_can_explicitly_opt_in_to_github_sync():
+def test_member_support_ticket_can_explicitly_opt_in_to_github_sync(monkeypatch):
+    monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
     data = FakeSupport()
-    response = make_client(data=data).post('/api/support/tickets', json={
-        'title': 'A useful report', 'sync_to_github': True,
-    })
+    client = make_client(data=data)
+    payload = {'title': 'A useful report', 'sync_to_github': True}
+    preview = client.post('/api/support/preview', json=payload).json()['preview']
+    payload.update({key: preview[key] for key in ['request_id', 'preview_token']})
+    response = client.post('/api/support/tickets', json=payload)
 
     assert response.status_code == 201
     assert data.created[1]['sync_to_github'] is True

@@ -90,6 +90,8 @@ def test_external_payload_redacts_synthetic_secrets_and_personal_context(
         'logs': 'Email ' + canaries[2] + '\nPath ' + canaries[3],
         'sync_to_github': True,
     }
+    preview = _json(support_client.post('/api/support/preview', json=payload))['preview']
+    payload.update({key: preview[key] for key in ['preview_token', 'request_id']})
     response = support_client.post('/api/support/tickets', json=payload)
     assert response.status_code == 201
     saved = db_session.get(SupportTicket, _json(response)['ticket']['id'])
@@ -98,6 +100,8 @@ def test_external_payload_redacts_synthetic_secrets_and_personal_context(
     assert len(captured_forwarding) == 1
     outbound = captured_forwarding[0]['title'] + '\n' + captured_forwarding[0]['body']
     assert all(value not in outbound for value in canaries)
+    assert captured_forwarding[0]['title'] == preview['title']
+    assert captured_forwarding[0]['body'] == preview['body']
 
 
 def test_local_only_report_never_reaches_external_http(
@@ -158,3 +162,103 @@ def test_redaction_is_stable_when_preview_and_final_sender_filter_again():
     text = 'api_key=private\n{"password":"private"}\nhttps://name:private@fixture.invalid/?token=private'
     once = redact_support_text(text)
     assert redact_support_text(once) == once
+
+
+def test_preview_is_redacted_and_does_not_create_or_forward(
+    support_client, db_session, captured_forwarding,
+):
+    before = db_session.query(SupportTicket).count()
+    payload = {'title': 'Preview api_key=SYNTHETIC_PREVIEW_KEY',
+               'body': 'Contact synthetic.preview@example.invalid', 'sync_to_github': True}
+    response = support_client.post('/api/support/preview', json=payload)
+    assert response.status_code == 200
+    data = _json(response)['preview']
+    assert data['destination'] == 'example-owner/example-repo'
+    assert data['visibility'] == 'unknown'
+    assert data['redaction'] == 'mandatory'
+    assert 'SYNTHETIC_PREVIEW_KEY' not in data['title']
+    assert 'synthetic.preview@example.invalid' not in data['body']
+    assert data['preview_token']
+    assert db_session.query(SupportTicket).count() == before
+    assert captured_forwarding == []
+
+
+def test_opt_in_without_preview_cannot_forward(support_client, captured_forwarding):
+    response = support_client.post('/api/support/tickets', json={
+        'title': 'No preview', 'sync_to_github': True,
+    })
+    assert response.status_code == 409
+    assert captured_forwarding == []
+
+
+@pytest.mark.parametrize('change', ['body', 'request_id', 'destination', 'signature'])
+def test_changed_report_or_destination_invalidates_preview(
+    support_client, captured_forwarding, db_session, monkeypatch, change,
+):
+    payload = {'title': 'Approved text', 'body': 'Original', 'sync_to_github': True}
+    preview = _json(support_client.post('/api/support/preview', json=payload))['preview']
+    payload.update({key: preview[key] for key in ['preview_token', 'request_id']})
+    before = db_session.query(SupportTicket).count()
+    if change == 'body': payload['body'] = 'Changed after preview'
+    if change == 'request_id': payload['request_id'] = str(uuid4())
+    if change == 'destination': monkeypatch.setenv('SUPPORT_GITHUB_REPO', 'another-owner/another-repo')
+    if change == 'signature': payload['preview_token'] += 'tampered'
+    response = support_client.post('/api/support/tickets', json=payload)
+    assert response.status_code == 409
+    assert captured_forwarding == []
+    assert db_session.query(SupportTicket).count() == before
+
+
+@pytest.mark.parametrize('configuration', ['missing', 'invalid'])
+def test_unavailable_forwarding_does_not_block_local_reporting(
+    support_client, captured_forwarding, monkeypatch, configuration,
+):
+    if configuration == 'missing': monkeypatch.delenv('SUPPORT_GITHUB_TOKEN')
+    else: monkeypatch.setenv('SUPPORT_GITHUB_REPO', 'owner/repo?token=SYNTHETIC_INVALID_CONFIG')
+    payload = {'title': 'Still useful locally'}
+    response = support_client.post('/api/support/preview', json=payload)
+    assert response.status_code == 200
+    preview = _json(response)['preview']
+    assert preview['available'] is False
+    assert preview['preview_token'] is None
+    assert 'SYNTHETIC_INVALID_CONFIG' not in json.dumps(preview)
+    assert support_client.post('/api/support/tickets', json=payload).status_code == 201
+    assert captured_forwarding == []
+
+
+def test_preview_approval_is_account_bound_and_expires(captured_forwarding, monkeypatch):
+    from oneirodex.utils.support_reports import preview_support_report, valid_support_preview
+    from itsdangerous.timed import TimestampSigner
+    user = SimpleNamespace(id=701, role='user')
+    payload = {'title': 'Account-bound preview'}
+    preview = preview_support_report(user, payload, 'synthetic-preview-signing-key')
+    payload.update({key: preview[key] for key in ['preview_token', 'request_id']})
+    assert valid_support_preview(user, payload, 'synthetic-preview-signing-key')
+    assert not valid_support_preview(SimpleNamespace(id=702, role='user'), payload, 'synthetic-preview-signing-key')
+    original = TimestampSigner.get_timestamp
+    monkeypatch.setattr(TimestampSigner, 'get_timestamp', lambda self: original(self) + 901)
+    assert not valid_support_preview(user, payload, 'synthetic-preview-signing-key')
+    assert captured_forwarding == []
+
+
+def test_sender_rechecks_approved_destination_at_final_sink(captured_forwarding):
+    from oneirodex.utils.github_issues import create_github_issue
+    result = create_github_issue(title='Approved', body='Approved', expected_repository='old-owner/old-repo')
+    assert result['ok'] is False
+    assert result['skipped'] is True
+    assert captured_forwarding == []
+
+
+def test_preview_has_no_raw_override(support_client, captured_forwarding):
+    response = support_client.post('/api/support/preview', json={
+        'title': 'Do not bypass', 'redaction': 'disabled',
+    })
+    assert response.status_code == 422
+    assert captured_forwarding == []
+
+
+def test_preview_requires_csrf_when_enabled(support_client, captured_forwarding, app):
+    app.config['WTF_CSRF_ENABLED'] = True
+    response = support_client.post('/api/support/preview', json={'title': 'No CSRF'})
+    assert response.status_code == 400
+    assert captured_forwarding == []

@@ -2,6 +2,8 @@
 
 > **Doc status:** Active
 
+**Focused support-preview QA:** R2032 uses populated isolated native staging and fingerprinted candidate assets in headless Chromium, with mandatory preview and configured/unconfigured local-only flows. Desktop and375px mobile captures were inspected after the rail settled off-canvas. Screenshots remain private; hashes and bounds are in [R2032](../../dev/parity-evidence/support-preview-r2032.json). This focused Report-page change does not replace the Library, Systems or Chat README slots. No external issue was sent; all owned staging resources were removed. Delivery/retry acceptance remains open.
+
 Every screenshot, poster, banner and how-to clip under `docs/assets/readme/`
 and `docs/media/` is produced by four scripts against a **throwaway local
 instance**. Nothing here is a mock-up: if a surface cannot be photographed

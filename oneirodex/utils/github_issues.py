@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -46,6 +47,14 @@ def support_github_config() -> tuple[str | None, str]:
     return token, repo
 
 
+def valid_support_repository(repo: str) -> bool:
+    """A repository slug, never a URL, query, credential or extra API path."""
+    owner, separator, name = repo.partition('/')
+    return bool(separator and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}', owner)
+                and re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', name)
+                and name not in {'.', '..'})
+
+
 def build_issue_body(ticket: dict[str, Any]) -> str:
     lines = [
         '## Support ticket (Oneirodex)',
@@ -74,13 +83,16 @@ def build_issue_body(ticket: dict[str, Any]) -> str:
     return redact_support_text('\n'.join(lines), secrets=(token or '',))
 
 
-def create_github_issue(*, title: str, body: str, labels: list[str] | None = None) -> dict[str, Any]:
+def create_github_issue(*, title: str, body: str, labels: list[str] | None = None,
+                        expected_repository: str | None = None) -> dict[str, Any]:
     """POST a GitHub issue. Returns {ok, number, url, error?}."""
     token, repo = support_github_config()
     if not token:
         return {'ok': False, 'skipped': True, 'error': 'SUPPORT_GITHUB_TOKEN not set'}
-    if '/' not in repo:
+    if not valid_support_repository(repo):
         return {'ok': False, 'error': 'Invalid SUPPORT_GITHUB_REPO'}
+    if expected_repository is not None and repo != expected_repository:
+        return {'ok': False, 'skipped': True, 'error': 'Support destination changed; preview again'}
 
     # Enforce at the final shared sink as well as the preview/body formatter.
     # Direct callers must not bypass filtering, including through the title.

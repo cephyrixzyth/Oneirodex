@@ -2267,13 +2267,10 @@
         }
       },
       "post": {
-        "summary": "Create support ticket (local by default; GitHub sync requires member opt-in)",
+        "summary": "Create local support ticket; external forwarding requires opt-in and a current redacted preview",
         "security": [
           {
             "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
           }
         ],
         "requestBody": {
@@ -2341,9 +2338,22 @@
                   "sync_to_github": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Send this report to the administrator-configured GitHub repository. Requires explicit member opt-in."
+                    "description": "Explicit opt-in. Always redact; a valid server preview approval is required."
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Report reference returned by the preview; required for external forwarding."
+                  },
+                  "preview_token": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "nullable": true,
+                    "description": "15-minute signed preview approval, bound to this account, normalized content, report reference and configured destination."
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -2351,6 +2361,176 @@
         "responses": {
           "201": {
             "description": "Created"
+          },
+          "409": {
+            "description": "Missing, expired or changed preview approval; preview again. No external send."
+          }
+        }
+      }
+    },
+    "/api/support/preview": {
+      "post": {
+        "summary": "Preview the mandatory redacted GitHub report and configured destination without saving or sending",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "body": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "symptom": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "kind": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "area": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "severity": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "logs": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "sync_to_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Explicit opt-in. Always redact; a valid server preview approval is required."
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Report reference returned by the preview; required for external forwarding."
+                  },
+                  "preview_token": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "nullable": true,
+                    "description": "15-minute signed preview approval, bound to this account, normalized content, report reference and configured destination."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview metadata. unavailable keeps local reporting usable; visibility is unknown, never assumed private. Signed approval contains hashes, not raw diagnostics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preview": {
+                      "type": "object",
+                      "required": [
+                        "available",
+                        "destination",
+                        "visibility",
+                        "redaction",
+                        "preview_token"
+                      ],
+                      "properties": {
+                        "available": {
+                          "type": "boolean",
+                          "description": "Configuration is present and valid; does not verify provider reachability or authorization."
+                        },
+                        "destination": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "unknown"
+                          ]
+                        },
+                        "redaction": {
+                          "type": "string",
+                          "enum": [
+                            "mandatory"
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "preview_token": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser session required"
+          },
+          "422": {
+            "description": "Invalid request"
           }
         }
       }

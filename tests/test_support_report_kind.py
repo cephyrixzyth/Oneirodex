@@ -39,6 +39,9 @@ def login(client, user):
 def _create(client, **body):
     payload = {'title': 'Something to report'}
     payload.update(body)
+    if payload.get('sync_to_github'):
+        preview = client.post('/api/support/preview', json=payload).get_json()['preview']
+        payload.update({key: preview[key] for key in ['request_id', 'preview_token']})
     return client.post('/api/support/tickets', json=payload)
 
 
@@ -53,7 +56,8 @@ class TestReportKind:
         assert response.get_json()['ticket']['github_sync'] == 'local_only'
         create_issue.assert_not_called()
 
-    def test_github_sync_requires_explicit_opt_in(self, client, member):
+    def test_github_sync_requires_explicit_opt_in(self, client, member, monkeypatch):
+        monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
         login(client, member)
         with patch(
             'oneirodex.routes_apis.support.create_github_issue',
@@ -95,7 +99,8 @@ class TestReportKind:
         rows = client.get('/api/support/tickets').get_json()['tickets']
         assert any(row.get('kind') == 'enhancement' for row in rows)
 
-    def test_ticket_submission_is_limited_per_account(self, client, member):
+    def test_ticket_submission_is_limited_per_account(self, client, member, monkeypatch):
+        monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
         login(client, member)
         with patch(
             'oneirodex.routes_apis.support.create_github_issue',

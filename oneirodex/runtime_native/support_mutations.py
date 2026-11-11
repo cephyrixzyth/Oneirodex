@@ -35,27 +35,13 @@ class SupportMutationData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import SupportTicket
         from oneirodex.utils.role_catalog import normalize_role
-        from oneirodex.utils.github_issues import build_issue_body, create_github_issue
+        from oneirodex.utils.github_issues import create_github_issue
+        from oneirodex.utils.support_reports import support_fields, support_external_payload
         from oneirodex.utils.notifications import notify_admins
 
-        title = body['title'][:200]
-        ticket_body = (body.get('body') or body.get('symptom') or '').strip()[:_BODY_MAX]
-        area = (body.get('area') or 'other').strip().lower()
-        if area not in _AREAS:
-            area = 'other'
-        kind = (body.get('kind') or 'issue').strip().lower()
-        if kind not in _KINDS:
-            kind = 'issue'
-        severity = (body.get('severity') or 'P2').strip().upper()
-        if severity not in _SEVERITIES:
-            severity = 'P2'
         ticket = SupportTicket(
-            user_id=user.id, title=title, body=ticket_body, area=area, kind=kind,
-            severity=severity, role_at_submit=normalize_role(getattr(user, 'role', None)),
-            deploy_hint=(body.get('deploy_hint') or body.get('deploy') or '')[:64] or None,
-            client_hint=(body.get('client_hint') or body.get('client') or '')[:120] or None,
-            url_hint=(body.get('url_hint') or body.get('url') or '')[:512] or None,
-            logs=(body.get('logs') or '').strip()[:_LOGS_MAX] or None,
+            **support_fields(body), user_id=user.id,
+            role_at_submit=normalize_role(getattr(user, 'role', None)),
             status='open',
             github_sync='pending' if body.get('sync_to_github') is True else 'local_only',
             created_at=now,
@@ -64,9 +50,7 @@ class SupportMutationData:
         db.session.commit()
         if body.get('sync_to_github') is True:
             gh = create_github_issue(
-                title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
-                body=build_issue_body(ticket.to_dict()),
-                labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
+                **support_external_payload(user, body),
             )
             if gh.get('ok'):
                 ticket.github_sync = 'synced'
@@ -120,6 +104,10 @@ def create_support_mutation_router(
     async def create_ticket(request: Request):
         return await _mutate(request, **opts, ticket_id=None)
 
+    @router.post('/api/support/preview')
+    async def preview_ticket(request: Request):
+        return await _mutate(request, **opts, ticket_id=None, preview=True)
+
     @router.post('/api/support/tickets/{ticket_id:int}/resolve')
     async def resolve_ticket(ticket_id: int, request: Request):
         return await _mutate(request, **opts, ticket_id=ticket_id)
@@ -134,7 +122,7 @@ def mount_support_mutation_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _mutate(request, *, flask_app, data, find_user, find_token,
                   commit_token_touch, load_user_id, login_manager,
-                  database_scope, ticket_id):
+                  database_scope, ticket_id, preview=False):
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
         from .csrf_compat import csrf_error_response
@@ -166,7 +154,7 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
             payload, status = api_error_payload('Sign in with your site account to manage support reports', code='forbidden')
             response = JSONResponse(payload, status_code=status)
         elif ticket_id is None:
-            if (data.recent_count(auth.user.id, datetime.now(timezone.utc) - _WINDOW) >= _RATE_LIMIT):
+            if (not preview and data.recent_count(auth.user.id, datetime.now(timezone.utc) - _WINDOW) >= _RATE_LIMIT):
                 payload, status = api_error_payload('Support report limit reached. Try again later.', code='rate_limited')
                 response = JSONResponse(payload, status_code=status)
             else:
@@ -176,8 +164,20 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
                     model = CreateSupportTicketBody.model_validate(
                         body if body is not None else {},
                     )
-                    result = data.create(auth.user, model.model_dump(), datetime.now(timezone.utc))
-                    response = JSONResponse(api_ok_payload({'ticket': result}), status_code=201)
+                    from oneirodex.utils.support_reports import preview_support_report, valid_support_preview
+                    values = model.model_dump()
+                    approval = valid_support_preview(auth.user, values, flask_app.config['SECRET_KEY']) if model.sync_to_github and not preview else None
+                    if preview:
+                        result = preview_support_report(auth.user, values, flask_app.config['SECRET_KEY'])
+                        response = JSONResponse(api_ok_payload({'preview': result}))
+                    elif model.sync_to_github and not approval:
+                        payload, status = api_error_payload('Preview this report and its destination again before sending to GitHub.', code='conflict')
+                        response = JSONResponse(payload, status_code=status)
+                    else:
+                        if approval:
+                            values['_approved_repository'] = approval['destination']
+                        result = data.create(auth.user, values, datetime.now(timezone.utc))
+                        response = JSONResponse(api_ok_payload({'ticket': result}), status_code=201)
                 except ValidationError as exc:
                     from oneirodex.utils.validation import format_validation_errors
 

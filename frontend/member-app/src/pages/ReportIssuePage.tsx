@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@oneirodex/ui'
-import { submitSupportTicket } from '../api/support'
+import { previewSupportTicket, submitSupportTicket } from '../api/support'
 import { PageStatus } from '../components/PageStatus'
 import './ReportIssuePage.css'
 
@@ -59,24 +59,61 @@ export function ReportIssuePage() {
   const [busy, setBusy] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
+  const [preview, setPreview] = useState<any>(null)
+  const [previewBusy, setPreviewBusy] = useState(false)
+  const [requestId, setRequestId] = useState('')
+  const revision = useRef(0)
+
+  function draft() {
+    return {
+      title,
+      body,
+      kind,
+      area,
+      severity,
+      deploy_hint: deploy,
+      client_hint: client,
+      url_hint: url,
+      logs,
+      sync_to_github: syncToGithub,
+      ...(requestId ? { request_id: requestId } : {}),
+    }
+  }
+
+  async function previewGithub() {
+    const capturedRevision = revision.current
+    if (!title.trim()) {
+      setError('Enter a title before previewing.')
+      return
+    }
+    setPreviewBusy(true)
+    setError(null)
+    setPreview(null)
+    try {
+      const data = await previewSupportTicket(draft())
+      if (revision.current !== capturedRevision) return
+      setPreview(data.preview)
+      if (data.preview?.request_id) setRequestId(data.preview.request_id)
+    } catch (err: any) {
+      if (revision.current === capturedRevision) setError(err.message || 'Preview failed')
+    } finally {
+      setPreviewBusy(false)
+    }
+  }
 
   async function submit(event: any) {
     event.preventDefault()
+    if (syncToGithub && (!preview?.available || !preview?.preview_token)) {
+      setError('Preview this report and its destination before sending to GitHub.')
+      return
+    }
     setBusy(true)
     setError(null)
     setResult(null)
     try {
       const data = await submitSupportTicket({
-        title,
-        body,
-        kind,
-        area,
-        severity,
-        deploy_hint: deploy,
-        client_hint: client,
-        url_hint: url,
-        logs,
-        sync_to_github: syncToGithub,
+        ...draft(),
+        ...(syncToGithub ? { preview_token: preview.preview_token } : {}),
       })
       setResult(data.ticket)
       setTitle('')
@@ -85,6 +122,9 @@ export function ReportIssuePage() {
       setSyncToGithub(false)
       setDetailsOpen(false)
       setLogsOpen(false)
+      setPreview(null)
+      setRequestId('')
+      revision.current += 1
     } catch (err: any) {
       setError(err.message || 'Submit failed')
     } finally {
@@ -122,7 +162,14 @@ export function ReportIssuePage() {
         </div>
       ) : null}
 
-      <form className="od-report__form" onSubmit={submit}>
+      <form
+        className="od-report__form"
+        onSubmit={submit}
+        onChangeCapture={() => {
+          revision.current += 1
+          setPreview(null)
+        }}
+      >
         <section className="od-report__primary" aria-label="Report details">
           {/* Asked first, because it changes what the rest of the form means.
               The page was headed "Report issue" and collected feature requests
@@ -275,8 +322,48 @@ export function ReportIssuePage() {
           </span>
         </label>
 
+        {syncToGithub ? (
+          <section className="od-report__preview" aria-label="GitHub report preview">
+            <p>
+              Preview the destination and redacted report before sending. Local-only reporting is
+              always available by clearing the GitHub option.
+            </p>
+            <Button type="button" disabled={busy || previewBusy} onClick={previewGithub}>
+              {previewBusy ? 'Preparing preview…' : 'Preview GitHub report'}
+            </Button>
+            {preview ? (
+              preview.available ? (
+                <>
+                  <p>
+                    Destination: <strong>{preview.destination}</strong>. Repository visibility is
+                    unknown; treat this report as potentially public.
+                  </p>
+                  <p>
+                    Automatic redaction always applies and cannot recognize every private detail.
+                    Review this text, edit the report if needed, then preview again. Your account
+                    identifier and role are included below.
+                  </p>
+                  <h2>{preview.title}</h2>
+                  <pre className="od-report__preview-text">{preview.body}</pre>
+                </>
+              ) : (
+                <p role="status">
+                  GitHub forwarding is unavailable. Clear the GitHub option to save this report
+                  locally.
+                </p>
+              )
+            ) : null}
+          </section>
+        ) : null}
+
         <div className="od-report__actions">
-          <Button type="submit" disabled={busy}>
+          <Button
+            type="submit"
+            disabled={
+              busy ||
+              (syncToGithub && (!preview?.available || !preview?.preview_token || previewBusy))
+            }
+          >
             {busy ? 'Sending…' : 'Submit ticket'}
           </Button>
           <Link className="od-report__help-link" to="/help">

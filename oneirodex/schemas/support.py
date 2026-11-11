@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -34,3 +35,5 @@ class CreateSupportTicketBody(BaseModel):
     url_hint: str | None = None
     url: str | None = None
     sync_to_github: bool = False
+    request_id: UUID | None = None
+    preview_token: Annotated[str, StringConstraints(max_length=2048)] | None = None

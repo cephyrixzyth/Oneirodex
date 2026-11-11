@@ -244,3 +244,18 @@
   font-size: var(--od-font-sm);
   color: var(--od-text-muted);
 }
+
+.od-report__preview {
+  padding: 1rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-bg);
+  color: var(--od-text);
+}
+
+.od-report__preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+}
