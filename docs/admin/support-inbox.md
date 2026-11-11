@@ -14,6 +14,24 @@ External titles and bodies are always filtered at the shared GitHub sender. Reco
 
 The preview names the validated owner/repository. Repository visibility is **unknown**; treat the report as potentially public. Configuration availability does not establish provider reachability or write permission. A missing token or invalid repository keeps forwarding unavailable while local-only submission stays usable. Approval expires after 15 minutes and is bound to the signed-in account, normalized contents, report reference and configuration; edits, account changes or configuration changes require another preview. Clients that previously sent only `sync_to_github=true` must obtain preview approval first. Delivery/retry and duplicate-request qualification remain open review work.
 
+## Delivery receipts and retries
+
+The member form creates a UUID before its first submission and keeps it if the response is lost. Repeat the unchanged report with the same `request_id` to recover the original local ticket. The database reserves that reference per account and commits a sending marker before contacting GitHub. A pending reservation can resume with a valid preview; an in-flight, unknown or confirmed attempt is never automatically posted again. Changed contents under an existing reference return409. API clients should generate and retain their own UUID; older local-only clients that omit it receive a server-generated reference but cannot recover a lost response by key unless they retained that reference.
+
+| `github_sync` | Meaning |
+|---|---|
+| `local_only` | No external send requested. |
+| `pending` | Local receipt committed; external attempt not started. |
+| `sending` / `unknown` | Delivery is unconfirmed and might already exist. Keep the ticket and report reference; do not submit a new report. |
+| `synced` | GitHub returned201 and a valid issue number/link for the configured repository. |
+| `rejected` | GitHub returned a recognized client rejection. The local ticket remains. |
+| `skipped` | No external POST was made because forwarding became unavailable. |
+| `error` | Historical failure state; inspect the destination before attempting another send. |
+
+Administrators can look for the report UUID in the destination's issue body and compare it with the local ticket. Automated reconciliation and an explicit safe retry action after a definite rejection remain open review work. Do not change a delivery state directly in the database or assume a timeout means the issue was not created. Repository redirects are refused; after a rename, repair the configured destination and preview again. No provider request ID or HTTP retry advice establishes exactly-once creation. See the [GitHub create-issue endpoint](https://docs.github.com/en/rest/issues/issues#create-an-issue) and [REST API retry guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api).
+
+The receipt migration preserves historical tickets with null references and adopts an existing startup-created unique index into the matching database constraint. It refuses a schema downgrade once receipts exist. For rollback, retain a tested pre-upgrade database backup; deleting receipt columns loses duplicate-send protection.
+
 ## Admin path
 
 1. Open **`/admin/support`** (Users hub → Support inbox), or follow the in-app notification.

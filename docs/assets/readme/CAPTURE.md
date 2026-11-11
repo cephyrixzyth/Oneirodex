@@ -2,6 +2,8 @@
 
 > **Doc status:** Active
 
+**Focused support-receipt QA:** R2033 uses current-source populated native staging and headless Chromium to drop a committed response, retry the same UUID, show uncertain delivery, and retain local-only reporting when unconfigured. Desktop and settled375px mobile captures were inspected; private screenshot hashes are in [R2033](../../dev/parity-evidence/support-delivery-receipts-r2033.json). No real external issue was sent. This focused change does not replace the Library, Systems or Chat README slots; explicit rejection retry/reconciliation remains open.
+
 **Focused support-preview QA:** R2032 uses populated isolated native staging and fingerprinted candidate assets in headless Chromium, with mandatory preview and configured/unconfigured local-only flows. Desktop and375px mobile captures were inspected after the rail settled off-canvas. Screenshots remain private; hashes and bounds are in [R2032](../../dev/parity-evidence/support-preview-r2032.json). This focused Report-page change does not replace the Library, Systems or Chat README slots. No external issue was sent; all owned staging resources were removed. Delivery/retry acceptance remains open.
 
 Every screenshot, poster, banner and how-to clip under `docs/assets/readme/`

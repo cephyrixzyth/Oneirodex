@@ -1,7 +1,12 @@
 import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@oneirodex/ui'
-import { previewSupportTicket, submitSupportTicket } from '../api/support'
+import {
+  newSupportRequestId,
+  previewSupportTicket,
+  submitSupportTicket,
+  type SupportPreview,
+} from '../api/support'
 import { PageStatus } from '../components/PageStatus'
 import './ReportIssuePage.css'
 
@@ -59,9 +64,9 @@ export function ReportIssuePage() {
   const [busy, setBusy] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
-  const [preview, setPreview] = useState<any>(null)
+  const [preview, setPreview] = useState<SupportPreview | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
-  const [requestId, setRequestId] = useState('')
+  const [requestId, setRequestId] = useState(newSupportRequestId)
   const revision = useRef(0)
 
   function draft() {
@@ -92,10 +97,11 @@ export function ReportIssuePage() {
     try {
       const data = await previewSupportTicket(draft())
       if (revision.current !== capturedRevision) return
-      setPreview(data.preview)
+      setPreview(data.preview ?? null)
       if (data.preview?.request_id) setRequestId(data.preview.request_id)
-    } catch (err: any) {
-      if (revision.current === capturedRevision) setError(err.message || 'Preview failed')
+    } catch (err: unknown) {
+      if (revision.current === capturedRevision)
+        setError(err instanceof Error ? err.message : 'Preview failed')
     } finally {
       setPreviewBusy(false)
     }
@@ -103,7 +109,8 @@ export function ReportIssuePage() {
 
   async function submit(event: any) {
     event.preventDefault()
-    if (syncToGithub && (!preview?.available || !preview?.preview_token)) {
+    const approval = syncToGithub ? preview?.preview_token : undefined
+    if (syncToGithub && (!preview?.available || !approval)) {
       setError('Preview this report and its destination before sending to GitHub.')
       return
     }
@@ -113,7 +120,7 @@ export function ReportIssuePage() {
     try {
       const data = await submitSupportTicket({
         ...draft(),
-        ...(syncToGithub ? { preview_token: preview.preview_token } : {}),
+        ...(approval ? { preview_token: approval } : {}),
       })
       setResult(data.ticket)
       setTitle('')
@@ -123,7 +130,7 @@ export function ReportIssuePage() {
       setDetailsOpen(false)
       setLogsOpen(false)
       setPreview(null)
-      setRequestId('')
+      setRequestId(newSupportRequestId())
       revision.current += 1
     } catch (err: any) {
       setError(err.message || 'Submit failed')
@@ -156,7 +163,16 @@ export function ReportIssuePage() {
           {result.github_sync === 'skipped'
             ? ' · GitHub sync unavailable; ticket stayed on this server'
             : null}
-          {result.github_sync === 'error' ? ' · GitHub sync failed (ticket kept)' : null}
+          {['sending', 'unknown', 'error'].includes(result.github_sync)
+            ? ' · GitHub delivery is unconfirmed; it may already exist. Keep this ticket reference and do not send a new report. Ask an administrator to check the destination.'
+            : null}
+          {result.github_sync === 'pending'
+            ? ' · GitHub delivery has not started; the local ticket is kept.'
+            : null}
+          {result.github_sync === 'rejected'
+            ? ' · GitHub rejected this attempt; the local ticket is kept.'
+            : null}
+          {result.request_id ? <span> · Report reference: {result.request_id}</span> : null}
           {' · '}
           <Link to="/notifications">Notifications</Link>
         </div>

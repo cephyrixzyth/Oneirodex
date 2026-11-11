@@ -933,6 +933,12 @@ class DatabaseManager:
         ALTER TABLE support_tickets
         ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'issue';
 
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS request_id VARCHAR(36);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS request_hash VARCHAR(64);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_attempt_id VARCHAR(36);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_support_ticket_user_request
+            ON support_tickets(user_id, request_id);
+
         ALTER TABLE user_preferences
         ADD COLUMN IF NOT EXISTS notify_free_games BOOLEAN DEFAULT TRUE;
         ALTER TABLE user_preferences

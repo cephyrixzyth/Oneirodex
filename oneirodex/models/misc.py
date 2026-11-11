@@ -348,10 +348,14 @@ class SupportTicket(db.Model):
     """In-app teammate support reports → GitHub Issues (no external chat SaaS)."""
 
     __tablename__ = 'support_tickets'
+    __table_args__ = (db.UniqueConstraint('user_id', 'request_id', name='uq_support_ticket_user_request'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
+    request_id = db.Column(db.String(36), nullable=True)
+    request_hash = db.Column(db.String(64), nullable=True)
+    github_attempt_id = db.Column(db.String(36), nullable=True)
     body = db.Column(db.Text, nullable=False)
     area = db.Column(db.String(64), nullable=True)
     # What kind of report this is. "Report issue" collected both bug reports and
@@ -368,7 +372,7 @@ class SupportTicket(db.Model):
     status = db.Column(db.String(32), default='open', nullable=False)  # open|resolved|closed
     github_issue_number = db.Column(db.Integer, nullable=True)
     github_issue_url = db.Column(db.String(512), nullable=True)
-    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|synced|skipped|error|local_only
+    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|sending|synced|skipped|rejected|unknown|error|local_only
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     resolved_at = db.Column(db.DateTime, nullable=True)
     resolved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
@@ -378,6 +382,7 @@ class SupportTicket(db.Model):
         logs = self.logs or ''
         payload = {
             'id': self.id,
+            'request_id': self.request_id,
             'user_id': self.user_id,
             'kind': self.kind or 'issue',
             'title': self.title,

@@ -209,3 +209,44 @@ test('requires the server-redacted preview and destination before forwarding', a
   expect(await screen.findByText(/Ticket #71 saved/)).toBeInTheDocument()
   expect(fetch).toHaveBeenCalledTimes(2)
 })
+
+test('retries a lost local response with the same request UUID', async () => {
+  const user = userEvent.setup()
+  const payloads: any[] = []
+  stubFetch((_input, init) => {
+    payloads.push(JSON.parse(init.body))
+    if (payloads.length === 1) throw new TypeError('Synthetic response lost')
+    return jsonResponse({ ticket: { id: 81, github_sync: 'local_only' } }, { status: 201 })
+  })
+  render(
+    <MemoryRouter>
+      <ReportIssuePage />
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByLabelText('Title'), 'Keep one receipt')
+  await user.type(screen.getByLabelText('Symptom'), 'Transport response lost')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  await screen.findByRole('alert')
+  expect(payloads[0].request_id).toMatch(
+    /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i,
+  )
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  expect(await screen.findByText(/Ticket #81 saved/)).toBeInTheDocument()
+  expect(payloads[1].request_id).toBe(payloads[0].request_id)
+})
+
+test('explains that an uncertain provider outcome must not be resent', async () => {
+  const user = userEvent.setup()
+  stubFetch(() => jsonResponse({ ticket: { id: 82, github_sync: 'unknown' } }, { status: 201 }))
+  render(
+    <MemoryRouter>
+      <ReportIssuePage />
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByLabelText('Title'), 'Uncertain delivery')
+  await user.type(screen.getByLabelText('Symptom'), 'Keep the receipt')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  expect(await screen.findByText(/GitHub delivery is unconfirmed/)).toHaveTextContent(
+    /do not send a new report/i,
+  )
+})

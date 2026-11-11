@@ -17,10 +17,13 @@ from oneirodex.utils.auth import admin_required
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.github_issues import create_github_issue
 from oneirodex.utils.support_reports import (
-    preview_support_report, valid_support_preview, support_fields, support_external_payload,
+    preview_support_report, valid_support_preview, support_external_payload,
+)
+from oneirodex.utils.support_delivery import (
+    SupportRequestConflict, SupportRateLimited, find_support_request,
+    persist_support_request, deliver_support_request,
 )
 from oneirodex.utils.notifications import notify_admins
-from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.api_tokens import require_browser_session
 
 from . import apis_bp
@@ -48,6 +51,12 @@ _LOGS_MAX = 4000
 @validate_body(CreateSupportTicketBody)
 def support_ticket_create(body: CreateSupportTicketBody):
     values = body.model_dump()
+    try:
+        existing = find_support_request(db.session, current_user.id, values)
+    except SupportRequestConflict as exc:
+        return api_error(str(exc), code='conflict')
+    if existing is not None and existing.github_sync != 'pending':
+        return api_ok({'ticket': existing.to_dict()}, status=201)
     if body.sync_to_github:
         approval = valid_support_preview(current_user, values, current_app.secret_key)
         if not approval:
@@ -60,50 +69,37 @@ def support_ticket_create(body: CreateSupportTicketBody):
             SupportTicket.created_at >= now - _SUPPORT_TICKET_WINDOW,
         )
     ) or 0
-    if recent_count >= _SUPPORT_TICKET_LIMIT:
+    if existing is None and recent_count >= _SUPPORT_TICKET_LIMIT:
         return api_error(
             'Support report limit reached. Try again later.',
             code='rate_limited',
         )
 
-    ticket = SupportTicket(
-        **support_fields(values),
-        user_id=current_user.id,
-        role_at_submit=normalize_role(getattr(current_user, 'role', None)),
-        status='open',
-        github_sync='pending' if body.sync_to_github else 'local_only',
-        created_at=now,
-    )
-    db.session.add(ticket)
-    db.session.commit()
+    try:
+        ticket, created = persist_support_request(db.session, current_user, values, now)
+    except SupportRequestConflict as exc:
+        return api_error(str(exc), code='conflict')
+    except SupportRateLimited as exc:
+        return api_error(str(exc), code='rate_limited')
 
     # The kind leads the title and rides along as a label, so the distinction
     # survives into the issue tracker instead of stopping at our database.
     if body.sync_to_github:
-        gh = create_github_issue(
-            **support_external_payload(current_user, values),
+        ticket = deliver_support_request(
+            db.session, ticket, support_external_payload(current_user, values), create_github_issue,
         )
-        if gh.get('ok'):
-            ticket.github_sync = 'synced'
-            ticket.github_issue_number = gh.get('number')
-            ticket.github_issue_url = gh.get('url')
-        elif gh.get('skipped'):
-            ticket.github_sync = 'skipped'
-        else:
-            ticket.github_sync = 'error'
-            current_app.logger.warning('GitHub issue sync failed: %s', gh.get('error'))
-        db.session.commit()
 
     try:
-        notify_admins(
-            kind='support_ticket',
-            title=f'Support: {ticket.title}',
-            body=f'{ticket.severity} · {ticket.area} · by {current_user.name}',
-            link='/admin/support',
-            actor_user_id=current_user.id,
-            payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
-            pref_flag='notify_support',
-        )
+        if created:
+            notify_admins(
+                kind='support_ticket',
+                title=f'Support: {ticket.title}',
+                body=f'{ticket.severity} · {ticket.area} · by {current_user.name}',
+                link='/admin/support',
+                actor_user_id=current_user.id,
+                payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
+                pref_flag='notify_support',
+            )
     except Exception:
         pass
 

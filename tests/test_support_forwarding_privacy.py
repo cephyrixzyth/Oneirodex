@@ -62,6 +62,7 @@ def captured_forwarding(monkeypatch):
     captured = []
 
     class Response:
+        status = 201
         def __enter__(self): return self
         def __exit__(self, *args): return False
         def read(self, size=-1):
@@ -261,4 +262,70 @@ def test_preview_requires_csrf_when_enabled(support_client, captured_forwarding,
     app.config['WTF_CSRF_ENABLED'] = True
     response = support_client.post('/api/support/preview', json={'title': 'No CSRF'})
     assert response.status_code == 400
+    assert captured_forwarding == []
+
+
+def test_repeated_approved_request_returns_one_ticket_and_one_external_issue(
+    support_client, captured_forwarding,
+):
+    payload = {'title': 'Same approved request', 'body': 'Retry after a lost response',
+               'sync_to_github': True}
+    preview = _json(support_client.post('/api/support/preview', json=payload))['preview']
+    payload.update({key: preview[key] for key in ['preview_token', 'request_id']})
+    first = support_client.post('/api/support/tickets', json=payload)
+    second = support_client.post('/api/support/tickets', json=payload)
+    assert first.status_code == second.status_code == 201
+    assert _json(first)['ticket']['id'] == _json(second)['ticket']['id']
+    assert len(captured_forwarding) == 1
+
+
+def test_repeated_local_request_preserves_one_local_receipt(support_client, captured_forwarding):
+    payload = {'title': 'Local request receipt', 'request_id': str(uuid4())}
+    first = support_client.post('/api/support/tickets', json=payload)
+    second = support_client.post('/api/support/tickets', json=payload)
+    assert first.status_code == second.status_code == 201
+    assert _json(first)['ticket']['id'] == _json(second)['ticket']['id']
+    assert captured_forwarding == []
+
+
+def test_lost_provider_response_is_uncertain_and_replay_does_not_resend(
+    support_client, captured_forwarding, monkeypatch,
+):
+    import urllib.error
+    import oneirodex.utils.github_issues as github
+    intercept = github._open_github_request
+    def lose_response(request, *, timeout):
+        intercept(request, timeout=timeout)
+        raise urllib.error.URLError('Synthetic response lost after provider accepted request')
+    monkeypatch.setattr(github, '_open_github_request', lose_response)
+    payload = {'title': 'Uncertain provider receipt', 'sync_to_github': True}
+    preview = _json(support_client.post('/api/support/preview', json=payload))['preview']
+    payload.update({key: preview[key] for key in ['preview_token', 'request_id']})
+    first = support_client.post('/api/support/tickets', json=payload)
+    assert first.status_code == 201
+    assert _json(first)['ticket']['github_sync'] == 'unknown'
+    second = support_client.post('/api/support/tickets', json=payload)
+    assert second.status_code == 201
+    assert _json(first)['ticket']['id'] == _json(second)['ticket']['id']
+    assert len(captured_forwarding) == 1
+
+
+def test_replay_reference_rejects_changed_contents(support_client, captured_forwarding):
+    payload = {'title': 'Original local report', 'request_id': str(uuid4())}
+    assert support_client.post('/api/support/tickets', json=payload).status_code == 201
+    payload['title'] = 'Different report reusing the same reference'
+    assert support_client.post('/api/support/tickets', json=payload).status_code == 409
+    assert captured_forwarding == []
+
+
+def test_existing_receipt_remains_readable_after_new_report_limit(support_client, captured_forwarding):
+    payload = {'title': 'Original local receipt', 'request_id': str(uuid4())}
+    first = support_client.post('/api/support/tickets', json=payload)
+    assert first.status_code == 201
+    for index in range(4):
+        assert support_client.post('/api/support/tickets', json={'title': f'Other {index}'}).status_code == 201
+    assert support_client.post('/api/support/tickets', json={'title': 'New sixth'}).status_code == 429
+    replay = support_client.post('/api/support/tickets', json=payload)
+    assert replay.status_code == 201
+    assert _json(replay)['ticket']['id'] == _json(first)['ticket']['id']
     assert captured_forwarding == []

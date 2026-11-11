@@ -2344,7 +2344,7 @@
                     "type": "string",
                     "format": "uuid",
                     "nullable": true,
-                    "description": "Report reference returned by the preview; required for external forwarding."
+                    "description": "Client-generated UUID, or reference returned by preview. Retain it across unchanged retries to recover one local receipt; required for external forwarding."
                   },
                   "preview_token": {
                     "type": "string",
@@ -2360,10 +2360,49 @@
         },
         "responses": {
           "201": {
-            "description": "Created"
+            "description": "Durable local receipt, including replay of an existing same-account request. External state is independent of local acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "github_sync"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "github_sync": {
+                          "type": "string",
+                          "enum": [
+                            "local_only",
+                            "pending",
+                            "sending",
+                            "synced",
+                            "skipped",
+                            "rejected",
+                            "unknown",
+                            "error"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "409": {
-            "description": "Missing, expired or changed preview approval; preview again. No external send."
+            "description": "Missing/changed/expired preview, or the same request UUID reused for different normalized contents. No new external attempt."
           }
         }
       }

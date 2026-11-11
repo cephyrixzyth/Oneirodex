@@ -6,7 +6,6 @@ import json
 import os
 import re
 import urllib.error
-import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -17,20 +16,10 @@ MAX_GITHUB_RESPONSE_BYTES = 64 * 1024
 
 
 class _GitHubRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Keep the support token on GitHub when following repository renames."""
+    """A changed destination requires a new preview; never replay a support POST."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        target = urllib.parse.urlsplit(newurl)
-        if (
-            target.scheme.lower() != 'https'
-            or target.hostname is None
-            or target.hostname.lower() != 'api.github.com'
-            or target.port not in (None, 443)
-            or target.username is not None
-            or target.password is not None
-        ):
-            raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
 
 
 def _open_github_request(req, *, timeout: int):
@@ -119,16 +108,27 @@ def create_github_issue(*, title: str, body: str, labels: list[str] | None = Non
     try:
         with _open_github_request(req, timeout=20) as resp:
             raw = resp.read(MAX_GITHUB_RESPONSE_BYTES + 1)
+            response_status = resp.status
         if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
-            return {'ok': False, 'error': 'GitHub API response exceeded the size limit'}
+            return {'ok': False, 'outcome': 'unknown', 'error': 'GitHub API response exceeded the size limit'}
         data = json.loads(raw.decode('utf-8'))
+        number = data.get('number') if isinstance(data, dict) else None
+        issue_url = data.get('html_url') if isinstance(data, dict) else None
+        expected_url = f'https://github.com/{repo}/issues/{number}'
+        if (response_status != 201 or type(number) is not int or number <= 0
+                or not isinstance(issue_url, str) or issue_url.casefold() != expected_url.casefold()):
+            return {'ok': False, 'outcome': 'unknown', 'error': 'GitHub did not return a confirmed issue receipt'}
         return {
             'ok': True,
-            'number': data.get('number'),
-            'url': data.get('html_url'),
+            'number': number,
+            'url': issue_url,
         }
     except urllib.error.HTTPError as exc:
-        detail = exc.read(400).decode('utf-8', errors='replace')
-        return {'ok': False, 'error': f'GitHub HTTP {exc.code}: {detail}'}
-    except Exception as exc:
-        return {'ok': False, 'error': str(exc)}
+        status = exc.code
+        exc.close()
+        # No automatic retries, even for definite rejection. In particular a
+        # timeout or server error cannot establish that creation did not occur.
+        outcome = 'rejected' if status in {400, 401, 403, 404, 410, 422, 429} else 'unknown'
+        return {'ok': False, 'outcome': outcome, 'error': f'GitHub HTTP {status}'}
+    except Exception:
+        return {'ok': False, 'outcome': 'unknown', 'error': 'GitHub delivery could not be confirmed'}

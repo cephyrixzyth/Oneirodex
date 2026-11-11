@@ -1,0 +1,115 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2033",
+  "base_commit": "94e0d59fa84bcd2e2ab5156168c40f52f5afa539",
+  "scope": "Durable per-account support receipt and initial send claim; truthful provider uncertainty and UI transport retry. Original UC-004/P3-07 remains partial.",
+  "source_sha256": {
+    "oneirodex/utils/github_issues.py": "019787afbd5f9e06c7641e7126e949ecf0d153c8c8ee75c84a52fd31b2ddf053",
+    "oneirodex/utils/support_privacy.py": "4a79ab29aebc5cae14ed3b916e20d04f9b9a113d53a015cd028337137cb58560",
+    "oneirodex/utils/support_reports.py": "63cd9ea343f771cabd0682858b2d9ace34fcf3c8c2cc0017ee2d2e4232d95b4e",
+    "oneirodex/schemas/support.py": "a2645e1d7c5046f1e61104931d7b1a70df0e27658ff9a76bee0771bebdf7b3f1",
+    "oneirodex/routes_apis/support.py": "ca771a254eb201a26dba2daea1e01bc81874aea0dc4a4025ed10322ce3af2971",
+    "oneirodex/runtime_native/support_mutations.py": "2e3b1a97598a1035ada36cdaf44b110aafd2c371db6f704847776cc4fcef0dff",
+    "oneirodex/models/misc.py": "581388e990a4bd54cbaaf70891a321efcdd64138846b53f8dae3d922a1378860",
+    "oneirodex/updateschema.py": "07422136c509ba14bda77eb2b63c5f8375e9afc2ae0f84f7fce60d3dc09a5a6c",
+    "oneirodex/utils/support_delivery.py": "1efdc29be49b7862253af102ed41409d07b1bc005390c9e3858cea659332c735",
+    "alembic/versions/f2a3b4c5d6e7_support_request_receipts.py": "602201dfb701c25b478009a8625953329f6c0172091776c4b24a891dd7ca06c7",
+    "frontend/member-app/src/api/support.ts": "0d42c23ad8b4a45c2b16309b69a8363b690dfc260ff82cb0f4f9ecd751432555",
+    "frontend/member-app/src/pages/ReportIssuePage.tsx": "d80cb0b30550d2af110759d85b85be94069c7518494b938b9ec5680ddaab3480",
+    "frontend/member-app/src/pages/ReportIssuePage.test.tsx": "2b0637b77a3dd335d19aa5eec32de3df7f5032e0ead54f99f0766885c5852c5b",
+    "tests/test_support_forwarding_privacy.py": "a3f5f61a24d47f8170ea075856b1d9cab61119469930cb5565fae0a72d97b01e",
+    "tests/test_github_issues.py": "633297db49a29493fdd862f94d2ba13169c854f2c1843833f39fe30d46a00d25",
+    "tests/test_support_delivery_transactions.py": "252373bb083713c4c32c3a7911c94f3e724057e7f96b79ae0db32617ea0cf2a1",
+    "tests/test_native_support_mutations.py": "8389238b7de55f1cffc3b5b2ad4a0cf170647a4fd4b5851f6bb42a691096994a"
+  },
+  "red_evidence": {
+    "duplicate_or_uncertain_http_failures": 6,
+    "controls": 49,
+    "provider_protocol_failures": 11,
+    "provider_controls": 10,
+    "populated_downgrade_guard_failures": 2,
+    "migration_index_shape_failure": 1,
+    "ui_missing_uuid_status_failures": 2
+  },
+  "verified": {
+    "combined_backend_security_cases": 370,
+    "backend_pytest_seconds": 54.97,
+    "backend_runner_seconds": 67.67,
+    "focused_member_contract_cases": 378,
+    "types": "passed",
+    "member_production_build": "passed; existing chunk-size warning",
+    "eslint": "passed",
+    "explicit_any_ratchet": "passed,1138 known sites; no baseline increase",
+    "api_envelope": "passed; no baseline increase",
+    "css_tokens": "passed; zero new violations",
+    "r1972_bundle": "passed unchanged"
+  },
+  "transaction_scope": [
+    "Real PostgreSQL simultaneous reservation/send claims: one external attempt while second request returns.",
+    "Real local commit followed by acknowledgement loss recovers the pending receipt.",
+    "Provider result commit failure before commit and lost acknowledgement after commit both avoid a repeated POST.",
+    "Populated historical migration, startup index adoption, repeat upgrade, nullable history and protected downgrade."
+  ],
+  "headless_browser": {
+    "base_image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+    "runtime": "Actual populated native Docker app, fingerprinted read-only candidate Python/member overlays; not a release image",
+    "passed": true,
+    "seconds": 45.94,
+    "committed_reply_dropped": true,
+    "same_id_and_uuid_recovered": true,
+    "unknown_replay_sent_again": false,
+    "unconfigured_local_only": true,
+    "external_issues_sent": false,
+    "owned_resources_removed_and_absence_verified": true,
+    "screenshots": [
+      {
+        "view": "desktop",
+        "width": 1100,
+        "height": 850,
+        "sha256": "a79466076849b9bdc7cf986b3dfb72b3992f67e0541fbe4bc5d9e198f4811a77",
+        "published": false
+      },
+      {
+        "view": "mobile",
+        "width": 375,
+        "height": 812,
+        "sha256": "f5963cf13996c3090254e621a44252294d2047fc184725b114541ddf87a01256",
+        "published": false
+      },
+      {
+        "view": "uncertain-mobile",
+        "width": 375,
+        "height": 812,
+        "sha256": "fc0065eb7de35f980c71c60004531c9f36104e1824b5b4de84ebdeeb2b831e74",
+        "published": false
+      },
+      {
+        "view": "unconfigured-mobile",
+        "width": 375,
+        "height": 812,
+        "sha256": "1b0283ca0d2ef937a49be100c7108881412fe2e77924cc3cb3bc626fcdc09366",
+        "published": false
+      }
+    ]
+  },
+  "compatibility": [
+    "Client request UUID is per-account and contents-bound. Old local-only clients omitting UUID receive one but cannot use it to recover a response they never received.",
+    "External success requires201 and matching positive-number GitHub issue URL.",
+    "Issue-create redirects are refused; destination repair and preview required after a repository rename.",
+    "Downgrade refuses to erase delivery receipts; use a pre-upgrade backup for rollback."
+  ],
+  "review": "Separate author investigation and bypass/regression review; weaker than independent review.",
+  "ci_observation": {
+    "source_commit": "94e0d59fa84bcd2e2ab5156168c40f52f5afa539",
+    "run": 42961592767,
+    "result": "failure only in explicit-any ratchet; repaired locally with real preview/request types, no baseline increase",
+    "desktop_run": 42961592773,
+    "desktop_result": "success",
+    "new_commit_ci": "not yet run"
+  },
+  "limits": [
+    "Explicit safe retry after definite rejection/skipping and automated reconciliation remain Task3b.",
+    "No actual provider permission/visibility or real external issue acceptance.",
+    "No fresh whole-Python/full-member run, installed-platform, full-route parity, merge, release or deployment clearance."
+  ]
+}

@@ -23,6 +23,12 @@ _SEVERITIES = frozenset({'P0', 'P1', 'P2', 'P3'})
 
 
 class SupportMutationData:
+    def request_receipt(self, user_id, body):
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.support_delivery import find_support_request
+        ticket = find_support_request(db.session, user_id, body)
+        return ticket.to_dict() if ticket is not None else None
+
     def recent_count(self, user_id, cutoff):
         from sqlalchemy import func, select
         from oneirodex.runtime_native.db_session import native_db as db
@@ -33,43 +39,25 @@ class SupportMutationData:
 
     def create(self, user, body, now):
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import SupportTicket
-        from oneirodex.utils.role_catalog import normalize_role
         from oneirodex.utils.github_issues import create_github_issue
-        from oneirodex.utils.support_reports import support_fields, support_external_payload
+        from oneirodex.utils.support_reports import support_external_payload
+        from oneirodex.utils.support_delivery import persist_support_request, deliver_support_request
         from oneirodex.utils.notifications import notify_admins
 
-        ticket = SupportTicket(
-            **support_fields(body), user_id=user.id,
-            role_at_submit=normalize_role(getattr(user, 'role', None)),
-            status='open',
-            github_sync='pending' if body.get('sync_to_github') is True else 'local_only',
-            created_at=now,
-        )
-        db.session.add(ticket)
-        db.session.commit()
+        ticket, created = persist_support_request(db.session, user, body, now)
         if body.get('sync_to_github') is True:
-            gh = create_github_issue(
-                **support_external_payload(user, body),
+            ticket = deliver_support_request(
+                db.session, ticket, support_external_payload(user, body), create_github_issue,
             )
-            if gh.get('ok'):
-                ticket.github_sync = 'synced'
-                ticket.github_issue_number = gh.get('number')
-                ticket.github_issue_url = gh.get('url')
-            elif gh.get('skipped'):
-                ticket.github_sync = 'skipped'
-            else:
-                ticket.github_sync = 'error'
-                logging.getLogger(__name__).warning('Support ticket GitHub sync failed')
-            db.session.commit()
         try:
-            notify_admins(
-                kind='support_ticket', title=f'Support: {ticket.title}',
-                body=f'{ticket.severity} · {ticket.area} · by {getattr(user, "name", "member")}',
-                link='/admin/support', actor_user_id=user.id,
-                payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
-                pref_flag='notify_support',
-            )
+            if created:
+                notify_admins(
+                    kind='support_ticket', title=f'Support: {ticket.title}',
+                    body=f'{ticket.severity} · {ticket.area} · by {getattr(user, "name", "member")}',
+                    link='/admin/support', actor_user_id=user.id,
+                    payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
+                    pref_flag='notify_support',
+                )
         except Exception:
             pass
         return ticket.to_dict()
@@ -154,44 +142,45 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
             payload, status = api_error_payload('Sign in with your site account to manage support reports', code='forbidden')
             response = JSONResponse(payload, status_code=status)
         elif ticket_id is None:
-            if (not preview and data.recent_count(auth.user.id, datetime.now(timezone.utc) - _WINDOW) >= _RATE_LIMIT):
-                payload, status = api_error_payload('Support report limit reached. Try again later.', code='rate_limited')
+            from oneirodex.utils.support_delivery import SupportRequestConflict, SupportRateLimited
+            body = await _read_json(request)
+            try:
+                from oneirodex.schemas.support import CreateSupportTicketBody
+                from oneirodex.utils.support_reports import preview_support_report, valid_support_preview
+                model = CreateSupportTicketBody.model_validate(body if body is not None else {})
+                values = model.model_dump()
+                existing = data.request_receipt(auth.user.id, values) if not preview else None
+                approval = valid_support_preview(auth.user, values, flask_app.config['SECRET_KEY']) if model.sync_to_github and not preview else None
+                if preview:
+                    result = preview_support_report(auth.user, values, flask_app.config['SECRET_KEY'])
+                    response = JSONResponse(api_ok_payload({'preview': result}))
+                elif existing is not None and existing['github_sync'] != 'pending':
+                    response = JSONResponse(api_ok_payload({'ticket': existing}), status_code=201)
+                elif model.sync_to_github and not approval:
+                    payload, status = api_error_payload('Preview this report and its destination again before sending to GitHub.', code='conflict')
+                    response = JSONResponse(payload, status_code=status)
+                elif existing is None and data.recent_count(auth.user.id, datetime.now(timezone.utc) - _WINDOW) >= _RATE_LIMIT:
+                    payload, status = api_error_payload('Support report limit reached. Try again later.', code='rate_limited')
+                    response = JSONResponse(payload, status_code=status)
+                else:
+                    if approval:
+                        values['_approved_repository'] = approval['destination']
+                    result = data.create(auth.user, values, datetime.now(timezone.utc))
+                    response = JSONResponse(api_ok_payload({'ticket': result}), status_code=201)
+            except (SupportRequestConflict, SupportRateLimited) as exc:
+                code = 'rate_limited' if isinstance(exc, SupportRateLimited) else 'conflict'
+                payload, status = api_error_payload(str(exc), code=code)
                 response = JSONResponse(payload, status_code=status)
-            else:
-                body = await _read_json(request)
-                try:
-                    from oneirodex.schemas.support import CreateSupportTicketBody
-                    model = CreateSupportTicketBody.model_validate(
-                        body if body is not None else {},
-                    )
-                    from oneirodex.utils.support_reports import preview_support_report, valid_support_preview
-                    values = model.model_dump()
-                    approval = valid_support_preview(auth.user, values, flask_app.config['SECRET_KEY']) if model.sync_to_github and not preview else None
-                    if preview:
-                        result = preview_support_report(auth.user, values, flask_app.config['SECRET_KEY'])
-                        response = JSONResponse(api_ok_payload({'preview': result}))
-                    elif model.sync_to_github and not approval:
-                        payload, status = api_error_payload('Preview this report and its destination again before sending to GitHub.', code='conflict')
-                        response = JSONResponse(payload, status_code=status)
-                    else:
-                        if approval:
-                            values['_approved_repository'] = approval['destination']
-                        result = data.create(auth.user, values, datetime.now(timezone.utc))
-                        response = JSONResponse(api_ok_payload({'ticket': result}), status_code=201)
-                except ValidationError as exc:
-                    from oneirodex.utils.validation import format_validation_errors
-
-                    payload, status = api_error_payload(
-                        'Invalid request.', code='unprocessable',
-                        detail=format_validation_errors(exc),
-                    )
-                    response = JSONResponse(payload, status_code=status)
-                except Exception:
-                    from oneirodex.runtime_native.db_session import native_db as db
-                    db.session.rollback()
-                    logging.getLogger(__name__).warning('Support ticket create failed')
-                    payload, status = api_error_payload('Could not create support report.', code='internal')
-                    response = JSONResponse(payload, status_code=status)
+            except ValidationError as exc:
+                from oneirodex.utils.validation import format_validation_errors
+                payload, status = api_error_payload('Invalid request.', code='unprocessable', detail=format_validation_errors(exc))
+                response = JSONResponse(payload, status_code=status)
+            except Exception:
+                from oneirodex.runtime_native.db_session import native_db as db
+                db.session.rollback()
+                logging.getLogger(__name__).warning('Support ticket create failed')
+                payload, status = api_error_payload('Could not create support report.', code='internal')
+                response = JSONResponse(payload, status_code=status)
         elif normalize_role(getattr(auth.user, 'role', None) or '') != 'admin':
             payload, status = api_error_payload('You must be an admin to access this page.', code='forbidden')
             response = JSONResponse(payload, status_code=status)

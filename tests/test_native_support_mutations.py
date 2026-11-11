@@ -19,6 +19,9 @@ class FakeSupport:
     def recent_count(self, _user_id, _cutoff):
         return 0
 
+    def request_receipt(self, _user_id, _body):
+        return None
+
     def create(self, user, body, _now):
         self.created = (user.id, body)
         return {'id': 17, 'title': body['title'], 'status': 'open'}
