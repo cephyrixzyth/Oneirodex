@@ -64,6 +64,8 @@ def _digest(user, body: dict) -> str:
     token, repo = support_github_config()
     # Sign hashes only: the browser approval token must not contain raw diagnostics.
     data = {'user_id': user.id, 'fields': support_fields(body), 'destination': repo,
+            'retry_github': body.get('retry_github') is True,
+            'retry_id': str(body.get('retry_id') or ''),
             'operator_key': hashlib.sha256((token or '').encode()).hexdigest(),
             'payload': support_external_payload(user, body)}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
@@ -79,14 +81,19 @@ def preview_support_report(user, body: dict, secret_key) -> dict:
     if not metadata['available']:
         return {**metadata, 'preview_token': None}
     body = {**body, 'request_id': str(body.get('request_id') or uuid4())}
+    if body.get('retry_github') is True:
+        body['retry_id'] = str(body.get('retry_id') or uuid4())
     return {**metadata, **support_external_payload(user, body),
             'request_id': body['request_id'],
+            **({'retry_id': body['retry_id']} if body.get('retry_github') is True else {}),
             'preview_token': _signer(secret_key).dumps({
                 'digest': _digest(user, body), 'destination': metadata['destination'],
             })}
 
 
 def valid_support_preview(user, body: dict, secret_key) -> dict | None:
+    if body.get('retry_github') is True and not body.get('retry_id'):
+        return None
     if not body.get('request_id') or not body.get('preview_token') or not support_destination()['available']:
         return None
     try:

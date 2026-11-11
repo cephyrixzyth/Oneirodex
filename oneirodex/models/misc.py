@@ -356,6 +356,9 @@ class SupportTicket(db.Model):
     request_id = db.Column(db.String(36), nullable=True)
     request_hash = db.Column(db.String(64), nullable=True)
     github_attempt_id = db.Column(db.String(36), nullable=True)
+    github_repository = db.Column(db.String(140), nullable=True)
+    github_last_status = db.Column(db.Integer, nullable=True)
+    github_retry_after_at = db.Column(db.DateTime(timezone=True), nullable=True)
     body = db.Column(db.Text, nullable=False)
     area = db.Column(db.String(64), nullable=True)
     # What kind of report this is. "Report issue" collected both bug reports and
@@ -383,6 +386,10 @@ class SupportTicket(db.Model):
         payload = {
             'id': self.id,
             'request_id': self.request_id,
+            'github_attempt_id': self.github_attempt_id,
+            'github_repository': self.github_repository,
+            'github_last_status': self.github_last_status,
+            'github_retry_after_at': _utc_isoformat(self.github_retry_after_at),
             'user_id': self.user_id,
             'kind': self.kind or 'issue',
             'title': self.title,
@@ -410,6 +417,30 @@ class SupportTicket(db.Model):
             payload['body_preview'] = payload['body']
             payload['logs'] = None
         return payload
+
+class SupportDeliveryAttempt(db.Model):
+    """Account-owned delivery metadata; report bodies and credentials stay out."""
+    __tablename__ = 'support_delivery_attempts'
+    __table_args__ = (db.Index('ix_support_delivery_attempts_user_created', 'user_id', 'created_at'),)
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('support_tickets.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    repository = db.Column(db.String(140), nullable=False)
+    payload_sha256 = db.Column(db.String(64), nullable=False)
+    outcome = db.Column(db.String(16), nullable=False, default='sending')
+    http_status = db.Column(db.Integer, nullable=True)
+    retry_after_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    issue_number = db.Column(db.Integer, nullable=True)
+    issue_url = db.Column(db.String(512), nullable=True)
+
+
+class SupportDeliveryCheckBudget(db.Model):
+    __tablename__ = 'support_delivery_check_budgets'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    window_started_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    count = db.Column(db.Integer, nullable=False, default=0)
+
 
 class AllowedFileType(db.Model):
     __tablename__ = 'allowed_file_types'
@@ -455,6 +486,8 @@ __all__ = [
     "FreeGameOffer",
     "GameRequest",
     "SupportTicket",
+    "SupportDeliveryAttempt",
+    "SupportDeliveryCheckBudget",
     "AllowedFileType",
     "IgnoredFileType",
     "SystemEvents",

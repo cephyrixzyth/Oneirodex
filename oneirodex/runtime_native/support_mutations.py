@@ -9,6 +9,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
@@ -23,11 +24,22 @@ _SEVERITIES = frozenset({'P0', 'P1', 'P2', 'P3'})
 
 
 class SupportMutationData:
+    def reconciliation_candidate(self, user_id, ticket_id, *, admin=False):
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.support_delivery import support_reconciliation_candidate
+        return support_reconciliation_candidate(db.session, user_id, ticket_id, admin=admin)
+
+    def finish_reconciliation(self, candidate, issue):
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.support_delivery import finish_support_reconciliation
+        return finish_support_reconciliation(db.session, candidate, issue)
+
     def request_receipt(self, user_id, body):
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.utils.support_delivery import find_support_request
+        from oneirodex.utils.support_delivery import find_support_request, is_support_replay
         ticket = find_support_request(db.session, user_id, body)
-        return ticket.to_dict() if ticket is not None else None
+        replay = is_support_replay(db.session, ticket, body)
+        return (ticket.to_dict(), replay) if ticket is not None else None
 
     def recent_count(self, user_id, cutoff):
         from sqlalchemy import func, select
@@ -48,6 +60,7 @@ class SupportMutationData:
         if body.get('sync_to_github') is True:
             ticket = deliver_support_request(
                 db.session, ticket, support_external_payload(user, body), create_github_issue,
+                retry_id=body.get('retry_id') if body.get('retry_github') is True else None,
             )
         try:
             if created:
@@ -96,6 +109,10 @@ def create_support_mutation_router(
     async def preview_ticket(request: Request):
         return await _mutate(request, **opts, ticket_id=None, preview=True)
 
+    @router.post('/api/support/tickets/{ticket_id:int}/reconcile')
+    async def reconcile_ticket(ticket_id: int, request: Request):
+        return await _mutate(request, **opts, ticket_id=ticket_id, reconcile=True)
+
     @router.post('/api/support/tickets/{ticket_id:int}/resolve')
     async def resolve_ticket(ticket_id: int, request: Request):
         return await _mutate(request, **opts, ticket_id=ticket_id)
@@ -110,7 +127,7 @@ def mount_support_mutation_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _mutate(request, *, flask_app, data, find_user, find_token,
                   commit_token_touch, load_user_id, login_manager,
-                  database_scope, ticket_id, preview=False):
+                  database_scope, ticket_id, preview=False, reconcile=False):
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
         from .csrf_compat import csrf_error_response
@@ -138,9 +155,41 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
             response = _login_redirect(flask_app, request, login_manager, auth,
                 message=getattr(login_manager, 'login_message', None),
                 category=getattr(login_manager, 'login_message_category', 'message'), include_next=True)
-        elif auth.token is not None and ticket_id is None:
+        elif auth.token is not None and (ticket_id is None or reconcile):
             payload, status = api_error_payload('Sign in with your site account to manage support reports', code='forbidden')
             response = JSONResponse(payload, status_code=status)
+        elif reconcile:
+            from oneirodex.schemas.support import ReconcileSupportDeliveryBody
+            from oneirodex.utils.github_issues import read_support_issue
+            from oneirodex.utils.support_delivery import SupportRequestConflict, SupportRequestNotFound, SupportRateLimited
+            try:
+                model = ReconcileSupportDeliveryBody.model_validate(await _read_json(request))
+                candidate = data.reconciliation_candidate(
+                    auth.user.id, ticket_id,
+                    admin=normalize_role(getattr(auth.user, 'role', None) or '') == 'admin',
+                )
+                result = candidate['ticket']
+                if result is None:
+                    issue = await run_in_threadpool(read_support_issue, repository=candidate['repository'], issue_number=model.issue_number)
+                    result = data.finish_reconciliation(candidate, issue)
+                response = JSONResponse(api_ok_payload({'ticket': result}))
+            except (SupportRequestConflict, SupportRequestNotFound, SupportRateLimited) as exc:
+                from oneirodex.runtime_native.db_session import native_db as db
+                db.session.rollback()
+                code = ('not_found' if isinstance(exc, SupportRequestNotFound)
+                        else 'rate_limited' if isinstance(exc, SupportRateLimited) else 'conflict')
+                payload, status = api_error_payload(str(exc), code=code)
+                response = JSONResponse(payload, status_code=status)
+            except ValidationError as exc:
+                from oneirodex.utils.validation import format_validation_errors
+                payload, status = api_error_payload('Invalid request.', code='unprocessable', detail=format_validation_errors(exc))
+                response = JSONResponse(payload, status_code=status)
+            except Exception:
+                from oneirodex.runtime_native.db_session import native_db as db
+                db.session.rollback()
+                logging.getLogger(__name__).warning('Support delivery check failed')
+                payload, status = api_error_payload('Could not check support delivery.', code='internal')
+                response = JSONResponse(payload, status_code=status)
         elif ticket_id is None:
             from oneirodex.utils.support_delivery import SupportRequestConflict, SupportRateLimited
             body = await _read_json(request)
@@ -149,12 +198,13 @@ async def _mutate(request, *, flask_app, data, find_user, find_token,
                 from oneirodex.utils.support_reports import preview_support_report, valid_support_preview
                 model = CreateSupportTicketBody.model_validate(body if body is not None else {})
                 values = model.model_dump()
-                existing = data.request_receipt(auth.user.id, values) if not preview else None
+                receipt = data.request_receipt(auth.user.id, values) if not preview else None
+                existing, replay = receipt if receipt is not None else (None, False)
                 approval = valid_support_preview(auth.user, values, flask_app.config['SECRET_KEY']) if model.sync_to_github and not preview else None
                 if preview:
                     result = preview_support_report(auth.user, values, flask_app.config['SECRET_KEY'])
                     response = JSONResponse(api_ok_payload({'preview': result}))
-                elif existing is not None and existing['github_sync'] != 'pending':
+                elif replay:
                     response = JSONResponse(api_ok_payload({'ticket': existing}), status_code=201)
                 elif model.sync_to_github and not approval:
                     payload, status = api_error_payload('Preview this report and its destination again before sending to GitHub.', code='conflict')

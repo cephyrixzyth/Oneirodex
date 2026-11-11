@@ -11839,6 +11839,8 @@ def test_lazy_asgi_dispatches_download_request_and_cleanup_natively(monkeypatch)
 def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
     calls = []
     data = SimpleNamespace(
+        request_receipt=lambda *_args: None,
+        reconciliation_candidate=lambda user_id, ticket_id, **_kwargs: calls.append(('check', user_id, ticket_id)) or {'ticket': {'id': ticket_id, 'github_sync': 'reconciled'}},
         recent_count=lambda *_args: 0,
         create=lambda user, body, _now: calls.append(('create', user.id, body['title'])) or {
             'id': 17, 'title': body['title'], 'status': 'open',
@@ -11857,6 +11859,12 @@ def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
     )
     assert created.status_code == 201 and created.json()['ticket']['id'] == 17
 
+    checked = _run(
+        runtime, '/api/support/tickets/17/reconcile', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={'issue_number': 701},
+    )
+    assert checked.status_code == 200 and checked.json()['ticket']['github_sync'] == 'reconciled'
+
     cookie, csrf = _signed_session_with_csrf()
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
     resolved = _run(
@@ -11864,7 +11872,7 @@ def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
         headers={'X-CSRFToken': csrf}, json_body={},
     )
     assert resolved.status_code == 200 and resolved.json()['ticket']['status'] == 'resolved'
-    assert calls == [('create', 7, 'Fixture report'), ('resolve', 17, 7)]
+    assert calls == [('create', 7, 'Fixture report'), ('check', 7, 17), ('resolve', 17, 7)]
 
 
 def test_lazy_asgi_dispatches_launcher_import_natively(monkeypatch):

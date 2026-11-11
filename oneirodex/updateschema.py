@@ -939,6 +939,31 @@ class DatabaseManager:
         CREATE UNIQUE INDEX IF NOT EXISTS uq_support_ticket_user_request
             ON support_tickets(user_id, request_id);
 
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_repository VARCHAR(140);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_last_status INTEGER;
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_retry_after_at TIMESTAMPTZ;
+        CREATE TABLE IF NOT EXISTS support_delivery_attempts (
+            id VARCHAR(36) NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL,
+            repository VARCHAR(140) NOT NULL,
+            payload_sha256 VARCHAR(64) NOT NULL,
+            outcome VARCHAR(16) NOT NULL,
+            http_status INTEGER,
+            retry_after_at TIMESTAMPTZ,
+            issue_number INTEGER,
+            issue_url VARCHAR(512),
+            PRIMARY KEY (id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_support_delivery_attempts_user_created ON support_delivery_attempts(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS ix_support_delivery_attempts_ticket_id ON support_delivery_attempts(ticket_id);
+        CREATE TABLE IF NOT EXISTS support_delivery_check_budgets (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            window_started_at TIMESTAMPTZ NOT NULL,
+            count INTEGER NOT NULL
+        );
+
         ALTER TABLE user_preferences
         ADD COLUMN IF NOT EXISTS notify_free_games BOOLEAN DEFAULT TRUE;
         ALTER TABLE user_preferences

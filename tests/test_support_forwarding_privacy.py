@@ -45,6 +45,7 @@ def support_client(request, app, client, reporter, db_session, monkeypatch):
         login_manager=manager, database_scope=lambda _app: nullcontext(),
     ))
     native_client = TestClient(native)
+    native_client.review_user = user
     native_client.cookies.set('session', dump_session_cookie(
         {'_user_id': f'{reporter.id}:fixture'}, app.config['SECRET_KEY']))
     return native_client
@@ -329,3 +330,189 @@ def test_existing_receipt_remains_readable_after_new_report_limit(support_client
     assert replay.status_code == 201
     assert _json(replay)['ticket']['id'] == _json(first)['ticket']['id']
     assert captured_forwarding == []
+
+
+def _rejected_report(support_client, captured_forwarding, monkeypatch):
+    import io
+    import urllib.error
+    import oneirodex.utils.github_issues as github
+    original = github._open_github_request
+    def reject_first(request, *, timeout):
+        response = original(request, timeout=timeout)
+        if len(captured_forwarding) == 1:
+            raise urllib.error.HTTPError(request.full_url, 422, 'Synthetic rejection', {}, io.BytesIO(b'private detail'))
+        return response
+    monkeypatch.setattr(github, '_open_github_request', reject_first)
+    values = {'title': 'Retry this rejected report', 'body': 'Keep one ticket', 'sync_to_github': True}
+    preview = _json(support_client.post('/api/support/preview', json=values))['preview']
+    values.update({key: preview[key] for key in ['request_id', 'preview_token']})
+    first = support_client.post('/api/support/tickets', json=values)
+    assert first.status_code == 201 and _json(first)['ticket']['github_sync'] == 'rejected'
+    return values, _json(first)['ticket']
+
+
+def test_explicit_retry_uses_fresh_approval_and_replays_one_attempt(
+    support_client, captured_forwarding, monkeypatch,
+):
+    values, ticket = _rejected_report(support_client, captured_forwarding, monkeypatch)
+    values['retry_github'] = True
+    response = support_client.post('/api/support/preview', json=values)
+    assert response.status_code == 200
+    preview = _json(response)['preview']
+    values.update({key: preview[key] for key in ['preview_token', 'retry_id']})
+    retry = support_client.post('/api/support/tickets', json=values)
+    assert retry.status_code == 201
+    assert _json(retry)['ticket']['id'] == ticket['id']
+    assert _json(retry)['ticket']['github_sync'] == 'synced'
+    replay = support_client.post('/api/support/tickets', json=values)
+    assert replay.status_code == 201 and _json(replay)['ticket']['id'] == ticket['id']
+    assert len(captured_forwarding) == 2
+
+
+def test_original_preview_cannot_authorize_a_new_retry_attempt(
+    support_client, captured_forwarding, monkeypatch,
+):
+    values, _ticket = _rejected_report(support_client, captured_forwarding, monkeypatch)
+    values.update(retry_github=True, retry_id=str(uuid4()))
+    response = support_client.post('/api/support/tickets', json=values)
+    assert response.status_code == 409
+    assert len(captured_forwarding) == 1
+
+
+def test_explicit_retry_nonce_change_requires_another_preview(
+    support_client, captured_forwarding, monkeypatch,
+):
+    values, _ticket = _rejected_report(support_client, captured_forwarding, monkeypatch)
+    values['retry_github'] = True
+    response = support_client.post('/api/support/preview', json=values)
+    assert response.status_code == 200
+    preview = _json(response)['preview']
+    values.update(preview_token=preview['preview_token'], retry_id=str(uuid4()))
+    assert support_client.post('/api/support/tickets', json=values).status_code == 409
+    assert len(captured_forwarding) == 1
+
+
+def _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch, *, matching=True):
+    import urllib.error
+    import oneirodex.utils.github_issues as github
+    original = github._open_github_request
+    reads = []
+    class ReadResponse:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, size=-1):
+            sent = captured_forwarding[0]
+            return json.dumps({'number': 701,
+                'html_url': 'https://github.com/example-owner/example-repo/issues/701',
+                'title': sent['title'],
+                'body': sent['body'] if matching else 'SYNTHETIC_UNRELATED_PRIVATE_PROVIDER_BODY',
+            }).encode()[:size]
+    def intercept(request, *, timeout):
+        if request.get_method() == 'GET':
+            reads.append(request.full_url)
+            assert request.full_url == 'https://api.github.com/repos/example-owner/example-repo/issues/701'
+            return ReadResponse()
+        original(request, timeout=timeout)
+        raise urllib.error.URLError('Synthetic accepted request with lost response')
+    monkeypatch.setattr(github, '_open_github_request', intercept)
+    values = {'title': 'Find the existing issue', 'body': 'Same approved text', 'sync_to_github': True}
+    preview = _json(support_client.post('/api/support/preview', json=values))['preview']
+    values.update({key: preview[key] for key in ['request_id', 'preview_token']})
+    first = support_client.post('/api/support/tickets', json=values)
+    assert first.status_code == 201 and _json(first)['ticket']['github_sync'] == 'unknown'
+    return values, _json(first)['ticket'], reads
+
+
+def test_reconcile_links_only_an_exact_existing_issue_without_posting(
+    support_client, captured_forwarding, monkeypatch,
+):
+    _values, ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch)
+    response = support_client.post(f"/api/support/tickets/{ticket['id']}/reconcile", json={'issue_number': 701})
+    assert response.status_code == 200
+    linked = _json(response)['ticket']
+    assert linked['id'] == ticket['id']
+    assert linked['github_sync'] == 'reconciled'
+    assert linked['github_issue_number'] == 701
+    assert len(reads) == 1 and len(captured_forwarding) == 1
+    replay = support_client.post(f"/api/support/tickets/{ticket['id']}/reconcile", json={'issue_number': 701})
+    assert replay.status_code == 200
+    assert len(captured_forwarding) == 1
+
+
+def test_reconcile_never_returns_unrelated_provider_content(
+    support_client, captured_forwarding, monkeypatch, db_session,
+):
+    _values, ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch, matching=False)
+    response = support_client.post(f"/api/support/tickets/{ticket['id']}/reconcile", json={'issue_number': 701})
+    assert response.status_code == 409
+    assert 'SYNTHETIC_UNRELATED_PRIVATE_PROVIDER_BODY' not in json.dumps(_json(response))
+    assert db_session.get(SupportTicket, ticket['id']).github_sync == 'unknown'
+    assert len(reads) == 1 and len(captured_forwarding) == 1
+
+
+def test_unknown_delivery_cannot_be_retried_with_a_new_approval(
+    support_client, captured_forwarding, monkeypatch,
+):
+    values, _ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch)
+    values['retry_github'] = True
+    preview = _json(support_client.post('/api/support/preview', json=values))['preview']
+    values.update({key: preview[key] for key in ['preview_token', 'retry_id']})
+    assert support_client.post('/api/support/tickets', json=values).status_code == 409
+    assert reads == [] and len(captured_forwarding) == 1
+
+
+def test_reconcile_hides_other_accounts_and_allows_an_administrator(
+    support_client, captured_forwarding, monkeypatch, reporter, db_session,
+):
+    _values, ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch)
+    other = User(name='other-' + uuid4().hex[:8], email=uuid4().hex + '@example.invalid',
+                 password_hash='unused', role='user', user_id=str(uuid4()), invite_quota=0)
+    db_session.add(other)
+    db_session.flush()
+    row = db_session.get(SupportTicket, ticket['id'])
+    from oneirodex.models import SupportDeliveryAttempt
+    attempt = db_session.get(SupportDeliveryAttempt, {'id': row.github_attempt_id, 'user_id': row.user_id})
+    attempt.user_id = other.id
+    row.user_id = other.id
+    db_session.commit()
+    path = f"/api/support/tickets/{ticket['id']}/reconcile"
+    assert support_client.post(path, json={'issue_number': 701}).status_code == 404
+    assert reads == []
+    reporter.role = 'admin'
+    if hasattr(support_client, 'review_user'):
+        support_client.review_user.role = 'admin'
+    db_session.commit()
+    response = support_client.post(path, json={'issue_number': 701})
+    assert response.status_code == 200 and _json(response)['ticket']['github_sync'] == 'reconciled'
+    assert len(reads) == 1 and len(captured_forwarding) == 1
+
+
+@pytest.mark.parametrize('number', [0, -1, True, '701', 701.5, 2_147_483_648, 9_007_199_254_740_992])
+def test_reconcile_refuses_non_integer_or_unbounded_issue_numbers(
+    support_client, captured_forwarding, number,
+):
+    response = support_client.post('/api/support/tickets/1/reconcile', json={'issue_number': number})
+    assert response.status_code == 422
+    assert captured_forwarding == []
+
+
+def test_reconcile_lookup_budget_persists_after_failed_checks(
+    support_client, captured_forwarding, monkeypatch,
+):
+    _values, ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch, matching=False)
+    path = f"/api/support/tickets/{ticket['id']}/reconcile"
+    for _ in range(5):
+        assert support_client.post(path, json={'issue_number': 701}).status_code == 409
+    assert support_client.post(path, json={'issue_number': 701}).status_code == 429
+    assert len(reads) == 5 and len(captured_forwarding) == 1
+
+
+def test_reconcile_requires_csrf_when_enabled(
+    support_client, captured_forwarding, monkeypatch, app,
+):
+    _values, ticket, reads = _uncertain_report_with_lookup(support_client, captured_forwarding, monkeypatch)
+    app.config['WTF_CSRF_ENABLED'] = True
+    response = support_client.post(f"/api/support/tickets/{ticket['id']}/reconcile", json={'issue_number': 701})
+    assert response.status_code == 400
+    assert reads == [] and len(captured_forwarding) == 1

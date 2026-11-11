@@ -12,16 +12,17 @@ from sqlalchemy import func, select
 
 from oneirodex import db
 from oneirodex.models import SupportTicket
-from oneirodex.schemas.support import CreateSupportTicketBody
+from oneirodex.schemas.support import CreateSupportTicketBody, ReconcileSupportDeliveryBody
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.validation import validate_body
-from oneirodex.utils.github_issues import create_github_issue
+from oneirodex.utils.github_issues import create_github_issue, read_support_issue
 from oneirodex.utils.support_reports import (
     preview_support_report, valid_support_preview, support_external_payload,
 )
 from oneirodex.utils.support_delivery import (
-    SupportRequestConflict, SupportRateLimited, find_support_request,
+    SupportRequestConflict, SupportRateLimited, find_support_request, is_support_replay,
     persist_support_request, deliver_support_request,
+    SupportRequestNotFound, support_reconciliation_candidate, finish_support_reconciliation,
 )
 from oneirodex.utils.notifications import notify_admins
 from oneirodex.utils.api_tokens import require_browser_session
@@ -53,9 +54,10 @@ def support_ticket_create(body: CreateSupportTicketBody):
     values = body.model_dump()
     try:
         existing = find_support_request(db.session, current_user.id, values)
+        replay = is_support_replay(db.session, existing, values)
     except SupportRequestConflict as exc:
         return api_error(str(exc), code='conflict')
-    if existing is not None and existing.github_sync != 'pending':
+    if replay:
         return api_ok({'ticket': existing.to_dict()}, status=201)
     if body.sync_to_github:
         approval = valid_support_preview(current_user, values, current_app.secret_key)
@@ -85,9 +87,13 @@ def support_ticket_create(body: CreateSupportTicketBody):
     # The kind leads the title and rides along as a label, so the distinction
     # survives into the issue tracker instead of stopping at our database.
     if body.sync_to_github:
-        ticket = deliver_support_request(
-            db.session, ticket, support_external_payload(current_user, values), create_github_issue,
-        )
+        try:
+            ticket = deliver_support_request(
+                db.session, ticket, support_external_payload(current_user, values), create_github_issue,
+                retry_id=body.retry_id if body.retry_github else None,
+            )
+        except SupportRequestConflict as exc:
+            return api_error(str(exc), code='conflict')
 
     try:
         if created:
@@ -114,6 +120,29 @@ def support_report_preview(body: CreateSupportTicketBody):
     response = make_response(api_ok({'preview': preview_support_report(current_user, body.model_dump(), current_app.secret_key)}))
     response.headers['Cache-Control'] = 'no-store'
     return response
+
+
+@apis_bp.route('/support/tickets/<int:ticket_id>/reconcile', methods=['POST'])
+@login_required
+@require_browser_session
+@validate_body(ReconcileSupportDeliveryBody)
+def support_ticket_reconcile(ticket_id: int, body: ReconcileSupportDeliveryBody):
+    try:
+        candidate = support_reconciliation_candidate(
+            db.session, current_user.id, ticket_id, admin=is_admin(current_user),
+        )
+        ticket = candidate['ticket']
+        if ticket is None:
+            issue = read_support_issue(repository=candidate['repository'], issue_number=body.issue_number)
+            ticket = finish_support_reconciliation(db.session, candidate, issue)
+        response = make_response(api_ok({'ticket': ticket}))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except (SupportRequestNotFound, SupportRequestConflict, SupportRateLimited) as exc:
+        db.session.rollback()
+        code = ('not_found' if isinstance(exc, SupportRequestNotFound)
+                else 'rate_limited' if isinstance(exc, SupportRateLimited) else 'conflict')
+        return api_error(str(exc), code=code)
 
 
 @apis_bp.route('/support/tickets', methods=['GET'])

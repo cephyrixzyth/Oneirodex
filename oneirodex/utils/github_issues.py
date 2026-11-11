@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from math import ceil
 import urllib.error
 import urllib.request
 from typing import Any
@@ -13,6 +16,37 @@ from oneirodex.utils.support_privacy import redact_support_text
 
 
 MAX_GITHUB_RESPONSE_BYTES = 64 * 1024
+
+
+def _github_retry_after(status, headers):
+    """Retain provider pacing without retaining arbitrary response diagnostics."""
+    headers = headers or {}
+    now = datetime.now(timezone.utc)
+    maximum = int((datetime.max.replace(tzinfo=timezone.utc) - now).total_seconds()) - 1
+    def header(name):
+        return headers.get(name) or headers.get(name.lower())
+    wait = 60 if status in {403, 429} else 0
+    value = header('Retry-After')
+    if value is not None:
+        try:
+            raw = str(value).strip()
+            if raw.isdecimal():
+                wait = min(int(raw), maximum) if len(raw) < 20 else maximum
+            else:
+                target = parsedate_to_datetime(raw)
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                wait = max(0, ceil((target - now).total_seconds()))
+        except (TypeError, ValueError, OverflowError):
+            wait = max(wait, 60)
+    if header('X-RateLimit-Remaining') == '0':
+        try:
+            raw = str(header('X-RateLimit-Reset') or '').strip()
+            reset = int(raw) if len(raw) < 20 else maximum + ceil(now.timestamp())
+            wait = max(wait, ceil(reset - now.timestamp()))
+        except (ValueError, OverflowError):
+            wait = max(wait, 60)
+    return min(max(0, wait), maximum)
 
 
 class _GitHubRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -122,13 +156,47 @@ def create_github_issue(*, title: str, body: str, labels: list[str] | None = Non
             'ok': True,
             'number': number,
             'url': issue_url,
+            'http_status': 201,
         }
     except urllib.error.HTTPError as exc:
         status = exc.code
+        cooldown = _github_retry_after(status, exc.headers)
         exc.close()
         # No automatic retries, even for definite rejection. In particular a
         # timeout or server error cannot establish that creation did not occur.
         outcome = 'rejected' if status in {400, 401, 403, 404, 410, 422, 429} else 'unknown'
-        return {'ok': False, 'outcome': outcome, 'error': f'GitHub HTTP {status}'}
+        return {'ok': False, 'outcome': outcome, 'error': f'GitHub HTTP {status}',
+                'http_status': status, 'retry_after_seconds': cooldown}
     except Exception:
         return {'ok': False, 'outcome': 'unknown', 'error': 'GitHub delivery could not be confirmed'}
+
+
+def read_support_issue(*, repository: str, issue_number: int) -> dict[str, Any] | None:
+    """Read only; never return arbitrary provider diagnostics to a member."""
+    token, _repo = support_github_config()
+    if not token or not valid_support_repository(repository) or type(issue_number) is not int or not 0 < issue_number <= 2_147_483_647:
+        return None
+    url = f'https://api.github.com/repos/{repository}/issues/{issue_number}'
+    req = urllib.request.Request(url, method='GET', headers={
+        'Accept': 'application/vnd.github+json', 'Authorization': f'Bearer {token}',
+        'User-Agent': 'Oneirodex-Support', 'X-GitHub-Api-Version': '2022-11-28',
+    })
+    try:
+        with _open_github_request(req, timeout=20) as response:
+            raw = response.read(MAX_GITHUB_RESPONSE_BYTES + 1)
+            status = response.status
+        if status != 200 or len(raw) > MAX_GITHUB_RESPONSE_BYTES:
+            return None
+        data = json.loads(raw.decode('utf-8'))
+        expected = f'https://github.com/{repository}/issues/{issue_number}'
+        if (not isinstance(data, dict) or type(data.get('number')) is not int
+                or data['number'] != issue_number or data.get('pull_request') is not None
+                or not isinstance(data.get('html_url'), str) or data['html_url'].casefold() != expected.casefold()
+                or not isinstance(data.get('title'), str) or not isinstance(data.get('body'), str)):
+            return None
+        return {key: data[key] for key in ['number', 'html_url', 'title', 'body']}
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        return None
+    except Exception:
+        return None

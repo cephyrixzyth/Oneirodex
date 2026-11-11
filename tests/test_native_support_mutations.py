@@ -144,10 +144,12 @@ def test_admin_scoped_bearer_can_resolve_but_unscoped_or_member_cannot(monkeypat
     unscoped = client.post('/api/support/tickets/17/resolve', headers={'Authorization': 'Bearer unscoped-admin'})
     member = client.post('/api/support/tickets/17/resolve', headers={'Authorization': 'Bearer member-admin-scope'})
     create = client.post('/api/support/tickets', json={'title': 'Not allowed'}, headers={'Authorization': 'Bearer scoped-admin'})
+    check = client.post('/api/support/tickets/17/reconcile', json={'issue_number': 701}, headers={'Authorization': 'Bearer scoped-admin'})
 
     assert allowed.status_code == 200
     assert unscoped.status_code == 403
     assert member.status_code == 403
     assert create.status_code == 403
+    assert check.status_code == 403
     assert data.created is None
     assert data.resolved == [(17, 7)]

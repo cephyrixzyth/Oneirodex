@@ -24,13 +24,18 @@ The member form creates a UUID before its first submission and keeps it if the r
 | `pending` | Local receipt committed; external attempt not started. |
 | `sending` / `unknown` | Delivery is unconfirmed and might already exist. Keep the ticket and report reference; do not submit a new report. |
 | `synced` | GitHub returned201 and a valid issue number/link for the configured repository. |
+| `reconciled` | An exact matching existing issue was found by a read-only check. This does not prove who created it. |
 | `rejected` | GitHub returned a recognized client rejection. The local ticket remains. |
 | `skipped` | No external POST was made because forwarding became unavailable. |
 | `error` | Historical failure state; inspect the destination before attempting another send. |
 
-Administrators can look for the report UUID in the destination's issue body and compare it with the local ticket. Automated reconciliation and an explicit safe retry action after a definite rejection remain open review work. Do not change a delivery state directly in the database or assume a timeout means the issue was not created. Repository redirects are refused; after a rename, repair the configured destination and preview again. No provider request ID or HTTP retry advice establishes exactly-once creation. See the [GitHub create-issue endpoint](https://docs.github.com/en/rest/issues/issues#create-an-issue) and [REST API retry guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api).
+For a definite rejection or skipped delivery, **Prepare GitHub retry** reopens the saved details and requires a fresh redacted preview. It keeps the report reference and uses a distinct attempt reference; a lost retry reply can be retried with that same reference to recover the receipt. Pending delivery can be continued without creating a new report. Provider cooldowns and a five-attempt/hour/account budget persist across requests; **Try again after** means no new attempt started during the wait.
+
+For uncertain delivery with retained attempt metadata, enter the issue number from its original destination and choose **Check existing issue**. This performs a bounded read, verifies the repository/link and exact redacted title/body, and never creates an issue. Owners or browser-signed-in administrators may check; unrelated, inaccessible or mismatched provider content is withheld. Failed checks count toward five checks/hour/account. Older receipts without a verifiable attempt fingerprint require manual operator checking. Do not change a delivery state directly in the database or assume a timeout means the issue was not created. Repository redirects are refused; after a rename, repair the configured destination and preview again. No provider request ID or HTTP retry advice establishes exactly-once creation. See the [GitHub create-issue endpoint](https://docs.github.com/en/rest/issues/issues#create-an-issue) and [REST API retry guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api).
 
 The receipt migration preserves historical tickets with null references and adopts an existing startup-created unique index into the matching database constraint. It refuses a schema downgrade once receipts exist. For rollback, retain a tested pre-upgrade database backup; deleting receipt columns loses duplicate-send protection.
+
+The follow-up attempt migration preserves old reports without inventing send history. Attempt metadata and lookup budgets belong to their accounts and are deleted with them; security/audit retention is separate. It also refuses downgrade when attempt receipts exist.
 
 ## Admin path
 
@@ -54,6 +59,8 @@ Global settings: `admin_notify_support` (and related `admin_notify_*` for librar
 
 - `POST /api/support/tickets` — create (session + CSRF). `title` required; `body`/`symptom` and `logs` optional.
 - `POST /api/support/preview` — authenticated browser session + CSRF; returns availability, safe destination, unknown visibility and mandatory redacted preview. No ticket creation or provider contact. Forwarding create requests include its `request_id` and `preview_token`; missing or stale approval returns 409.
+- Explicit retry uses `POST /api/support/tickets` with unchanged fields and `request_id`, `sync_to_github=true`, `retry_github=true`, new `retry_id`, and its fresh `preview_token`. Replays do not send again. Unknown/sending/confirmed delivery cannot be retried.
+- `POST /api/support/tickets/<id>/reconcile` — owner/admin browser session + CSRF, JSON positive integer `issue_number` up to2147483647. Exact match returns a `reconciled` receipt; generic409 retains uncertainty.404 withholds inaccessible reports,429 limits lookups.
 - `GET /api/support/tickets` — own tickets (members) / all (admin). Compact rows: `body` ≤280, `logs` null, `has_logs`, `empty`.
 - `GET /api/support/tickets/<id>` — full ticket including logs.
 - `POST /api/support/tickets/<id>/resolve` — admin

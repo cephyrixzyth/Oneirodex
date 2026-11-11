@@ -2,7 +2,7 @@
   "review_id": "R1994",
   "title": "Classify public and private game collections during account deletion",
   "policy_source": "ADR 0013 and owner policy summarized in docs/dev/behavior-parity-review.md.",
-  "schema_basis": "Current ORM metadata and loopback PostgreSQL test schema upgraded through Alembic e1f2a3b4c5d6; 50 user foreign-key columns across 82 ORM tables.",
+  "schema_basis": "Extended for support retry metadata through Alembic a4b5c6d7e8f9; 52 user foreign-key columns across 84 ORM tables. Original R1994 evidence remains in its historical commit.",
   "relations": [
     {
       "foreign_key": "announcements.author_user_id",
@@ -233,6 +233,20 @@
       "on_delete": "SET NULL",
       "disposition": "retain_shared_row_clear_user_reference",
       "policy": "Retain shared, historical, or household content and clear the departing account attribution reference.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "support_delivery_attempts.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account delivery attempt metadata with its support reports; security audit retention is separate.",
+      "synthetic_fixture": "covered"
+    },
+    {
+      "foreign_key": "support_delivery_check_budgets.user_id",
+      "on_delete": "CASCADE",
+      "disposition": "delete_account_linked_row",
+      "policy": "Delete the departing account support lookup budget; security audit retention is separate.",
       "synthetic_fixture": "covered"
     },
     {

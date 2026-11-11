@@ -28,6 +28,8 @@ EXPECTED_USER_FKS = {
     'store_sync_jobs.user_id': 'CASCADE',
     'store_sync_jobs.actor_id': 'SET NULL',
     'support_tickets.user_id': 'CASCADE',
+    'support_delivery_attempts.user_id': 'CASCADE',
+    'support_delivery_check_budgets.user_id': 'CASCADE',
     'support_tickets.resolved_by_user_id': 'SET NULL',
     'system_events.audit_user': None,
     'user_attract_mode_settings.user_id': None,
@@ -101,7 +103,7 @@ def test_user_fk_inventory_and_no_action_dispositions_match_database(db_session)
     from oneirodex.models import db
 
     orm_actions = _orm_user_fk_actions(db.Model.metadata)
-    assert len(orm_actions) == 50
+    assert len(orm_actions) == 52
     assert orm_actions == EXPECTED_USER_FKS
     assert _database_user_fk_actions(db_session.connection()) == EXPECTED_USER_FKS
     no_action = {key for key, action in EXPECTED_USER_FKS.items() if action is None}
@@ -117,7 +119,7 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     relations = {item['foreign_key']: item for item in manifest['relations']}
     assert set(relations) == set(EXPECTED_USER_FKS)
-    assert len(relations) == 50
+    assert len(relations) == 52
     assert {
         key: (None if value['on_delete'] == 'NO ACTION' else value['on_delete'])
         for key, value in relations.items()
@@ -172,6 +174,7 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         ScanJob,
         User,
         UserOwnedTitle,
+        SupportTicket,
         db,
     )
     from oneirodex.platform import LibraryPlatform
@@ -261,7 +264,11 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         'users.id': (departing.id, survivor.id),
         'users.user_id': (departing.user_id, survivor.user_id),
     }
+    parent_ticket = SupportTicket(user_id=survivor.id, title='Shared fixture parent', body='Synthetic')
+    db_session.add(parent_ticket)
+    db_session.flush()
     parent_refs = {
+        'support_tickets.id': parent_ticket.id,
         'games.uuid': game.uuid,
         'libraries.uuid': library.uuid,
         'chat_spaces.id': space.id,
@@ -271,7 +278,7 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         'user_owned_titles.id': parent_title.id,
     }
     relations = manifest['relations']
-    assert len(relations) == 50
+    assert len(relations) == 52
     populated = []
     metadata = db.Model.metadata
     for relation in relations:

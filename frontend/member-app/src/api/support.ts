@@ -20,6 +20,17 @@ export interface SupportTicketDraft {
   sync_to_github?: boolean
   request_id?: string
   preview_token?: string
+  retry_github?: boolean
+  retry_id?: string
+}
+
+export interface SupportTicket extends SupportTicketDraft {
+  id: number
+  github_sync: string
+  github_attempt_id?: string | null
+  github_issue_number?: number | null
+  github_issue_url?: string | null
+  github_retry_after_at?: string | null
 }
 
 export interface SupportPreview {
@@ -29,6 +40,7 @@ export interface SupportPreview {
   redaction: 'mandatory'
   preview_token: string | null
   request_id?: string
+  retry_id?: string
   title?: string
   body?: string
   labels?: string[]
@@ -49,8 +61,23 @@ export function newSupportRequestId() {
   ].join('-')
 }
 
-export async function submitSupportTicket(payload: SupportTicketDraft) {
+export async function submitSupportTicket(
+  payload: SupportTicketDraft,
+): Promise<{ ticket?: SupportTicket }> {
   return (await postJson('/api/support/tickets', payload, { label: 'Submit failed' })) ?? {}
+}
+
+export async function reconcileSupportTicket(
+  id: number,
+  issueNumber: number,
+): Promise<{ ticket?: SupportTicket }> {
+  return (
+    (await postJson(
+      `/api/support/tickets/${id}/reconcile`,
+      { issue_number: issueNumber },
+      { label: 'Delivery check failed' },
+    )) ?? {}
+  )
 }
 
 export async function previewSupportTicket(

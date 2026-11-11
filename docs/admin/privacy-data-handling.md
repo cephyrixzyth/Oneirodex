@@ -51,7 +51,7 @@ The browser PWA caches versioned public assets and a data-free offline page, not
 | News feeds | `ONEIRODEX_NEWS_FEEDS` (http/https only) | The **server** fetches public destinations and checks each redirect under the same policy. Private-network feeds and responses above 512,000 decoded bytes are skipped; members can hide individual sources |
 | OIDC | `OIDC_ENABLED` | Username / email / groups from *your* IdP (Authentik, etc.); the configured issuer must use HTTPS |
 | LiveKit | Voice profile | Room tokens for household voice; media goes to the LiveKit you deployed |
-| GitHub support | `SUPPORT_GITHUB_*` and the member's per-report opt-in | The selected report, context, optional logs, reporter ID, and role go to the administrator-configured repository. Members can keep reports local by leaving the opt-in unchecked. |
+| GitHub support | `SUPPORT_GITHUB_*` and the member's per-report opt-in | Mandatory redacted preview identifies the destination and included report/context/logs, reporter ID and role. Visibility is unknown; treat it as potentially public. Local-only is available. Definite-rejection retries need fresh approval; uncertain delivery can be checked by exact-match read only. Account-owned attempt metadata and lookup budgets follow account deletion. See [Support inbox](support-inbox.md). |
 | WebRetro cores | First boot fetch | WASM cores from the operator-provisioned install path — [webretro-cores.md](../runbooks/webretro-cores.md) |
 
 ROM files, BIOS, and artwork you pointed the library at never upload to a Oneirodex service — there isn't one.

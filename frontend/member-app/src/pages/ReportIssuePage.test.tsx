@@ -250,3 +250,134 @@ test('explains that an uncertain provider outcome must not be resent', async () 
     /do not send a new report/i,
   )
 })
+
+test('requires a fresh retry preview and preserves its identity after a lost reply', async () => {
+  const user = userEvent.setup()
+  const sends: Record<string, unknown>[] = []
+  let previews = 0
+  stubFetch((input, init) => {
+    const draft = JSON.parse(init.body)
+    if (String(input).endsWith('/preview')) {
+      previews += 1
+      return jsonResponse({
+        preview: {
+          available: true,
+          destination: 'example/repo',
+          title: 'Redacted',
+          body: 'Redacted text',
+          request_id: draft.request_id,
+          retry_id: draft.retry_id,
+          preview_token: `approval-${previews}`,
+        },
+      })
+    }
+    sends.push(draft)
+    if (sends.length === 2) throw new TypeError('Synthetic lost retry reply')
+    return jsonResponse(
+      {
+        ticket: {
+          ...draft,
+          id: 91,
+          github_attempt_id: 'initial-attempt',
+          github_sync: sends.length === 1 ? 'rejected' : 'synced',
+        },
+      },
+      { status: 201 },
+    )
+  })
+  render(
+    <MemoryRouter>
+      <ReportIssuePage />
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByLabelText('Title'), 'Keep original report')
+  await user.type(screen.getByLabelText('Symptom'), 'Same body')
+  await user.click(screen.getByRole('checkbox', { name: /Also send this report to GitHub/i }))
+  await user.click(screen.getByRole('button', { name: /preview github report/i }))
+  await screen.findByText('Redacted text')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  await user.click(await screen.findByRole('button', { name: /prepare github retry/i }))
+  expect(screen.getByText(/The local ticket is already saved/i)).toBeInTheDocument()
+  expect(screen.getByLabelText('Title')).toBeDisabled()
+  expect(screen.getByRole('button', { name: /submit ticket/i })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: /preview github report/i }))
+  await screen.findByText('Redacted text')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  await screen.findByRole('alert')
+  expect(screen.getByText(/Ticket #91 saved/)).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  await screen.findByText(/Ticket #91 saved/)
+  expect(sends).toHaveLength(3)
+  expect(sends[1]).toMatchObject({
+    retry_github: true,
+    request_id: sends[0].request_id,
+    title: sends[0].title,
+    body: sends[0].body,
+    preview_token: 'approval-2',
+  })
+  expect(sends[1].retry_id).toMatch(/^[a-f0-9-]{36}$/)
+  expect(sends[2].retry_id).toBe(sends[1].retry_id)
+})
+
+test('checks an uncertain receipt without submitting another report', async () => {
+  const user = userEvent.setup()
+  const fetch = stubFetch((input, init) => {
+    if (String(input).endsWith('/reconcile')) {
+      expect(JSON.parse(init.body)).toEqual({ issue_number: 701 })
+      return jsonResponse({
+        ticket: {
+          id: 92,
+          github_sync: 'reconciled',
+          github_issue_number: 701,
+          github_issue_url: 'https://github.com/example/repo/issues/701',
+        },
+      })
+    }
+    return jsonResponse(
+      { ticket: { id: 92, github_sync: 'unknown', github_attempt_id: 'attempt' } },
+      { status: 201 },
+    )
+  })
+  render(
+    <MemoryRouter>
+      <ReportIssuePage />
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByLabelText('Title'), 'Check existing report')
+  await user.type(screen.getByLabelText('Symptom'), 'Keep receipt')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  await user.type(await screen.findByLabelText('GitHub issue number'), '701')
+  await user.click(screen.getByRole('button', { name: /check existing issue/i }))
+  expect(await screen.findByText(/matching existing report was found/i)).toBeInTheDocument()
+  expect(fetch).toHaveBeenCalledTimes(2)
+  expect(fetch.mock.calls.filter(([input]) => String(input).endsWith('/tickets'))).toHaveLength(1)
+  expect(screen.queryByRole('button', { name: /prepare github retry/i })).not.toBeInTheDocument()
+})
+
+test('explains a persisted cooldown before permitting another delivery attempt', async () => {
+  const user = userEvent.setup()
+  stubFetch((_input, init) =>
+    jsonResponse(
+      {
+        ticket: {
+          ...JSON.parse(init.body),
+          id: 93,
+          github_sync: 'rejected',
+          github_attempt_id: 'attempt',
+          github_retry_after_at: '2099-01-01T00:00:00Z',
+        },
+      },
+      { status: 201 },
+    ),
+  )
+  render(
+    <MemoryRouter>
+      <ReportIssuePage />
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByLabelText('Title'), 'Provider cooldown')
+  await user.type(screen.getByLabelText('Symptom'), 'Wait before retry')
+  await user.click(screen.getByRole('button', { name: /submit ticket/i }))
+  expect(await screen.findByText(/Try again after/i)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /prepare github retry/i })).toBeDisabled()
+})
