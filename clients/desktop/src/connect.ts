@@ -1,6 +1,8 @@
 import type { OneirodexClient, SearchResultItem } from '@oneirodex/api-client'
 import { OneirodexApiError } from '@oneirodex/api-client'
 
+import { DesktopTransportError } from './api.js'
+
 import type { LifecycleRegistry } from './lifecycle.js'
 
 export interface ConnectionValidation {
@@ -13,7 +15,15 @@ export interface ConnectionFailure {
   message: string
   /** Machine-oriented cause for companion console / local diagnostics. */
   cause?:
-    'shape_invalid' | 'unauthorized' | 'forbidden' | 'not_found' | 'network' | 'keyring' | 'unknown'
+    | 'shape_invalid'
+    | 'unauthorized'
+    | 'forbidden'
+    | 'not_found'
+    | 'network'
+    | 'keyring'
+    | 'redirect_refused'
+    | 'protocol'
+    | 'unknown'
 }
 
 export type ConnectionResult = ConnectionValidation | ConnectionFailure
@@ -31,12 +41,14 @@ export function logCompanion(scope: string, message: string, detail?: unknown): 
 }
 
 function isNetworkFailure(error: unknown): boolean {
+  if (error instanceof OneirodexApiError || error instanceof DesktopTransportError) {
+    return false
+  }
   if (!(error instanceof Error)) {
     return false
   }
   const msg = error.message
   if (
-    error.name === 'TypeError' ||
     /failed to fetch|networkerror|load failed|failed to load|cors|ssl|tls|certificate|cert_|econnrefused|enotfound|etimedout|network request failed|net::err/i.test(
       msg,
     )
@@ -96,7 +108,8 @@ export function formatDesktopApiError(error: unknown): string {
   return 'Connection failed'
 }
 
-function classifyConnectionError(error: unknown): ConnectionFailure['cause'] {
+export function classifyConnectionError(error: unknown): ConnectionFailure['cause'] {
+  if (error instanceof DesktopTransportError) return error.cause
   if (error instanceof OneirodexApiError) {
     if (error.status === 401) return 'unauthorized'
     if (error.status === 403) return 'forbidden'
@@ -119,6 +132,7 @@ function classifyConnectionError(error: unknown): ConnectionFailure['cause'] {
 export async function validateConnection(api: OneirodexClient): Promise<ConnectionResult> {
   try {
     const collections = await api.browse.listCollections()
+    if (!Array.isArray(collections)) throw new DesktopTransportError('protocol')
     return { ok: true, collectionCount: collections.length }
   } catch (error) {
     const cause = classifyConnectionError(error)
@@ -147,16 +161,21 @@ function extractSearchResults(response: {
 export async function fetchLibraryPreview(
   api: OneirodexClient,
   limit = 12,
+  strict = false,
 ): Promise<SearchResultItem[]> {
   const queries = ['', '*', 'a']
   for (const query of queries) {
     try {
       const response = await api.browse.search({ query })
+      if (strict && (!response || !Array.isArray(response.results ?? response.games))) {
+        throw new DesktopTransportError('protocol')
+      }
       const items = extractSearchResults(response)
       if (items.length > 0) {
         return items.slice(0, limit)
       }
-    } catch {
+    } catch (error) {
+      if (strict) throw error
       // try next query shape
     }
   }
@@ -185,4 +204,12 @@ export function mergeUpdateSignalsFromLibrary(
     }
   }
   return signaled
+}
+
+/** Only transport/service unavailability is an outage; denial and protocol failures are separate. */
+export function isConnectionUnavailable(error: unknown): boolean {
+  return (
+    isNetworkFailure(error) ||
+    (error instanceof OneirodexApiError && [408, 502, 503, 504].includes(error.status))
+  )
 }

@@ -96,3 +96,13 @@ export async function stopLaunchWatcher(gameUuid: string): Promise<void> {
   await watcher.stop()
   activeWatchers.delete(gameUuid)
 }
+
+/** Retire profile tracking without killing any locally running game. */
+export function stopAllLaunchWatchers(): void {
+  const watchers = [...activeWatchers.values()]
+  activeWatchers.clear()
+  for (const watcher of watchers) {
+    // stop clears its timer synchronously; its final server report is best-effort.
+    void watcher.stop().catch(() => undefined)
+  }
+}

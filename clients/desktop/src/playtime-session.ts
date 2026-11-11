@@ -51,6 +51,7 @@ export function watchPlaySession(
 
     try {
       const running = await isProcessRunning(pid)
+      if (stopped) return
       if (!running) {
         await stop()
         return

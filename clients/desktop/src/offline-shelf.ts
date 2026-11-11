@@ -51,6 +51,7 @@ export async function saveOfflineInstalledShelf(
   identity: OfflineShelfIdentity,
   games: SearchResultItem[],
   storage: Pick<Storage, 'setItem'> = localStorage,
+  canCommit: () => boolean = () => true,
 ): Promise<void> {
   const serverUrl = normalizeServerUrl(identity.serverUrl)
   if (!serverUrl || !identity.accountId || !identity.deviceId || !identity.token) {
@@ -64,7 +65,7 @@ export async function saveOfflineInstalledShelf(
     credentialFingerprint: await credentialFingerprint(identity.token),
     games: normalizeGames(games),
   }
-  storage.setItem(STORAGE_KEY, JSON.stringify(record))
+  if (canCommit()) storage.setItem(STORAGE_KEY, JSON.stringify(record))
 }
 
 export async function loadOfflineInstalledShelf(
@@ -103,3 +104,10 @@ export function installedOfflineGames<T extends OfflineShelfGame>(
 }
 
 export const OFFLINE_SHELF_STORAGE_KEY = STORAGE_KEY
+
+/** Removes local catalog metadata only, never installs or saves. */
+export function clearOfflineInstalledShelf(
+  storage: Pick<Storage, 'removeItem'> = localStorage,
+): void {
+  storage.removeItem(STORAGE_KEY)
+}

@@ -40,6 +40,16 @@ Each game install is serialized while it is staged and promoted. If the companio
 
 Signing in on Friends does not replace Connect on the main window, and Connect does not log you into Friends.
 
+### Local account and server access
+
+The Installed shelf uses titles previously verified for the same server, account, device and credential. A reachable server rejecting the token is shown as **Server access denied**. Local **Play** and **Show in Explorer** remain available for matching installed titles; downloads, updates, mods and patches require current server access. A refused API redirect or unexpected server response has its own error and does not imply an outage or prove token revocation.
+
+On recovery, the companion refreshes account identity and the permitted library preview before enabling server actions. A changed account identity clears the old catalog and requires Connect again. The current cache comes from the library preview; it is not a complete inventory of every installed title.
+
+To switch accounts, enter the server and token and select **Connect**. The old catalog is hidden during validation. Only a successful verified connection replaces the saved profile; a failed attempt does not save the new credentials. Finish or cancel active local operations before switching or forgetting the account.
+
+**Forget account and cached titles** clears the visible profile, saved server URL, OS credential entry and local title cache. It stops presence and playtime tracking, with a best-effort final session report. It preserves installed files, saves, local install records and running games. Partial storage or credential-store failures are reported so you can retry. Other Library/Friends windows keep their separate site sign-ins; the server token remains valid until you revoke it. Anyone with access to local game files through the OS may still use them.
+
 | Situation | What you see |
 |---|---|
 | **No Server URL** | Status error — set Server URL first (no silent no-op) |
@@ -173,7 +183,7 @@ On a domain PC where Windows Folder Redirection puts Documents, AppData or the p
 | Connect “Bad data” / credential store | OS keyring persist failed after validate | Check Windows Credential Manager; retry Connect; see `[Oneirodex:keyring]` in console |
 | Connect 404 | Wrong base URL | Use origin only (no `/api` suffix) |
 | Download / update fails with permission | Missing Tauri ACL for append/rename | Rebuild companion from this repo |
-| Download / Update buttons disabled | Companion Offline banner | Re-Connect or wait for heartbeat; Play/Install/Uninstall still work |
+| Download / Update buttons unavailable | Offline, access-denied or connection-error state | Reconnect with valid access; matching cached installs retain local Play and Show in Explorer. Recovery refreshes identity and permitted titles first |
 | Friends window permission errors on install | Social webview has no FS ACL (by design) | Use lifecycle actions in the **main** companion window |
 | Update button missing | Server didn’t flag updates | Refresh Connect; check freshness inbox on web |
 | Extra update / uninstall directories | The one previous update generation (removed at the next update or uninstall), an archive-retaining snapshot, or a leftover from an update that failed part way | Keep the selected install and save backups; retry the operation. A failed update's own files (`…-update-<id>` folders and zips) are not removed automatically — review before manual cleanup |
