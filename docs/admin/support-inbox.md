@@ -10,6 +10,8 @@ Members open **More → Report issue** (`/report`). Fields: title (required), sy
 
 Caps on create: symptom ≤2000 chars, logs ≤4000 chars. List payloads omit log blobs (`has_logs` + truncated `body` / `body_preview` + `empty`).
 
+External titles and bodies are always filtered at the shared GitHub sender. Recognized credentials, private-key blocks, email addresses and home-directory paths are removed; URL queries and fragments are removed as a whole, which can also hide useful diagnostics. Local ticket text is preserved. Automatic filtering cannot recognize every private detail in prose. Destination-specific disclosure, mandatory preview and delivery/retry qualification remain open review work; the existing checkbox alone does not meet that acceptance gate.
+
 ## Admin path
 
 1. Open **`/admin/support`** (Users hub → Support inbox), or follow the in-app notification.

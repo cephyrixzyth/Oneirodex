@@ -9,6 +9,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from oneirodex.utils.support_privacy import redact_support_text
+
 
 MAX_GITHUB_RESPONSE_BYTES = 64 * 1024
 
@@ -68,7 +70,8 @@ def build_issue_body(ticket: dict[str, Any]) -> str:
         '---',
         '_Filed from Oneirodex in-app Report. Triage with `@issue-assess`, fix with `@issue-fix`._',
     ])
-    return '\n'.join(lines)
+    token, _repo = support_github_config()
+    return redact_support_text('\n'.join(lines), secrets=(token or '',))
 
 
 def create_github_issue(*, title: str, body: str, labels: list[str] | None = None) -> dict[str, Any]:
@@ -79,7 +82,12 @@ def create_github_issue(*, title: str, body: str, labels: list[str] | None = Non
     if '/' not in repo:
         return {'ok': False, 'error': 'Invalid SUPPORT_GITHUB_REPO'}
 
-    payload: dict[str, Any] = {'title': title[:200], 'body': body}
+    # Enforce at the final shared sink as well as the preview/body formatter.
+    # Direct callers must not bypass filtering, including through the title.
+    payload: dict[str, Any] = {
+        'title': redact_support_text(title, secrets=(token,))[:200],
+        'body': redact_support_text(body, secrets=(token,)),
+    }
     if labels:
         payload['labels'] = labels[:10]
 
