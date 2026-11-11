@@ -1,6 +1,7 @@
 # File: /oneirodex/igdb_api.py
 # This file contains functions for interacting with the IGDB API extracted from routes.py
 
+import logging
 import requests
 import time
 import threading
@@ -15,6 +16,8 @@ from oneirodex.utils.security import validate_outbound_http_url
 MAX_IGDB_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_TWITCH_TOKEN_RESPONSE_BYTES = 64 * 1024
 
+
+logger = logging.getLogger(__name__)
 
 def _validate_igdb_url(url):
     """Keep the configurable endpoint on Twitch's documented IGDB API host."""
@@ -100,7 +103,7 @@ def get_access_token(client_id, client_secret):
             )
     except requests.RequestException:
         # Keep transport exception text out of the request-level traceback log.
-        print('Failed to obtain access token')
+        logger.warning('Failed to obtain access token')
         return None
     if response.status_code == 200:
         payload = response.json()

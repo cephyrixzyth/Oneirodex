@@ -18,7 +18,7 @@ from oneirodex.utils.auth import (
 )
 from oneirodex.utils.accounts import is_placeholder_email
 from oneirodex.utils.api_response import api_error, api_ok
-from oneirodex.schemas.auth import LoginBody
+from oneirodex.schemas.auth import EmailConfirmationBody, LoginBody
 from oneirodex.schemas.registration import RegistrationBody
 from oneirodex.schemas.password_reset import PasswordResetRequestBody, PasswordResetConfirmBody
 from oneirodex.utils.validation import validate_body
@@ -711,23 +711,25 @@ def confirm_email(token):
     return render_member_auth_spa()
 
 
+def _confirmation_body_error(exc):
+    password_invalid = any(
+        not issue.get('loc') or issue['loc'][0] == 'password'
+        for issue in exc.errors(include_input=False)
+    )
+    return api_error(
+        'Password must be at least 8 characters.' if password_invalid else 'Passwords do not match.',
+        code='unprocessable',
+    )
+
+
 @login_bp.route('/api/auth/confirm/<token>', methods=['GET', 'POST'])
-def api_confirm_email(token: str):
+@validate_body(EmailConfirmationBody, methods={'POST'}, on_error=_confirmation_body_error)
+def api_confirm_email(token: str, body: EmailConfirmationBody | None = None):
     """Inspect on GET; activate and set mailbox-owner credentials on POST."""
     password = None
     if request.method == 'POST':
-        payload = request.get_json(silent=True)
-        password = payload.get('password') if isinstance(payload, dict) else None
-        confirm_password = payload.get('confirm_password') if isinstance(payload, dict) else None
-        try:
-            password_bytes = len(password.encode('utf-8')) if isinstance(password, str) else 0
-        except UnicodeEncodeError:
-            password_bytes = 0
-        if (
-            not isinstance(password, str) or not password.strip()
-            or len(password) < 8 or password_bytes > 1024 or not password_bytes
-        ):
-            return api_error('Password must be at least 8 characters.', code='unprocessable')
+        password = body.password
+        confirm_password = body.confirm_password
         if password != confirm_password:
             return api_error('Passwords do not match.', code='unprocessable')
     _user, outcome = _confirm_email_token(token, password=password)

@@ -4,7 +4,7 @@
 
 `oneirodex/utils/validation.py` adds `@validate_body(Model)`. It reads
 `request.get_json(silent=True)`, validates it against a `pydantic.BaseModel`
-from `oneirodex/schemas/`, and on failure returns **one** shape:
+from `oneirodex/schemas/`, and by default on failure returns **one** shape:
 
 ```
 api_error('Invalid request.', code='unprocessable', detail={field: message})   # HTTP 422
@@ -36,8 +36,9 @@ envelope. Do **not** wrap those routes with the flat helper.
        ...
    ```
 
-   Decorators apply bottom-up, so auth runs first and validation second. A
-   `@validate_body` route with no auth decorator above it is a bug.
+   Decorators apply bottom-up, so auth runs first and validation second.
+   Protected routes must retain their auth decorators. Public authentication
+   entrypoints instead retain their token/password and CSRF checks.
 3. Delete the now-redundant `data = request.get_json(...)` line and the
    `if not data.get('x'): return api_error(...)` guards the model now covers.
 4. Keep *semantic* checks that need the DB or app state (does this row exist,
@@ -50,6 +51,17 @@ envelope. Do **not** wrap those routes with the flat helper.
 Partial-success batch routes use `@validate_batch_body(Model, limit=N)` the
 same way (innermost, under auth). Pass `extra_on_error=` when the refusal
 also carries `cap` / `requested` / per-id `results`.
+
+### Existing multi-method and error contracts
+
+Use `methods={'POST'}` on a GET/POST view when GET only inspects state. Use
+`on_error=` when adoption must preserve an established sanitized rejection.
+The email-confirmation route uses `EmailConfirmationBody`: exact passwords,
+8-character minimum, 1,024-byte UTF-8 maximum, legacy unknown-key tolerance,
+and unchanged password/mismatch messages. GET does not activate an account.
+Native confirmation keeps its existing bounded-body and parser behavior;
+these checks do not assert that every legacy/native malformed-body response
+is identical.
 
 ### `detail` shape
 

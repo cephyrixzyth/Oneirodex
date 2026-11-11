@@ -189,13 +189,15 @@ class TestGetAccessToken:
         assert _validate_twitch_url('https://attacker.example/oauth2/token')[0] is False
 
     @patch('oneirodex.utils.igdb_api.safe_request_limited')
-    def test_token_transport_failure_does_not_escape(self, mock_safe_request):
+    def test_token_transport_failure_does_not_escape(self, mock_safe_request, caplog):
         import requests
 
         mock_safe_request.side_effect = requests.ConnectionError(
             'https://id.twitch.tv/oauth2/token?client_secret=should-not-escape'
         )
         assert get_access_token('client-id', 'should-not-escape') is None
+        assert 'Failed to obtain access token' in caplog.text
+        assert 'should-not-escape' not in caplog.text
 
     @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_token_cache_avoids_second_request(self, mock_requests_post):

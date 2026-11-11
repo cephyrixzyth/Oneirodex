@@ -27,6 +27,13 @@ and acknowledgement loss; they do not physically drop database connections or co
 `POSTGRES_DB=oneirodextest` and runs a *core* pytest subset only. The full suite
 stays local/release — see release-checklist.md.
 
+The API-envelope, print and JSON-reader ratchets run before the long CI pytest
+selection. Runtime diagnostics use configured logging. Explicitly named operator
+CLI reports keep their stdout/stderr interface through the print scanner's
+existing exception policy; this changes scanner scope, not baseline counts.
+Repaired checkout, enrichment-log and unmatched-redirect cases are included in
+CI again. Other named exclusions and the integration split still limit CI.
+
 ## Install the test dependencies
 
 `requirements.txt` is the **runtime** set — it has no test runner in it. Use

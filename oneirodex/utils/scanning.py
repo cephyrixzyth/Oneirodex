@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 from datetime import datetime, timezone
@@ -25,6 +26,8 @@ from oneirodex.utils.pc_extras import (
 from oneirodex.utils.rom_language import classify_patch_file
 from oneirodex.utils.image_paths import image_path_under_save_dir
 
+
+logger = logging.getLogger(__name__)
 
 def bump_scan_job_progress(
     scan_job_id,
@@ -636,7 +639,7 @@ def delete_game_images(game_uuid, *, config=None):
                     image.url, config['IMAGE_SAVE_PATH'],
                 )
                 if image_file_path is None:
-                    print(f"Skipping image outside IMAGE_SAVE_PATH for game {game_uuid}.")
+                    logger.warning("Skipping image outside IMAGE_SAVE_PATH for game %s.", game_uuid)
                 elif os.path.exists(image_file_path):
                     os.remove(image_file_path)
                     if not os.path.exists(image_file_path):

@@ -24,10 +24,9 @@ walk, not a grep).
 Scope
 -----
 ``oneirodex/**/*.py`` and the top level of ``scripts/*.py``. ``tests/`` is out
-of scope (assertions and fixtures print freely). ``oneirodex/updateschema.py``
-and ``scripts/get_json_lint.py`` are excluded: the former is an operator-run
-migration whose progress ``print``s are its interface; the latter is a CLI
-ratchet whose report is stdout.
+of scope (assertions and fixtures print freely). The explicit ``EXEMPT`` set keeps operator migration, validation, inventory
+and capture reports whose stdout/stderr is their interface. It names files;
+it does not exclude a runtime subtree or raise any baseline allowance.
 
 Usage
 -----
@@ -59,6 +58,14 @@ EXEMPT = {
     "oneirodex/updateschema.py",  # operator-run migration; progress print is UX
     "scripts/get_json_lint.py",  # CLI ratchet; stdout is the report
     # These tools are CLI reports consumed directly by operators and scripts.
+    "scripts/audit_emulator_saves.py",
+    "scripts/check_release_license_files.py",
+    "scripts/check_undefined_names.py",
+    "scripts/migrate_emulator_save_keys.py",
+    "scripts/migrate_reusable_secrets.py",
+    "scripts/migrate_store_credentials.py",
+    "scripts/upgrade_test_schema.py",
+    "scripts/validate-native-install.py",
     "scripts/generate_icon_adapters.py",
     "scripts/p17_route_parity.py",
     # The docs-capture tools. Each is operator-run against a throwaway

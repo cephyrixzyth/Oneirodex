@@ -1,0 +1,181 @@
+{
+  "review_id": "R2027",
+  "doc_status": "Reference",
+  "title": "Unrestricted baseline and CI ratchet compatibility qualification",
+  "source_head_before_change": "a71d68a846251dea923bc24fee701a15c7a9b705",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    ".github/workflows/ci-tests.yml": "dcf0cc84fb5f26f920995c7b57034fe9f62dc9f5854ce5ad336db53896d11c54",
+    "oneirodex/utils/igdb_api.py": "2ff561afaa21b7618d7b13dc24a99542c2e3294ccebaa139d8ffb2d5368eeb32",
+    "oneirodex/utils/scanning.py": "a70fb3212d908ba39c18dfd53f20bae72ccdafbaa6d3b53a8bae1ed2318e028d",
+    "scripts/print_lint.py": "a62bdeb7bd182b7b6af605191ca96de6a772b862ac4f1878373429ee36e46d3e",
+    "oneirodex/schemas/auth.py": "ea9bfa9e15dfeee185df345aa65d3400a30729b27b8e68a5ca65afddf1eee442",
+    "oneirodex/routes_login.py": "8dd2ac92f64c9d5a7404387edcfb7485e023b9ceb2a996c8587aaf57c8970cee",
+    "tests/test_email_confirmation_validation_contracts.py": "716c9d5c9b83030b2494ccc73af9276bdfbb943a4a7a57f0e13d9cef4b4458d7",
+    "tests/test_utils_igdb_api.py": "dd996059147968e0098ac99f478f1ee37d744ab2024ffd35edd488a75e4f2f9b"
+  },
+  "checks": {
+    "unrestricted-r2026": {
+      "exit_code": 0,
+      "seconds": 2241.75,
+      "database_removed": true,
+      "counts": {
+        "tests": 8458,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 101,
+        "passed": 8357
+      },
+      "log_sha256": "2f5f0f16e0c07c11413a833a56d61c10447cd2cc2636e9fe2151355dcb8db34e"
+    },
+    "ratchet-compatibility-final": {
+      "exit_code": 0,
+      "seconds": 49.94,
+      "database_removed": true,
+      "counts": {
+        "tests": 130,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 130
+      },
+      "log_sha256": "6288646606d5f1cd32ed25aa542534a75cd1ed25c1b291786d8c0dd3c8921c53"
+    },
+    "r2027-print-applied": {
+      "exit_code": 0,
+      "seconds": 4.08,
+      "log_sha256": "a57f47469db7945468b67eca370d1d749eaef1b7eed301b37c307d60155594df"
+    },
+    "r2027-get-json-applied": {
+      "exit_code": 0,
+      "seconds": 3.69,
+      "log_sha256": "a1d80559fa8e966ac763c959590ff752860230fff7eee5dbffaf6d8c0eb49398"
+    },
+    "r2027-envelope-applied": {
+      "exit_code": 0,
+      "seconds": 13.9,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    },
+    "r2027-undefined-applied": {
+      "exit_code": 0,
+      "seconds": 6.91,
+      "log_sha256": "2b77b24211cb9f496f4b52983d22d82424ea6abf6c1385515336a65ebf433db1"
+    },
+    "r2027-print-candidate": {
+      "exit_code": 0,
+      "seconds": 6.42,
+      "kind": "Ignored candidate substitution, static source/ratchet tests only; tracked source untouched",
+      "log_sha256": "a041854068afaa1edb2a910b68276f672e4dcaa703c9841242fef318ffc8b9a5"
+    },
+    "r2027-confirm-characterization": {
+      "exit_code": 0,
+      "seconds": 7.47,
+      "kind": "Actual unchanged Flask/native body contracts; isolated data adapters, no DB activation proof",
+      "log_sha256": "4a3c7f305df33fcd260686d58c7544a80a1361cfff75d00b0aaa1bf69d789484"
+    },
+    "r2027-confirm-candidate": {
+      "exit_code": 0,
+      "seconds": 7.47,
+      "kind": "Ignored candidate schema/Flask route loaded under canonical module names; actual Flask/native boundary22-case checks; no DB activation proof or tracked-source change",
+      "log_sha256": "becba74e8ea8f5f4eb34f056e1f251ecc477487596b3c3ee2bf9238382d59a46"
+    },
+    "r2027-runtime-log-red": {
+      "exit_code": 1,
+      "seconds": 5.01,
+      "kind": "Candidate test against unchanged current production module; expected missing structured warning",
+      "log_sha256": "d8e0abd12628bbfccce65c82c4ae1451bfa1fda60e74a0e524136c7d00a060e8"
+    },
+    "r2027-workflow-format": {
+      "exit_code": 0,
+      "seconds": 6.63,
+      "log_sha256": "293acdcc103f3ead6367569c6c88fda7457eb543ab00f4876ee84b37937f1d28"
+    }
+  },
+  "classifications": {
+    "full_suite": "Fresh unrestricted tests/ at a71d68a8 passed8357/101 skipped/160 warnings; source fixed throughout, owned DB removed. No integration exclusion or CI deselection. This precedes the current patch.",
+    "print": "Two new runtime diagnostics exceeded per-file limits and now use configured module warnings. Eight operator CLI report files join the existing named stdout/stderr-interface exception set.",
+    "json_reader": "One new direct JSON read exceeded the zero allowance in routes_login. POST-only typed validation and an on_error callback preserve existing password/mismatch messages, exact whitespace, min8 characters, max1024 UTF8 bytes, legacy unknown-field tolerance and read-only GET.",
+    "ci_order": "Same API-envelope/print/JSON guards now run before the long core suite. Seven already repaired known-failure exceptions removed; no new pytest exclusion."
+  },
+  "print_policy_effect": {
+    "new_named_cli_exceptions": [
+      "scripts/audit_emulator_saves.py",
+      "scripts/check_release_license_files.py",
+      "scripts/check_undefined_names.py",
+      "scripts/migrate_emulator_save_keys.py",
+      "scripts/migrate_reusable_secrets.py",
+      "scripts/migrate_store_credentials.py",
+      "scripts/upgrade_test_schema.py",
+      "scripts/validate-native-install.py"
+    ],
+    "ruling": "CLI reports are intentional stdout/stderr interfaces, consistent with the pre-existing operator/capture exception policy. Runtime modules remain scanned. This is an explicit scanner-scope change, not a claimed count reduction for those reports.",
+    "risk": "Future debug prints in the named CLI files are outside this ratchet; functional redaction/bounded-report checks still apply.",
+    "runtime_counts_after_change": {
+      "oneirodex/utils/igdb_api.py": 6,
+      "oneirodex/utils/scanning.py": 62
+    }
+  },
+  "baseline_sha256_lf": {
+    "scripts/api_envelope_lint.baseline.json": "1f29162556ddcb995213a5f4fc6092b76c46cbc848a212005cd6ce456457b8de",
+    "scripts/print_lint.baseline.json": "7047b524a7313034161d0701863d83c505e15fa621970f12db33669080dada06",
+    "scripts/get_json_lint.baseline.json": "6302666018575836c72e6e82311c20c14ca2af81fb9450e05a5b01260a9b78a4"
+  },
+  "baseline_values_changed": false,
+  "current_ci_context": {
+    "prior_source": "fdc2d679",
+    "prior_run": 42897359056,
+    "core_tests": "7712 passed,14 skipped,554 deselected;75% coverage;2318.90 seconds",
+    "workflow": "Failed afterward at print ratchet; subsequent JSON-reader gate was not reached.",
+    "a71d68a8_run": 42904129394,
+    "a71d68a8_result": "Eight non-core jobs passed; core intentionally cancelled after same late ratchet failure was confirmed. No core pass claim for this run.",
+    "desktop_run": 42904129353,
+    "desktop_result": "Success; six builds and native job passed, no installed-app acceptance claim."
+  },
+  "confirmation_contract_limits": [
+    "The22 boundary cases isolate confirmation data adapters; the combined130-case PostgreSQL suite also exercises existing real activation/token-reuse behavior.",
+    "Existing native4096-byte envelope cap, malformed-JSON400 and media-type parser differences remain explicit. No blanket legacy/native parity claim.",
+    "Only the legacy request model/reader is migrated; native confirmation and token/persistence/CSRF transitions are unchanged."
+  ],
+  "rework": [
+    "Initial candidate source-reader wrapper failed11 temp-path tests/7 passed; delegate outside-repo fixture paths, then18 passed.",
+    "Initial body characterization assumed empty detail and matching parser/envelope behavior:18 failed/4 passed. Correct observed contracts, then21 passed/1 surrogate transport encoding failure; escaped fixture transport, then22 passed.",
+    "Candidate22 checks emitted one pre-import pytest assertion-rewrite warning; final combined130 checks passed without warnings.",
+    "New test source formatting is AST-identical to the130-case checked version.",
+    "Fresh whole suite generated two synthetic wanted-update files; preserved privately with verified hashes after terminal completion."
+  ],
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "database": "Owned loopback PostgreSQL17.6; removed after each terminal DB run",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "limits": [
+    "The full-suite result belongs to a71d68a8, before this patch. Focused130 checks cover this patch; fresh current-source full-suite/CI outcomes remain pending.",
+    "R1972 historical route coverage unchanged; original packaged/platform/restore/screen-reader and release gates remain open.",
+    "R2026 clean image build was stopped after1807.08 seconds during prolonged external archive wait. Overlay browser behavior does not establish a clean image rebuild."
+  ],
+  "capture": "N/A: validation/logging/CI changes preserve visible UI; R2026 accepted desktop/account captures remain private.",
+  "final_gates": {
+    "print": {
+      "exit_code": 0,
+      "log_sha256": "a57f47469db7945468b67eca370d1d749eaef1b7eed301b37c307d60155594df"
+    },
+    "get-json": {
+      "exit_code": 0,
+      "log_sha256": "a1d80559fa8e966ac763c959590ff752860230fff7eee5dbffaf6d8c0eb49398"
+    },
+    "envelope": {
+      "exit_code": 0,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    },
+    "bundle": {
+      "exit_code": 0,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    },
+    "coordination": {
+      "exit_code": 0,
+      "log_sha256": "9dd4633df30b8b59f93bcfdca5c8a741c492045dc11d103c3919e53494072463"
+    }
+  }
+}
