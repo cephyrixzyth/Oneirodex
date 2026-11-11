@@ -1,5 +1,7 @@
 # Oneirodex Desktop Companion
 
+> **Doc status:** Active
+
 Cross-platform Tauri client (Windows · macOS · Linux) with **two build flavors** against a Oneirodex server:
 
 | Flavor | Command | What it does |
@@ -62,7 +64,7 @@ For all three platforms in one go, use [`scripts/build-installers.sh`](../../scr
 
 1. Enter your **server base URL** (e.g. `https://oneirodex.example.com`).
 2. Enter a personal **API token** (`gt_<hexprefix>_<urlsafe-secret>`; secret may include `_`/`-`) from **Account → API tokens** (or Admin). Full companion needs the **Desktop companion** preset (`read:library` + **`write:download`**). Thin uses the **Thin client** preset (no download).
-3. Click **Connect** — validates via `GET /api/collections`, then loads a 12-title library preview via search. Click **Open full library** to open the server's `/library` catalog when you need titles outside the preview; the webview uses the site session and receives no companion API token.
+3. Click **Connect** — validates via `GET /api/collections`, then loads a 12-title library preview and verifies launchable local install IDs outside that preview through the details API. The Installed shelf caches those permitted installed titles independently. Click **Open full library** for the wider `/library` catalog; the webview uses the site session and receives no companion API token.
 4. Non-secret settings (base URL) are saved to app data as JSON; the API token goes to the OS credential store:
 
    - Windows: `%APPDATA%\com.oneirodex.desktop\config.json` (base URL only) + Windows Credential Manager (`com.oneirodex.desktop` / `api_token`)
@@ -118,7 +120,11 @@ While connected, the desktop companion POSTs `POST /api/client/heartbeat` every 
 
 The server uses recent heartbeats (5-minute TTL) to set `client_connected: true` on browse/discover/game-details responses so the web UI enables Install/Update/Uninstall actions when the companion is online.
 
-After **two consecutive heartbeat failures**, the UI switches to **Offline**. Its Installed shelf contains only titles that were previously returned for the same verified server account and companion device, and that still have a local install record and launchable lifecycle state. Play and Reveal use local files; Download, Update, mods, and patches require a server connection. **Open full library** hands off to the server's `/library` page and may need a site sign-in. The cache keeps only game UUIDs and names, plus the server/account/device binding and a SHA-256 fingerprint of the credential held in the OS keychain. It does not store the bearer token. The UI explains that server access can change while disconnected and that local file access follows OS permissions. Reconnect to refresh the shelf and current server access. Queued web commands remain pending until the companion is reachable.
+After **two consecutive transport/service failures**, the UI switches to **Offline**. HTTP401/403 instead shows **Server access denied** and retains matching historical local installs. Refused redirects and invalid responses have separate failure states. Recovery revalidates identity and library access before enabling server actions.
+
+The Installed shelf contains previously verified titles for the same server/account/device/credential that still have a local install record and launchable lifecycle state. Verification includes installed IDs outside the preview, with at most four reads in flight and an explicit5,000-title cache capacity.403/404 omit a title on a successful refresh; transport/service/protocol failure preserves the previous cache. Newly committed local installs refresh shelf metadata too, with a warning if the install succeeded but that refresh failed. Concurrent metadata completions cannot overwrite a newer shelf.
+
+Play and Reveal use local files; Download, Update, mods and patches require current server access. **Open full library** uses a separate site sign-in. The cache stores UUIDs/names, identity binding and a SHA-256 credential fingerprint, never the bearer token. **Forget account and cached titles** removes this profile's saved server/token/cache and stops tracking; it preserves installed files, saves, local install records and running games. Partial storage failures are reported. Independent site-window sign-ins and server token revocation are separate. Local file access follows OS permissions; UI restrictions cannot revoke possession of those files.
 
 ## Friends window
 

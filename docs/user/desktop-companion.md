@@ -44,7 +44,9 @@ Signing in on Friends does not replace Connect on the main window, and Connect d
 
 The Installed shelf uses titles previously verified for the same server, account, device and credential. A reachable server rejecting the token is shown as **Server access denied**. Local **Play** and **Show in Explorer** remain available for matching installed titles; downloads, updates, mods and patches require current server access. A refused API redirect or unexpected server response has its own error and does not imply an outage or prove token revocation.
 
-On recovery, the companion refreshes account identity and the permitted library preview before enabling server actions. A changed account identity clears the old catalog and requires Connect again. The current cache comes from the library preview; it is not a complete inventory of every installed title.
+On recovery, the companion refreshes account identity and the permitted library preview before enabling server actions. It also checks launchable local install IDs outside that preview through the game-details API, with at most four reads in flight. The Installed shelf caches those permitted installed titles independently of the twelve-title preview; **Open full library** remains the path to the wider catalog. Denied or missing titles are omitted from a successful refresh. A changed account identity clears the old catalog and requires Connect again.
+
+The cache supports up to 5,000 installed titles. An over-capacity inventory or failed verification is reported explicitly and preserves the previous cache; it is not reported as a complete refresh. Newly completed local installs refresh their shelf metadata too. If that refresh fails, the local install remains successful and the companion reports that offline metadata is stale. Games and saves are not deleted by these metadata checks.
 
 To switch accounts, enter the server and token and select **Connect**. The old catalog is hidden during validation. Only a successful verified connection replaces the saved profile; a failed attempt does not save the new credentials. Finish or cancel active local operations before switching or forgetting the account.
 

@@ -1,0 +1,113 @@
+{
+  "review_id": "R2029",
+  "doc_status": "Reference",
+  "title": "Installed inventory independent of the twelve-title preview",
+  "source_head_before_change": "38b1f616c31c8225eeb3929d7b862fb18261648e",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "clients/desktop/src/app.ts": "3d1d32af0385695213157275147bbe609c2f74bee8d25a7f793a5f18d610b43e",
+    "clients/desktop/src/app-access-boundary.test.ts": "0eee96118ca80a9ab551f2938270cb57a95e71e7523ef9bf7f2c824c8570eb4e",
+    "clients/desktop/src/installed-shelf.ts": "f0c6cff0fdb3c58079b74535d294e0b7fda1c28fd45d047d73fd4b5d2366d4b0",
+    "clients/desktop/src/installed-shelf.test.ts": "5c66ea02e94c9486e5698bec1a58a07ad4f7d61e63895b7fc231b5d90d59eac6",
+    "clients/desktop/src/offline-shelf.ts": "9e6af1b431fc77940b774d035bddb0f5e59f01bb689d1fc685cced43e7531677"
+  },
+  "original_requirements": ["DT-002", "DT-007", "P3-08", "P3-09"],
+  "confirmed": "The actual mounted companion omitted a permitted local install outside the first twelve search results and omitted newly installed command targets from its offline cache.",
+  "correction": [
+    "Verify launchable local install IDs missing from the preview through the existing scoped game-details API; persist installed metadata independently of the preview.",
+    "Allow at most four metadata reads in flight.403/404 omit the individual title; transport/service/protocol failure aborts the refresh without publishing partial cached success.",
+    "Validate the returned UUID and bounded title name. Preserve the existing5,000-title cache capacity and report overflow before making requests or publishing truncated success.",
+    "Refresh metadata after a committed local operation. Metadata failure leaves the native operation successful, acknowledges its completed command and preserves the old cache with a warning.",
+    "Fence metadata publication by both connection epoch and catalog revision. Late completions cannot overwrite a newer shelf from another account or another committed install.",
+    "Retain the twelve-title remote preview and explicit full-library handoff; do not duplicate the full web catalog or remove local files."
+  ],
+  "checks": {
+    "r2029-desktop-final": {
+      "exit_code": 0,
+      "seconds": 19.36,
+      "log_sha256": "56174b4c07af179a02ab6cde5c2aec7fb14a3ebc8f8d1847f4385af26655a837",
+      "passed": 328,
+      "files": 44
+    },
+    "r2029-api-source": {
+      "exit_code": 0,
+      "seconds": 5.95,
+      "log_sha256": "ac5df4b9dce627bcd288f4bd20969a00549dd8aa11d16f68d5cffc12e226ae6f",
+      "passed": 55,
+      "files": 14,
+      "selection": "Unique source tests only"
+    },
+    "r2029-types": {
+      "exit_code": 0,
+      "seconds": 3.22,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r2029-eslint": {
+      "exit_code": 0,
+      "seconds": 6.8,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r2029-css": {
+      "exit_code": 0,
+      "seconds": 0.52,
+      "log_sha256": "0dcefb129c2ff420e04f891e5d49207e3ad44e69e2417e4ff65cf21dd36dd399"
+    },
+    "r2029-full-build": {
+      "exit_code": 0,
+      "seconds": 2.16,
+      "log_sha256": "2736fedf134f32f993a99f29db2d3f6320f69da42839f8f19cad2e5141346358"
+    },
+    "r2029-thin-build": {
+      "exit_code": 0,
+      "seconds": 2.16,
+      "log_sha256": "bab9598c96b794c1a659a3053ff9bd487d7a3fc941e9b5720d1d9ddad9a7a3de"
+    },
+    "r2029-bundle": {
+      "exit_code": 0,
+      "seconds": 1.75,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    }
+  },
+  "red_green": [
+    {
+      "case": "Mounted app thirteen-title preview boundary",
+      "red_failed": 1,
+      "red_passed": 11,
+      "green": "Included in final328"
+    },
+    {
+      "case": "Committed queued install/cache failure and malformed preview metadata",
+      "red_failed": 3,
+      "red_passed": 19,
+      "green": "Included in final328"
+    },
+    {
+      "case": "Concurrent actual app installation-state transitions with delayed older metadata",
+      "red_failed": 1,
+      "red_passed": 14,
+      "green": "Included in final328"
+    }
+  ],
+  "coverage": "Actual mountApp, SDK requests and JavaScript install/lifecycle/store logic. Only native invoke/event I/O and HTTP responses are controlled. Helper cases cover13 installed titles, maximum4 requests, denial/missing/pending/nonlaunchable exclusions, malformed data, transport/service failure,5,001-title refusal and superseded connection scheduling.",
+  "prior_source_desktop_ci": {
+    "source": "38b1f616c31c8225eeb3929d7b862fb18261648e",
+    "run": 42948786377,
+    "conclusion": "success",
+    "scope": "Native checks and all six unsigned full/thin platform builds; release attachment skipped. Precedes this slice."
+  },
+  "rework": [
+    "Initial inventory candidate had18 pass/1 failure because the recovery fixture lacked the new details request for a title whose ACL changed. Added explicit403 response; preserved its denial assertions.",
+    "A fixture patch context did not match and made no changes; corrected the exact context before rerunning.",
+    "The new concurrent-install case exposed an older metadata write replacing a newer cache; added a separate catalog revision fence, then the final suite passed.",
+    "Build output paths use a new review-specific directory so earlier native/frontend artifacts are preserved. Existing Vite output-directory/static-dynamic import warnings remain; both builds completed."
+  ],
+  "limits": [
+    "No native window interaction performed for this source; further focus-taking testing deferred while the owner uses the computer.",
+    "Controlled native I/O does not prove actual extraction, OS credential persistence, file launch/reveal, process exit/restart, native account switching or installed upgrade/rollback.",
+    "The prior source had two unsigned debug review builds. Its first absolute Windows asset override opened a directory listing; that window was closed and the override corrected. The corrected variant was not launched; no native journey acceptance is inferred.",
+    "Current-source clean image build, full route-family behavior, assistive technology/headset, platform and deployment acceptance remain open.",
+    "Cache identity verifies historical metadata access; local files remain controlled by OS permissions. No encryption or remote file revocation is claimed.",
+    "R1972 remains0 fully verified/10 partial/1535 unverified shared pairs and2 partial/158 unverified current-only operations. No route coverage promotion, merge, release or deployment performed."
+  ],
+  "capture": "Needed for native companion journeys; deferred. No member/admin UI changed."
+}

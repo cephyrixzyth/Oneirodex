@@ -10,6 +10,7 @@ import { escapeHtml } from './html.js'
 import { kickoffDownload, pickDownloadVersion } from './download.js'
 import { cancelInstallArchive, kickoffInstall } from './install.js'
 import { loadInstallsFromDisk } from './install-store.js'
+import { readInstalledShelf } from './installed-shelf.js'
 import { canLaunchGame, kickoffLaunch, stopAllLaunchWatchers } from './launch.js'
 import { kickoffUninstall, kickoffUpdate } from './uninstall.js'
 import { kickoffApplyPatch, stagePatchFile } from './apply_patch.js'
@@ -83,6 +84,8 @@ let lifecycle: LifecycleRegistry | null = null
 let sessionActive = false
 let connectionMode: ConnectionMode = 'disconnected'
 let libraryGames: SearchResultItem[] = []
+let libraryPreviewGames: SearchResultItem[] = []
+let catalogRevision = 0
 let verifiedAccountId = ''
 let localInstalls: Record<
   string,
@@ -370,6 +373,7 @@ function displayConnectionFailure(error: unknown, message = formatDesktopApiErro
     heartbeatScheduler?.stop()
     heartbeatScheduler = null
     libraryGames = []
+    libraryPreviewGames = []
     verifiedAccountId = ''
     try {
       clearOfflineInstalledShelf()
@@ -393,6 +397,8 @@ async function refreshAccount(
   current: () => boolean,
   expectedAccountId: string,
 ): Promise<string | null> {
+  const revision = ++catalogRevision
+  const latest = () => current() && revision === catalogRevision
   const api = createDesktopApi(connectionAuth)
   const identity = await api.device.identity()
   if (!identity || typeof identity.account_id !== 'string' || !identity.account_id)
@@ -401,11 +407,18 @@ async function refreshAccount(
     throw new AccountIdentityChangedError()
   const games = await fetchLibraryPreview(api, 12, true)
   const installs = await loadInstallsFromDisk()
+  const installed = await readInstalledShelf(
+    api,
+    installs,
+    (uuid) => Boolean(lifecycle && canLaunchGame(lifecycle.get(uuid))),
+    games,
+    latest,
+  )
   const mods = await fetchModsSummaryGameUuids(connectionAuth).catch(() => ({
     gameUuids: new Set<string>(),
     trackingEnabled: false,
   }))
-  if (!current()) return null
+  if (!latest()) return null
   let warning: string | null = null
   try {
     await saveOfflineInstalledShelf(
@@ -415,16 +428,17 @@ async function refreshAccount(
         deviceId: getOrCreateDeviceId(),
         token: connectionAuth.getToken()!,
       },
-      games,
+      installed,
       localStorage,
-      current,
+      latest,
     )
   } catch {
     warning = 'Connected, but the offline Installed shelf could not be saved on this device.'
   }
-  if (!current()) return null
+  if (!latest()) return null
   verifiedAccountId = identity.account_id
-  libraryGames = games
+  libraryPreviewGames = games
+  libraryGames = [...new Map([...games, ...installed].map((game) => [game.uuid, game])).values()]
   localInstalls = installs
   gamesWithEnabledMods = mods.gameUuids
   modsTrackingEnabled = mods.trackingEnabled
@@ -448,6 +462,7 @@ async function handleConnect(): Promise<void> {
   heartbeatScheduler = null
   sessionActive = false
   libraryGames = []
+  libraryPreviewGames = []
   localInstalls = {}
   verifiedAccountId = ''
   lastPlayedGameUuid = null
@@ -608,6 +623,7 @@ async function forgetAccount(): Promise<void> {
   sessionActive = false
   verifiedAccountId = ''
   libraryGames = []
+  libraryPreviewGames = []
   localInstalls = {}
   gamesWithEnabledMods = new Set()
   gameActivity.clear()
@@ -929,15 +945,56 @@ async function runGameAction(
   } finally {
     busyGames.delete(uuid)
     archiveInstallOperations.delete(uuid)
+    let latestInstalls: Awaited<ReturnType<typeof loadInstallsFromDisk>> | null = null
     try {
-      localInstalls = await loadInstallsFromDisk()
+      latestInstalls = await loadInstallsFromDisk()
     } catch {
       // Keep the last known local install index; failed reads do not promote titles.
     }
-    if (outcome === 'ok') {
+    if (operationEpoch === connectionEpoch && latestInstalls) localInstalls = latestInstalls
+    if (operationEpoch === connectionEpoch && outcome === 'ok') {
       setGameActivity(uuid, '')
     }
-    if (operationEpoch === connectionEpoch && connectionMode === 'online') {
+    const current = () => operationEpoch === connectionEpoch && connectionMode === 'online'
+    if (current() && outcome === 'ok' && latestInstalls) {
+      const revision = ++catalogRevision
+      const metadataCurrent = () => current() && revision === catalogRevision
+      try {
+        const installed = await readInstalledShelf(
+          api,
+          latestInstalls,
+          (id) => canLaunchGame(registry.get(id)),
+          libraryPreviewGames,
+          metadataCurrent,
+        )
+        if (metadataCurrent()) {
+          await saveOfflineInstalledShelf(
+            {
+              serverUrl: operationAuth.getBaseUrl(),
+              accountId: verifiedAccountId,
+              deviceId: getOrCreateDeviceId(),
+              token: operationAuth.getToken()!,
+            },
+            installed,
+            localStorage,
+            metadataCurrent,
+          )
+        }
+        if (metadataCurrent())
+          libraryGames = [
+            ...new Map(
+              [...libraryPreviewGames, ...installed].map((game) => [game.uuid, game]),
+            ).values(),
+          ]
+      } catch {
+        if (metadataCurrent())
+          setStatus(
+            `${action === 'install' ? 'Installed locally' : 'Local operation completed'}; offline shelf refresh unavailable. Previous cached titles are preserved. Reconnect to refresh.`,
+            'info',
+          )
+      }
+    }
+    if (current()) {
       await syncLifecycleRegistryToServer(
         operationAuth,
         registry
@@ -945,7 +1002,7 @@ async function runGameAction(
           .filter((row) => libraryGames.some((game) => game.uuid === row.gameUuid)),
       )
     }
-    renderLibrary()
+    if (operationEpoch === connectionEpoch) renderLibrary()
   }
   return outcome
 }
@@ -1112,7 +1169,7 @@ export async function mountApp(root: HTMLElement): Promise<void> {
         <p id="trusted-shares-status" class="status" data-tone="info" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>
       <section class="panel">
-        <h2>Library preview</h2>
+        <h2>Installed games · Library preview</h2>
         <div id="library"></div>
       </section>
       <section class="panel">

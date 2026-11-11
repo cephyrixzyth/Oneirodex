@@ -1,7 +1,7 @@
 import type { SearchResultItem } from '@oneirodex/api-client'
 
 const STORAGE_KEY = 'oneirodex-offline-installed-shelf-v1'
-const MAX_GAMES = 5_000
+export const MAX_OFFLINE_SHELF_GAMES = 5_000
 
 export interface OfflineShelfIdentity {
   serverUrl: string
@@ -42,7 +42,7 @@ function normalizeGames(games: SearchResultItem[]): OfflineShelfGame[] {
       continue
     }
     unique.set(uuid, { uuid, name })
-    if (unique.size >= MAX_GAMES) break
+    if (unique.size >= MAX_OFFLINE_SHELF_GAMES) break
   }
   return [...unique.values()]
 }

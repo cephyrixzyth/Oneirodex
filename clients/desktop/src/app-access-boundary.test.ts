@@ -7,6 +7,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: native.invoke,
   convertFileSrc: (value: string) => value,
 }))
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => undefined }))
 const server = 'https://a.example'
 const token = 'gt_abcdef01_fixtureA'
 let root: HTMLElement
@@ -85,6 +86,160 @@ afterEach(() => {
 })
 
 describe('actual companion connection orchestration', () => {
+  it.each(['success', 'metadata-unavailable', 'concurrent'])(
+    'refreshes a newly committed installed command outside preview: %s',
+    async (outcome) => {
+      const gameId = '11111111-2222-4333-8444-555555555555'
+      const secondId = '22222222-3333-4444-8555-666666666666'
+      let resolveOldDetails!: (value: Response) => void
+      let detailsRequests = 0
+      let installs = {
+        installs: {
+          'game-a': {
+            archive_path: 'C:/fixture/a.zip',
+            extract_path: 'C:/fixture/a',
+            exe_path: 'C:/fixture/a/game.exe',
+          },
+          [gameId]: {
+            archive_path: 'C:/fixture/new.zip',
+            extract_path: 'C:/fixture/new',
+            exe_path: null as string | null,
+          },
+          [secondId]: {
+            archive_path: 'C:/fixture/second.zip',
+            extract_path: 'C:/fixture/second',
+            exe_path: null as string | null,
+          },
+        },
+      }
+      const previous = native.invoke.getMockImplementation()!
+      native.invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+        if (command === 'load_installs') return structuredClone(installs)
+        if (command === 'save_installs') {
+          installs = structuredClone(args!.installsFile) as typeof installs
+          return
+        }
+        if (command === 'load_lifecycle_registry')
+          return {
+            records: [
+              { game_uuid: 'game-a', state: 'installed' },
+              { game_uuid: gameId, state: 'downloaded' },
+              { game_uuid: secondId, state: 'downloaded' },
+            ],
+          }
+        if (command === 'extract_zip_archive')
+          return { extract_path: args!.destDir, exe_path: `${args!.destDir}/game.exe` }
+        return previous(command, args)
+      })
+      vi.resetModules()
+      const { mountApp } = await import('./app.js')
+      await mountApp(root)
+      const paths: string[] = []
+      vi.stubGlobal('fetch', async (url: string) => {
+        const path = new URL(String(url)).pathname
+        paths.push(path)
+        if (path === '/api/collections') return Response.json([])
+        if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
+        if (path === '/api/search')
+          return Response.json({
+            results: [
+              { uuid: 'game-a', name: 'Private A Title' },
+              ...(outcome === 'concurrent'
+                ? [{ uuid: secondId, name: 'Second Installed Title' }]
+                : []),
+            ],
+          })
+        if (path === `/api/games/${gameId}/details`) {
+          detailsRequests += 1
+          if (outcome === 'concurrent' && detailsRequests === 1)
+            return new Promise<Response>((resolve) => {
+              resolveOldDetails = resolve
+            })
+          return outcome !== 'metadata-unavailable'
+            ? Response.json({ uuid: gameId, name: 'Newly Installed Outside Preview' })
+            : Response.json({ error: 'Unavailable' }, { status: 503 })
+        }
+        if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+        if (path === '/api/client/lifecycle') return Response.json({ records: [] })
+        if (path === '/api/client/heartbeat')
+          return Response.json({
+            commands: [{ id: 'install-outside-preview', game_uuid: gameId, action: 'install' }],
+          })
+        if (path === '/api/client/commands/ack') return Response.json({})
+        throw new Error(`Unexpected request: ${path}`)
+      })
+      submit()
+      await settled()
+      if (outcome === 'concurrent') {
+        await vi.waitFor(() => expect(resolveOldDetails).toBeTypeOf('function'))
+        root
+          .querySelector<HTMLButtonElement>(`[data-action="install"][data-uuid="${secondId}"]`)!
+          .click()
+        await vi.waitFor(() =>
+          expect(
+            JSON.parse(localStorage.getItem('oneirodex-offline-installed-shelf-v1')!).games,
+          ).toContainEqual({ uuid: secondId, name: 'Second Installed Title' }),
+        )
+        resolveOldDetails(Response.json({ uuid: gameId, name: 'Newly Installed Outside Preview' }))
+        await vi.waitFor(() => expect(paths).toContain('/api/client/commands/ack'))
+        expect(
+          JSON.parse(localStorage.getItem('oneirodex-offline-installed-shelf-v1')!).games,
+        ).toContainEqual({ uuid: secondId, name: 'Second Installed Title' })
+        return
+      }
+      await vi.waitFor(() => expect(paths).toContain('/api/client/commands/ack'))
+      expect(installs.installs[gameId].exe_path).toBe('C:/fixture/new/game.exe')
+      if (outcome === 'success') {
+        expect(root.textContent).toContain('Newly Installed Outside Preview')
+        const saved = JSON.parse(localStorage.getItem('oneirodex-offline-installed-shelf-v1')!)
+        expect(saved.games).toContainEqual({
+          uuid: gameId,
+          name: 'Newly Installed Outside Preview',
+        })
+      } else {
+        expect(field('#status').textContent).toMatch(/installed locally.*refresh/i)
+        expect(
+          JSON.parse(localStorage.getItem('oneirodex-offline-installed-shelf-v1')!).games,
+        ).toEqual([{ uuid: 'game-a', name: 'Private A Title' }])
+      }
+    },
+  )
+
+  it('includes an authorized local install beyond the twelve-title preview in the saved shelf', async () => {
+    const paths: string[] = []
+    const preview = Array.from({ length: 12 }, (_, index) => ({
+      uuid: `preview-${index}`,
+      name: `Preview ${index}`,
+    }))
+    vi.stubGlobal('fetch', async (url: string) => {
+      const path = new URL(String(url)).pathname
+      paths.push(path)
+      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
+      if (path === '/api/search')
+        return Response.json({ results: [...preview, { uuid: 'game-a', name: 'Private A Title' }] })
+      if (path === '/api/games/game-a/details')
+        return Response.json({ uuid: 'game-a', name: 'Private A Title' })
+      if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+      if (path === '/api/client/lifecycle') return Response.json({ records: [] })
+      if (path === '/api/client/heartbeat') return Response.json({ commands: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    submit()
+    await settled()
+    expect(root.querySelector('[data-game-uuid="game-a"]')).not.toBeNull()
+    expect(paths).toContain('/api/games/game-a/details')
+    const { loadOfflineInstalledShelf } = await import('./offline-shelf.js')
+    expect(
+      await loadOfflineInstalledShelf({
+        serverUrl: server,
+        accountId: 'account-a',
+        deviceId: 'device-review',
+        token,
+      }),
+    ).toMatchObject({ games: [{ uuid: 'game-a', name: 'Private A Title' }] })
+  })
+
   it('keeps Connect usable when a new invalid attempt supersedes a pending request', async () => {
     let finish!: (value: Response) => void
     vi.stubGlobal(
@@ -280,6 +435,8 @@ describe('actual companion connection orchestration', () => {
                     ? [{ uuid: 'game-b', name: 'Current Allowed Title' }]
                     : [{ uuid: 'game-a', name: 'Private A Title' }],
               })
+        if (path === '/api/games/game-a/details')
+          return Response.json({ error: 'Library access removed' }, { status: 403 })
         if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
         if (path === '/api/client/lifecycle') return Response.json({ records: [] })
         throw new Error(`Unexpected request: ${path}`)
