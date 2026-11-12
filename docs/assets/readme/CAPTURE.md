@@ -2,6 +2,11 @@
 
 > **Doc status:** Active
 
+**R2040 type correction:** All 65 member production output files match the
+inspected R2038 build byte-for-byte. No UI behavior or layout changed; existing
+populated captures remain applicable. A new screenshot/browser run is skipped
+for this type-only correction. See [R2040](../../dev/parity-evidence/bootstrap-full-types-r2040.json).
+
 **Focused first-load identity QA:** R2038 uses populated isolated native staging with fingerprinted current Python and all five rebuilt SPA overlays. Actual adult HTML entry is delayed across UI logout and verified child login, then rejected by the live-account check with focused sign-in recovery. Fresh full navigation renders the child account correctly. Both recovery and populated fresh-child captures were inspected; private hashes are in [R2038](../../dev/parity-evidence/browser-bootstrap-identity-r2038.json). Owned resources were removed and absence verified. This recovery/bootstrap-only change leaves the Library, Systems and Chat README slots current. Other engines, classic pages and whole journey acceptance remain open.
 
 **Focused session-boundary QA:** R2037 uses rebuilt five-SPA assets in populated isolated native staging and headless Chromium. The delayed adult response stays absent after actual UI logout/visible child login; the old member view and populated native admin/Ops views show focused sign-in recovery. Member recovery, populated admin and Ops recovery captures were inspected. Private hashes are in [R2037](../../dev/parity-evidence/browser-session-boundary-r2037.json); the aggregate first runner's later incorrect-admin-URL failure is retained separately. This recovery-only change leaves the Library, Systems and Chat README slots current; screenshots remain private. Other engines, classic pages and full journey acceptance remain open.

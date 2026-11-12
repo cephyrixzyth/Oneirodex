@@ -63,6 +63,15 @@ also keeps the legacy key needed to read existing `GTENC1` saves.
 Restore matching key IDs from the protected backup before restoring encrypted
 saves. Do not rotate `SECRET_KEY` as a substitute for save-key rotation.
 
+Stop save writers before inventorying or applying a save-key migration. The
+command preserves shared current/history files until their last reference moves,
+refreshes metadata under the save owner lock and retains ciphertext when commit
+or cleanup safety is uncertain. Report-only mode does not modify saves or acquire
+write row locks. Follow the save-key rotation procedure in the
+[Compose guide](docker-compose-deploy.md) and retain the protected old keys.
+[R2039](../dev/parity-evidence/save-rotation-safety-r2039.json) records bounded
+synthetic recovery checks; actual operator backup acceptance remains separate.
+
 After updating the schema with the new release, stop every old app writer and
 take a protected database backup before running both
 `python scripts/migrate_reusable_secrets.py` and

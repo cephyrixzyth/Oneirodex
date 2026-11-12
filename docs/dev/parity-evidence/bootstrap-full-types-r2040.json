@@ -1,0 +1,134 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2040",
+  "finding": "FE-007",
+  "classification": "Confirmed R2038 CI type regression corrected and locally verified. Whole finding/program acceptance remains open.",
+  "source_base": "01d3f463d69823c63c965ed0f5b657ba01d967f3",
+  "candidate_sha256": {
+    "frontend/member-app/src/VerifiedMemberBootstrap.tsx": "8e266b87c54e9724f2190d9ac90723d9f6b9e7baca7562874e755d9aef6c3a28",
+    "frontend/member-app/src/memberBootstrap.test.tsx": "ff4cf1680b143ddd48bd2f77c274bf9c4f0c679320c4f851b0dbc2e93e29c972"
+  },
+  "cause": "Local R2038 production-build configs omitted CI full member tsconfig.json with Node/test ambient types. This is recorded verification rework.",
+  "red": {
+    "full_member_types_failed": 2,
+    "runner_seconds": 17.33,
+    "errors": [
+      "TS2322 browser numeric timeout versus Node Timeout",
+      "TS2769 unsupported exact option in role query"
+    ]
+  },
+  "correction": [
+    "Use numeric browser timeout handle.",
+    "Use supported anchored exact-name regex in role query.",
+    "Include full member tsconfig.json in local gates."
+  ],
+  "green": {
+    "full_member_types_runner_seconds": 13.02,
+    "member_passed": 1266,
+    "member_runner_seconds": 221.72,
+    "member_source_fixed": true,
+    "member_private_build_runner_seconds": 8.49,
+    "compiled_files": 65,
+    "compiled_output_byte_identical_to_r2038": true
+  },
+  "previous_exact_head_qualification": {
+    "source_head": "01d3f463d69823c63c965ed0f5b657ba01d967f3",
+    "unrestricted_python": {
+      "passed": 8513,
+      "skipped": 101,
+      "warnings": 160,
+      "pytest_seconds": 2266.15,
+      "runner_seconds": 2291.98,
+      "source_fixed": true,
+      "owned_db_absence_verified": true,
+      "generated_files_hash_preserved": true,
+      "private_archive_sha256": "ae452b7f718f2a73ac4eb05f399b32b62451058b3e21f6a96ef22845a26e7c69"
+    },
+    "ci": {
+      "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43135816065",
+      "conclusion": "failure",
+      "member_failed_at_full_type_step": true,
+      "other_jobs_passed": 8,
+      "python_core": {
+        "passed": 7876,
+        "skipped": 14,
+        "deselected": 548,
+        "warnings": 156,
+        "pytest_seconds": 2371.8
+      }
+    },
+    "desktop": {
+      "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43135816044",
+      "conclusion": "success",
+      "active_jobs_passed": 7,
+      "release_attachment_skipped": true
+    }
+  },
+  "ratchets": {
+    "results": [
+      {
+        "check": "eslint",
+        "exit_code": 0
+      },
+      {
+        "check": "format",
+        "exit_code": 0
+      },
+      {
+        "check": "css-token-lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "any_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "component_size_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "od_btn_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "api_envelope_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "check_undefined_names.py",
+        "exit_code": 0
+      },
+      {
+        "check": "print_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "get_json_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "R1972-validator",
+        "exit_code": 0
+      },
+      {
+        "check": "diff-check",
+        "exit_code": 0
+      }
+    ],
+    "seconds": 52.65,
+    "passed": true,
+    "dotenv_disabled": true
+  },
+  "private_archive": {
+    "filename": "bootstrap-full-types-r2040.zip",
+    "files": 19,
+    "bytes": 104460,
+    "sha256": "715c2057b443085f60260e6a052fe05e902c9740fa750e40071a002ae26a4733"
+  },
+  "capture": "No new UI screenshot: all65 member production outputs are byte-identical to the existing inspected populated R2038 capture. Browser journey not rerun or relabeled.",
+  "limits": [
+    "Previous unrestricted pass qualifies the named committed Python baseline, not the later R2039 migration candidate.",
+    "No full post-correction CI claim until new exact-head runs complete.",
+    "R2038 classic/server-only/frozen/offline/engine/platform and final independent acceptance gaps remain. No route-parity, release or model-winner inference."
+  ]
+}

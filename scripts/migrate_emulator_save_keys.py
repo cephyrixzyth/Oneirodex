@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from oneirodex.models import EmulatorSave, EmulatorSaveGeneration
+from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, User
 from oneirodex.utils.save_crypto import BOUND_MAGIC, _encrypt_with_keyring, context_for_row, maybe_decrypt, save_context
 from oneirodex.utils.save_keyring import load_save_keyring
 from scripts.migrate_store_credentials import resolve_database_url
@@ -136,6 +136,23 @@ def _stage(path: Path, payload: bytes, generation_id: str) -> Path:
         raise
 
 
+def _reference_key(raw_path: str) -> str:
+    # Resolve aliases even when the last component is missing. A symlink row
+    # cannot be migrated, but must still protect the file it references.
+    return os.path.normcase(str(Path(raw_path).resolve()))
+
+
+def _unreferenced(session: Session, aliases: set[str]) -> bool:
+    paths = sorted(aliases)
+    for offset in range(0, len(paths), 450):
+        for model in (EmulatorSave, EmulatorSaveGeneration):
+            if session.scalar(select(model.id).where(
+                model.storage_path.in_(paths[offset:offset + 450]),
+            ).limit(1)) is not None:
+                return False
+    return True
+
+
 def migrate_rows(session: Session, root: Path, *, apply: bool) -> dict[str, int]:
     keyring = load_save_keyring()
     counts = {"visited": 0, "already_active": 0, "rotated": 0, "skipped": 0, "failures": 0}
@@ -143,21 +160,57 @@ def migrate_rows(session: Session, root: Path, *, apply: bool) -> dict[str, int]
         *(session.execute(select(EmulatorSave)).scalars().all()),
         *(session.execute(select(EmulatorSaveGeneration)).scalars().all()),
     ]
-    for row in rows:
+    identities = [(type(row), row.id) for row in rows]
+    aliases: dict[str, set[str]] = {}
+    references_known = True
+    if apply:
+        for row in rows:
+            try:
+                aliases.setdefault(_reference_key(row.storage_path), set()).add(row.storage_path)
+            except (OSError, ValueError, RuntimeError, TypeError):
+                references_known = False
+    for model, row_id in identities:
         counts["visited"] += 1
-        if not row.encrypted:
-            counts["skipped"] += 1
-            continue
-        old_path = _safe_path(row.storage_path, root)
-        if old_path is None:
-            counts["failures"] += 1
-            continue
         try:
-            stored = old_path.read_bytes()
+            if apply:
+                owner_query = select(EmulatorSave.user_id)
+                if model is EmulatorSave:
+                    owner_query = owner_query.where(EmulatorSave.id == row_id)
+                else:
+                    owner_query = owner_query.join(EmulatorSaveGeneration).where(
+                        EmulatorSaveGeneration.id == row_id,
+                    )
+                owner_id = session.scalar(owner_query)
+                if owner_id is None:
+                    counts["skipped"] += 1
+                    continue
+                # Match store_save/delete_save, then discard any ORM snapshot
+                # read before the writer committed while we waited.
+                if session.scalar(select(User.id).where(User.id == owner_id).with_for_update()) is None:
+                    counts["skipped"] += 1
+                    continue
+            row = session.get(model, row_id, populate_existing=apply)
+            if row is None:
+                counts["skipped"] += 1
+                continue
             owner = row if isinstance(row, EmulatorSave) else session.get(EmulatorSave, row.save_id)
+            if apply and owner is not None and owner is not row:
+                session.refresh(owner)
             if owner is None:
                 counts["failures"] += 1
                 continue
+            if apply and owner.user_id != owner_id:
+                raise ValueError("Save ownership changed during rotation")
+            if not row.encrypted:
+                counts["skipped"] += 1
+                continue
+            old_path = _safe_path(row.storage_path, root)
+            if old_path is None:
+                counts["failures"] += 1
+                continue
+            if apply:
+                aliases.setdefault(_reference_key(row.storage_path), set()).add(row.storage_path)
+            stored = old_path.read_bytes()
             context = context_for_row(row, owner=owner)
             if stored.startswith(BOUND_MAGIC):
                 header = stored[len(BOUND_MAGIC):].partition(b":")[0].decode("ascii")
@@ -185,14 +238,24 @@ def migrate_rows(session: Session, root: Path, *, apply: bool) -> dict[str, int]
                 # Commit outcome can be ambiguous; keep both immutable files.
                 raise
             try:
-                old_path.unlink()
-            except OSError:
-                # Stale ciphertext is safe and can be inventoried separately.
+                # The initial alias inventory includes both tables. Fresh SQL
+                # also sees history inserted by the serialized production writer.
+                # Writers must still be stopped for operator migration; arbitrary
+                # concurrent imports or manual path edits are not supported.
+                candidates = aliases.get(_reference_key(str(old_path)))
+                if references_known and candidates and _unreferenced(session, candidates):
+                    old_path.unlink()
+            except Exception:  # uncertain references must preserve ciphertext
                 pass
             counts["rotated"] += 1
         except Exception:  # noqa: BLE001 - report only counts, never DB/path details
             session.rollback()
             counts["failures"] += 1
+        finally:
+            if apply:
+                # Includes skipped/active/missing rows and the reference query's
+                # post-commit read transaction. Never leave an owner lock behind.
+                session.rollback()
     return counts
 
 

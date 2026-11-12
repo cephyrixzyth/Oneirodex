@@ -198,12 +198,22 @@ To rotate keys, prepare a second file with
 Preserve both protected rings, point the app at the new one, stop save writers,
 then run `python scripts/migrate_emulator_save_keys.py --migrate --root <save-root>`
 for a report-only inventory. Repeat with `--apply` to re-encrypt current and
-retained generations. The migration changes ciphertext paths only after the
-database commit; it keeps each save generation and never schedules history
-garbage collection. Retain old key IDs for encrypted backups that still need
-them. The command does not contact providers or load `.env`; set `DATABASE_URL`
+retained generations. The migration stages a new immutable file, then commits
+its metadata path. It removes the old file only after checking that no current
+or retained generation still references it, including normalized path aliases.
+Uncertain references or an ambiguous commit preserve ciphertext for recovery.
+Applied migration uses the same owner lock as save writes and refreshes metadata
+after waiting; this defensive protection does not replace stopping all writers.
+The report-only command remains read-only. It keeps each save generation and
+never schedules history garbage collection. Retain old key IDs for encrypted
+backups that still need them. The command does not contact providers or load
+`.env`; set `DATABASE_URL`
 for an external database or use the embedded database environment described
 by the script.
+
+[R2039 evidence](../dev/parity-evidence/save-rotation-safety-r2039.json) covers
+synthetic shared-path, writer-overlap and abrupt process-exit recovery checks.
+It does not qualify your operator backup media or a fully online migration.
 
 #### Convert existing credentials after upgrading
 

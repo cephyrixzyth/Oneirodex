@@ -181,10 +181,7 @@ test('hung identity verification offers fresh sign-in after its bound', async ()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000)
     })
-    expect(screen.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute(
-      'href',
-      '/login',
-    )
+    expect(screen.getByRole('link', { name: /^Sign in$/ })).toHaveAttribute('href', '/login')
   } finally {
     vi.useRealTimers()
   }

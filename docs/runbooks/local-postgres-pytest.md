@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-The R2038 fixture follow-up preserves client disposal for every real app, including exceptional teardown and retained tracebacks. Configuration-only database-guard probes inject `db=None` and have no clients to dispose. Those stubs skip resource cleanup; URL validation and real database teardown stay enforced. The previous full/CI baselines each exposed three stub-close failures; 29 focused guard/resource checks now pass. This does not establish a fresh full-suite pass. See [R2038 evidence](../dev/parity-evidence/browser-bootstrap-identity-r2038.json).
+The R2038 fixture follow-up preserves client disposal for every real app, including exceptional teardown and retained tracebacks. Configuration-only database-guard probes inject `db=None` and have no clients to dispose. Those stubs skip resource cleanup; URL validation and real database teardown stay enforced. The previous full/CI baselines each exposed three stub-close failures; 29 focused guard/resource checks now pass. The subsequent fixed `01d3f463` baseline finished **8,513 passed, 101 skipped**, with source and owned-database absence verified; its CI core finished **7,876 passed, 14 skipped, 548 deselected**. Overall CI failed the separate member TypeScript step. [R2040 evidence](../dev/parity-evidence/bootstrap-full-types-r2040.json) preserves these exact-source results and the focused type correction. The full Python baseline does not qualify later migration edits.
 
 Native Windows, with Docker Desktop running.
 

@@ -19,7 +19,7 @@ export function VerifiedMemberBootstrap({
   useEffect(() => {
     const controller = new AbortController()
     const { signal } = controller
-    let timeout: ReturnType<typeof window.setTimeout> | undefined
+    let timeout: number | undefined
     setVerification({ accountId, phase: 'checking' })
     const finish = (phase: Phase) => {
       if (!signal.aborted) setVerification({ accountId, phase })
