@@ -42,6 +42,8 @@ Container startup passes parsed database connection settings to its probe as env
 
 The browser PWA caches versioned public assets and a data-free offline page, not private pages, APIs or covers. Startup retires the former VR worker before private VR requests proceed; sign-out removes owned caches even when no worker controls the page. Unrelated application caches remain intact. Fully offline legacy installations need an online update before these protections can apply. Focused Chromium migration fixtures are verified; authenticated application/headset acceptance remains open.
 
+Confirmed sign-out and sign-in through the current web UI notify other open member, admin and Operations SPA views on the same origin. Those views remove their private React content and show a focused **Sign in to continue** notice; use its **Sign in** link for a fresh server check. Only an opaque change marker is stored, with no account details. A missed marker is checked again when the document regains focus or is restored. This does not replace server session expiry or access checks. Classic/hybrid pages, server-side revocation without a UI notification, fully offline updates and other browser engines retain separate acceptance gates. [R2037](../dev/parity-evidence/browser-session-boundary-r2037.json) records the tested paths and limitations.
+
 ## What can leave the machine (only if you turn it on)
 
 | Channel | When | What goes out |

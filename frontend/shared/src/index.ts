@@ -34,6 +34,7 @@ export * from './safeExternalUrl.js'
 export * from './railIcons.js'
 export * from './useResource.js'
 export * from './ViewerContext.js'
+export * from './AuthSessionBoundary.js'
 export * from './ShellConfigContext.js'
 // PR-4 (d): AccountModal + its data helpers move here so the admin shell drops
 // its `@member` cross-app alias. member-app keeps thin re-export shims at the

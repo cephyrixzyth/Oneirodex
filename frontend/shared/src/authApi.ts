@@ -1,5 +1,6 @@
 import { csrfHeaders } from './csrf.js'
 import { errorFromResponse } from './envelopeError.js'
+import { notifyAuthBoundary } from './authBoundary.js'
 
 export interface LoginResult {
   next_url: string
@@ -13,6 +14,7 @@ export async function signOut(): Promise<void> {
     headers: csrfHeaders(),
   })
   if (!response.ok) throw await errorFromResponse(response, 'Sign out')
+  notifyAuthBoundary()
 }
 
 export interface RegistrationResult {
@@ -83,7 +85,9 @@ export async function signIn(
     body: JSON.stringify(credentials),
   })
   if (!response.ok) throw await errorFromResponse(response, 'Sign in')
-  return response.json() as Promise<LoginResult>
+  const result = (await response.json()) as LoginResult
+  notifyAuthBoundary()
+  return result
 }
 
 /** Register by a valid invite link or an allow-listed email address. */

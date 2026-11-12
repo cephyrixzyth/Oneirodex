@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { AppErrorBoundary, Button, PageStatus, errorFromResponse } from '@oneirodex/ui'
+import {
+  AppErrorBoundary,
+  AuthSessionBoundary,
+  Button,
+  PageStatus,
+  errorFromResponse,
+} from '@oneirodex/ui'
 import { App } from './App'
 import './styles.css'
 
@@ -161,7 +167,9 @@ function StaticPilot() {
 }
 
 createRoot(document.getElementById('admin-app-root')!).render(
-  <AppErrorBoundary>
-    <StaticPilot />
-  </AppErrorBoundary>,
+  <AuthSessionBoundary>
+    <AppErrorBoundary>
+      <StaticPilot />
+    </AppErrorBoundary>
+  </AuthSessionBoundary>,
 )
