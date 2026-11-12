@@ -6,7 +6,7 @@ declare global {
   }
 }
 
-async function requirePrivateVrControl(signal?: AbortSignal) {
+export async function requirePrivateVrControl(signal?: AbortSignal) {
   const ready = await window.odPwaPrivacyReady
   const worker = navigator.serviceWorker?.controller
   const legacy = worker && new URL(worker.scriptURL, location.href).pathname === '/vr/sw.js'

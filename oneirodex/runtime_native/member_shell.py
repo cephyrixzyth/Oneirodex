@@ -192,6 +192,7 @@ def _member_root(user, settings: dict, app_config, extra: dict, static_url_path:
         'is-librarian': str(role in ('admin', 'librarian')).lower(),
         'role': role,
         'user-id': user_id,
+        'account-id': getattr(user, 'user_id', None) or '',
         'show-trailers': str(bool(settings.get('show_trailers', True))).lower(),
         'show-help': str(bool(settings.get('show_help_button', True))).lower(),
         'enable-vr': str(bool(app_config.get('ENABLE_VR_BROWSE'))).lower(),

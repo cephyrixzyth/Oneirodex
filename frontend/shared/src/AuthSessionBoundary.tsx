@@ -6,15 +6,19 @@ import './AuthSessionBoundary.css'
 export function AuthSessionBoundary({ children }: { children?: ReactNode }) {
   const [initialEpoch] = useState(readAuthBoundaryEpoch)
   const [ended, setEnded] = useState(false)
-  const notice = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (ended) return
     return subscribeAuthBoundary(() => setEnded(true), initialEpoch)
   }, [ended, initialEpoch])
-  useEffect(() => {
-    if (ended) notice.current?.focus()
-  }, [ended])
   if (!ended) return children
+  return <SessionEndedNotice />
+}
+
+export function SessionEndedNotice() {
+  const notice = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    notice.current?.focus()
+  }, [])
   return (
     <div ref={notice} className="od-session-ended" role="alert" tabIndex={-1}>
       <h1>Sign in to continue</h1>

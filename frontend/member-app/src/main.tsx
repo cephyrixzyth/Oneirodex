@@ -3,7 +3,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ShellConfigProvider, ViewerProvider, viewerFromConfig } from '@oneirodex/ui'
 import { App } from './App'
-import { AppErrorBoundary } from '@oneirodex/ui'
+import { AppErrorBoundary, AuthSessionBoundary } from '@oneirodex/ui'
+import { VerifiedMemberBootstrap } from './VerifiedMemberBootstrap'
 import { installUnauthorizedRedirect } from './api/http'
 import { GameDetailsApp, parseGameDetailsRootConfig } from './GameDetailsApp'
 
@@ -181,17 +182,21 @@ if (memberAppRoot) {
   // instead of the object being threaded down as a prop through 40+ routes.
   const viewerFromShell = viewerFromConfig(shellConfig)
   createRoot(memberAppRoot).render(
-    <BrowserRouter>
-      <AppErrorBoundary>
-        <ViewerProvider value={viewerFromShell}>
-          <ShellConfigProvider value={shellConfig}>
-            <QueryClientProvider client={queryClient}>
-              <App />
-            </QueryClientProvider>
-          </ShellConfigProvider>
-        </ViewerProvider>
-      </AppErrorBoundary>
-    </BrowserRouter>,
+    <AuthSessionBoundary>
+      <VerifiedMemberBootstrap accountId={memberAppRoot.dataset.accountId}>
+        <BrowserRouter>
+          <AppErrorBoundary>
+            <ViewerProvider value={viewerFromShell}>
+              <ShellConfigProvider value={shellConfig}>
+                <QueryClientProvider client={queryClient}>
+                  <App />
+                </QueryClientProvider>
+              </ShellConfigProvider>
+            </ViewerProvider>
+          </AppErrorBoundary>
+        </BrowserRouter>
+      </VerifiedMemberBootstrap>
+    </AuthSessionBoundary>,
   )
 }
 

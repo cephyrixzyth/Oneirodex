@@ -120,12 +120,15 @@ def app():
         # Pytest can retain app objects via failure tracebacks. Returning a
         # session connection to its pool is insufficient: that app's idle pool
         # otherwise keeps PostgreSQL clients alive until nondeterministic GC.
-        with app.app_context():
-            try:
-                db.session.remove()
-            finally:
-                for engine in db.engines.values():
-                    engine.dispose()
+        # The DB-free configuration guards inject db=None and a config-only
+        # app stub. They have no session or pool to release.
+        if db is not None:
+            with app.app_context():
+                try:
+                    db.session.remove()
+                finally:
+                    for engine in db.engines.values():
+                        engine.dispose()
 
 # ---------------------------------------------------------------------------
 # Per-test database isolation (spec §3.2)

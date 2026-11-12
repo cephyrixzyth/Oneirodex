@@ -2,6 +2,8 @@
 
 > **Doc status:** Active
 
+The R2038 fixture follow-up preserves client disposal for every real app, including exceptional teardown and retained tracebacks. Configuration-only database-guard probes inject `db=None` and have no clients to dispose. Those stubs skip resource cleanup; URL validation and real database teardown stay enforced. The previous full/CI baselines each exposed three stub-close failures; 29 focused guard/resource checks now pass. This does not establish a fresh full-suite pass. See [R2038 evidence](../dev/parity-evidence/browser-bootstrap-identity-r2038.json).
+
 Native Windows, with Docker Desktop running.
 
 The per-test app fixture removes its session and disposes every app-owned engine

@@ -13,6 +13,7 @@ from oneirodex.runtime_native import admin_pilot, db_session, member_shell
 
 class Member:
     id = 14
+    user_id = '11111111-1111-4111-8111-111111111111'
     name = 'Home <Player>'
     role = 'librarian'
     avatarpath = 'newstyle/avatars/controller.svg'
@@ -109,6 +110,7 @@ def test_member_shell_preserves_authenticated_spa_bootstrap_and_session(monkeypa
     assert response.headers['content-security-policy']
     assert response.cookies.get('session')
     assert 'data-user-id="14"' in response.text
+    assert 'data-account-id="11111111-1111-4111-8111-111111111111"' in response.text
     assert 'data-is-librarian="true"' in response.text
     assert 'data-show-tile-titles="false"' in response.text
     assert 'data-username="Home &lt;Player&gt;"' in response.text
@@ -120,6 +122,30 @@ def test_member_shell_preserves_authenticated_spa_bootstrap_and_session(monkeypa
     assert 'member-app/member-app.js' in response.text
     assert '_flashes' not in session_data
     assert 'image_refresh_game_uuid' not in session_data
+
+
+def test_member_bootstrap_keeps_account_identity_in_one_escaped_attribute(monkeypatch):
+    from html.parser import HTMLParser
+
+    class RootAttributes(HTMLParser):
+        attributes = None
+
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if values.get('id') == 'member-app-root':
+                self.attributes = values
+
+    user = Member()
+    user.user_id = 'synthetic" data-untrusted="injected'
+    client, _session_data = _native_client(monkeypatch, user=user)
+    with client:
+        response = client.get('/systems')
+    assert response.status_code == 200
+    parser = RootAttributes()
+    parser.feed(response.text)
+    assert parser.attributes['data-account-id'] == 'synthetic" data-untrusted="injected'
+    assert parser.attributes['data-user-id'] == '14'
+    assert 'data-untrusted' not in parser.attributes
 
 
 def test_favorites_shell_uses_legacy_page_size_when_preference_is_missing(monkeypatch):
