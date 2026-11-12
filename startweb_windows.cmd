@@ -14,7 +14,7 @@ call venv\Scripts\activate.bat
 REM Load .env file and export variables to shell environment
 if exist .env (
     echo [*] Loading environment variables from .env...
-    for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
         if not "%%a"=="" if not "%%b"=="" (
             set "%%a=%%b"
         )

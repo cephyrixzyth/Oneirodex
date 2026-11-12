@@ -93,8 +93,43 @@
     "sha256": "1fe492c7f74f9e00b4159e748805180bc0b11e7d95fd242359241d1f0a8268f9"
   },
   "limits": [
-    "New-head core CI/full qualification pending; failed exact2e250493 baselines remain failed.",
+    "Exact60e741ea full/core qualification passed as recorded above; earlier failed2e250493 baselines remain failed. Later installer changes have separate focused evidence, not this full-run source identity.",
     "R2046 image proves unchanged production correction; its identity remains2e250493, not a later test/docs commit.",
     "Focused/author verification does not replace fresh whole-program review or broader parity/platform/operator acceptance."
-  ]
+  ],
+  "post_correction_exact_source_results": {
+    "source": "60e741ea42d481ea6f373de260fb9c4d3f5bb9be",
+    "local_full": {
+      "passed": 8549,
+      "skipped": 101,
+      "warnings": 160,
+      "pytest_seconds": 2034.2,
+      "runner_seconds": 2055.17,
+      "source_fixed": true,
+      "database_absence_verified": true,
+      "generated_files_hash_preserved": true
+    },
+    "ci": {
+      "run": 43264798737,
+      "result": "success",
+      "jobs_passed": 9,
+      "core_passed": 7912,
+      "core_skipped": 14,
+      "core_deselected": 548,
+      "core_warnings": 156,
+      "pytest_seconds": 2410.73,
+      "coverage_percent": 74.97
+    },
+    "desktop": {
+      "run": 43264798718,
+      "result": "success",
+      "active_jobs_passed": 7,
+      "installers_published": false
+    },
+    "private_archive": {
+      "files": 9,
+      "bytes": 246360,
+      "sha256": "834fc57f4e64fcd7d37289e877f919782cac36b361c52c6074e2a6e08a138c14"
+    }
+  }
 }

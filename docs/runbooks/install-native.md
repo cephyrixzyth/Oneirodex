@@ -15,7 +15,7 @@ For containers, use [docker-compose-deploy.md](docker-compose-deploy.md) or
 |---|---|
 | Python | 3.11+ |
 | Node.js | 22.x and npm (the installer builds all five frontend bundles from source) |
-| PostgreSQL | 17+ (16 works; 17 is what CI and the images use) |
+| PostgreSQL | 17+ recommended; core CI uses 16, local review and bundled images use 17 |
 | Disk | ~1 GB for the app and dependencies, plus covers/artwork under `UPLOAD_FOLDER` |
 | Port | 5006 by default |
 
@@ -34,6 +34,20 @@ validates all five targets before promotion. A failed build or promotion keeps
 the last working bundle. Docker uses the same Node 22 build contract. The native
 runtime installer validates the manifest and files without importing Flask or
 requiring Node at server startup.
+
+On reinstall, an existing `.env` is preserved unless you pass `--force`
+(Linux/macOS) or `-Force` (Windows). New port/path options do not replace
+preserved settings. Linux also skips database provisioning and installer
+connection probes in this mode, so it does not rotate the role password behind
+the retained connection URL. Runtime validation still runs; fix invalid retained
+settings before retrying. A validation failure does not start the server.
+
+Explicit force mode backs up `.env` as `.env.backup.<timestamp>`, retains its
+existing signing key when present, then regenerates settings from installer
+options. Reapply any other custom settings from the backup before starting.
+Keep the backup private: it contains credentials. The tracked `config.py` is
+not regenerated. Fresh and forced installs persist the selected port in `.env`
+for subsequent launcher runs.
 
 For linked-store and saved admin integration credentials, provide a separate
 operator-managed key-ring JSON file and set
@@ -162,7 +176,7 @@ build tools, then configures the database and `.env`.
 | `--port PORT` | Serve on a port other than 5006 |
 | `--no-db` | Skip PostgreSQL; point `DATABASE_URL` at an existing server |
 | `--dev` | Also install `requirements-dev.txt` |
-| `--force` | Overwrite an existing `.env` / `config.py` |
+| `--force` | Back up and regenerate `.env`; retain its existing signing key |
 | `--verbose` | Show the full output of every step |
 
 ```bash
@@ -323,7 +337,7 @@ when it is not on `PATH`, so a stock PostgreSQL install needs no extra work.
 | `-Port PORT` | Serve on a port other than 5006 |
 | `-SkipDb` | Use an existing PostgreSQL database |
 | `-Dev` | Also install `requirements-dev.txt` |
-| `-Force` | Overwrite an existing `.env` / `config.py` |
+| `-Force` | Back up and regenerate `.env`; retain its existing signing key |
 
 ```powershell
 .\install-windows.ps1 -GamesDir 'D:\Games' -LibraryRoots 'NAS ROMs=\\nas\roms'

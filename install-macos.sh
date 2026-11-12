@@ -31,6 +31,7 @@ GAMES_DIR=""
 LIBRARY_ROOTS=""
 CUSTOM_PORT="5006"
 FORCE_INSTALL=false
+PRESERVED_CONFIGURATION=false
 DEV_MODE=false
 SKIP_DB=false
 VERBOSE_MODE=false
@@ -97,7 +98,7 @@ show_help() {
     echo "  ./install-macos.sh [OPTIONS]"
     echo
     echo "OPTIONS:"
-    echo "  --force           Overwrite an existing .env / config.py"
+    echo "  --force           Regenerate existing .env settings (backup and signing key retained)"
     echo "  --dev             Install development dependencies too"
     echo "  --no-db           Skip PostgreSQL setup (use an existing database)"
     echo "  --verbose, -v     Show detailed output"
@@ -305,6 +306,16 @@ check_scan_locations() {
 configure_application() {
     print_step "Configuring Oneirodex..."
 
+    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" != true ]; then
+        PRESERVED_CONFIGURATION=true
+        chmod 600 "$SCRIPT_DIR/.env"
+        chmod +x "$SCRIPT_DIR"/*.sh
+        print_success "Existing .env preserved"
+        print_info "Use --force to regenerate installer settings; reapply custom values from the backup."
+        return 0
+    fi
+    PRESERVED_CONFIGURATION=false
+
     if [ -f "$SCRIPT_DIR/.env" ]; then
         cp "$SCRIPT_DIR/.env" "$SCRIPT_DIR/.env.backup.$(date +%Y%m%d-%H%M%S)"
         print_success "Existing .env backed up"
@@ -424,13 +435,17 @@ show_summary() {
     echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
     echo -e "${CYAN}  ONEI > Your worlds are waiting at the gate.${NC}"
     echo
-    echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
-    echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
-    if [ -n "$LIBRARY_ROOTS" ]; then
-        echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
-    fi
-    if [ "$SKIP_DB" != true ]; then
-        echo -e "${CYAN}  Camp ledger:${NC} $DB_NAME (local socket, user $DB_USER)"
+    if [ "$PRESERVED_CONFIGURATION" = true ]; then
+        print_info "Existing .env preserved; its port, paths and other settings remain active."
+    else
+        echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
+        echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
+        if [ -n "$LIBRARY_ROOTS" ]; then
+            echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
+        fi
+        if [ "$SKIP_DB" != true ]; then
+            echo -e "${CYAN}  Camp ledger:${NC} $DB_NAME (local socket, user $DB_USER)"
+        fi
     fi
     echo -e "${CYAN}  Start command:${NC} ./startweb.sh"
     echo -e "${CYAN}  Stop:${NC} Press Ctrl+C"
@@ -443,16 +458,20 @@ show_summary() {
     case "${start_now:-Y}" in
         [Yy]|[Yy][Ee][Ss])
             echo
-            print_info "Opening the launch gate — http://localhost:$CUSTOM_PORT"
+            print_info "Starting with the configured .env settings"
             print_info "Press Ctrl+C to stop"
             echo
-            export PORT="$CUSTOM_PORT"
+            if [ "$PRESERVED_CONFIGURATION" != true ]; then
+                export PORT="$CUSTOM_PORT"
+            fi
             exec ./startweb.sh
             ;;
         *)
             echo
             print_info "To start Oneirodex later, run: ./startweb.sh"
-            print_info "Then open: http://localhost:$CUSTOM_PORT"
+            if [ "$PRESERVED_CONFIGURATION" != true ]; then
+                print_info "Then open: http://localhost:$CUSTOM_PORT"
+            fi
             ;;
     esac
 }

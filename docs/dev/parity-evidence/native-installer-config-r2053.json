@@ -1,0 +1,99 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2053",
+  "finding": "OP-001 / D-P1-01 native configuration follow-up",
+  "classification": "Confirmed configuration defects fixed with focused verification; full native delivery remains partial.",
+  "source_base": "60e741ea42d481ea6f373de260fb9c4d3f5bb9be",
+  "source_identity": "Candidate fingerprints are checked worktree bytes; Git may normalize line endings. The earlier full run and R2046 image have their own identities.",
+  "candidate_source_sha256": {
+    "install-windows.ps1": "8782ac30ed7323d0511d7c7949639c5790005a0be88416757ed7652d0365a7d6",
+    "install-linux.sh": "9d66d658bb8df871ef4a1251972bc520868c48ddcda84565bdf32232dde4f47e",
+    "install-macos.sh": "d439aa809fc12a4ee72926c2bbd56d72e5eb14af0285e5c07f5af8a57ab6e804",
+    "startweb_windows.cmd": "699b9f41f7e09648e2c5947fc835d06ef5530ef4053e402694b7b8918173b084",
+    "tests/test_native_install_config.py": "c5113bbde3cc8547f87b1b44fb8d6bc1f2b99c65bac29bd25d9b750fae846124",
+    "tests/fixtures/native_installer_config.ps1": "e3f112e9fc6be26421717d9056471cc9806b3731ef328c4065fd6fb94708f72f",
+    "scripts/validate-native-install.py": "df22323bf84d57b67d2bbb124a1ef4e7e9c6a7bef4b8aaf39a50cc4c945634ee"
+  },
+  "confirmed_before_fix": [
+    "Windows fresh install validates before generating required configuration; force validates stale settings.",
+    "All three writers overwrite existing custom configuration without the advertised force flag.",
+    "Linux does not persist the selected port.",
+    "Windows batch tokenization truncates a padded signing key and an embedded-equals custom value.",
+    "Author review: preserving Linux .env while earlier provisioning rotates its database-role password leaves stale credentials."
+  ],
+  "correction": [
+    "Write Windows effective configuration before native validation.",
+    "Preserve existing .env bytes by default; explicit force backs it up and retains the signing key.",
+    "Report preserved settings honestly rather than presenting ignored CLI paths or ports as effective.",
+    "Persist Linux PORT and keep embedded/trailing equals in tested Windows launcher values.",
+    "For existing non-forced Linux configuration, skip database provisioning and unused-credential connection probes; retain fresh/force setup."
+  ],
+  "tracked_red": {
+    "failed": 8,
+    "passed": 2,
+    "pytest_seconds": 25.03,
+    "runner_seconds": 26.62,
+    "limit": "Initial generic runner fingerprinted unrelated older paths. Native baseline scripts are retained in the prepatch archive; this receipt alone is not a native-source fingerprint proof."
+  },
+  "author_boundary_red": {
+    "failed": 1,
+    "passed": 2,
+    "pytest_seconds": 4.97,
+    "runner_seconds": 6.72,
+    "scope": "Actual Linux database setup with every privileged command intercepted; no real database mutation."
+  },
+  "verification": {
+    "passed": 26,
+    "pytest_seconds": 27.17,
+    "runner_seconds": 28.89,
+    "source_fixed": true,
+    "scope": [
+      "Actual Windows main AST/order and writer; prerequisite, DB, dependency/build, runtime-validation and launch seams controlled.",
+      "Invalid retained Windows configuration rejects before summary, remains unchanged and is not backed up.",
+      "Actual Linux/macOS configuration functions and summaries executed under Bash.",
+      "Actual Windows launcher with inert Python startup and capture-only uvicorn shim; signing-key digest, custom value and port checked.",
+      "Actual Linux setup preserves existing connection configuration without password rotation; fresh/force controls still provision through intercepted commands."
+    ],
+    "database_or_os_provisioning_performed": false,
+    "app_launched": false,
+    "operator_data_used": false
+  },
+  "linux_permission_probe": {
+    "controlled_cases": 6,
+    "seconds": 0.92,
+    "results": "All configuration cases exit0; mode0600, shell executable permission bits, backups/key/bytes and selected/preserved ports checked.",
+    "source_stage": "First candidate before the later database guard; configuration function unchanged in final candidate. Checked source injected into unchanged R2046 tooling image, not a newly qualified product image.",
+    "platform_limit": "Linux networkless read-only container with noexec tmpfs; macOS writer executed as Bash on Linux, not a macOS installation."
+  },
+  "checks": {
+    "four_source_ratchets_and_r1972": true,
+    "ratchet_runner_seconds": 28.46,
+    "final_linux_and_macos_syntax": true,
+    "powershell_parse": true,
+    "note": "Source ratchets precede the Linux-only database guard; final native suite and separate syntax checks cover that later edit. Final staged review is recorded separately."
+  },
+  "retained_rework": [
+    "First macOS probe used an image UID without a passwd name and stopped at id -un.",
+    "First Linux executable check used os.access on intentionally noexec tmpfs; corrected to permission bits, original stdout retained.",
+    "Author review found the missing Linux provisioning boundary; reproduced then corrected before publication."
+  ],
+  "private_archives": {
+    "first_candidate": {
+      "files": 67,
+      "bytes": 102505,
+      "sha256": "94abd2f834d39d75f152a572a0289fc1c6dcc21a63b32b1c0b5700323217cb35"
+    },
+    "final_candidate_addendum": {
+      "files": 16,
+      "bytes": 36459,
+      "sha256": "35297586c7c62d542cb8772dd6a4dfa8aed0a03c9e6ea8c50b917c1e7a11a614"
+    }
+  },
+  "limits": [
+    "Controlled phases do not qualify complete online installers, OS provisioning, packaged standalone/Tauri, macOS or Steam Deck.",
+    "Earlier Windows online installer PyPI socket10013 gate remains; these tests do not clear it.",
+    "Untested path/quoting classes and original platform/restart acceptance remain unknown.",
+    "No API/runtime product change after qualified R2046 image; installer candidate itself is newer than that image.",
+    "Current-head CI, whole-original-program fresh review, full route parity and release/deployment gates remain open."
+  ]
+}

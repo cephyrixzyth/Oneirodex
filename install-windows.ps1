@@ -29,7 +29,7 @@
     Also install requirements-dev.txt when present.
 
 .PARAMETER Force
-    Overwrite an existing .env / config.py instead of backing off.
+    Regenerate .env from installer settings after backing it up; retain SECRET_KEY.
 
 .EXAMPLE
     .\install-windows.ps1
@@ -55,6 +55,7 @@ $LogFile = Join-Path $ScriptDir 'install.log'
 $DbName = 'oneirodex'
 $TestDbName = 'oneirodextest'
 $script:InstallStage = 0
+$script:PreservedConfiguration = $false
 
 function Write-Log([string]$Message) {
     "{0}: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message | Add-Content -Path $LogFile -Encoding utf8
@@ -276,6 +277,13 @@ function Write-EnvFile([string]$DatabaseUrl) {
     Write-Step 'Writing configuration...'
 
     $envPath = Join-Path $ScriptDir '.env'
+    if ((Test-Path -LiteralPath $envPath) -and -not $Force) {
+        $script:PreservedConfiguration = $true
+        Write-Ok 'Existing .env preserved'
+        Write-Note 'Use -Force to regenerate configuration from installer options; custom settings must be reapplied from the backup.'
+        return
+    }
+    $script:PreservedConfiguration = $false
     $existingSecretKey = $null
     if (Test-Path $envPath) {
         $backup = "$envPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -337,10 +345,15 @@ function Show-Summary {
     Write-Host '+--------------------------------------------------------------------+' -ForegroundColor Green
     Write-Host '  ONEI > Your worlds are waiting at the gate.' -ForegroundColor Cyan
     Write-Host ''
-    Write-Note "Launch gate:     http://localhost:$Port"
-    Write-Note "Game cache:      $GamesDir"
-    if (-not [string]::IsNullOrWhiteSpace($LibraryRoots)) {
-        Write-Note "Trail markers:   $LibraryRoots"
+    if ($script:PreservedConfiguration) {
+        Write-Note 'Existing .env preserved; its port, paths and other settings remain active.'
+    }
+    else {
+        Write-Note "Launch gate:     http://localhost:$Port"
+        Write-Note "Game cache:      $GamesDir"
+        if (-not [string]::IsNullOrWhiteSpace($LibraryRoots)) {
+            Write-Note "Trail markers:   $LibraryRoots"
+        }
     }
     Write-Note 'Start command:   .\startweb_windows.cmd'
     Write-Note 'Reset database:  .\startweb_windows.cmd --force-setup'
@@ -350,7 +363,12 @@ function Show-Summary {
 
     $answer = Read-Host 'Start Oneirodex now? [Y/n]'
     if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^[Yy]') {
-        Write-Note "Opening the launch gate - http://localhost:$Port"
+        if ($script:PreservedConfiguration) {
+            Write-Note 'Starting with the preserved .env configuration'
+        }
+        else {
+            Write-Note "Opening the launch gate - http://localhost:$Port"
+        }
         & (Join-Path $ScriptDir 'startweb_windows.cmd')
     }
     else {
@@ -407,8 +425,8 @@ try {
     $databaseUrl = New-Databases
     Install-PythonEnvironment
     Install-NativeSpas
-    Test-NativeRuntime
     Write-EnvFile $databaseUrl
+    Test-NativeRuntime
     Show-Summary
 }
 catch {

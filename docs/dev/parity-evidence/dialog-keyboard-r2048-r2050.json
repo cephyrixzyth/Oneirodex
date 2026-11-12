@@ -41,7 +41,8 @@
     "page_errors": 0,
     "console_errors": 0,
     "operator_data_used": false,
-    "account_mutations": false,
+    "account_setting_token_or_save_writes": false,
+    "synthetic_authentication_session_writes": true,
     "owned_containers_volumes_networks_databases_and_relay_threads_cleaned": true,
     "database_absence_verified": true
   },
@@ -53,7 +54,7 @@
   ],
   "private_archive": {"files": 36, "bytes": 98469, "sha256": "97cee3be1fa76c934dff3984137e8baeefa86efcf2f11ec380023783df79c295"},
   "limits": [
-    "Read-only UI observation; no frontend source changes or screenshots.",
+    "UI observation with synthetic authentication/session writes; no account-setting, token or save writes, frontend source changes or screenshots.",
     "VoiceOver/NVDA, other browser engines, headsets, visual contrast and the fresh whole-program review remain open.",
     "No route promoted to fully verified. Immutable R1972 historical coverage remains0fully/10partially/1535unverified shared pairs; current-only coverage remains separate.",
     "Times are individual overlapping verification intervals, not a combined model-speed measurement or inference time."
