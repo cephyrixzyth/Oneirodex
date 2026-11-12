@@ -14,6 +14,15 @@ framework-isolation probe also starts its real cleanup worker, stops and joins t
 thread, then disposes its SQLite engine; disposing while the worker is live caused
 an intermittent CI pool-mutation failure.
 
+The schema fixture must also patch and restore the legacy migration module's
+imported configuration class. Earlier tests reload `config`; patching only its new
+class leaves legacy DDL pointed at the parent test database. The R2052 regression
+checks the actual engine target and unchanged parent shelf rows through bootstrap.
+The real config-reload/schema/discovery ordering passes64checks; the previous full
+and core runs failed the discovery query after two shelves leaked into the parent.
+Keep that failure evidence and the original query assertion. The fixture correction
+does not change product migrations or relax URL validation.
+
 The per-test app fixture removes its session and disposes every app-owned engine
 on both success and failure. Removing a session alone leaves idle pooled clients
 alive while pytest retains app objects or tracebacks; do not rely on garbage

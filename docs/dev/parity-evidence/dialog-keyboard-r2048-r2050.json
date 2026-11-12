@@ -1,0 +1,61 @@
+{
+  "doc_status": "Reference",
+  "evidence_ids": ["R2048", "R2049", "R2050"],
+  "scope": "Remaining mobile account dialog checks and original FE-005 related-media keyboard trigger",
+  "current": {
+    "source": "2e250493984ebdc8b33c763b73ac00d6799f4355",
+    "image": "sha256:bccf4d6f6dea15707eb30222462a9e4bc4d00d26d7a301f2ff2b384324ca154c",
+    "account": {
+      "runner_seconds": 31.78,
+      "viewport": "390x844",
+      "panels_checked": ["Profile", "Avatar", "Password", "Invites", "API tokens"],
+      "all_passed": ["Visible dialog title and accessible label", "Focus inside on open or panel switch", "Full Tab and Shift+Tab cycle stays inside", "Background roots inert and aria-hidden", "Escape closes", "Account launcher focus restored", "Member root restored after close"],
+      "measured_width_each": 358,
+      "state_limit": "Fresh synthetic accounts with no tokens; these measurements do not requalify the historical R1972 populated-token state."
+    },
+    "related_media": {
+      "runner_seconds": 39.14,
+      "viewports": ["390x844", "1100x850"],
+      "trigger": "Keyboard-activate an actual related-media card on an authenticated populated game-details page",
+      "all_passed": ["Focus enters close control", "Dialog name resolves to visible media title", "Two focusable controls; full forward/backward cycle stays inside", "Background roots inert and aria-hidden", "Body scroll locked", "Escape closes", "Focus returns to media card", "Member root restored"]
+    }
+  },
+  "legacy": {
+    "source": "d437b44a525245b4dd5848987114aaf6d2646bb7",
+    "registry_release": "v1.1.8 linux/amd64",
+    "manifest_image": "sha256:edae8a3e17454fb07818c085947bf5ba5633584f72e89e1524fba0dc200519fe",
+    "backend_template_config_files_matching_release": 577,
+    "historical_r1972_pin_restored": false,
+    "runner_seconds": 45.53,
+    "viewports": ["390x844", "1100x850"],
+    "same_related_media_trigger": true,
+    "observed_defects": ["Focus remains on background card when modal opens", "Tab and Shift+Tab escape into background controls", "Background not inert", "No body scroll lock", "Focus not restored to launcher after Escape"],
+    "escape_closes": true,
+    "result": "Original FE-005 defect reproduced in this separately identified official release image; preserve the corrected current behavior.",
+    "limits": "Historical local pin19648d0e remains absent. Source comparison covers shipped Python/templates/config, not an independent rebuild of legacy compiled frontend bundles. No old evidence identity substituted."
+  },
+  "environment": {
+    "browser_host": "Windows Python3.14.10, Playwright1.65.1, headless Chromium1248",
+    "app": "Actual unmodified image entrypoints, dedicated synthetic test databases and owned volumes",
+    "transport": "Previously qualified loopback relay with unmodified image static files; app network internal; external browser requests blocked",
+    "page_errors": 0,
+    "console_errors": 0,
+    "operator_data_used": false,
+    "account_mutations": false,
+    "owned_containers_volumes_networks_databases_and_relay_threads_cleaned": true,
+    "database_absence_verified": true
+  },
+  "retained_rework": [
+    "Initial browser launcher used a DB-test environment without Playwright; import stopped before resource creation.",
+    "Direct published port was unavailable on the internal network; reused the established loopback relay.",
+    "Avatar/Invites are modal section buttons, not top-menu links; corrected selectors after Profile passed.",
+    "Legacy login submit is named Sign in, not Login; corrected from release template source."
+  ],
+  "private_archive": {"files": 36, "bytes": 98469, "sha256": "97cee3be1fa76c934dff3984137e8baeefa86efcf2f11ec380023783df79c295"},
+  "limits": [
+    "Read-only UI observation; no frontend source changes or screenshots.",
+    "VoiceOver/NVDA, other browser engines, headsets, visual contrast and the fresh whole-program review remain open.",
+    "No route promoted to fully verified. Immutable R1972 historical coverage remains0fully/10partially/1535unverified shared pairs; current-only coverage remains separate.",
+    "Times are individual overlapping verification intervals, not a combined model-speed measurement or inference time."
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2052",
+  "finding": "P0-01 verification follow-up to R2045",
+  "classification": "Confirmed isolation defect in new schema test fixture; focused correction verified.",
+  "source_base": "2e250493984ebdc8b33c763b73ac00d6799f4355",
+  "candidate_test_sha256": "5d2c215fe9c0c229dd710a13fe8153312d2fb4a00da78aeaf628268b0bbbb404",
+  "root_cause": "Earlier legal-surface tests reload config. The legacy updateschema module retains its prior Config class while the new fixture patched only the current class. Legacy DDL could write the parent test database and insert two discovery shelves outside the later test transaction.",
+  "impact": "Discovery query expected at least three visible fixture shelves but observed only Curated for you and Upcoming. Parent/child targets were owned test databases; no operator/production data.",
+  "correction": [
+    "Patch and restore both configuration aliases in new schema fixture.",
+    "Regression splits alias identity, verifies actual legacy engine targets owned child, runs bootstrap and checks parent shelf rows unchanged.",
+    "Preserve original discovery query/assertion and database URL guards.",
+    "No product migration/runtime/dependency/frontend changes after R2046 qualified image."
+  ],
+  "diagnosis": {
+    "fresh_query": "Pass1/5.82pytest seconds; no standalone reproduction.",
+    "schema_then_query": "Pass14/44.70pytest seconds; no preceding config reload.",
+    "preseed_before_floor": "Pass1/5.78pytest seconds; harness floor removed precondition.",
+    "preseed_in_transaction": "Exact discovery failure1/7.09pytest seconds; temporary-plugin marker warning retained.",
+    "real_reload": "Legacy engine targets parent: failure1/3.56pytest seconds.",
+    "tracked_red": {
+      "failed": 1,
+      "deselected": 13,
+      "pytest_seconds": 3,
+      "runner_seconds": 9.45
+    }
+  },
+  "verification": {
+    "passed": 64,
+    "warnings": 1,
+    "warning": "Existing SQLAlchemy nested-transaction warning in discover impressions; not suppressed/attributed to fixture correction.",
+    "pytest_seconds": 72.06,
+    "runner_seconds": 80.61,
+    "selection": [
+      "Actual legal/config reload tests",
+      "All14 native bootstrap tests",
+      "Unchanged discovery tests",
+      "Native framework/lifecycle",
+      "App client teardown"
+    ],
+    "source_fixed": true,
+    "owned_database_cleanup_and_absence": true,
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "prior_exact_source_results": {
+    "source": "2e250493984ebdc8b33c763b73ac00d6799f4355",
+    "local_full": {
+      "failed": 1,
+      "passed": 8547,
+      "skipped": 101,
+      "warnings": 160,
+      "pytest_seconds": 2277.62,
+      "runner_seconds": 2303.07,
+      "source_fixed": true,
+      "database_absence_verified": true,
+      "generated_files_hash_preserved": true
+    },
+    "ci": {
+      "run": 43255897957,
+      "result": "failure",
+      "core_failed": 1,
+      "core_passed": 7910,
+      "skipped": 14,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1504.14,
+      "other_jobs_passed": 8
+    },
+    "desktop": {
+      "run": 43255897782,
+      "result": "Success after targeted retry",
+      "attempt1": "Rust and five installers pass; macOS full never acquired hosted runner, zero steps/runner_id0/capacity annotations.",
+      "attempt2": "Only macOS full retried; passed. No installer publication."
+    }
+  },
+  "ratchets": {
+    "passed": true,
+    "checks": [
+      "API envelope",
+      "Undefined names",
+      "Print",
+      "JSON reader",
+      "Immutable R1972",
+      "Diff"
+    ],
+    "seconds": 28.21
+  },
+  "private_archive": {
+    "files": 42,
+    "bytes": 298569,
+    "sha256": "1fe492c7f74f9e00b4159e748805180bc0b11e7d95fd242359241d1f0a8268f9"
+  },
+  "limits": [
+    "New-head core CI/full qualification pending; failed exact2e250493 baselines remain failed.",
+    "R2046 image proves unchanged production correction; its identity remains2e250493, not a later test/docs commit.",
+    "Focused/author verification does not replace fresh whole-program review or broader parity/platform/operator acceptance."
+  ]
+}

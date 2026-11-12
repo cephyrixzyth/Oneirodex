@@ -46,6 +46,7 @@ def schema_case(monkeypatch):
     # Import classes while the process still points to the parent test DB;
     # TestConfig captures its URI at import and is used by later app fixtures.
     from config import Config
+    from oneirodex import updateschema
 
     parent_url = make_url(raw).set(drivername='postgresql+psycopg2')
     assert parent_url.host in {'127.0.0.1', 'localhost', '::1'}
@@ -64,6 +65,9 @@ def schema_case(monkeypatch):
         monkeypatch.setenv('DATABASE_URL', child_raw)
         monkeypatch.setenv('TEST_DATABASE_URL', child_raw)
         monkeypatch.setattr(Config, 'SQLALCHEMY_DATABASE_URI', child_raw)
+        # Earlier config reloads can leave this module holding the prior class.
+        # Keep both aliases on the child, then restore both during teardown.
+        monkeypatch.setattr(updateschema.Config, 'SQLALCHEMY_DATABASE_URI', child_raw)
         child = sa.create_engine(child_url, pool_pre_ping=True)
         yield SimpleNamespace(
             engine=child, manager=InitializationManager(),
@@ -99,6 +103,40 @@ def test_native_fresh_schema_reaches_declared_head(schema_case):
     case = schema_case
     assert case.manager._phase2_database_structure() is True
     assert _revision(case.engine) == case.head
+
+
+def test_native_bootstrap_keeps_stale_config_alias_on_owned_child(monkeypatch, request):
+    # Configuration reloads leave the legacy module holding the prior class.
+    # Simulate that identity split without globally reloading pytest's config.
+    parent_raw = os.environ['TEST_DATABASE_URL']
+    validate_test_database_url(parent_raw)
+    parent_url = make_url(parent_raw).set(drivername='postgresql+psycopg2')
+    from oneirodex import updateschema
+
+    prior_config = type('PriorConfig', (), {'SQLALCHEMY_DATABASE_URI': parent_raw})
+    monkeypatch.setattr(updateschema, 'Config', prior_config)
+    case = request.getfixturevalue('schema_case')
+    migration = updateschema.DatabaseManager()
+    try:
+        actual = make_url(migration.database_uri).database
+        assert actual == case.engine.url.database, 'Legacy DDL must stay inside the owned child'
+    finally:
+        migration.engine.dispose()
+
+    parent = sa.create_engine(parent_url)
+    try:
+        with parent.connect() as connection:
+            before = connection.execute(sa.text(
+                'SELECT identifier, name FROM discovery_sections ORDER BY id',
+            )).all()
+        assert case.manager._phase2_database_structure() is True
+        assert _revision(case.engine) == case.head
+        with parent.connect() as connection:
+            assert connection.execute(sa.text(
+                'SELECT identifier, name FROM discovery_sections ORDER BY id',
+            )).all() == before
+    finally:
+        parent.dispose()
 
 
 def test_native_current_metadata_preserves_revision_history_and_bytes(schema_case, tmp_path):
