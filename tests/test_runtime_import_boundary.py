@@ -335,6 +335,14 @@ assert set(started) == {
 }
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
 assert not any(name == 'jinja2' or name.startswith('jinja2.') for name in sys.modules)
+from oneirodex.background import _WORKER_HANDLES
+worker_threads = [handle.thread for handle in _WORKER_HANDLES if getattr(handle, 'thread', None)]
+assert worker_threads, 'The actual file cleanup worker did not start'
+from oneirodex.background import stop_background_workers
+stop_background_workers()
+for thread in worker_threads:
+    thread.join(timeout=5)
+assert not any(thread.is_alive() for thread in worker_threads), 'Worker still active before engine disposal'
 app.native_engine.dispose()
 '''
     child_env = os.environ.copy()

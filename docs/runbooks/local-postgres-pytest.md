@@ -6,6 +6,14 @@ The R2038 fixture follow-up preserves client disposal for every real app, includ
 
 Native Windows, with Docker Desktop running.
 
+Native-bootstrap checks use independently owned child test databases to exercise
+metadata adoption and historical upgrades. Startup must reach the declared Alembic
+head, preserve retained saves, and fail on incompatible history objects or migration
+errors. Their fixture drops each owned database and asserts its absence. The native
+framework-isolation probe also starts its real cleanup worker, stops and joins that
+thread, then disposes its SQLite engine; disposing while the worker is live caused
+an intermittent CI pool-mutation failure.
+
 The per-test app fixture removes its session and disposes every app-owned engine
 on both success and failure. Removing a session alone leaves idle pooled clients
 alive while pytest retains app objects or tracebacks; do not rely on garbage
