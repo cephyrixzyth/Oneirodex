@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from io import BytesIO
+import subprocess
+import sys
 from threading import Event
 
 from PIL import Image
@@ -91,28 +93,34 @@ def test_art_pack_fallback_decodes_and_closes_generated_inputs(tmp_path, monkeyp
     IMAGE_DECODE_WORKER.release()
 
 
-def test_image_threadpool_cancellation_waits_for_worker_cleanup():
+@pytest.mark.parametrize('cancel_count', [1, 2, 5])
+def test_image_threadpool_cancellation_waits_for_worker_cleanup(cancel_count):
     """The image worker helper defers request cancellation until cleanup."""
     worker_started = Event()
     allow_worker_cleanup = Event()
     worker_cleaned = Event()
+    cancellation_cleanup = []
 
     def gated_image_work():
         try:
             with image_decode_work_slot():
                 worker_started.set()
                 assert allow_worker_cleanup.wait(timeout=5)
+                return 'image-result'
         finally:
             worker_cleaned.set()
 
     async def scenario():
-        task = asyncio.create_task(run_image_work_in_threadpool(gated_image_work))
+        task = asyncio.create_task(run_image_work_in_threadpool(
+            gated_image_work, on_cancel=cancellation_cleanup.append,
+        ))
         try:
             assert await asyncio.to_thread(worker_started.wait, 5)
-            task.cancel()
-            await asyncio.sleep(0)
-
-            assert not task.done()
+            for _ in range(cancel_count):
+                task.cancel()
+                for _turn in range(4):
+                    await asyncio.sleep(0)
+                assert not task.done(), 'Cancellation escaped while the worker was still running'
             assert not IMAGE_DECODE_WORKER.acquire(blocking=False)
         finally:
             allow_worker_cleanup.set()
@@ -120,6 +128,7 @@ def test_image_threadpool_cancellation_waits_for_worker_cleanup():
         with pytest.raises(asyncio.CancelledError):
             await task
         assert await asyncio.to_thread(worker_cleaned.wait, 5)
+        assert cancellation_cleanup == ['image-result']
 
     asyncio.run(scenario())
     assert IMAGE_DECODE_WORKER.acquire(blocking=False)
@@ -178,3 +187,57 @@ def test_anyio_cancellation_is_deferred_until_image_worker_finishes():
     assert cancellation_cleanup == ['image-result']
     assert IMAGE_DECODE_WORKER.acquire(blocking=False)
     IMAGE_DECODE_WORKER.release()
+
+
+@pytest.mark.parametrize('cancel_request', [False, True])
+def test_image_worker_failure_releases_gate_and_preserves_error(cancel_request):
+    started, release = Event(), Event()
+    cleanup = []
+
+    def work():
+        with image_decode_work_slot():
+            started.set()
+            assert release.wait(5)
+            raise ValueError('Synthetic image worker failure')
+
+    async def scenario():
+        task = asyncio.create_task(run_image_work_in_threadpool(work, on_cancel=cleanup.append))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            if cancel_request:
+                task.cancel()
+                for _ in range(4):
+                    await asyncio.sleep(0)
+                assert not task.done()
+        finally:
+            release.set()
+        with pytest.raises(ValueError, match='Synthetic image worker failure'):
+            await task
+
+    asyncio.run(scenario())
+    assert cleanup == []
+    assert IMAGE_DECODE_WORKER.acquire(blocking=False)
+    IMAGE_DECODE_WORKER.release()
+
+
+def test_cancelled_image_worker_propagates_without_retry_spin():
+    # Bound the process: a regression that retries an already-cancelled worker
+    # can spin without yielding to an in-process asyncio timeout.
+    code = '''
+import asyncio
+from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+def cancelled_worker():
+    raise asyncio.CancelledError
+
+async def scenario():
+    try:
+        await run_image_work_in_threadpool(cancelled_worker)
+    except asyncio.CancelledError:
+        return
+    raise AssertionError('Worker cancellation was swallowed')
+
+asyncio.run(scenario())
+'''
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')

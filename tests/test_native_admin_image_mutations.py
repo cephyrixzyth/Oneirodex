@@ -263,7 +263,8 @@ def test_native_game_image_work_does_not_block_health_route(monkeypatch):
     assert responses and responses[0].status_code == 200
 
 
-def test_cancelled_native_game_image_route_waits_before_database_scope_exit(monkeypatch):
+@pytest.mark.parametrize('cancel_count', [1, 3])
+def test_cancelled_native_game_image_route_waits_before_database_scope_exit(monkeypatch, cancel_count):
     import asyncio
 
     import httpx
@@ -301,12 +302,16 @@ def test_cancelled_native_game_image_route_waits_before_database_scope_exit(monk
                 data={'image_type': 'cover'},
                 headers={'X-CSRFToken': client.headers['X-CSRFToken']},
             ))
-            assert await asyncio.to_thread(data.upload_started.wait, 5)
-            request.cancel()
-            await asyncio.sleep(0)
-            assert not request.done()
-            assert events == []
-            data.upload_continue.set()
+            try:
+                assert await asyncio.to_thread(data.upload_started.wait, 5)
+                for _ in range(cancel_count):
+                    request.cancel()
+                    for _turn in range(4):
+                        await asyncio.sleep(0)
+                    assert not request.done(), 'Request ended while its image worker was active'
+                    assert events == []
+            finally:
+                data.upload_continue.set()
             with pytest.raises(asyncio.CancelledError):
                 await request
 

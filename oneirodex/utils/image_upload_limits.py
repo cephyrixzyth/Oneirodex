@@ -35,12 +35,16 @@ async def run_image_work_in_threadpool(func, *args, on_cancel=None, **kwargs):
     worker = asyncio.create_task(run_in_threadpool(func, *args, **kwargs))
     direct_cancel = False
     with anyio.CancelScope(shield=True):
-        try:
-            result = await asyncio.shield(worker)
-        except asyncio.CancelledError:
-            # Direct Task.cancel() bypasses AnyIO's cancellation shield.
-            direct_cancel = True
-            result = await asyncio.shield(worker)
+        while True:
+            try:
+                result = await asyncio.shield(worker)
+                break
+            except asyncio.CancelledError:
+                if worker.cancelled():
+                    raise
+                # Each direct Task.cancel() bypasses AnyIO's shield. Keep
+                # waiting through repeated cancellation before closing scope.
+                direct_cancel = True
 
     if direct_cancel:
         if on_cancel is not None:

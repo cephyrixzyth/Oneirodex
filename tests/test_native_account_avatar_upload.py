@@ -130,7 +130,8 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
     assert response.headers['x-content-type-options'] == 'nosniff'
 
 
-def test_cancelled_avatar_upload_waits_for_worker_then_rolls_back_and_cleans(monkeypatch):
+@pytest.mark.parametrize('cancel_count', [1, 3])
+def test_cancelled_avatar_upload_waits_for_worker_then_rolls_back_and_cleans(monkeypatch, cancel_count):
     from oneirodex.runtime_native import account_avatar_upload
 
     worker_started = Event()
@@ -162,9 +163,11 @@ def test_cancelled_avatar_upload_waits_for_worker_then_rolls_back_and_cleans(mon
         ))
         try:
             assert await asyncio.to_thread(worker_started.wait, 5)
-            task.cancel()
-            await asyncio.sleep(0)
-            assert not task.done()
+            for _ in range(cancel_count):
+                task.cancel()
+                for _turn in range(4):
+                    await asyncio.sleep(0)
+                assert not task.done(), 'Avatar cleanup was bypassed by repeated cancellation'
         finally:
             finish_worker.set()
 
@@ -333,6 +336,71 @@ def test_real_avatar_files_survive_native_route_commit_failure(tmp_path):
     assert old_avatar.read_bytes() == b'old avatar bytes'
     assert old_thumbnail.read_bytes() == b'old thumbnail bytes'
     assert set(avatar_folder.iterdir()) == {old_avatar, old_thumbnail}
+
+
+def test_repeated_avatar_cancellation_removes_real_uncommitted_files(tmp_path):
+    from werkzeug.datastructures import FileStorage
+    from oneirodex.runtime_native.account_avatar_upload import _save_avatar_cancellable
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX, save_avatar
+
+    upload_folder = tmp_path / 'uploads'
+    folder = upload_folder / 'images' / 'avatars_users'
+    folder.mkdir(parents=True)
+    old_avatar, old_thumbnail = folder / 'old.png', folder / 'old_thumbnail.png'
+    old_avatar.write_bytes(b'prior avatar')
+    old_thumbnail.write_bytes(b'prior thumbnail')
+    previous = AVATAR_URL_PREFIX + 'old.png'
+    user = SimpleNamespace(id=167, avatarpath=previous)
+    flask_app = Flask(__name__)
+    flask_app.config['UPLOAD_FOLDER'] = str(upload_folder)
+    staged, release = Event(), Event()
+    premature_completion = []
+
+    class Data:
+        rollbacks = 0
+
+        def save(self, file, owner, app):
+            result = save_avatar(file, owner, app)
+            assert result[0] and result[1] is None
+            staged.set()
+            assert release.wait(5)
+            return result
+
+        def rollback(self):
+            self.rollbacks += 1
+            user.avatarpath = previous
+
+    image = BytesIO()
+    Image.new('RGB', (48, 48), 'green').save(image, format='PNG')
+    image.seek(0)
+    data = Data()
+
+    async def scenario():
+        task = asyncio.create_task(_save_avatar_cancellable(
+            data, FileStorage(stream=image, filename='replacement.png'),
+            user, flask_app, previous,
+        ))
+        try:
+            assert await asyncio.to_thread(staged.wait, 5)
+            assert user.avatarpath != previous
+            assert len(list(folder.iterdir())) == 4
+            for _ in range(3):
+                task.cancel()
+                for _turn in range(4):
+                    await asyncio.sleep(0)
+                premature_completion.append(task.done())
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+    assert set(folder.iterdir()) == {old_avatar, old_thumbnail}
+    assert data.rollbacks == 1
+    assert user.avatarpath == previous
+    assert old_avatar.read_bytes() == b'prior avatar'
+    assert old_thumbnail.read_bytes() == b'prior thumbnail'
+    assert premature_completion == [False, False, False]
 
 
 def test_legacy_profile_edit_get_redirects_to_avatar_settings():
