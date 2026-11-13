@@ -16,6 +16,7 @@ use tauri::{Emitter, Manager, State};
 use url::{Host, Url};
 use zip::ZipArchive;
 mod install_recovery;
+mod launch_supervisor;
 mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
@@ -137,9 +138,19 @@ struct ManagedLaunchIdentity {
 }
 
 impl ManagedProcessRegistry {
-    fn track(&self, mut child: Child) -> Result<ManagedLaunchIdentity, String> {
+    #[cfg(any(test, not(any(windows, target_os = "linux"))))]
+    fn track(&self, child: Child) -> Result<ManagedLaunchIdentity, String> {
         let pid = child.id();
         let launch_id = uuid::Uuid::new_v4().to_string();
+        self.track_identity(child, pid, launch_id)
+    }
+
+    fn track_identity(
+        &self,
+        mut child: Child,
+        pid: u32,
+        launch_id: String,
+    ) -> Result<ManagedLaunchIdentity, String> {
         self.0
             .lock()
             .map_err(|_| "Process registry is unavailable".to_string())?
@@ -1496,64 +1507,99 @@ fn safe_archive_file_mode(mode: u32) -> u32 {
 }
 
 #[tauri::command]
-fn launch_game(
+async fn launch_game(
     app: tauri::AppHandle,
     processes: tauri::State<'_, ManagedProcessRegistry>,
     game_uuid: String,
     exe_path: Option<String>,
     extract_path: String,
 ) -> Result<LaunchGameResult, String> {
-    let _ = game_uuid;
-    let installs = installs_root(&app)?;
-    let extract = PathBuf::from(&extract_path);
-    ensure_path_under_root(&extract, &installs)?;
+    let processes = processes.inner().clone();
+    // The preparation handshake can wait on a failed helper. Keep both the
+    // webview thread and async executor free while waiting for its response.
+    tauri::async_runtime::spawn_blocking(move || {
+        let installs = installs_root(&app)?;
+        let extract = PathBuf::from(&extract_path);
+        ensure_path_under_root(&extract, &installs)?;
 
-    let had_exe_path = exe_path.is_some();
-    let resolved = if let Some(exe) = exe_path {
-        let candidate = PathBuf::from(&exe);
-        ensure_path_under_root(&candidate, &installs)?;
-        if !candidate.is_file() {
-            return Err(format!("Executable not found: {exe}"));
-        }
-        candidate
-    } else {
-        find_likely_exe(&extract, 2)
-            .map(PathBuf::from)
-            .ok_or_else(|| "No executable found in install directory".to_string())?
-    };
-
-    ensure_path_under_root(&resolved, &installs)?;
-
-    let working_dir = resolved
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| extract.clone());
-
-    let child = std::process::Command::new(&resolved)
-        .current_dir(working_dir)
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    let identity = processes.track(child)?;
-
-    Ok(LaunchGameResult {
-        pid: identity.pid,
-        launch_id: identity.launch_id,
-        exe_path: resolved.to_string_lossy().into_owned(),
-        resolved_exe_path: if had_exe_path {
-            None
+        let had_exe_path = exe_path.is_some();
+        let resolved = if let Some(exe) = exe_path {
+            let candidate = PathBuf::from(&exe);
+            ensure_path_under_root(&candidate, &installs)?;
+            if !candidate.is_file() {
+                return Err(format!("Executable not found: {exe}"));
+            }
+            candidate
         } else {
-            Some(resolved.to_string_lossy().into_owned())
-        },
+            find_likely_exe(&extract, 2)
+                .map(PathBuf::from)
+                .ok_or_else(|| "No executable found in install directory".to_string())?
+        };
+
+        ensure_path_under_root(&resolved, &installs)?;
+
+        #[cfg(not(any(windows, target_os = "linux")))]
+        let working_dir = resolved
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| extract.clone());
+
+        #[cfg(any(windows, target_os = "linux"))]
+        let identity = {
+            let launch = launch_supervisor::start(
+                &app_data_dir(&app)?.join("launches"),
+                &installs,
+                &resolved,
+                game_uuid,
+            )
+            .map_err(|error| error.to_string())?;
+            processes.track_identity(launch.child, launch.pid, launch.launch_id)?
+        };
+        #[cfg(not(any(windows, target_os = "linux")))]
+        let child = std::process::Command::new(&resolved)
+            .current_dir(working_dir)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        #[cfg(not(any(windows, target_os = "linux")))]
+        let identity = {
+            let _ = game_uuid;
+            processes.track(child)?
+        };
+
+        Ok(LaunchGameResult {
+            pid: identity.pid,
+            launch_id: identity.launch_id,
+            exe_path: resolved.to_string_lossy().into_owned(),
+            resolved_exe_path: if had_exe_path {
+                None
+            } else {
+                Some(resolved.to_string_lossy().into_owned())
+            },
+        })
     })
+    .await
+    .map_err(|_| "Launch status is uncertain. Check the game before retrying.".to_string())?
 }
 
 #[tauri::command]
 fn is_process_running(
+    _app: tauri::AppHandle,
     processes: tauri::State<'_, ManagedProcessRegistry>,
     pid: u32,
     launch_id: Option<String>,
 ) -> Result<bool, String> {
-    process_running_in_registry(processes.inner(), pid, launch_id.as_deref())
+    if process_running_in_registry(processes.inner(), pid, launch_id.as_deref())? {
+        return Ok(true);
+    }
+    #[cfg(any(windows, target_os = "linux"))]
+    return launch_supervisor::status(
+        &app_data_dir(&_app)?.join("launches"),
+        pid,
+        launch_id.as_deref(),
+    )
+    .map_err(|_| "Launch tracking is unavailable; running game state is unverified".to_string());
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Ok(false)
 }
 
 fn process_running_in_registry(
@@ -2284,6 +2330,10 @@ fn reveal_path_in_os(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(any(windows, target_os = "linux"))]
+    if let Some(code) = launch_supervisor::run_from_args() {
+        std::process::exit(code);
+    }
     tauri::Builder::default()
         .manage(ManagedProcessRegistry::default())
         .manage(GameArchiveInstallOperations::default())

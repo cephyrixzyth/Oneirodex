@@ -1,0 +1,141 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2064",
+  "finding": "DT-006 verified launch-family supervision; partial platform acceptance",
+  "source_base": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+  "observed_utc": "2026-11-13T16:32:11.578483+00:00",
+  "candidate_source_sha256": {
+    "clients/desktop/src-tauri/src/lib.rs": "2db2fc7055322deb21cd5e36ad9f6a755cdc070e1b98b07ee8e0c7337aa581de",
+    "clients/desktop/src-tauri/src/launch_supervisor.rs": "7c6db8311fd75372dafd038992755939660c0abfd5b804f2c49e0b88a1793133",
+    "clients/desktop/src-tauri/src/launch_supervisor/linux.rs": "ff23bc43f651ead072780f3dab86e1b0bfdc3c89feab8d0421557bb1f800405c",
+    "clients/desktop/src-tauri/src/launch_supervisor/windows.rs": "ddc19f732b37a06478f0454450ce566d8e25b0f792f366e383310b91b0c1ac51"
+  },
+  "source_hash_note": "Observed Windows worktree bytes. Git normalizes line endings; staged preflight verifies normalized index equivalence.",
+  "implementation": [
+    "Separate supervisor-only executable mode runs before Tauri/keyring initialization; launch preparation runs in a blocking task, outside the UI/async executor.",
+    "Windows nested Job Objects establish inheritance before game spawn; Linux PR_SET_CHILD_SUBREAPER adopts and reaps orphaned descendants. macOS keeps its existing direct-child behavior pending qualification.",
+    "UUID descriptor, exact start authorization, phase record and non-inherited kernel-held alive lease; post-start ambiguity preserves possible games and warns before retry.",
+    "Status needs the exact UUID/PID pair and held lease; stale started metadata without the guardian returns unverified state. No OS-wide PID/name fallback."
+  ],
+  "verification": {
+    "Windows_native": {
+      "passed": 108,
+      "ignored": 4,
+      "ignored_reason": "Three bounded child-role fixtures invoked by parent tests; one Linux-only opt-in real-volume exhaustion case.",
+      "native_suite_seconds": 18.11,
+      "log_sha256": "18cb4a90e11b0aff487cd5d0e67ce00643fc8a6c95ab4b71f6a26297490e324f"
+    },
+    "actual_Windows_debug_helper": {
+      "cases": 2,
+      "seconds_including_fixture_compile": 1.19,
+      "binary_sha256": "4647b231cd430847ce362b8c6156d585f3932b71f962dc30bedd488dbd5cc54b",
+      "case_summary": "Actual wrapper exit retains explicit breakaway child; normal family completion and deliberate guardian termination preserve/retire owned processes as expected. No UI or user game opened."
+    },
+    "checks": [
+      {
+        "name": "native",
+        "seconds": 18.11,
+        "log_sha256": "18cb4a90e11b0aff487cd5d0e67ce00643fc8a6c95ab4b71f6a26297490e324f"
+      },
+      {
+        "name": "clippy",
+        "seconds": 5.44,
+        "log_sha256": "1f63f928ba42b3d2dc956729c86a20c56192b9a218ff40424a9e25efa0c800f6"
+      },
+      {
+        "name": "build",
+        "seconds": 20.28,
+        "log_sha256": "8437b1e55709e8a85c91959c2fda2c4904a56c8ed07647033465df4ebfee9d6b"
+      },
+      {
+        "name": "fmt",
+        "seconds": 0.45,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "R1972",
+        "seconds": 4.12,
+        "log_sha256": "fdd37736b91c104c8d8e5fd19a35da0cae2996cdd36a8196acf9405787f7944d"
+      },
+      {
+        "name": "diff",
+        "seconds": 0.23,
+        "log_sha256": "520a1b9ebfb805456d92a184d4d45912369585f07a327c1b6ef492a12304d2ba"
+      }
+    ],
+    "TDD": "Initial supervisor stub fails the runtime preparation assertion. Initial status stub yields 1 intended assertion failure with 3 controls passing; implemented lease status passes in the final full native suite.",
+    "controls": [
+      "Independent simultaneous families and live unrelated process exclusion",
+      "Exact start authorization before game creation",
+      "Malformed/moved descriptors reject before launch",
+      "Unrelated live PID, missing/mismatched launch identity, stale started metadata and terminal records",
+      "Actual native wrapper reaping independent of webview polling"
+    ]
+  },
+  "capability_R2063": {
+    "passed_cases": 4,
+    "seconds_including_compile": 1.92,
+    "source_sha256": "c00a7d0b649c904dc89218815efc9ea6fe37d6370dec347ee41c6d1c99540787",
+    "result": "Default-job control rejects explicit breakaway; nested jobs allow it while retaining outer membership; all-allow control escapes. Guardian close preserves the child."
+  },
+  "published_parent_CI": {
+    "observed_utc": "2026-11-13T16:32:11.578483+00:00",
+    "runs": [
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719090",
+        "run_id": 43372719090
+      },
+      {
+        "conclusion": "success",
+        "event": "push",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372711763",
+        "run_id": 43372711763
+      },
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719117",
+        "run_id": 43372719117
+      }
+    ],
+    "core": {
+      "job_id": 131712004644,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1576.67,
+      "raw_log_sha256": "b0808a5c4b8a7181987cdf66fd95c3f1b63b529e9d2182efc137763a3a59ae1f"
+    },
+    "scope": "Exact published 3ad prerequisite only; no later supervisor or packaged qualification."
+  },
+  "cleanup": "Owned synthetic guardian/root/leaf handles observed terminated; native fixtures reap family children; no user game, root environment, operator database, browser window or deployment used. Source/failed fixture history retained.",
+  "archive": {
+    "filename": "desktop-launch-supervisor-r2063-r2064.zip",
+    "sha256": "54969b17134905c0c827a98c856e54798bd97626245988316062cadbb27ded06",
+    "bytes": 346567,
+    "files": 44,
+    "storage": "Private canonical DT-006 evidence; raw operator paths are withheld from public Git."
+  },
+  "remaining": [
+    "Linux product implementation must pass its own CI/runtime checks; no inference from the earlier Python capability probe.",
+    "macOS verified family mechanism and actual supported-platform packaged journeys.",
+    "Owner-selected account-bound verified restart resume, multi-instance reporting ownership, aggregation and denial/failure/restart cases.",
+    "Physical kernel PID recycling, real launchers handing off through existing external services, platform update/rollback and full original-program gates."
+  ],
+  "coverage": "No route parity promotion, complete DT-006, original-program completion, merge, release or deployment claim.",
+  "references": [
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information",
+    "https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html",
+    "https://v2.tauri.app/develop/calling-rust/"
+  ]
+}

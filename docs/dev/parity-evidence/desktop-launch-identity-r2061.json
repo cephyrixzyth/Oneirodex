@@ -87,5 +87,44 @@
     "desktop_PR_run": 43350307045,
     "desktop_active_jobs_passed_per_run": 7,
     "limits": "Existing CI selection; duplicate automatic desktop events are not additional unique coverage. No release assets published. R2061 later candidate needs its own exact-head qualification."
+  },
+  "published_source_ci_followup": {
+    "observed_utc": "2026-11-13T16:32:11.578483+00:00",
+    "runs": [
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719090",
+        "run_id": 43372719090
+      },
+      {
+        "conclusion": "success",
+        "event": "push",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372711763",
+        "run_id": 43372711763
+      },
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719117",
+        "run_id": 43372719117
+      }
+    ],
+    "core": {
+      "job_id": 131712004644,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1576.67,
+      "raw_log_sha256": "b0808a5c4b8a7181987cdf66fd95c3f1b63b529e9d2182efc137763a3a59ae1f"
+    },
+    "scope": "Exact published 3ad prerequisite only; no later supervisor or packaged qualification."
   }
 }

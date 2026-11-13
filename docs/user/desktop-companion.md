@@ -74,10 +74,9 @@ unavailable notice and continues watching the local process. That session's
 playtime is not uploaded or backfilled. A local registry write failure after
 launch likewise does not report that the game failed to start.
 
-Tracking currently follows the direct executable launched by this companion
-in its current session. Status checks are bound to that launch; a reused process
-number is insufficient. Restarting does not resume tracking for games already running. A launcher that exits before its game can still end
-tracking early; verified child-process tracking remains under review.
+On Windows and Linux, a separate launch supervisor follows the executable and its verified child processes. Closing the companion leaves games running. A numeric process ID alone cannot attach another game; if the supervisor loses verified state, playtime reporting stops. A handoff through an already running external launcher may fall outside the verified family. macOS currently follows only the directly launched executable.
+
+Reopening the companion does not yet resume tracking for games already running. Account-bound verified recovery is still being implemented. Controlled Windows helper tests pass; Linux runtime and installed-package journeys remain under validation.
 
 Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected
 by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html).
