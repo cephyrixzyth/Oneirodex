@@ -56,9 +56,19 @@
     "scope": "Ten mocked controller checks, compile/refusal and parsed workflow guards only; actual targeted-manual selection and new native diagnosis remain pending."
   },
   "native_comparison": {
-    "status": "pending",
-    "same_runner_user_control": "Explicit GUI manual experiment only; success0/known unsupported2 are recorded, other failures stop the job.",
-    "selected_GUI_probe": "Must pass with normal nonzero-failure propagation; no waiver.",
+    "status": "phase_passed",
+    "observed_utc": "2026-11-13T21:00:45.768Z",
+    "source_head": "e5688aaa65d3ad7f12f8b4a762e0518152a7d444",
+    "source_sha256": "0520e812d19da238dd184b3bcd4145e263c47322b880c22f345822c6ed7233a8",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43506053694",
+    "job_id": 132163895665,
+    "platform": "Darwin 25.6.0 arm64",
+    "same_runner_user_control": "Unsupported: bootstrap exit 5; exact attempted job cleanup passed. No elevation or automatic fallback.",
+    "selected_GUI_probe": "Passed: two distinct own-user GUI job coalitions, each active count 1, excluding the controller and independent outside process; cleanup errors 0.",
+    "execution_scope": "One probe job executed; Rust, build and release jobs skipped by the explicit probe-only manual selection.",
+    "family_recovery_acceptance": false,
+    "raw_log_sha256": "69bc78244c2433bb5fec9d1ff53c97a380de23e7fa0ebf321bacc385a485e751",
+    "private_native_receipt_sha256": "aa21b582762d7c760952e0518e62fcd5695b222336d257dd0e10d2ae0b150b1a",
     "fallback": "none"
   },
   "archive": {
@@ -69,10 +79,9 @@
     "bytes": 75490,
     "storage": "Private canonical DT-006 artifacts; raw host paths withheld from Git."
   },
-  "limits": "No native GUI/isolation, descendant, guardian-loss, account/restart/package or original-program acceptance from local mock checks.",
+  "limits": "Native API/job isolation qualified on one Darwin arm64 runtime only. No descendant, guardian-loss, production Rust/Tauri, account/restart/package, Intel/older Mac or original-program acceptance. Local mocks are separate evidence.",
   "evidence_selection": "Archive fixes sources/local checks before this public summary; RED and final staged preflight are separate.",
   "remaining": [
-    "Actual same-source same-runner user/GUI comparison.",
     "All detached-descendant, guardian-loss, identity/restart/package and original program gates."
   ]
 }
