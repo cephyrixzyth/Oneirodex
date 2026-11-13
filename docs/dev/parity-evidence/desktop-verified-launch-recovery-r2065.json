@@ -205,7 +205,7 @@
   },
   "cleanup": "All owned synthetic helper/root/leaf/controller processes terminated and family children reaped. No operator database, root environment file, keychain credential, user game, foreground app or deployment used. Sources and failed evidence retained; BIOS output untouched.",
   "remaining": [
-    "Own-source Linux/macOS CI and platform selections; parent native results do not qualify this new source.",
+    "Own-source native CI qualified for the recorded platform selections; actual packaged acceptance and macOS family supervision/recovery remain open.",
     "Actual packaged account-bound cold/reopen/account-switch/denial, IPC, update and rollback journeys.",
     "macOS verified family mechanism and restart recovery; actual kernel PID cycling and existing external-launcher handoff coverage.",
     "Whole original review, route parity, operator/restore/resource/accessibility/platform gates, final fresh whole-program review and authorized release/deployment."
@@ -279,5 +279,228 @@
     "files": 117,
     "storage": "Private canonical DT-006 artifacts; raw logs/local paths withheld from public Git."
   },
-  "evidence_selection": "The final archive retains earlier candidates and failing checks for history. The authoritative final staged preflight is saved separately after archive creation; the publication receipt selects that preflight, final archive and exact commit tree."
+  "evidence_selection": "The final archive retains earlier candidates and failing checks for history. The authoritative final staged preflight is saved separately after archive creation; the publication receipt selects that preflight, final archive and exact commit tree.",
+  "own_source_ci_closeout": {
+    "doc_status": "Reference",
+    "evidence_id": "R2065",
+    "kind": "weekly-closeout",
+    "observed_utc": "2026-11-13T18:40:21.402Z",
+    "source_head": "2101c7a87fc4b2c416c29d96ce3c9e2e63e2a295",
+    "workflow_runs": [
+      {
+        "run_id": 43479270539,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479270539",
+        "jobs": [
+          {
+            "id": 132071180115,
+            "name": "Ops-glance vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180386,
+            "name": "Member-app vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180541,
+            "name": "Pytest (core)",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180581,
+            "name": "Lint & format",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180589,
+            "name": "Alembic (upgrade + check)",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180616,
+            "name": "Desktop vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180714,
+            "name": "Shared vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180737,
+            "name": "API client vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180804,
+            "name": "Admin-app vitest",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "run_id": 43479260057,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479260057",
+        "jobs": [
+          {
+            "id": 132071142875,
+            "name": "rust \u00b7 fmt + clippy + test",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143389,
+            "name": "macos \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143432,
+            "name": "linux \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143452,
+            "name": "linux \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143550,
+            "name": "windows \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143622,
+            "name": "macos \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143788,
+            "name": "windows \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132075096363,
+            "name": "attach installers to the GitHub release",
+            "status": "completed",
+            "conclusion": "skipped"
+          }
+        ]
+      },
+      {
+        "run_id": 43479270464,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479270464",
+        "jobs": [
+          {
+            "id": 132071179578,
+            "name": "rust \u00b7 fmt + clippy + test",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071179937,
+            "name": "macos \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071179945,
+            "name": "linux \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180015,
+            "name": "windows \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180147,
+            "name": "macos \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180241,
+            "name": "linux \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180258,
+            "name": "windows \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132075048168,
+            "name": "attach installers to the GitHub release",
+            "status": "completed",
+            "conclusion": "skipped"
+          }
+        ]
+      }
+    ],
+    "native_logs": [
+      {
+        "platform": "Linux",
+        "job_id": 132071142875,
+        "passed": 118,
+        "ignored": 6,
+        "raw_log_sha256": "ff6359ef2336829de63b56d0ae3aac779e8b3b88d6b6d20b291966e2e76f336a",
+        "scope": "Native selection includes actual profile-bound family recovery and separate reporter-process ownership."
+      },
+      {
+        "platform": "macOS",
+        "job_id": 132071143389,
+        "passed": 112,
+        "ignored": 2,
+        "raw_log_sha256": "8eb1e6cd446eb08a3bb8b5e13270109805f97b72ee5f5f7f3aaff3e8d7775a0a",
+        "scope": "Native selections; macOS family/recovery unsupported."
+      },
+      {
+        "platform": "Windows",
+        "job_id": 132071143788,
+        "passed": 114,
+        "ignored": 6,
+        "raw_log_sha256": "935e771e907c9274c4de7d28d6ee66aedaadea224bad13c7eeff9c7c5e64149f",
+        "scope": "Native selection includes actual profile-bound family recovery and separate reporter-process ownership."
+      }
+    ],
+    "limits": [
+      "macOS native tests do not implement or qualify family tracking/restart recovery.",
+      "Actual packaged IPC/cold/reopen/account-switch/denial/offline/install/update/rollback remain open.",
+      "No route parity promotion, merge, release, deployment or full-program completion."
+    ],
+    "core_result": {
+      "job_id": 132071180541,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1843.7,
+      "raw_log_sha256": "901ee25b707578608fe1c4466f4e9aa4b70613f6f63aa8060ba71201a6cc927d",
+      "scope": "CI core marker/exception selection; not unrestricted full-suite or packaged acceptance."
+    },
+    "Linux_separate_ENOSPC": {
+      "passed": 1,
+      "cleanup": "unmounted=true removed=true",
+      "overlap": "Separate opt-in test; fixture subprocess result lines are not additive suite totals."
+    }
+  }
 }
