@@ -25,10 +25,20 @@
     }
   },
   "native_macos": {
-    "status": "pending",
+    "status": "observed_unsupported",
     "job_name": "macOS coalition API/isolation probe",
     "failure_waiver": false,
-    "privileged_setup": false
+    "privileged_setup": false,
+    "observed_utc": "2026-11-13T19:37:52.574Z",
+    "source_head": "039ba881a85309f3c0c0eff14b55a897e870903c",
+    "run_id": 43492989735,
+    "job_id": 132118723620,
+    "platform": "Darwin25.6.0 arm64",
+    "own_coalition_APIs": "succeeded",
+    "user_domain_bootstrap_exit_code": 5,
+    "cleanup_errors": 0,
+    "raw_log_sha256": "6d34049ac15e2f6bf2d16e7211b469dd4fd850a455b549f90f985ae98a06f2c6",
+    "limits": "Per-game isolation not established. Bootstrap stderr was discarded; underlying cause unknown. No domain change or elevation inferred."
   },
   "primary_source": {
     "repository": "apple-oss-distributions/xnu",
@@ -43,7 +53,7 @@
   },
   "evidence_selection": "Selected CI-ready archive freezes the fixture, local checks and explicit fresh-checkout artifact-directory setup. Earlier archives are retained. Final staged preflight and eventual native CI are separate; no native pass is inferred.",
   "remaining": [
-    "Native API availability, user-domain bootstrap and independent coalition baselines.",
+    "Bootstrap failure5 cause and per-game coalition isolation remain unverified; basic ordinary-user query APIs were observed on source039ba881 only.",
     "Detached descendants, rapid exec/crash/API-denial controls and guardian-loss game survival.",
     "Successive launches, production UUID/lease/account integration and actual packaged/platform acceptance.",
     "All original parity/security/operator/restore/accessibility gates and final whole-program review/release readiness."

@@ -25,7 +25,7 @@ class OwnedProcess:
 
 class ControllerSafety(unittest.TestCase):
     def exercise(self, bootstrap, snapshots, cleanup_return=0, remains=False,
-                 expected_exception=None):
+                 expected_exception=None, diagnostic=''):
         calls = []
         report = {'api_and_job_isolation_passed': False}
 
@@ -34,7 +34,8 @@ class ControllerSafety(unittest.TestCase):
             if args[0] == 'bootstrap':
                 if isinstance(bootstrap, Exception):
                     raise bootstrap
-                return types.SimpleNamespace(returncode=bootstrap)
+                return types.SimpleNamespace(returncode=bootstrap,
+                                             stdout=diagnostic, stderr=diagnostic)
             if args[0] == 'bootout':
                 return types.SimpleNamespace(returncode=cleanup_return)
             if args[0] == 'print':
@@ -86,6 +87,20 @@ class ControllerSafety(unittest.TestCase):
                           {'coalition_id': 200, 'active': 1},
                           {'coalition_id': 300, 'active': 1}], remains=True,
                       expected_exception=RuntimeError)
+
+    def test_bootstrap_failure_preserves_reason_with_host_paths_redacted(self):
+        _, report = self.exercise(5, [{'coalition_id': 100}], diagnostic=(
+            'Bootstrap failed: 5: Input/output error at /Users/fixture/private/job.plist '
+            'and C:\\fixture\\private\\job.plist'))
+        self.assertIn('bootstrap_diagnostics', report)
+        entry = report['bootstrap_diagnostics'][0]
+        self.assertEqual(entry['exit_code'], 5)
+        for field in ('stdout', 'stderr'):
+            self.assertIn('Input/output error', entry[field])
+            self.assertNotIn('/Users/', entry[field])
+            self.assertNotIn('C:\\', entry[field])
+            self.assertLessEqual(len(entry[field]), 2048)
+        self.assertFalse(report['api_and_job_isolation_passed'])
 
     def test_root_cannot_qualify_ordinary_user_capability(self):
         with patch.object(probe, 'sys', types.SimpleNamespace(platform='darwin')), \

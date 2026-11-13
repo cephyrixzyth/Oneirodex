@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -101,6 +102,16 @@ def launchctl(*args):
                           text=True, timeout=15, check=False)
 
 
+def command_diagnostic(text, fixture_root):
+    value = str(text or '')
+    for prefix in (str(fixture_root), str(Path(__file__).resolve().parents[2]),
+                   sys.executable):
+        value = value.replace(prefix, '<owned-path>')
+    value = re.sub(r"(?<![A-Za-z0-9_])[A-Za-z]:[\\/][^\s'\"<>]+", '<path>', value)
+    value = re.sub(r"(?<![A-Za-z0-9_<>])/[^\s'\"<>]+", '<path>', value)
+    return value[:2048]
+
+
 def probe(report):
     if sys.platform != 'darwin':
         raise Unsupported('macOS runtime required; no native capability tested')
@@ -142,6 +153,12 @@ def probe(report):
                 # Retain its exact owned label before the side effect starts.
                 loaded.append((target, directory))
                 result = launchctl('bootstrap', f'user/{os.geteuid()}', str(plist))
+                report.setdefault('bootstrap_diagnostics', []).append({
+                    'domain': f'user/{os.geteuid()}',
+                    'exit_code': result.returncode,
+                    'stdout': command_diagnostic(getattr(result, 'stdout', ''), root),
+                    'stderr': command_diagnostic(getattr(result, 'stderr', ''), root),
+                })
                 if result.returncode != 0:
                     raise Unsupported(f'user-domain bootstrap failed ({result.returncode})')
                 snapshot = ready(directory, nonce)
