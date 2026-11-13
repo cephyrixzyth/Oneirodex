@@ -9,6 +9,32 @@ describe('playtime session watcher', () => {
     vi.useFakeTimers()
   })
 
+  it('carries the native launch identity on every process query', async () => {
+    const launchId = '5d283155-6b33-45c9-b9cf-a8e872dd0559'
+    const fetchImpl = vi.fn()
+    const api = createOneirodexClient({
+      baseUrl: 'https://example.com',
+      getToken: () => 'test',
+      fetchImpl,
+    })
+    const isProcessRunning = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false)
+    const watcher = watchPlaySession(api, 42, null, {
+      launchId,
+      pollIntervalMs: 1000,
+      isProcessRunning,
+    })
+    try {
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(isProcessRunning).toHaveBeenCalledTimes(2)
+      expect(isProcessRunning).toHaveBeenNthCalledWith(1, 42, launchId)
+      expect(isProcessRunning).toHaveBeenNthCalledWith(2, 42, launchId)
+      expect(fetchImpl).not.toHaveBeenCalled()
+    } finally {
+      await watcher.stop()
+      vi.useRealTimers()
+    }
+  })
+
   it('watches an offline process without sending a nonexistent remote session', async () => {
     const fetchImpl = vi.fn()
     const api = createOneirodexClient({

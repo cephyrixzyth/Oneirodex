@@ -10,9 +10,11 @@ import {
 } from './install-store.js'
 import type { GameLifecycleState } from './lifecycle.js'
 import { watchPlaySession, type PlaySessionWatcher } from './playtime-session.js'
+import { hasNativeLaunchIdentity } from './process-status.js'
 
 interface LaunchGameResult {
   pid: number
+  launch_id?: string
   exe_path: string
   resolved_exe_path?: string | null
 }
@@ -51,16 +53,20 @@ export async function kickoffLaunch(
   }
 
   let sessionId: number | null = null
-  try {
-    const session = await api.playtime.startSession({
-      game_uuid: gameUuid,
-      client: 'desktop',
-    })
-    if (typeof session.id === 'number' && Number.isInteger(session.id) && session.id > 0) {
-      sessionId = session.id
+  const launchId = launchResult.launch_id
+  const canTrack = hasNativeLaunchIdentity(launchResult.pid, launchId)
+  if (canTrack) {
+    try {
+      const session = await api.playtime.startSession({
+        game_uuid: gameUuid,
+        client: 'desktop',
+      })
+      if (typeof session.id === 'number' && Number.isInteger(session.id) && session.id > 0) {
+        sessionId = session.id
+      }
+    } catch {
+      // Offline play remains a successful local launch, without invented playtime.
     }
-  } catch {
-    // Offline play remains a successful local launch, without invented playtime.
   }
 
   const existing = activeWatchers.get(gameUuid)
@@ -69,7 +75,9 @@ export async function kickoffLaunch(
     activeWatchers.delete(gameUuid)
   }
 
-  activeWatchers.set(gameUuid, watchPlaySession(api, launchResult.pid, sessionId))
+  if (canTrack) {
+    activeWatchers.set(gameUuid, watchPlaySession(api, launchResult.pid, sessionId, { launchId }))
+  }
 
   return { pid: launchResult.pid, sessionId }
 }

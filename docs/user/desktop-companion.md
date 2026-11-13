@@ -75,8 +75,8 @@ playtime is not uploaded or backfilled. A local registry write failure after
 launch likewise does not report that the game failed to start.
 
 Tracking currently follows the direct executable launched by this companion
-in its current session. Restarting the companion does not resume tracking for
-games already running. A launcher that exits before its game can still end
+in its current session. Status checks are bound to that launch; a reused process
+number is insufficient. Restarting does not resume tracking for games already running. A launcher that exits before its game can still end
 tracking early; verified child-process tracking remains under review.
 
 Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected

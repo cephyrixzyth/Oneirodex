@@ -6,8 +6,9 @@ export interface PlaySessionWatcher {
 }
 
 export interface WatchPlaySessionOptions {
+  launchId?: string
   pollIntervalMs?: number
-  isProcessRunning?: (pid: number) => Promise<boolean>
+  isProcessRunning?: (pid: number, launchId?: string) => Promise<boolean>
   setIntervalImpl?: typeof setInterval
   clearIntervalImpl?: typeof clearInterval
 }
@@ -50,7 +51,7 @@ export function watchPlaySession(
     }
 
     try {
-      const running = await isProcessRunning(pid)
+      const running = await isProcessRunning(pid, options.launchId)
       if (stopped) return
       if (!running) {
         await stop()

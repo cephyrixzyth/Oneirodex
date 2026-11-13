@@ -50,5 +50,24 @@
     "desktop_PR_run": 43345227216,
     "desktop_active_jobs_passed_per_run": 7,
     "note": "Parent qualification only. The separately fingerprinted R2059 code still needs its own next-head native/platform CI."
+  },
+  "published_source_qualification": {
+    "source": "25b2833fc343044a40ec2959f9f61119f4ccb458",
+    "main_run": 43350306811,
+    "main_jobs_passed": 9,
+    "core": {
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1781.61,
+      "coverage_percent": 74.98,
+      "job": 131639489129,
+      "raw_log_sha256": "789c238e89779a7dfaa79d8c0866e4400c803bc6894bedd1eb2ef0488dd43832"
+    },
+    "desktop_push_run": 43350298925,
+    "desktop_PR_run": 43350307045,
+    "desktop_active_jobs_passed_per_run": 7,
+    "limits": "Existing CI selection; duplicate automatic desktop events are not additional unique coverage. No release assets published. R2061 later candidate needs its own exact-head qualification."
   }
 }

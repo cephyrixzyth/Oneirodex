@@ -56,7 +56,11 @@ beforeEach(async () => {
       case 'secure_store_delete':
         return undefined
       case 'launch_game':
-        return { pid: 42, exe_path: 'C:/fixture/a/game.exe' }
+        return {
+          pid: 42,
+          launch_id: '5d283155-6b33-45c9-b9cf-a8e872dd0559',
+          exe_path: 'C:/fixture/a/game.exe',
+        }
       case 'is_process_running':
         return true
       default:

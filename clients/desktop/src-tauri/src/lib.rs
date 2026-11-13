@@ -122,43 +122,48 @@ impl Drop for GameArchiveOperationCleanup {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LaunchGameResult {
     pub pid: u32,
+    pub launch_id: String,
     pub exe_path: String,
     pub resolved_exe_path: Option<String>,
 }
 
 #[derive(Clone, Default)]
-struct ManagedProcessRegistry(Arc<Mutex<HashMap<u32, bool>>>);
+struct ManagedProcessRegistry(Arc<Mutex<HashMap<String, u32>>>);
+
+#[derive(Debug, Serialize)]
+struct ManagedLaunchIdentity {
+    pid: u32,
+    launch_id: String,
+}
 
 impl ManagedProcessRegistry {
-    fn track(&self, mut child: Child) -> Result<u32, String> {
+    fn track(&self, mut child: Child) -> Result<ManagedLaunchIdentity, String> {
         let pid = child.id();
+        let launch_id = uuid::Uuid::new_v4().to_string();
         self.0
             .lock()
             .map_err(|_| "Process registry is unavailable".to_string())?
-            .insert(pid, true);
+            .insert(launch_id.clone(), pid);
 
         let registry = Arc::clone(&self.0);
+        let completed_launch_id = launch_id.clone();
         thread::spawn(move || {
             // Waiting here reaps the direct child even when the webview is not
-            // polling. Its exited state is kept for the next watcher query.
+            // polling. Remove only this launch: a later process can reuse its PID.
             let _ = child.wait();
             if let Ok(mut processes) = registry.lock() {
-                processes.insert(pid, false);
+                processes.remove(&completed_launch_id);
             }
         });
-        Ok(pid)
+        Ok(ManagedLaunchIdentity { pid, launch_id })
     }
 
-    fn is_running(&self, pid: u32) -> Result<Option<bool>, String> {
-        let mut processes = self
+    fn is_running(&self, pid: u32, launch_id: Option<&str>) -> Result<bool, String> {
+        let processes = self
             .0
             .lock()
             .map_err(|_| "Process registry is unavailable".to_string())?;
-        let state = processes.get(&pid).copied();
-        if state == Some(false) {
-            processes.remove(&pid);
-        }
-        Ok(state)
+        Ok(launch_id.and_then(|id| processes.get(id)).copied() == Some(pid))
     }
 }
 
@@ -1528,10 +1533,11 @@ fn launch_game(
         .current_dir(working_dir)
         .spawn()
         .map_err(|error| error.to_string())?;
-    let pid = processes.track(child)?;
+    let identity = processes.track(child)?;
 
     Ok(LaunchGameResult {
-        pid,
+        pid: identity.pid,
+        launch_id: identity.launch_id,
         exe_path: resolved.to_string_lossy().into_owned(),
         resolved_exe_path: if had_exe_path {
             None
@@ -1545,17 +1551,19 @@ fn launch_game(
 fn is_process_running(
     processes: tauri::State<'_, ManagedProcessRegistry>,
     pid: u32,
+    launch_id: Option<String>,
 ) -> Result<bool, String> {
-    process_running_in_registry(processes.inner(), pid)
+    process_running_in_registry(processes.inner(), pid, launch_id.as_deref())
 }
 
 fn process_running_in_registry(
     processes: &ManagedProcessRegistry,
     pid: u32,
+    launch_id: Option<&str>,
 ) -> Result<bool, String> {
     // A numeric PID can name an unrelated process after exit or restart.
     // Only this registry's retained child is evidence of a running game.
-    Ok(processes.is_running(pid)?.unwrap_or(false))
+    processes.is_running(pid, launch_id)
 }
 
 fn remove_path_inner(path: &Path) -> Result<(), String> {
@@ -2325,9 +2333,36 @@ mod tests {
 
     #[test]
     fn managed_child_fixture() {
+        if std::env::var_os("ONEIRODEX_LAUNCH_IDENTITY_PIPE").is_some() {
+            use std::io::Read;
+            std::io::stdin().read_to_end(&mut Vec::new()).unwrap();
+            return;
+        }
         if std::env::var_os("ONEIRODEX_CHILD_REAP_TEST").is_some() {
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    #[test]
+    fn managed_launch_receipt_contains_a_native_launch_identity() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_CHILD_REAP_TEST", "1")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let registry = ManagedProcessRegistry::default();
+        let receipt = serde_json::to_value(registry.track(child).unwrap()).unwrap();
+        let launch_id = receipt.get("launch_id").and_then(|value| value.as_str());
+        assert!(
+            launch_id.is_some(),
+            "native launch must include an opaque identity"
+        );
+        assert_eq!(launch_id.unwrap().len(), 36);
+        assert_eq!(
+            receipt.get("pid").and_then(|value| value.as_u64()),
+            Some(pid as u64)
+        );
     }
 
     #[test]
@@ -2350,26 +2385,27 @@ mod tests {
             .unwrap();
         let pid = child.id();
         let registry = ManagedProcessRegistry::default();
-        assert_eq!(registry.track(child).unwrap(), pid);
-        assert_eq!(registry.is_running(pid).unwrap(), Some(true));
-        assert!(process_running_in_registry(&registry, pid).unwrap());
+        let identity = registry.track(child).unwrap();
+        assert_eq!(identity.pid, pid);
+        assert!(registry.is_running(pid, Some(&identity.launch_id)).unwrap());
+        assert!(process_running_in_registry(&registry, pid, Some(&identity.launch_id)).unwrap());
 
         let deadline = Instant::now() + Duration::from_secs(5);
-        let mut observed = Some(true);
-        while observed == Some(true) && Instant::now() < deadline {
+        let mut observed = true;
+        while observed && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
-            observed = registry.is_running(pid).unwrap();
+            observed = registry.is_running(pid, Some(&identity.launch_id)).unwrap();
         }
 
-        assert_eq!(observed, Some(false));
-        assert!(!process_running_in_registry(&registry, pid).unwrap());
+        assert!(!observed);
+        assert!(!process_running_in_registry(&registry, pid, Some(&identity.launch_id)).unwrap());
     }
 
     #[test]
     fn process_status_rejects_an_unregistered_live_pid() {
         let registry = ManagedProcessRegistry::default();
         // This test process is alive, but it was never launched as a game.
-        assert!(!process_running_in_registry(&registry, std::process::id()).unwrap());
+        assert!(!process_running_in_registry(&registry, std::process::id(), None).unwrap());
     }
 
     #[test]
@@ -2379,9 +2415,84 @@ mod tests {
         // Model a consumed game exit whose numeric PID now names an unrelated
         // live process. This is deterministic identity substitution, not a
         // claim that the kernel actually recycled a PID in this test.
-        registry.0.lock().unwrap().insert(pid, false);
-        assert!(!process_running_in_registry(&registry, pid).unwrap());
-        assert!(!process_running_in_registry(&registry, pid).unwrap());
+        let retired = uuid::Uuid::new_v4().to_string();
+        registry.0.lock().unwrap().insert(retired.clone(), pid);
+        assert!(process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+        registry.0.lock().unwrap().remove(&retired);
+        assert!(!process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+        assert!(!process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+    }
+
+    fn held_launch_fixture() -> (Child, std::process::ChildStdin) {
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_LAUNCH_IDENTITY_PIPE", "1")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let release = child.stdin.take().unwrap();
+        (child, release)
+    }
+
+    fn wait_for_launch_exit(registry: &ManagedProcessRegistry, identity: &ManagedLaunchIdentity) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while registry
+            .is_running(identity.pid, Some(&identity.launch_id))
+            .unwrap()
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!registry
+            .is_running(identity.pid, Some(&identity.launch_id))
+            .unwrap());
+    }
+
+    #[test]
+    fn managed_launches_require_their_own_identity_and_retire_independently() {
+        let (child_a, release_a) = held_launch_fixture();
+        let (child_b, release_b) = held_launch_fixture();
+        let registry = ManagedProcessRegistry::default();
+        let a = registry.track(child_a).unwrap();
+        let b = registry.track(child_b).unwrap();
+        assert_ne!(a.launch_id, b.launch_id);
+        assert!(
+            uuid::Uuid::parse_str(&a.launch_id)
+                .unwrap()
+                .get_version_num()
+                == 4
+        );
+        assert!(process_running_in_registry(&registry, a.pid, Some(&a.launch_id)).unwrap());
+        assert!(process_running_in_registry(&registry, b.pid, Some(&b.launch_id)).unwrap());
+        assert!(!process_running_in_registry(&registry, a.pid, None).unwrap());
+        assert!(!process_running_in_registry(&registry, a.pid, Some(&b.launch_id)).unwrap());
+        assert!(!process_running_in_registry(&registry, b.pid, Some(&a.launch_id)).unwrap());
+        drop(release_a);
+        wait_for_launch_exit(&registry, &a);
+        assert!(process_running_in_registry(&registry, b.pid, Some(&b.launch_id)).unwrap());
+        drop(release_b);
+        wait_for_launch_exit(&registry, &b);
+        assert!(registry.0.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn old_waiter_cannot_retire_a_new_identity_with_the_same_numeric_pid() {
+        let (child, release) = held_launch_fixture();
+        let registry = ManagedProcessRegistry::default();
+        let old = registry.track(child).unwrap();
+        // Deliberately model PID reuse, then let the actual older waiter finish.
+        // The operating system did not recycle a PID in this controlled test.
+        let replacement = uuid::Uuid::new_v4().to_string();
+        registry
+            .0
+            .lock()
+            .unwrap()
+            .insert(replacement.clone(), old.pid);
+        drop(release);
+        wait_for_launch_exit(&registry, &old);
+        assert!(process_running_in_registry(&registry, old.pid, Some(&replacement)).unwrap());
+        assert!(!process_running_in_registry(&registry, old.pid, Some(&old.launch_id)).unwrap());
+        registry.0.lock().unwrap().remove(&replacement);
     }
     use zip::write::{SimpleFileOptions, ZipWriter};
 
