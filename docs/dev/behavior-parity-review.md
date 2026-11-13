@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-13
 
+The macOS coalition API/isolation probe is a separate native capability gate ([scope and invocation](../../scripts/ci/README-macos-coalition-probe.md)). It checks ordinary-user APIs, two temporary user jobs, outside-process exclusion, held guardian leases and cleanup. [R2066](parity-evidence/macos-coalition-api-probe-r2066.json) records three controller-safety failures reproduced before correction, six final mocked controller checks passing, compilation and actual Windows refusal with exit2. Native results are pending; these local checks cannot qualify macOS. This first phase does not implement family tracking or close descendant, guardian-loss, restart/account or packaged acceptance.
+
 <!-- R2065 weekly closeout -->
 Published `2101c7a8` passes both desktop workflows (7 active jobs each; release attachment skipped). Own-source native logs record Linux 118 passed/6 ignored plus a separate real-ENOSPC case with cleanup, Windows 114 passed/6 ignored, and macOS 112 passed/2 ignored. macOS excludes family supervision/recovery; these results do not qualify that mechanism. Main CI all 9 jobs succeeded (core: 7,949 passed, 15 skipped, 548 deselected). Actual packaged IPC/restart/account journeys, macOS family recovery and all original program gates remain open.
 <!-- /R2065 weekly closeout -->

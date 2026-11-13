@@ -38,6 +38,8 @@ on:
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
       - 'scripts/ci/test-real-game-archive-enospc.sh'
+      - 'scripts/ci/probe-macos-launch-coalition.py'
+      - 'scripts/ci/test_macos_launch_coalition_probe.py'
   pull_request:
     paths:
       - 'clients/desktop/**'
@@ -47,11 +49,34 @@ on:
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
       - 'scripts/ci/test-real-game-archive-enospc.sh'
+      - 'scripts/ci/probe-macos-launch-coalition.py'
+      - 'scripts/ci/test_macos_launch_coalition_probe.py'
 
 permissions:
   contents: read
 
 jobs:
+  macos-coalition-probe:
+    name: macOS coalition API/isolation probe
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Probe ordinary-user APIs and temporary job isolation
+        run: |
+          mkdir -p .artifacts
+          python3 scripts/ci/test_macos_launch_coalition_probe.py
+          python3 scripts/ci/probe-macos-launch-coalition.py --output "$RUNNER_TEMP/oneirodex-macos-coalition-probe.json"
+
+      - name: Preserve capability result, including unsupported/failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-macos-coalition-probe
+          path: ${{ runner.temp }}/oneirodex-macos-coalition-probe.json
+          if-no-files-found: error
+
   rust-checks:
     name: rust · fmt + clippy + test
     runs-on: ubuntu-latest
