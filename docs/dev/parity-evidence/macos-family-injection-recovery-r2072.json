@@ -55,7 +55,27 @@
   "family_controller_methods": 13,
   "baseline_controller_methods": 16,
   "native_verification": {
-    "status": "pending"
+    "status": "phase_passed",
+    "source_head": "4fb429774447856a0b8cc0c46ecbab5e545bf12f",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43515067197",
+    "job_id": 132194843829,
+    "platform": "Darwin25.6.0 arm64",
+    "baseline_controller_methods": 16,
+    "family_controller_methods": 13,
+    "verified_cases": 4,
+    "independent_exit_and_self_crash": true,
+    "normal_and_detached_survive_guardian_loss_before_bootout": true,
+    "fresh_successive_keeper_isolated": true,
+    "bad_nonce_rejected": true,
+    "injected_api_failure_and_recovery_with_live_family": true,
+    "cleanup": {
+      "attempted_jobs": 3,
+      "errors": []
+    },
+    "other_jobs_skipped": 3,
+    "raw_log_sha256": "60cf7d94ab197231032dfd532ce2b787f59fddb0d0acb482381d48ab2abbf51b",
+    "private_native_receipt_sha256": "39f9cf33dd60f1b210061650f4d1493ee83829e99951d92a9da7b8bb1b6d17b8",
+    "completed_utc": "2026-11-13T21:56:49Z"
   },
   "archive": {
     "filename": "macos-family-injection-recovery-r2072.zip",
@@ -66,9 +86,10 @@
     "storage": "Private canonical DT-006 artifacts."
   },
   "production_tracking_changed": false,
-  "fixture_family_lifetime_passed": false,
+  "fixture_family_lifetime_passed": true,
   "family_recovery_acceptance": false,
-  "limits": "No new native qualification from local mocks. Normal inspection has no retry/fallback; production Rust/account/package and all original gates remain open.",
+  "limits": "Native lifetime fixture qualified on Darwin25.6arm64 only. Production Rust/Tauri integration, fresh-process inspection of the persisted owned coalition, exact account/ACL recovery, packaged restart/install/update/rollback, other runtimes, PID recycling and all original gates remain unverified. family_recovery_acceptance stays false.",
   "rework": "Preserved the failed first native run. Initial follow-up collector pointed to a nonexistent renamed checker; corrected it to the unchanged existing checker and reran the complete focused checks.",
-  "capture": "Skipped: synthetic fixture/CI only."
+  "capture": "Skipped: synthetic fixture/CI only.",
+  "evidence_selection": "The candidate archive pins source/local checks before native execution; native raw log and terminal receipt are separate private canonical artifacts."
 }
