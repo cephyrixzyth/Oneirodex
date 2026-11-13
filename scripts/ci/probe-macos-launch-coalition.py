@@ -81,11 +81,22 @@ def ready(directory, nonce):
     while time.monotonic() < deadline:
         path = directory / 'ready.json'
         if path.exists():
-            data = json.loads(path.read_text(encoding='utf-8'))
+            try:
+                data = json.loads(path.read_text(encoding='utf-8'))
+            except (ValueError, UnicodeError) as error:
+                raise RuntimeError('guardian readiness invalid') from error
+            if not isinstance(data, dict):
+                raise RuntimeError('guardian readiness invalid')
             if data.get('nonce') != nonce:
                 raise RuntimeError('fixture identity mismatch')
             if 'unavailable' in data:
-                raise Unsupported('guardian API unavailable: ' + data['unavailable'])
+                raise Unsupported('guardian API unavailable')
+            fields = ('coalition_id', 'started', 'exited', 'active')
+            if (any(type(data.get(key)) is not int or not 0 <= data[key] < (1 << 64)
+                    for key in fields) or data['coalition_id'] <= 1 or
+                    data['started'] < data['exited'] or
+                    data['active'] != data['started'] - data['exited']):
+                raise RuntimeError('guardian readiness invalid')
             # Readiness alone cannot stand in for an actual live guardian.
             with (directory / 'alive.lock').open('r') as lease:
                 try:

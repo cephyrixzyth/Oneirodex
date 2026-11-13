@@ -1,11 +1,14 @@
 """Controller safety regressions; these mocks do not qualify macOS APIs."""
 import importlib.util
+from contextlib import redirect_stdout
+import io
+import json
 from pathlib import Path
 import subprocess
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location(
     'coalition_probe', Path(__file__).with_name('probe-macos-launch-coalition.py'))
@@ -131,6 +134,68 @@ class ControllerSafety(unittest.TestCase):
         self.assertIn('jobs', report)
         self.assertEqual(report['jobs'][0]['active'], 2)
         self.assertFalse(report['api_and_job_isolation_passed'])
+
+
+class ReadinessSafety(unittest.TestCase):
+    snapshot = {'nonce': 'expected', 'coalition_id': 200,
+                'started': 3, 'exited': 2, 'active': 1}
+
+    def exercise(self, raw, held=True, controller=False):
+        flock = Mock(side_effect=BlockingIOError() if held else None)
+        fake_fcntl = types.SimpleNamespace(LOCK_EX=2, LOCK_NB=4, flock=flock)
+        with TEMP_FACTORY(dir=ROOT / '.artifacts') as temp, \
+                patch.dict('sys.modules', {'fcntl': fake_fcntl}):
+            directory = Path(temp)
+            (directory / 'ready.json').write_text(raw, encoding='utf-8')
+            (directory / 'alive.lock').touch()
+            if controller:
+                output = directory / 'report.json'
+                with patch.object(probe.sys, 'argv', ['probe', '--output', str(output)]), \
+                        patch.object(probe, 'probe', side_effect=lambda report, domain: probe.ready(directory, 'expected')), \
+                        redirect_stdout(io.StringIO()):
+                    code = probe.main()
+                return code, json.loads(output.read_text()), flock
+            return probe.ready(directory, 'expected'), flock
+
+    def test_malformed_records_fail_with_bounded_fixture_reason(self):
+        invalid = ['{private-diagnostic', '[]', 'null',
+                   json.dumps({'nonce': 'expected'}),
+                   json.dumps({**self.snapshot, 'coalition_id': True}),
+                   json.dumps({**self.snapshot, 'coalition_id': -4}),
+                   json.dumps({**self.snapshot, 'started': 1 << 64}),
+                   json.dumps({**self.snapshot, 'exited': -1}),
+                   json.dumps({**self.snapshot, 'active': 2})]
+        for raw in invalid:
+            with self.subTest(raw=raw), self.assertRaisesRegex(RuntimeError, 'guardian readiness invalid'):
+                self.exercise(raw)
+
+    def test_mismatched_nonce_cannot_use_a_held_lease(self):
+        with self.assertRaisesRegex(RuntimeError, 'identity mismatch'):
+            self.exercise(json.dumps({**self.snapshot, 'nonce': 'another-launch'}))
+
+    def test_api_denial_is_unavailable_and_does_not_echo_payload(self):
+        with self.assertRaises(probe.Unsupported) as caught:
+            self.exercise(json.dumps({'nonce': 'expected', 'unavailable': '/private/diagnostic'}))
+        self.assertEqual(str(caught.exception), 'guardian API unavailable')
+
+    def test_unheld_alive_lease_rejects_stale_valid_snapshot(self):
+        with self.assertRaisesRegex(RuntimeError, 'without held alive lease'):
+            self.exercise(json.dumps(self.snapshot), held=False)
+
+    def test_held_alive_lease_accepts_valid_snapshot(self):
+        result, flock = self.exercise(json.dumps(self.snapshot))
+        self.assertEqual(result, self.snapshot)
+        flock.assert_called_once()
+
+    def test_malformed_ready_still_writes_failed_controller_report(self):
+        code, report, flock = self.exercise('{private-diagnostic', controller=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(report['status'], 'failed')
+        self.assertFalse(report['api_and_job_isolation_passed'])
+        self.assertFalse(report['family_recovery_acceptance'])
+        self.assertEqual(report['reason'], 'guardian readiness invalid')
+        self.assertNotIn('private-diagnostic', json.dumps(report))
+        flock.assert_not_called()
 
 
 if __name__ == '__main__':
