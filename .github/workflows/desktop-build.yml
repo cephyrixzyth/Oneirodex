@@ -28,6 +28,11 @@ on:
         type: choice
         default: user
         options: [user, gui]
+      probe_family:
+        description: 'Also run owned descendant/guardian-loss controls; requires probe_only=true and probe_domain=gui.'
+        required: false
+        type: boolean
+        default: false
       release_tag:
         description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.1). Leave empty to only build.'
         required: false
@@ -51,6 +56,8 @@ on:
       - 'scripts/ci/test-real-game-archive-enospc.sh'
       - 'scripts/ci/probe-macos-launch-coalition.py'
       - 'scripts/ci/test_macos_launch_coalition_probe.py'
+      - 'scripts/ci/probe-macos-coalition-family.py'
+      - 'scripts/ci/test_macos_coalition_family.py'
   pull_request:
     paths:
       - 'clients/desktop/**'
@@ -62,6 +69,8 @@ on:
       - 'scripts/ci/test-real-game-archive-enospc.sh'
       - 'scripts/ci/probe-macos-launch-coalition.py'
       - 'scripts/ci/test_macos_launch_coalition_probe.py'
+      - 'scripts/ci/probe-macos-coalition-family.py'
+      - 'scripts/ci/test_macos_coalition_family.py'
 
 permissions:
   contents: read
@@ -80,6 +89,13 @@ jobs:
         run: |
           mkdir -p .artifacts
           python3 scripts/ci/test_macos_launch_coalition_probe.py
+          python3 scripts/ci/test_macos_coalition_family.py
+
+      - name: Validate explicit family experiment selection
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_family
+        env:
+          PROBE_ONLY: ${{ inputs.probe_only }}
+        run: test "$PROBE_ONLY" = "true" && test "$PROBE_DOMAIN" = "gui"
 
       - name: Same-host user-domain control for an explicit GUI experiment
         if: github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain == 'gui'
@@ -94,6 +110,10 @@ jobs:
 
       - name: Probe selected ordinary-user domain
         run: python3 scripts/ci/probe-macos-launch-coalition.py --domain "$PROBE_DOMAIN" --output "$RUNNER_TEMP/oneirodex-macos-coalition-probe.json"
+
+      - name: Probe owned native families and guardian-loss survival
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain == 'gui' && inputs.probe_family
+        run: python3 scripts/ci/probe-macos-coalition-family.py --output "$RUNNER_TEMP/oneirodex-macos-coalition-family.json"
 
       - name: Preserve capability result, including unsupported/failure
         if: always()

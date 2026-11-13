@@ -1,0 +1,78 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2071",
+  "observed_utc": "2026-11-13T21:48:41.310718+00:00",
+  "source_base": "76aea6027bc263298eeba455a6ac44e5fecd96f1",
+  "scope": "Owned native family/survival fixture candidate, no production tracking change.",
+  "controls": [
+    "Nonce-bound predefined UUID requests and separate GUI keeper coalitions",
+    "Fast wrapper/middle exits with owned-root reaping, leaf heartbeat/lease and active counter two",
+    "Independent normal/detached families, requested exit and self-crash lease/counter retirement",
+    "Normal and detached leaf survival after exact-label guardian kill, before bootout",
+    "Fresh successive job labels; unknown inspection remains unavailable",
+    "Registered cooperative stops, lease retirement, exact-label cleanup and role watchdogs"
+  ],
+  "local_checks": {
+    "observed_utc": "2026-11-13T21:47:50.735673+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "results": [
+      {
+        "name": "baseline-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "1b8a64a58edc7641a5720c381719142315f9d13fcf1d4d6b4f925a9dff1ce5ff"
+      },
+      {
+        "name": "family-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "a15d2d49f5c8ab947d7c4899b6cf355899159e5440be8e24f04f9b4ca99c7bea"
+      },
+      {
+        "name": "compile",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "nonmac-refusal",
+        "exit_code": 2,
+        "expected": 2,
+        "sha256": "51d3445e4ff75f80c1feeed7e7a4303d12794be911de4904dbee0db096f6f37c"
+      },
+      {
+        "name": "workflow",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "a3920e33d33390a10400f771ff2be777b1762f5cdb59b5b15d3827996160cff9"
+      }
+    ],
+    "keeper_loss_mutation_red": true,
+    "source_sha256": {
+      "scripts/ci/probe-macos-coalition-family.py": "0d0b66510b5025eaeb12b3369a522a034bb79f2e76a03527688e3ed7807ec62f",
+      "scripts/ci/test_macos_coalition_family.py": "f00660b188cadd6285eac7e426c397daa3e42050f4cf55a8f790fc439a7660fd",
+      ".github/workflows/desktop-build.yml": "40416c8bab3bb0bc5c996ec7fcf8d1f41c8dd190bba48c846986757fa539b61e"
+    },
+    "native_acceptance": "pending",
+    "family_recovery_acceptance": false,
+    "limits": "Mock/control and refusal checks only. Native six-control family/survival experiment must be observed before selecting production integration."
+  },
+  "rework": "Initial new-module absence was scaffolding RED, not a product finding. Two Windows mock-lock import errors were corrected. Keeper-loss mutation fails as expected. A genuine new-fixture already-dead-leaf false-exit fault was reproduced then fixed with a held-lease precondition.",
+  "native_verification": {
+    "status": "pending"
+  },
+  "archive": {
+    "filename": "macos-family-fixture-candidate-r2071.zip",
+    "sha256": "64e615868be0d7c7ffbe7f56c9d546469968defa6bdb2c907b715c113672443b",
+    "payload_files": 16,
+    "manifest_in_addition": true,
+    "bytes": 28754,
+    "storage": "Private canonical DT-006 artifacts; raw host paths and private brief withheld from Git."
+  },
+  "fixture_family_lifetime_passed": false,
+  "family_recovery_acceptance": false,
+  "production_tracking_changed": false,
+  "limits": "Local mock/control checks do not establish native lifetime behavior. No production Rust/Tauri, account/ACL, packaged restart/install/update/rollback, older/Intel Mac, actual PID recycling or external launcher/service acceptance. All original gates remain open as recorded in the main review.",
+  "capture": "Skipped: synthetic fixture/CI only."
+}
