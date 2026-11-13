@@ -3204,6 +3204,162 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires an owned small Linux tmpfs; run through the CI fixture"]
+    fn real_disk_full_after_preflight_preserves_install_and_recovers() {
+        assert_eq!(std::env::consts::OS, "linux", "Linux fixture required");
+        assert_eq!(GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(Cell::get), None);
+        let root = PathBuf::from(std::env::var("ONEIRODEX_TEST_REAL_ENOSPC_ROOT").unwrap());
+        let owner = std::env::var("ONEIRODEX_TEST_REAL_ENOSPC_OWNER").unwrap();
+        assert!(!owner.is_empty() && owner.len() <= 128);
+        assert!(root.is_absolute());
+        assert_eq!(fs::canonicalize(&root).unwrap(), root);
+        assert!(root
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("oneirodex-enospc."));
+        let metadata = fs::symlink_metadata(&root).unwrap();
+        assert!(metadata.is_dir() && !metadata.file_type().is_symlink());
+        assert!(Command::new("mountpoint")
+            .arg("-q")
+            .arg(&root)
+            .status()
+            .unwrap()
+            .success());
+        let filesystem = Command::new("stat")
+            .args(["-f", "-c", "%T"])
+            .arg(&root)
+            .output()
+            .unwrap();
+        assert!(filesystem.status.success());
+        assert_eq!(
+            String::from_utf8(filesystem.stdout).unwrap().trim(),
+            "tmpfs"
+        );
+        let capacity = fs2::total_space(&root).unwrap();
+        assert!((8 * 1024 * 1024..=32 * 1024 * 1024).contains(&capacity));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let uid = Command::new("id").arg("-u").output().unwrap();
+            assert!(uid.status.success());
+            assert_eq!(
+                metadata.uid(),
+                String::from_utf8(uid.stdout)
+                    .unwrap()
+                    .trim()
+                    .parse::<u32>()
+                    .unwrap()
+            );
+            assert_eq!(metadata.mode() & 0o777, 0o700);
+        }
+        let marker = root.join(".oneirodex-enospc-owner");
+        let marker_metadata = fs::symlink_metadata(&marker).unwrap();
+        assert!(marker_metadata.is_file() && !marker_metadata.file_type().is_symlink());
+        assert_eq!(fs::read_to_string(&marker).unwrap(), owner);
+        let initial_entries: Vec<_> = fs::read_dir(&root).unwrap().map(Result::unwrap).collect();
+        assert_eq!(initial_entries.len(), 1, "fixture must start empty");
+        assert_eq!(initial_entries[0].path(), marker);
+
+        let work = tempfile::tempdir_in(&root).unwrap();
+        let archive = work.path().join("game.zip");
+        let payload = vec![0x5a_u8; 4 * 1024 * 1024];
+        write_zip(&archive, &[("game.bin", &payload)]);
+        let destination = work.path().join("install");
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old installed bytes").unwrap();
+        let initial_available = available_space(work.path()).unwrap();
+        assert!(initial_available > payload.len() as u64);
+        let filler_path = work.path().join("owned-filler");
+        let mut filler_bytes = 0_u64;
+        let mut filler_errno = None;
+        let mut staged_progress = 0_u64;
+        let error = {
+            let mut fill_after_partial_write = |bytes: u64, _total: u64| {
+                if bytes == 0 || filler_errno.is_some() {
+                    return;
+                }
+                let stage = fs::read_dir(work.path())
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .find(|entry| {
+                        entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".install.staging-")
+                    })
+                    .expect("partial staging directory must exist");
+                staged_progress = fs::metadata(stage.path().join("game.bin")).unwrap().len();
+                assert_eq!(staged_progress, bytes);
+                let mut filler = File::create(&filler_path).unwrap();
+                let chunk = [0xa5_u8; 64 * 1024];
+                loop {
+                    assert!(filler_bytes < 64 * 1024 * 1024, "bounded fixture overflow");
+                    let remaining = (64 * 1024 * 1024 - filler_bytes).min(chunk.len() as u64);
+                    match filler.write(&chunk[..remaining as usize]) {
+                        Ok(0) => panic!("filler made no progress"),
+                        Ok(written) => filler_bytes += written as u64,
+                        Err(error) => {
+                            filler_errno = error.raw_os_error();
+                            assert_eq!(filler_errno, Some(28), "expected kernel ENOSPC");
+                            break;
+                        }
+                    }
+                }
+            };
+            let mut control = GameArchiveExtractionControl {
+                cancellation: None,
+                on_progress: &mut fill_after_partial_write,
+            };
+            extract_zip_to_dir_with_space_budget_and_control(
+                &archive,
+                &destination,
+                10,
+                8 * 1024 * 1024,
+                0,
+                None,
+                &mut control,
+            )
+            .unwrap_err()
+        };
+        assert!(staged_progress > 0 && staged_progress < payload.len() as u64);
+        assert!(filler_bytes > 0);
+        assert_eq!(filler_errno, Some(28));
+        assert!(error.contains("os error 28"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old installed bytes"
+        );
+        let residue_count = || {
+            fs::read_dir(work.path())
+                .unwrap()
+                .map(Result::unwrap)
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with(".install.staging-")
+                        || name.starts_with(".install.previous-")
+                        || name.starts_with(".install.oneirodex-ready-")
+                        || name.starts_with(".install.ready-pending-")
+                })
+                .count()
+        };
+        assert_eq!(
+            residue_count(),
+            0,
+            "full-volume failure left recovery residue"
+        );
+        fs::remove_file(&filler_path).unwrap();
+        extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 8 * 1024 * 1024, 0, None)
+            .unwrap();
+        assert_eq!(fs::read(destination.join("game.bin")).unwrap(), payload);
+        assert_eq!(residue_count(), 0);
+        println!(
+            "REAL_ENOSPC capacity={capacity} initial_available={initial_available} partial={staged_progress} filler={filler_bytes} errno=28 old_preserved=true stage_clean=true retry=true"
+        );
+    }
+
+    #[test]
     fn simulated_disk_full_after_partial_write_preserves_existing_install() {
         let work = tempdir().unwrap();
         let archive = work.path().join("game.zip");

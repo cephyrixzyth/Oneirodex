@@ -37,6 +37,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
+      - 'scripts/ci/test-real-game-archive-enospc.sh'
   pull_request:
     paths:
       - 'clients/desktop/**'
@@ -45,6 +46,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
+      - 'scripts/ci/test-real-game-archive-enospc.sh'
 
 permissions:
   contents: read
@@ -116,6 +118,9 @@ jobs:
 
       - name: cargo test
         run: cargo test
+
+      - name: Real game archive volume exhaustion and retry
+        run: bash ../../../scripts/ci/test-real-game-archive-enospc.sh
 
   build:
     name: ${{ matrix.label }} · ${{ matrix.flavor }}

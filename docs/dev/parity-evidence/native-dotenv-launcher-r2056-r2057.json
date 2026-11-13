@@ -161,7 +161,7 @@
     "Controlled Linux tmpfs/adapters do not qualify complete online/native macOS/Steam Deck installs, packaged Tauri/standalone or deployed-operator lifecycle.",
     "No new product image, full security audit, screen-reader or route-parity claim. Immutable R1972 unchanged.",
     "Shell commands are unsupported in .env; convert to dotenv data or keep shell setup outside the file.",
-    "Next-head CI, original broad parity/platform/restore acceptance, fresh whole-program review and release/deployment remain open."
+    "Exact0197 main/desktop CI passed. Later test-harness commits require their own checks; original parity/platform/restore, fresh whole-program review and release/deployment remain open."
   ],
   "private_archives": {
     "initial_candidate": {
@@ -174,5 +174,27 @@
       "bytes": 61420,
       "sha256": "a50cec8eef638e5b7484ceda81ce8a85a90f39c108f33c3743c2d20453b3d9c2"
     }
+  },
+  "post_publication_exact_source_ci": {
+    "source": "0197d3dd26e2f4022151d8726fb5135f4cfc6b79",
+    "main": {
+      "run": 43338529501,
+      "result": "success",
+      "jobs_passed": 9,
+      "core_passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2355.71,
+      "coverage_percent": 74.98,
+      "raw_core_log_sha256": "c29195063e9a78b1963cd74feb7568a9c922757678ef5b7f2c9222aed1a38508"
+    },
+    "desktop": {
+      "run": 43338529485,
+      "result": "success",
+      "active_jobs_passed": 7,
+      "installers_published": false
+    },
+    "limits": "Existing CI selection, not unrestricted full suite or complete parity/platform/installed acceptance."
   }
 }

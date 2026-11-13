@@ -1,0 +1,104 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2058",
+  "finding": "DT-005 actual volume-exhaustion acceptance follow-up",
+  "classification": "Verification fixture prepared and locally checked. Real Linux ENOSPC acceptance is still unknown until its dedicated CI step passes. No new product defect established.",
+  "source_base": "0197d3dd26e2f4022151d8726fb5135f4cfc6b79",
+  "candidate_source_sha256": {
+    "clients/desktop/src-tauri/src/lib.rs": "b3b917b46f303c3ce51948408e0d43f255c83fee730c76176bc3cf8d58d477cf",
+    ".github/workflows/desktop-build.yml": "3e18ec7b3891f15fe7c4eed6472ecad8929b4ae749026be44efeb9324e0dcf47",
+    "scripts/ci/test-real-game-archive-enospc.sh": "9b966f0133c499d5afef86ee587b504dd06c5431bd3cdccbf8c3738a7121c7e8"
+  },
+  "source_identity": "Checked worktree bytes; Git may normalize line endings. Entire Rust source matches the baseline after removal of this one added cfg(test) function.",
+  "production_Rust_source_unchanged": true,
+  "fixture": {
+    "native_test": "tests::real_disk_full_after_preflight_preserves_install_and_recovers",
+    "ordinary_cargo_test": "Ignored opt-in case; ordinary test success does not qualify it.",
+    "CI_step": "Real game archive volume exhaustion and retry",
+    "scope": "Existing Linux rust-checks job; exact1pass/0fail/0ignored required.",
+    "private_filesystem": "Fresh runner-owned0700 16MiB tmpfs, nosuid/nodev/noexec; only exact private mount unmounted, nonrecursive rmdir cleanup.",
+    "native_guards": [
+      "Linux only before any I/O",
+      "Absolute canonical nonsymlink named root",
+      "Actual mountpoint with tmpfs type and8..32MiB capacity",
+      "UID0700 and matching regular ownership marker",
+      "Initially empty except marker",
+      "Filler at most64MiB even if fixture checks drift"
+    ],
+    "path_under_test": [
+      "Actual available_space, no override",
+      "Reserve0 only to fit small fixture; production1GiB default unchanged",
+      "No synthetic ENOSPC seam",
+      "Positive progress and actual partial file length checked before filler",
+      "Actual kernel errno28 required from filler and extraction",
+      "Old install bytes and no stage/promotion residue checked while full",
+      "Filler removed, same archive retried and new payload compared",
+      "Exact native-test result and explicit cleanup receipt required"
+    ]
+  },
+  "local_verification": {
+    "passed": true,
+    "runner_seconds": 16.83,
+    "native_compile": "Passed on Windows; final control/denial commands rebuild the actual library test target.",
+    "clippy": "cargo clippy --offline --locked --all-targets -- -D warnings: exit0,4.32reported seconds",
+    "control": "Existing simulated-full test1passed; not a real-volume result.",
+    "native_denial": "Actual opt-in case invoked on Windows exits101 at Linux guard before storage access; expected refusal, not a product failure or physical test pass.",
+    "shell_denial": "CI helper exits1 outside Linux GitHub runner before mounting/allocation.",
+    "other_checks": [
+      "cargo fmt",
+      "Bash syntax",
+      "Workflow exact step/path filters",
+      "Coordination manifest17roles12skills62tasks",
+      "Immutable R1972",
+      "Diff"
+    ]
+  },
+  "current_CI_gate": {
+    "source": "0197d3dd26e2f4022151d8726fb5135f4cfc6b79",
+    "main_run": 43338529501,
+    "main_job": 131600758132,
+    "status_at_preparation": "Eight jobs passed; core live. Do not cancel/restart to publish this fixture.",
+    "desktop_run": 43338529485,
+    "desktop_active_jobs_passed": 7,
+    "new_real_volume_step_run": false,
+    "prior_source_terminal": {
+      "source": "0197d3dd26e2f4022151d8726fb5135f4cfc6b79",
+      "main": {
+        "run": 43338529501,
+        "result": "success",
+        "jobs_passed": 9,
+        "core_passed": 7949,
+        "skipped": 15,
+        "deselected": 548,
+        "warnings": 156,
+        "pytest_seconds": 2355.71,
+        "coverage_percent": 74.98,
+        "raw_core_log_sha256": "c29195063e9a78b1963cd74feb7568a9c922757678ef5b7f2c9222aed1a38508"
+      },
+      "desktop": {
+        "run": 43338529485,
+        "result": "success",
+        "active_jobs_passed": 7,
+        "installers_published": false
+      },
+      "limits": "Existing CI selection, not unrestricted full suite or complete parity/platform/installed acceptance."
+    },
+    "publication_gate": "Cleared: prior0197 main and desktop terminal success; publication will not cancel them."
+  },
+  "rework": [
+    "Initial format check requested three wraps; cargo fmt applied.",
+    "Initial helper placement was ignored local .github scratch; moved to tracked scripts/ci and added workflow path filters, without weakening ignore rules.",
+    "Author review made the filler cap exact and independently checked the partial file length."
+  ],
+  "private_archive": {
+    "files": 15,
+    "bytes": 91234,
+    "sha256": "3d074a0187a92e9934a63a5bb32dec5ad3eacaa167aede6ae1f44c5d1aa7b53d"
+  },
+  "limits": [
+    "No physical ENOSPC or Linux cleanup result recorded yet.",
+    "No local Windows/NAS filesystem filled or mounted; existing review database untouched during these DB-free checks.",
+    "Native Linux/tmpfs proof, once obtained, will remain distinct from packaged launches, other OS/filesystem classes, cancellation/crash/restore and full DT-005 acceptance.",
+    "No route-parity promotion or whole-program/final-review/release/deployment completion."
+  ]
+}

@@ -45,6 +45,16 @@ pytest tests/test_ops_followons.py tests/test_hardlinks_ai_vr_layouts.py tests/t
 
 - [ ] CI `ci-tests` workflow green on the release PR / commit
 - [ ] CI `desktop-build` green — six unsigned artifacts (full + thin × Windows / macOS / Linux); the upload fails the job if bundling produced nothing
+
+The Linux Rust job also runs the opt-in real archive disk-full check through
+[`test-real-game-archive-enospc.sh`](../../scripts/ci/test-real-game-archive-enospc.sh).
+It requires an isolated Linux GitHub runner and creates one owned 16 MiB tmpfs;
+it must report exactly one passing test, real kernel ENOSPC after a partial
+staged write, old-install preservation, retry after freeing space and
+`REAL_ENOSPC_CLEANUP unmounted=true removed=true`. Ordinary `cargo test` skips
+this fixture. Do not treat compilation, the unsupported-host refusal, or the
+existing simulated-full test as its positive result. This bounded native check
+does not qualify packaged game launches or other platforms/filesystems.
 - [ ] Docker build: `docker compose build`
 - [ ] Fresh `.env` from `.env.docker.example` starts (`SECRET_KEY` set)
 - [ ] Schema: `python -m alembic upgrade head` runs clean on a fresh DB and `python -m alembic check` reports no new operations (allow-list in [`docs/dev/alembic-baseline-notes.md`](../dev/alembic-baseline-notes.md))
