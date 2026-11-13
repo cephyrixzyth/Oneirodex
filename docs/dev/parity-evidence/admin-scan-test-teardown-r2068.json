@@ -41,7 +41,20 @@
   },
   "coverage": "No production UI/route behavior change or parity-coverage promotion.",
   "remaining": [
-    "Full Admin CI on the published repair head.",
+    "Admin selection qualified on6a4118ba; main/core and final-head full required CI remain separate.",
     "Bootstrap isolation, complete desktop/process/platform acceptance and all original parity/security/operator/final-review gates."
-  ]
+  ],
+  "full_admin_ci": {
+    "observed_source_head": "6a4118bae90dfc96ae81162e7c5ed37f45c85652",
+    "run_id": 43503317308,
+    "job_id": 132154427964,
+    "status": "success",
+    "passed": 715,
+    "files_passed": 99,
+    "vitest_seconds": 44.41,
+    "full_admin_typecheck": "passed",
+    "job_including_classic_JS_harnesses": "success",
+    "raw_log_sha256": "cacf1322a8a5e4d4fa1ac70318f383b42e23385ce2b09ed961ea2dd2e941a6a4",
+    "scope": "Admin selection only; main/core and all original gates are separate."
+  }
 }

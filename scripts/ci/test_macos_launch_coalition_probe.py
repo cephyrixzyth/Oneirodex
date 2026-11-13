@@ -25,7 +25,7 @@ class OwnedProcess:
 
 class ControllerSafety(unittest.TestCase):
     def exercise(self, bootstrap, snapshots, cleanup_return=0, remains=False,
-                 expected_exception=None, diagnostic=''):
+                 expected_exception=None, diagnostic='', domain='user'):
         calls = []
         report = {'api_and_job_isolation_passed': False}
 
@@ -56,7 +56,7 @@ class ControllerSafety(unittest.TestCase):
                 patch.object(probe.tempfile, 'TemporaryDirectory', side_effect=temporary):
             expected = expected_exception or (probe.Unsupported, RuntimeError, subprocess.TimeoutExpired)
             with self.assertRaises(expected):
-                probe.probe(report)
+                probe.probe(report, domain=domain)
         return calls, report
 
     def test_partial_bootstrap_error_still_unloads_attempted_exact_job(self):
@@ -109,6 +109,28 @@ class ControllerSafety(unittest.TestCase):
             with self.assertRaises(probe.Unsupported):
                 probe.probe({})
             api.assert_not_called()
+
+    def test_explicit_gui_probe_keeps_bootstrap_and_cleanup_in_own_gui_domain(self):
+        calls, report = self.exercise(5, [{'coalition_id': 100}], domain='gui')
+        bootstrap = next(call for call in calls if call[0] == 'bootstrap')
+        self.assertEqual(bootstrap[1], 'gui/501')
+        self.assertIn(('bootout', 'gui/501/' + Path(bootstrap[2]).stem), calls)
+        self.assertEqual(report['bootstrap_diagnostics'][0]['domain'], 'gui/501')
+
+    def test_system_domain_is_rejected_before_any_native_query(self):
+        with patch.object(probe, 'sys', types.SimpleNamespace(platform='darwin')), \
+                patch.object(probe, 'os', types.SimpleNamespace(geteuid=lambda: 501)), \
+                patch.object(probe, 'CoalitionAPI', side_effect=AssertionError('system domain reached native query')) as api:
+            with self.assertRaises(probe.Unsupported):
+                probe.probe({}, domain='system')
+            api.assert_not_called()
+
+    def test_rejected_guardian_baseline_retains_its_observed_snapshot(self):
+        _, report = self.exercise(0, [{'coalition_id': 100},
+                                     {'coalition_id': 200, 'active': 2}])
+        self.assertIn('jobs', report)
+        self.assertEqual(report['jobs'][0]['active'], 2)
+        self.assertFalse(report['api_and_job_isolation_passed'])
 
 
 if __name__ == '__main__':

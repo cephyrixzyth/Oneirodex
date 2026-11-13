@@ -22,6 +22,12 @@ on:
         required: false
         type: boolean
         default: false
+      probe_domain:
+        description: 'Own-user domain for an explicit probe-only experiment; GUI mode also records a user-domain control.'
+        required: false
+        type: choice
+        default: user
+        options: [user, gui]
       release_tag:
         description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.1). Leave empty to only build.'
         required: false
@@ -65,21 +71,36 @@ jobs:
     name: macOS coalition API/isolation probe
     runs-on: macos-latest
     timeout-minutes: 5
+    env:
+      PROBE_DOMAIN: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain || 'user' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Probe ordinary-user APIs and temporary job isolation
+      - name: Controller safety checks
         run: |
           mkdir -p .artifacts
           python3 scripts/ci/test_macos_launch_coalition_probe.py
-          python3 scripts/ci/probe-macos-launch-coalition.py --output "$RUNNER_TEMP/oneirodex-macos-coalition-probe.json"
+
+      - name: Same-host user-domain control for an explicit GUI experiment
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain == 'gui'
+        run: |
+          set +e
+          python3 scripts/ci/probe-macos-launch-coalition.py --domain user --output "$RUNNER_TEMP/oneirodex-macos-coalition-control.json"
+          control_code=$?
+          case "$control_code" in
+            0|2) exit 0 ;;
+            *) exit "$control_code" ;;
+          esac
+
+      - name: Probe selected ordinary-user domain
+        run: python3 scripts/ci/probe-macos-launch-coalition.py --domain "$PROBE_DOMAIN" --output "$RUNNER_TEMP/oneirodex-macos-coalition-probe.json"
 
       - name: Preserve capability result, including unsupported/failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: oneirodex-macos-coalition-probe
-          path: ${{ runner.temp }}/oneirodex-macos-coalition-probe.json
+          path: ${{ runner.temp }}/oneirodex-macos-coalition-*.json
           if-no-files-found: error
 
   rust-checks:

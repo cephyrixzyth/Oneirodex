@@ -112,7 +112,9 @@ def command_diagnostic(text, fixture_root):
     return value[:2048]
 
 
-def probe(report):
+def probe(report, domain='user'):
+    if domain not in ('user', 'gui'):
+        raise Unsupported('only own-user user/gui domains may be probed')
     if sys.platform != 'darwin':
         raise Unsupported('macOS runtime required; no native capability tested')
     if os.geteuid() == 0:
@@ -135,12 +137,13 @@ def probe(report):
             outside_info = ready(outside, outside_nonce)
             report['outside'] = outside_info
             jobs = []
+            report['jobs'] = jobs
             for _ in range(2):
                 nonce = uuid.uuid4().hex
                 directory = root / nonce
                 directory.mkdir()
                 label = 'com.oneirodex.fixture.' + nonce
-                target = f'user/{os.geteuid()}/{label}'
+                target = f'{domain}/{os.geteuid()}/{label}'
                 config = {'Label': label, 'RunAtLoad': True, 'KeepAlive': False,
                           'AbandonProcessGroup': True,
                           'ProgramArguments': [sys.executable, str(Path(__file__).resolve()),
@@ -152,20 +155,19 @@ def probe(report):
                 # Bootstrap can admit a job before returning an error/timeout.
                 # Retain its exact owned label before the side effect starts.
                 loaded.append((target, directory))
-                result = launchctl('bootstrap', f'user/{os.geteuid()}', str(plist))
+                result = launchctl('bootstrap', f'{domain}/{os.geteuid()}', str(plist))
                 report.setdefault('bootstrap_diagnostics', []).append({
-                    'domain': f'user/{os.geteuid()}',
+                    'domain': f'{domain}/{os.geteuid()}',
                     'exit_code': result.returncode,
                     'stdout': command_diagnostic(getattr(result, 'stdout', ''), root),
                     'stderr': command_diagnostic(getattr(result, 'stderr', ''), root),
                 })
                 if result.returncode != 0:
-                    raise Unsupported(f'user-domain bootstrap failed ({result.returncode})')
+                    raise Unsupported(f'{domain}-domain bootstrap failed ({result.returncode})')
                 snapshot = ready(directory, nonce)
+                jobs.append(snapshot)
                 if snapshot['active'] != 1:
                     raise RuntimeError('temporary job lacks guardian-only baseline')
-                jobs.append(snapshot)
-            report['jobs'] = jobs
             job_ids = [job['coalition_id'] for job in jobs]
             excluded = {controller['coalition_id'], outside_info['coalition_id'], 0, 1}
             if len(set(job_ids)) != 2 or any(cid in excluded for cid in job_ids):
@@ -202,6 +204,7 @@ def probe(report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--domain', choices=('user', 'gui'), default='user')
     parser.add_argument('--guardian', nargs=2, metavar=('DIRECTORY', 'NONCE'))
     args = parser.parse_args()
     if args.guardian:
@@ -211,6 +214,7 @@ def main():
     if args.output is None:
         parser.error('--output is required for the controller')
     report = {'phase': 'ordinary-user-api-and-job-isolation',
+              'requested_domain': args.domain,
               'platform': platform.system(), 'release': platform.release(),
               'architecture': platform.machine(),
               'source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -220,7 +224,7 @@ def main():
                             'guardian-loss game survival', 'successive-launch isolation',
                             'production integration and account/package acceptance']}
     try:
-        probe(report)
+        probe(report, domain=args.domain)
         report['status'] = 'phase_passed'
         code = 0
     except (OSError, AttributeError, Unsupported) as error:
