@@ -12,6 +12,8 @@ import { cancelInstallArchive, kickoffInstall } from './install.js'
 import { loadInstallsFromDisk } from './install-store.js'
 import { readInstalledShelf } from './installed-shelf.js'
 import { canLaunchGame, kickoffLaunch, stopAllLaunchWatchers } from './launch.js'
+import { launchProfileBinding } from './launch-profile.js'
+import { launchRecovery } from './launch-recovery.js'
 import { kickoffUninstall, kickoffUpdate } from './uninstall.js'
 import { kickoffApplyPatch, stagePatchFile } from './apply_patch.js'
 import {
@@ -370,6 +372,7 @@ function displayConnectionFailure(error: unknown, message = formatDesktopApiErro
     Boolean(lifecycle && canLaunchGame(lifecycle.get(uuid))),
   ) as SearchResultItem[]
   if (error instanceof AccountIdentityChangedError) {
+    stopAllLaunchWatchers()
     heartbeatScheduler?.stop()
     heartbeatScheduler = null
     libraryGames = []
@@ -443,6 +446,34 @@ async function refreshAccount(
   gamesWithEnabledMods = mods.gameUuids
   modsTrackingEnabled = mods.trackingEnabled
   sessionActive = true
+  const profileCurrent = () => current() && verifiedAccountId === identity.account_id
+  // Identity and library ACL refreshed above; cached shelf hydration never
+  // enters this recovery path. Do not delay a usable connection on reporting.
+  void launchProfileBinding({
+    serverUrl: connectionAuth.getBaseUrl(),
+    accountId: identity.account_id,
+    deviceId: getOrCreateDeviceId(),
+    token: connectionAuth.getToken()!,
+  })
+    .then(async (binding) => {
+      if (!binding || !profileCurrent()) return
+      const recovered = await launchRecovery.resume(api, binding, profileCurrent)
+      if (!profileCurrent()) return
+      if (recovered.unverified)
+        setStatus(
+          'Connected. Some running game records could not be verified; their playtime was not resumed.',
+          'info',
+        )
+      else if (recovered.resumed)
+        setStatus(`Playtime resumed for ${recovered.resumed} verified running game(s).`, 'info')
+    })
+    .catch(() => {
+      if (profileCurrent())
+        setStatus(
+          'Connected. Running game recovery is unavailable; local games remain usable.',
+          'info',
+        )
+    })
   return warning
 }
 
@@ -455,9 +486,9 @@ async function handleConnect(): Promise<void> {
     return
   }
   els.connectBtn.disabled = false
-  const previousAuth = auth
   const epoch = ++connectionEpoch
   const current = () => epoch === connectionEpoch
+  stopAllLaunchWatchers()
   heartbeatScheduler?.stop()
   heartbeatScheduler = null
   sessionActive = false
@@ -488,8 +519,6 @@ async function handleConnect(): Promise<void> {
     setStatus(shapeInvalidConnectionResult().message, 'error')
     return
   }
-  if (previousAuth.getBaseUrl() !== baseUrl || previousAuth.getToken() !== token)
-    stopAllLaunchWatchers()
   const connectionAuth = createAuthStore({ baseUrl, token })
   auth = connectionAuth
   els.connectBtn.disabled = true
@@ -636,6 +665,11 @@ async function forgetAccount(): Promise<void> {
   renderLibrary()
   const problems: string[] = []
   try {
+    await launchRecovery.forget()
+  } catch {
+    problems.push('launch recovery bindings')
+  }
+  try {
     clearOfflineInstalledShelf()
   } catch {
     problems.push('cached titles')
@@ -670,18 +704,36 @@ async function runPlayAction(uuid: string): Promise<void> {
     return
   }
   busyGames.add(uuid)
-  const api = createDesktopApi(auth)
+  const operationAuth = auth
+  const epoch = connectionEpoch
+  const accountId = verifiedAccountId
+  const profileCurrent = () =>
+    epoch === connectionEpoch && auth === operationAuth && verifiedAccountId === accountId
+  const api = createDesktopApi(operationAuth)
   try {
     setGameActivity(uuid, 'Launching…')
     renderLibrary()
-    const { pid, sessionId } = await kickoffLaunch(api, uuid)
+    const binding = await launchProfileBinding({
+      serverUrl: operationAuth.getBaseUrl(),
+      accountId,
+      deviceId: getOrCreateDeviceId(),
+      token: operationAuth.getToken() ?? '',
+    }).catch(() => null)
+    const { pid, sessionId, trackingOwnedElsewhere } = await kickoffLaunch(api, uuid, {
+      profileBinding: binding,
+      current: profileCurrent,
+      canReport: () => connectionMode === 'online',
+    })
+    if (!profileCurrent()) return
     lastPlayedGameUuid = uuid
     setGameActivity(uuid, `Playing (pid ${pid})`)
     renderLibrary()
     setStatus(
-      sessionId === null
-        ? `Launched ${uuid}. Playtime tracking is unavailable.`
-        : `Launched ${uuid}.`,
+      trackingOwnedElsewhere
+        ? `Launched ${uuid}. Another companion owns playtime reporting for this game.`
+        : sessionId === null
+          ? `Launched ${uuid}. Playtime tracking is unavailable.`
+          : `Launched ${uuid}.`,
       'success',
     )
   } finally {
@@ -1179,6 +1231,12 @@ export async function mountApp(root: HTMLElement): Promise<void> {
     </main>
   `
   bindElements(root)
+  launchRecovery.onUnavailable((game) => {
+    setStatus(
+      `Playtime reporting for ${game} is unavailable. Local Play and Reveal remain usable.`,
+      'info',
+    )
+  })
   root.querySelector('#connect-form')!.addEventListener('submit', (event) => {
     event.preventDefault()
     void handleConnect()

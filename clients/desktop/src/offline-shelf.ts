@@ -24,12 +24,12 @@ interface StoredOfflineShelf {
   games: OfflineShelfGame[]
 }
 
-function normalizeServerUrl(value: string): string {
+export function normalizeServerUrl(value: string): string {
   return value.trim().replace(/\/+$/, '')
 }
 
-async function credentialFingerprint(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+export async function sha256Fingerprint(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
@@ -62,7 +62,7 @@ export async function saveOfflineInstalledShelf(
     serverUrl,
     accountId: identity.accountId,
     deviceId: identity.deviceId,
-    credentialFingerprint: await credentialFingerprint(identity.token),
+    credentialFingerprint: await sha256Fingerprint(identity.token),
     games: normalizeGames(games),
   }
   if (canCommit()) storage.setItem(STORAGE_KEY, JSON.stringify(record))
@@ -87,7 +87,7 @@ export async function loadOfflineInstalledShelf(
     saved.serverUrl !== normalizeServerUrl(identity.serverUrl) ||
     (identity.accountId && saved.accountId !== identity.accountId) ||
     saved.deviceId !== identity.deviceId ||
-    saved.credentialFingerprint !== (await credentialFingerprint(identity.token)) ||
+    saved.credentialFingerprint !== (await sha256Fingerprint(identity.token)) ||
     !Array.isArray(saved.games)
   ) {
     return null

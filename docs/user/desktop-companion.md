@@ -68,15 +68,13 @@ Cancel, Escape or clicking outside the version picker stops the download without
 changing the game's local state. Choosing the base version explicitly still
 downloads it.
 
-An installed game can launch while the server is unavailable. If playtime
-registration fails, the companion reports a successful launch with a tracking
-unavailable notice and continues watching the local process. That session's
-playtime is not uploaded or backfilled. A local registry write failure after
-launch likewise does not report that the game failed to start.
+An installed game can launch while the server is unavailable. Play from a cached shelf does not request server playtime until the account verifies online. A reporting or registry-write failure leaves a successful local launch intact and shows tracking as unavailable. Recovery does not backfill the disconnected gap; the previous interval retains the server's existing limit of 120 seconds after its last heartbeat.
 
 On Windows and Linux, a separate launch supervisor follows the executable and its verified child processes. Closing the companion leaves games running. A numeric process ID alone cannot attach another game; if the supervisor loses verified state, playtime reporting stops. A handoff through an already running external launcher may fall outside the verified family. macOS currently follows only the directly launched executable.
 
-Reopening the companion does not yet resume tracking for games already running. Account-bound verified recovery is still being implemented. Controlled Windows helper tests pass; Linux runtime and installed-package journeys remain under validation.
+On Windows and Linux, reopening and successfully reconnecting can resume a still-running verified launch from the same server, account, device and credential. Recovery starts a fresh reporting interval. It does not attach a process by name or number, and a changed credential or unverifiable record is not resumed. Multiple instances of one game share a reporter until all verified instances exit; another companion owning that reporter is disclosed. Forget clears recovery bindings and reporting while leaving games running.
+
+If verification or a heartbeat fails, the status shows that reporting is unavailable; local Play and Reveal remain usable. Controlled Windows native/helper and mounted-UI checks pass. Actual packaged restart/account journeys and the new Linux source still need platform qualification. macOS does not yet resume games after reopening.
 
 Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected
 by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html).

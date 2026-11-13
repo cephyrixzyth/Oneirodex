@@ -47,6 +47,28 @@ pub(super) struct Launch {
     pub launch_id: String,
 }
 
+pub(super) fn live_record(
+    base: &Path,
+    id: &str,
+) -> io::Result<Option<super::launch_tracking::LaunchRecord>> {
+    let root = base.join(id);
+    let request = read_request(&root)?;
+    let Phase::Started { pid } = read_phase(&root)? else {
+        return Ok(None);
+    };
+    if pid == 0 {
+        return Err(io::Error::other("Invalid live launch receipt"));
+    }
+    if !status(base, pid, Some(id))? {
+        return Ok(None);
+    }
+    Ok(Some(super::launch_tracking::LaunchRecord {
+        game_uuid: request.game_uuid,
+        pid,
+        launch_id: request.launch_id,
+    }))
+}
+
 pub(super) fn status(base: &Path, pid: u32, launch_id: Option<&str>) -> io::Result<bool> {
     let Some(id) = launch_id.and_then(|value| uuid::Uuid::parse_str(value).ok()) else {
         return Ok(false);
@@ -207,6 +229,7 @@ pub(super) fn start(
     installs: &Path,
     executable: &Path,
     game_uuid: String,
+    profile_binding: Option<&str>,
 ) -> io::Result<Launch> {
     let launch_id = uuid::Uuid::new_v4().to_string();
     fs::create_dir_all(base)?;
@@ -231,6 +254,7 @@ pub(super) fn start(
         &root.join("request.json"),
         &serde_json::to_vec(&request)?,
     )?;
+    super::launch_tracking::bind(&root, profile_binding)?;
     let mut command = Command::new(std::env::current_exe()?);
     command.arg(MODE).arg(&root);
     #[cfg(windows)]
@@ -378,6 +402,19 @@ mod tests {
     #[allow(clippy::zombie_processes)] // Intentionally orphaned fixture; the guardian must reap it.
     fn wrapper_fixture() {
         let root = fixture_root();
+        let child = fixture_command(&root, "middle_fixture")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        fs::write(root.join("middle-pid"), child.id().to_string()).unwrap();
+    }
+    #[test]
+    #[ignore = "Synthetic child role, invoked only by the bounded parent test"]
+    #[allow(clippy::zombie_processes)] // Intentionally orphaned fixture; the guardian must reap it.
+    fn middle_fixture() {
+        let root = fixture_root();
         let mut command = fixture_command(&root, "leaf_fixture");
         #[cfg(windows)]
         {
@@ -387,7 +424,20 @@ mod tests {
         #[cfg(target_os = "linux")]
         {
             use std::os::unix::process::CommandExt;
-            command.process_group(0); // Escapes the guardian's process group.
+            // A new session escapes both the guardian's group and session.
+            // Only async-signal-safe setsid is called between fork and exec.
+            unsafe {
+                command.pre_exec(|| {
+                    extern "C" {
+                        fn setsid() -> i32;
+                    }
+                    if setsid() < 0 {
+                        Err(io::Error::last_os_error())
+                    } else {
+                        Ok(())
+                    }
+                });
+            }
         }
         let child = command
             .stdin(Stdio::null())
@@ -552,6 +602,41 @@ mod tests {
         assert!(status(container.path(), pid, Some(&request.launch_id)).is_err());
     }
     #[test]
+    fn profile_bound_family_can_be_recovered_without_old_registry() {
+        let container = tempfile::tempdir().unwrap();
+        let (root, _) = prepare_fixture(container.path());
+        let profile = "a".repeat(64);
+        let other = "b".repeat(64);
+        super::super::launch_tracking::bind(&root, Some(&profile)).unwrap();
+        let mut launch = launch_fixture(&root);
+        await_file(&root.join("leaf-ready"));
+        await_file(&root.join("wrapper-reaped"));
+        let recovered =
+            super::super::launch_tracking::list(container.path(), &profile, true, live_record)
+                .unwrap();
+        assert_eq!(
+            recovered.launches.len(),
+            1,
+            "fresh native reader must recover the exact account-bound live family"
+        );
+        assert_eq!(recovered.launches[0].pid, launch.pid);
+        assert_eq!(recovered.launches[0].launch_id, launch.launch_id);
+        let denied = super::super::launch_tracking::list(container.path(), &other, true, |_, _| {
+            panic!("other account's launch must never be inspected")
+        })
+        .unwrap();
+        assert!(denied.launches.is_empty());
+        super::super::launch_tracking::forget(container.path()).unwrap();
+        assert!(launch.child.try_wait().unwrap().is_none());
+        assert!(status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap());
+        let forgotten =
+            super::super::launch_tracking::list(container.path(), &profile, true, live_record)
+                .unwrap();
+        assert!(forgotten.launches.is_empty());
+        fs::write(root.join("release-leaf"), b"release").unwrap();
+        await_finished(&mut launch);
+    }
+    #[test]
     fn prepared_supervisor_requires_its_exact_start_authorization() {
         let container = tempfile::tempdir().unwrap();
         let (root, _) = prepare_fixture(container.path());
@@ -612,6 +697,7 @@ mod tests {
         .unwrap();
         let mut launch = launch_fixture(root);
         await_file(&root.join("leaf-ready"));
+        await_file(&root.join("middle-pid"));
         await_file(&root.join("wrapper-reaped"));
         assert!(launch.pid > 0);
         assert_eq!(launch.launch_id, request.launch_id);

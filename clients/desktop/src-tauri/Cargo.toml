@@ -25,6 +25,8 @@ keyring = { version = "3.6", default-features = false, features = ["windows-nati
 fs2 = "0.4"
 # Already locked transitively; native launch identities must survive PID reuse.
 uuid = { version = "=1.24.0", features = ["v4"] }
+# Already locked; safe deterministic reporter paths must accept arbitrary game IDs.
+sha2 = "=0.10.9"
 
 [dev-dependencies]
 # Real temp dirs for the path-traversal / zip-slip unit tests in src/lib.rs.

@@ -11,6 +11,13 @@ import {
 import type { GameLifecycleState } from './lifecycle.js'
 import { watchPlaySession, type PlaySessionWatcher } from './playtime-session.js'
 import { hasNativeLaunchIdentity } from './process-status.js'
+import { launchRecovery } from './launch-recovery.js'
+
+export interface LaunchProfileOptions {
+  profileBinding: string | null
+  current: () => boolean
+  canReport?: () => boolean
+}
 
 interface LaunchGameResult {
   pid: number
@@ -28,20 +35,24 @@ export function canLaunchGame(state: GameLifecycleState): boolean {
 export async function kickoffLaunch(
   api: OneirodexClient,
   gameUuid: string,
-): Promise<{ pid: number; sessionId: number | null }> {
+  profile?: LaunchProfileOptions,
+): Promise<{ pid: number; sessionId: number | null; trackingOwnedElsewhere?: boolean }> {
   if (!isTauriRuntime()) {
     throw new Error('Launch is only available in the desktop app')
   }
+  if (profile && !profile.current()) throw new Error('Account profile changed before launch')
 
   const record = await getInstallRecord(gameUuid)
   if (!record) {
     throw new Error(`No local install found for ${gameUuid}`)
   }
+  if (profile && !profile.current()) throw new Error('Account profile changed before launch')
 
   const launchResult = await invoke<LaunchGameResult>('launch_game', {
     gameUuid,
     exePath: record.exePath ?? null,
     extractPath: record.extractPath,
+    ...(profile ? { profileBinding: profile.profileBinding } : {}),
   })
 
   if (launchResult.resolved_exe_path) {
@@ -55,6 +66,35 @@ export async function kickoffLaunch(
   let sessionId: number | null = null
   const launchId = launchResult.launch_id
   const canTrack = hasNativeLaunchIdentity(launchResult.pid, launchId)
+  if (profile) {
+    if (
+      !canTrack ||
+      !profile.profileBinding ||
+      !profile.current() ||
+      profile.canReport?.() === false
+    ) {
+      return { pid: launchResult.pid, sessionId: null }
+    }
+    const reportingCurrent = profile.canReport
+      ? () => profile.current() && profile.canReport!()
+      : profile.current
+    const result = await launchRecovery.begin(
+      api,
+      profile.profileBinding,
+      gameUuid,
+      reportingCurrent,
+      true,
+    )
+    if (result.state !== 'unsupported') {
+      return {
+        pid: launchResult.pid,
+        sessionId: result.sessionId,
+        ...(result.state === 'owned_elsewhere' ? { trackingOwnedElsewhere: true } : {}),
+      }
+    }
+    // macOS retains current-session direct-child reporting until its native
+    // family/restart mechanism is independently qualified.
+  }
   if (canTrack) {
     try {
       const session = await api.playtime.startSession({
@@ -97,6 +137,7 @@ async function persistResolvedExePath(
 }
 
 export async function stopLaunchWatcher(gameUuid: string): Promise<void> {
+  await launchRecovery.stopGame(gameUuid)
   const watcher = activeWatchers.get(gameUuid)
   if (!watcher) {
     return
@@ -107,6 +148,7 @@ export async function stopLaunchWatcher(gameUuid: string): Promise<void> {
 
 /** Retire profile tracking without killing any locally running game. */
 export function stopAllLaunchWatchers(): void {
+  launchRecovery.stopAll()
   const watchers = [...activeWatchers.values()]
   activeWatchers.clear()
   for (const watcher of watchers) {

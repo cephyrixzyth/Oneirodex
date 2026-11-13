@@ -29,44 +29,76 @@ beforeEach(async () => {
   Object.defineProperty(window, '__TAURI_INTERNALS__', { value: {}, configurable: true })
   localStorage.clear()
   localStorage.setItem('oneirodex-device-id', 'device-review')
-  native.invoke.mockReset().mockImplementation(async (command: string) => {
-    switch (command) {
-      case 'load_config':
-        return { base_url: server, token: null }
-      case 'secure_store_get':
-        return token
-      case 'load_installs':
-        return {
-          installs: {
-            'game-a': {
-              archive_path: 'C:/fixture/a.zip',
-              extract_path: 'C:/fixture/a',
-              exe_path: 'C:/fixture/a/game.exe',
+  const boundLaunches: Array<{
+    profile: string
+    game_uuid: string
+    pid: number
+    launch_id: string
+  }> = []
+  native.invoke
+    .mockReset()
+    .mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      switch (command) {
+        case 'load_config':
+          return { base_url: server, token: null }
+        case 'secure_store_get':
+          return token
+        case 'load_installs':
+          return {
+            installs: {
+              'game-a': {
+                archive_path: 'C:/fixture/a.zip',
+                extract_path: 'C:/fixture/a',
+                exe_path: 'C:/fixture/a/game.exe',
+              },
             },
-          },
-        }
-      case 'load_lifecycle_registry':
-        return { records: [{ game_uuid: 'game-a', state: 'update_available' }] }
-      case 'load_trusted_shares':
-        return []
-      case 'save_config':
-      case 'secure_store_set':
-      case 'save_lifecycle_registry':
-        return undefined
-      case 'secure_store_delete':
-        return undefined
-      case 'launch_game':
-        return {
-          pid: 42,
-          launch_id: '5d283155-6b33-45c9-b9cf-a8e872dd0559',
-          exe_path: 'C:/fixture/a/game.exe',
-        }
-      case 'is_process_running':
-        return true
-      default:
-        throw new Error(`Unexpected native I/O in connection test: ${command}`)
-    }
-  })
+          }
+        case 'load_lifecycle_registry':
+          return { records: [{ game_uuid: 'game-a', state: 'update_available' }] }
+        case 'load_trusted_shares':
+          return []
+        case 'save_config':
+        case 'secure_store_set':
+        case 'save_lifecycle_registry':
+          return undefined
+        case 'secure_store_delete':
+          return undefined
+        case 'launch_game':
+          if (typeof args?.profileBinding === 'string')
+            boundLaunches.push({
+              profile: args.profileBinding,
+              game_uuid: String(args.gameUuid),
+              pid: 42,
+              launch_id: '5d283155-6b33-45c9-b9cf-a8e872dd0559',
+            })
+          return {
+            pid: 42,
+            launch_id: '5d283155-6b33-45c9-b9cf-a8e872dd0559',
+            exe_path: 'C:/fixture/a/game.exe',
+          }
+        case 'is_process_running':
+          return true
+        case 'begin_launch_reporting':
+          return '5d283155-6b33-45c9-b9cf-a8e872dd0562'
+        case 'list_launches':
+          return {
+            supported: true,
+            launches: boundLaunches.filter((record) => record.profile === args?.profileBinding),
+            unverified: 0,
+          }
+        case 'acquire_launch_reporting':
+          return '5d283155-6b33-45c9-b9cf-a8e872dd0563'
+        case 'owns_launch_reporting':
+          return true
+        case 'release_launch_reporting':
+          return undefined
+        case 'forget_launch_bindings':
+          boundLaunches.splice(0)
+          return undefined
+        default:
+          throw new Error(`Unexpected native I/O in connection test: ${command}`)
+      }
+    })
   vi.stubGlobal('fetch', async () => {
     throw new Error('Unexpected network before Connect')
   })
@@ -90,6 +122,112 @@ afterEach(() => {
 })
 
 describe('actual companion connection orchestration', () => {
+  it('keeps local Play available if profile hashing becomes unavailable', async () => {
+    vi.stubGlobal('crypto', {
+      subtle: { digest: vi.fn().mockRejectedValue(new Error('profile hashing unavailable')) },
+    })
+    const network = vi.fn(async () => {
+      throw new Error('No verified online reporting')
+    })
+    vi.stubGlobal('fetch', network)
+    root.querySelector<HTMLButtonElement>('[data-action="play"]')!.click()
+    await vi.waitFor(() => expect(field('#status').textContent).toMatch(/launched/i))
+    expect(native.invoke).toHaveBeenCalledWith(
+      'launch_game',
+      expect.objectContaining({ profileBinding: null }),
+    )
+    expect(network).not.toHaveBeenCalled()
+  })
+  it('shows reporting uncertainty while preserving local game access', async () => {
+    let lost = false
+    const previous = native.invoke.getMockImplementation()!
+    native.invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) =>
+      command === 'owns_launch_reporting' && lost ? false : previous(command, args),
+    )
+    vi.stubGlobal('fetch', async (url: string) => {
+      const path = new URL(String(url)).pathname
+      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
+      if (path === '/api/search')
+        return Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
+      if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+      if (path === '/api/client/heartbeat') return Response.json({ commands: [] })
+      if (path === '/api/client/lifecycle') return Response.json({ records: [] })
+      if (path.startsWith('/api/playtime/')) return Response.json({ id: 7 })
+      throw new Error(`Unexpected request ${path}`)
+    })
+    submit()
+    await settled()
+    root.querySelector<HTMLButtonElement>('[data-action="play"]')!.click()
+    await vi.waitFor(() => expect(field('#status').textContent).toMatch(/launched/i))
+    lost = true
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(field('#status').textContent).toMatch(/reporting.*unavailable/i)
+    expect(root.textContent).toContain('Private A Title')
+    expect(root.querySelector<HTMLButtonElement>('[data-action="play"]')!.disabled).toBe(false)
+  })
+  it('does not send server playtime from a cached identity before fresh verification', async () => {
+    const network = vi.fn(async () => {
+      throw new Error('No fresh account verification')
+    })
+    vi.stubGlobal('fetch', network)
+    root.querySelector<HTMLButtonElement>('[data-action="play"]')!.click()
+    await vi.waitFor(() => expect(field('#status').textContent).toMatch(/launched/i))
+    expect(network).not.toHaveBeenCalled()
+    expect(native.invoke).toHaveBeenCalledWith(
+      'launch_game',
+      expect.objectContaining({ profileBinding: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+    )
+  })
+  it.each(['allowed', 'denied'])(
+    'recovers a live family only after fresh identity and ACL verification: %s',
+    async (outcome) => {
+      let verified = false
+      const paths: string[] = []
+      const previous = native.invoke.getMockImplementation()!
+      native.invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+        if (command === 'list_launches') {
+          expect(verified).toBe(true)
+          return {
+            supported: true,
+            launches: [
+              { game_uuid: 'game-a', pid: 42, launch_id: '5d283155-6b33-45c9-b9cf-a8e872dd0559' },
+            ],
+            unverified: 0,
+          }
+        }
+        return previous(command, args)
+      })
+      vi.stubGlobal('fetch', async (url: string) => {
+        const path = new URL(String(url)).pathname
+        paths.push(path)
+        if (path === '/api/collections') return Response.json([])
+        if (path === '/api/client/identity') {
+          verified = true
+          return Response.json({ account_id: 'account-a' })
+        }
+        if (path === '/api/search')
+          return outcome === 'denied'
+            ? Response.json({ error: 'denied' }, { status: 403 })
+            : Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
+        if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+        if (path === '/api/client/heartbeat') return Response.json({ commands: [] })
+        if (path === '/api/client/lifecycle') return Response.json({ records: [] })
+        if (path === '/api/playtime/sessions') return Response.json({ id: 7 }, { status: 201 })
+        if (path === '/api/playtime/sessions/7/stop') return Response.json({})
+        throw new Error(`Unexpected connection fixture request ${path}`)
+      })
+      submit()
+      await settled()
+      if (outcome === 'allowed')
+        await vi.waitFor(() => expect(paths).toContain('/api/playtime/sessions'))
+      else expect(paths).not.toContain('/api/playtime/sessions')
+      if (outcome === 'denied')
+        expect(native.invoke.mock.calls.some(([command]) => command === 'list_launches')).toBe(
+          false,
+        )
+    },
+  )
   it.each(['success', 'metadata-unavailable', 'concurrent'])(
     'refreshes a newly committed installed command outside preview: %s',
     async (outcome) => {
@@ -307,18 +445,30 @@ describe('actual companion connection orchestration', () => {
   it('ends profile playtime tracking on explicit forget without stopping the game', async () => {
     const paths: string[] = []
     vi.stubGlobal('fetch', async (url: string) => {
-      paths.push(new URL(String(url)).pathname)
-      return Response.json({ id: 7 })
+      const path = new URL(String(url)).pathname
+      paths.push(path)
+      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
+      if (path === '/api/search')
+        return Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
+      if (path === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+      if (path === '/api/client/heartbeat') return Response.json({ commands: [] })
+      if (path === '/api/client/lifecycle') return Response.json({ records: [] })
+      if (path.startsWith('/api/playtime/')) return Response.json({ id: 7 })
+      throw new Error(`Unexpected request ${path}`)
     })
+    submit()
+    await settled()
     root.querySelector<HTMLButtonElement>('[data-action="play"]')!.click()
     await vi.waitFor(() => expect(field('#status').textContent).toMatch(/launched/i))
     const button = root.querySelector<HTMLButtonElement>('#forget-account-btn')
     expect(button).not.toBeNull()
+    const beforeForget = paths.length
     button!.click()
     await vi.waitFor(() => expect(field('#status').textContent).toMatch(/forgotten/i))
     await vi.advanceTimersByTimeAsync(30_000)
     expect(paths).toContain('/api/playtime/sessions/7/stop')
-    expect(paths.some((value) => value.endsWith('/heartbeat'))).toBe(false)
+    expect(paths.slice(beforeForget).some((value) => value.endsWith('/heartbeat'))).toBe(false)
     expect(
       native.invoke.mock.calls.some(([command]) => /kill|remove_path/.test(String(command))),
     ).toBe(false)

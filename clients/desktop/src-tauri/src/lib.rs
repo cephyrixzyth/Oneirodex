@@ -17,6 +17,7 @@ use url::{Host, Url};
 use zip::ZipArchive;
 mod install_recovery;
 mod launch_supervisor;
+mod launch_tracking;
 mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
@@ -1513,6 +1514,7 @@ async fn launch_game(
     game_uuid: String,
     exe_path: Option<String>,
     extract_path: String,
+    profile_binding: Option<String>,
 ) -> Result<LaunchGameResult, String> {
     let processes = processes.inner().clone();
     // The preparation handshake can wait on a failed helper. Keep both the
@@ -1551,6 +1553,7 @@ async fn launch_game(
                 &installs,
                 &resolved,
                 game_uuid,
+                profile_binding.as_deref(),
             )
             .map_err(|error| error.to_string())?;
             processes.track_identity(launch.child, launch.pid, launch.launch_id)?
@@ -1562,7 +1565,7 @@ async fn launch_game(
             .map_err(|error| error.to_string())?;
         #[cfg(not(any(windows, target_os = "linux")))]
         let identity = {
-            let _ = game_uuid;
+            let _ = (game_uuid, profile_binding);
             processes.track(child)?
         };
 
@@ -1610,6 +1613,84 @@ fn process_running_in_registry(
     // A numeric PID can name an unrelated process after exit or restart.
     // Only this registry's retained child is evidence of a running game.
     processes.is_running(pid, launch_id)
+}
+
+#[tauri::command]
+fn begin_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+) -> Result<String, String> {
+    claims
+        .begin_client()
+        .map_err(|_| "Playtime reporter is unavailable".to_string())
+}
+
+#[tauri::command]
+fn list_launches(
+    app: tauri::AppHandle,
+    profile_binding: String,
+) -> Result<launch_tracking::LaunchInventory, String> {
+    let base = app_data_dir(&app)?.join("launches");
+    #[cfg(any(windows, target_os = "linux"))]
+    let result = launch_tracking::list(
+        &base,
+        &profile_binding,
+        true,
+        launch_supervisor::live_record,
+    );
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let result = launch_tracking::list(&base, &profile_binding, false, |_, _| Ok(None));
+    result.map_err(|_| "Verified launch recovery is unavailable".to_string())
+}
+
+#[tauri::command]
+fn acquire_launch_reporting(
+    app: tauri::AppHandle,
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    profile_binding: String,
+    game_uuid: String,
+    client_id: String,
+) -> Result<Option<String>, String> {
+    claims
+        .acquire(
+            &app_data_dir(&app)?.join("launches"),
+            &profile_binding,
+            &game_uuid,
+            &client_id,
+        )
+        .map_err(|_| "Playtime reporter ownership is unavailable".to_string())
+}
+
+#[tauri::command]
+fn owns_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    client_id: String,
+    claim_id: String,
+) -> Result<bool, String> {
+    claims
+        .owns(&client_id, &claim_id)
+        .map_err(|_| "Playtime reporter ownership is unavailable".to_string())
+}
+
+#[tauri::command]
+fn release_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    claim_id: String,
+) -> Result<(), String> {
+    claims
+        .release(&claim_id)
+        .map_err(|_| "Playtime reporter could not be released".to_string())
+}
+
+#[tauri::command]
+fn forget_launch_bindings(
+    app: tauri::AppHandle,
+    claims: State<'_, launch_tracking::TrackingClaims>,
+) -> Result<(), String> {
+    claims
+        .release_all()
+        .map_err(|_| "Playtime reporter could not be released".to_string())?;
+    launch_tracking::forget(&app_data_dir(&app)?.join("launches"))
+        .map_err(|_| "Launch recovery bindings could not be cleared".to_string())
 }
 
 fn remove_path_inner(path: &Path) -> Result<(), String> {
@@ -2336,7 +2417,15 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(ManagedProcessRegistry::default())
+        .manage(launch_tracking::TrackingClaims::default())
         .manage(GameArchiveInstallOperations::default())
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(claims) = window.try_state::<launch_tracking::TrackingClaims>() {
+                    let _ = claims.release_all();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
@@ -2360,6 +2449,12 @@ pub fn run() {
             load_trusted_shares,
             save_trusted_shares,
             is_process_running,
+            begin_launch_reporting,
+            list_launches,
+            acquire_launch_reporting,
+            owns_launch_reporting,
+            release_launch_reporting,
+            forget_launch_bindings,
             remove_path,
             rename_path,
             get_flips_path,

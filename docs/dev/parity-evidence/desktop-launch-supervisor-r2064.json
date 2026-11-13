@@ -137,5 +137,125 @@
     "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information",
     "https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html",
     "https://v2.tauri.app/develop/calling-rust/"
-  ]
+  ],
+  "published_source_followup": {
+    "observed_utc": "2026-11-13T17:41:18.997751+00:00",
+    "source_head": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+    "runs": [
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242699"
+      },
+      {
+        "conclusion": "failure",
+        "event": "push",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464233548"
+      },
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242926"
+      }
+    ],
+    "core": {
+      "job_id": 132018958822,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2054.09,
+      "log_sha256": "53930c5a4e32614089f1c2da8be4103bf5449a2cbd93abcdd5f153138a3a0d88",
+      "reused_contracts": "tests/test_playtime_ttl_parity.py has three passing cases in the actual log; backend and API client trees unchanged."
+    },
+    "Linux_native": {
+      "job_id": 132018926360,
+      "passed": 112,
+      "ignored": 4,
+      "separate_real_ENOSPC": 1,
+      "log_sha256": "c5724e4ac7416f2c7b445053fd1bf5e7b6c55e06da72b894b3a3e5386d592683"
+    },
+    "cancelled_Mac_thin_jobs": [
+      {
+        "id": 132018927123,
+        "runner_id": 0,
+        "steps": [],
+        "conclusion": "cancelled"
+      },
+      {
+        "id": 132018959331,
+        "runner_id": 0,
+        "steps": [],
+        "conclusion": "cancelled"
+      }
+    ],
+    "retry": "Specific cancelled PR job132018959331 retry requested through the job tool. The new attempt exposes the full matrix; do not count these overlapping results twice. Specific cancellation cause is unproven; original cancelled jobs had no runner or steps."
+  },
+  "parent651_PR_retry_terminal": {
+    "observed_utc": "2026-11-13T17:50:57.032406+00:00",
+    "run": {
+      "conclusion": "success",
+      "event": "pull_request",
+      "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+      "status": "completed",
+      "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242926"
+    },
+    "jobs": [
+      {
+        "id": 132046405496,
+        "name": "macos \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011171
+      },
+      {
+        "id": 132046405529,
+        "name": "rust \u00b7 fmt + clippy + test",
+        "conclusion": "success",
+        "runner_id": 1000011148
+      },
+      {
+        "id": 132046406800,
+        "name": "windows \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011158
+      },
+      {
+        "id": 132046407659,
+        "name": "linux \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011160
+      },
+      {
+        "id": 132046466380,
+        "name": "macos \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011159
+      },
+      {
+        "id": 132046466975,
+        "name": "windows \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011162
+      },
+      {
+        "id": 132046468773,
+        "name": "linux \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011149
+      },
+      {
+        "id": 132053831651,
+        "name": "attach installers to the GitHub release",
+        "conclusion": "skipped",
+        "runner_id": null
+      }
+    ],
+    "scope": "Published parent651 PR retry qualifies all7 active selections; initial cancelled no-runner jobs and push failure remain historical. No new R2065-source or package/IPC inference."
+  }
 }
