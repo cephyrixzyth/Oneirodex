@@ -74,6 +74,11 @@ unavailable notice and continues watching the local process. That session's
 playtime is not uploaded or backfilled. A local registry write failure after
 launch likewise does not report that the game failed to start.
 
+Tracking currently follows the direct executable launched by this companion
+in its current session. Restarting the companion does not resume tracking for
+games already running. A launcher that exits before its game can still end
+tracking early; verified child-process tracking remains under review.
+
 Linux dependency note: the locked Tauri/GTK3 tree includes `glib 0.18.5`, affected
 by [RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html).
 The advisory concerns string-variant iteration and is patched in glib 0.20+;

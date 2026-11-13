@@ -388,43 +388,6 @@ fn find_likely_exe_inner(dir: &Path, depth: u32, max_depth: u32) -> Option<Strin
     None
 }
 
-// Each `cfg` arm is a full `return` so the arms stay mutually exclusive without
-// tripping "unreachable expression" on the platform whose arm is compiled last;
-// clippy reads the explicit `return` as needless, but dropping it makes the
-// multi-arm shape fragile. Scoped allow rather than a crate-wide one.
-#[allow(clippy::needless_return)]
-fn check_process_running(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::process::Command;
-        return Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false);
-    }
-
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        return Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-            .output()
-            .map(|output| String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()))
-            .unwrap_or(false);
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = pid;
-        false
-    }
-}
-
 /// Is this IPv4 address on the local machine or local network?
 /// 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16 and the shared address space
 /// 100.64/10 (RFC 6598), where Tailscale puts every peer. Tailscale encrypts the
@@ -1583,10 +1546,16 @@ fn is_process_running(
     processes: tauri::State<'_, ManagedProcessRegistry>,
     pid: u32,
 ) -> Result<bool, String> {
-    if let Some(running) = processes.is_running(pid)? {
-        return Ok(running);
-    }
-    Ok(check_process_running(pid))
+    process_running_in_registry(processes.inner(), pid)
+}
+
+fn process_running_in_registry(
+    processes: &ManagedProcessRegistry,
+    pid: u32,
+) -> Result<bool, String> {
+    // A numeric PID can name an unrelated process after exit or restart.
+    // Only this registry's retained child is evidence of a running game.
+    Ok(processes.is_running(pid)?.unwrap_or(false))
 }
 
 fn remove_path_inner(path: &Path) -> Result<(), String> {
@@ -2383,6 +2352,7 @@ mod tests {
         let registry = ManagedProcessRegistry::default();
         assert_eq!(registry.track(child).unwrap(), pid);
         assert_eq!(registry.is_running(pid).unwrap(), Some(true));
+        assert!(process_running_in_registry(&registry, pid).unwrap());
 
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut observed = Some(true);
@@ -2392,6 +2362,26 @@ mod tests {
         }
 
         assert_eq!(observed, Some(false));
+        assert!(!process_running_in_registry(&registry, pid).unwrap());
+    }
+
+    #[test]
+    fn process_status_rejects_an_unregistered_live_pid() {
+        let registry = ManagedProcessRegistry::default();
+        // This test process is alive, but it was never launched as a game.
+        assert!(!process_running_in_registry(&registry, std::process::id()).unwrap());
+    }
+
+    #[test]
+    fn process_status_does_not_reattach_after_an_exit_was_observed() {
+        let registry = ManagedProcessRegistry::default();
+        let pid = std::process::id();
+        // Model a consumed game exit whose numeric PID now names an unrelated
+        // live process. This is deterministic identity substitution, not a
+        // claim that the kernel actually recycled a PID in this test.
+        registry.0.lock().unwrap().insert(pid, false);
+        assert!(!process_running_in_registry(&registry, pid).unwrap());
+        assert!(!process_running_in_registry(&registry, pid).unwrap());
     }
     use zip::write::{SimpleFileOptions, ZipWriter};
 
