@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory=$true)][string]$ResultPath,
     [switch]$ExistingConfig,
     [switch]$ForceConfig,
-    [switch]$InvalidExistingConfig
+    [switch]$InvalidExistingConfig,
+    [switch]$HideBackups
 )
 $ErrorActionPreference = 'Stop'
 $script:Events = [System.Collections.Generic.List[string]]::new()
@@ -108,7 +109,12 @@ catch {
 if (-not $failure -and $ExistingConfig -and -not $Force -and (Get-FileHash -LiteralPath $envPath -Algorithm SHA256).Hash -ne $priorHash) {
     $failure = 'SYNTHETIC_EXISTING_CONFIG_OVERWRITTEN'
 }
-$backups = @(Get-ChildItem -LiteralPath $ScriptDir -Filter '.env.backup.*' -File)
+if ($HideBackups) {
+    Get-ChildItem -LiteralPath $ScriptDir -Filter '.env.backup.*' -File -Force | ForEach-Object {
+        $_.Attributes = $_.Attributes -bor [System.IO.FileAttributes]::Hidden
+    }
+}
+$backups = @(Get-ChildItem -LiteralPath $ScriptDir -Filter '.env.backup.*' -File -Force)
 $result = @{
     existing_config = [bool]$ExistingConfig
     force_config = [bool]$ForceConfig

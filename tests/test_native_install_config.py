@@ -55,6 +55,23 @@ def test_windows_installer_validates_effective_config_and_retains_operator_value
 
 
 @pytest.mark.skipif(not POWERSHELL, reason='PowerShell required for actual installer orchestration')
+def test_native_installer_fixture_counts_hidden_configuration_backup(tmp_path):
+    result = tmp_path / 'result.json'
+    run = subprocess.run(
+        [POWERSHELL, '-NoProfile', '-NonInteractive', '-File',
+         str(ROOT / 'tests/fixtures/native_installer_config.ps1'),
+         '-InstallScript', str(ROOT / 'install-windows.ps1'),
+         '-StageRoot', str(tmp_path / 'owned-hidden-install'), '-ResultPath', str(result),
+         '-ExistingConfig', '-ForceConfig', '-HideBackups'],
+        capture_output=True, text=True, encoding='utf-8', timeout=30,
+    )
+    outcome = json.loads(result.read_text(encoding='utf-8-sig'))
+    assert run.returncode == 0 and outcome['validated'], outcome
+    assert outcome['backup_count'] == 1
+    assert outcome['backup_matches_prior']
+
+
+@pytest.mark.skipif(not POWERSHELL, reason='PowerShell required for actual installer orchestration')
 def test_windows_invalid_retained_config_stops_before_summary_without_repair(tmp_path):
     result = tmp_path / 'result.json'
     run = subprocess.run(

@@ -94,6 +94,14 @@
     "Earlier Windows online installer PyPI socket10013 gate remains; these tests do not clear it.",
     "Untested path/quoting classes and original platform/restart acceptance remain unknown.",
     "No API/runtime product change after qualified R2046 image; installer candidate itself is newer than that image.",
-    "Current-head CI, whole-original-program fresh review, full route parity and release/deployment gates remain open."
-  ]
+    "Exact6ccb core exposed the new hidden-backup fixture omission; R2057 records its focused correction. Next-head CI, whole-program review, full parity and release/deployment remain open."
+  ],
+  "subsequent_ci": {
+    "source": "6ccb5f7c861260c9e41b34d679621827bda37024",
+    "core_run": 43275546562,
+    "core_result": "One new fixture backup-count failure,7924passed; corrected/tested in R2057.",
+    "desktop_run": 43275546411,
+    "desktop_result": "All7active jobs pass; no publication.",
+    "followup": "native-dotenv-launcher-r2056-r2057.json"
+  }
 }

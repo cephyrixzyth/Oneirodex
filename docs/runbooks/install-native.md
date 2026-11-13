@@ -49,6 +49,16 @@ Keep the backup private: it contains credentials. The tracked `config.py` is
 not regenerated. Fresh and forced installs persist the selected port in `.env`
 for subsequent launcher runs.
 
+On Linux and macOS, `startweb.sh` loads `.env` through the pinned dotenv parser,
+including quoted values, spaces, pipe-separated scan locations and `${NAME}`
+interpolation. File values take precedence over inherited environment values.
+The launcher does not execute shell substitutions or commands from this file.
+Invalid syntax, encoding, environment names or NUL bytes stop startup before
+initialization. `BASH_ENV`, `SHELLOPTS` and `BASHOPTS` are also rejected because
+they control Bash startup; keep shell setup outside the application `.env`.
+The file is not rewritten. Without `.env`, the launcher retains inherited
+settings. Windows continues to use `startweb_windows.cmd`.
+
 For linked-store and saved admin integration credentials, provide a separate
 operator-managed key-ring JSON file and set
 `ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to its absolute path (the old
