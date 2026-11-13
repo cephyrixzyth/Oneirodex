@@ -1,0 +1,74 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2072",
+  "observed_utc": "2026-11-13T21:54:39.618953+00:00",
+  "source_base": "99e5d578a33feeee67e64515d654f45514326a57",
+  "classification": "Confirmed synthetic-fixture injected-recovery polling defect; not a product vulnerability or general Mac API denial.",
+  "reproduction": "Native R2071 reached both descendant modes, then propagated the still-unavailable injected snapshot immediately after removing the injection. Focused local reproduction failed with Unsupported.",
+  "fix": "Within the deliberate injection-recovery control only, wait boundedly for a fresh valid same-coalition snapshot while the guardian lease remains held. A dead guardian still propagates unavailable; permanent unavailability times out as fixture failure.",
+  "local_checks": {
+    "observed_utc": "2026-11-13T21:53:51.733646+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "results": [
+      {
+        "name": "baseline-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "bda9b2cd73c5d361542dc44e221f53758fbb3ecf113c0cfb13244d2e74564440"
+      },
+      {
+        "name": "family-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "f909958ebbdedb38b9a8895217a779647cfe1d75fb68917a7922b6549b3ef8fb"
+      },
+      {
+        "name": "compile",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "nonmac-refusal",
+        "exit_code": 2,
+        "expected": 2,
+        "sha256": "9f6a418b7da1e865c09cd3e7594dca9e3e7731e40bbb68b0079a9a375c57cd17"
+      },
+      {
+        "name": "workflow",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "a3920e33d33390a10400f771ff2be777b1762f5cdb59b5b15d3827996160cff9"
+      }
+    ],
+    "keeper_loss_mutation_red": true,
+    "source_sha256": {
+      "scripts/ci/probe-macos-coalition-family.py": "1b9165e16ac6a5e2db64426037006498639c87baa1ef2a909a5cee81d1ba3805",
+      "scripts/ci/test_macos_coalition_family.py": "1355d7bb40f335ca7658bc7f7ee6b618979e787e0525b15f8335ab1a3dd0dffc",
+      ".github/workflows/desktop-build.yml": "40416c8bab3bb0bc5c996ec7fcf8d1f41c8dd190bba48c846986757fa539b61e"
+    },
+    "native_acceptance": "pending",
+    "family_recovery_acceptance": false,
+    "limits": "Mock/control and refusal checks only. Native six-control family/survival experiment must be observed before selecting production integration."
+  },
+  "family_controller_methods": 13,
+  "baseline_controller_methods": 16,
+  "native_verification": {
+    "status": "pending"
+  },
+  "archive": {
+    "filename": "macos-family-injection-recovery-r2072.zip",
+    "sha256": "987ae70f708bbb142009db636384e05c33453ac8371539cba72db1f0e9dcd399",
+    "payload_files": 14,
+    "manifest_in_addition": true,
+    "bytes": 29031,
+    "storage": "Private canonical DT-006 artifacts."
+  },
+  "production_tracking_changed": false,
+  "fixture_family_lifetime_passed": false,
+  "family_recovery_acceptance": false,
+  "limits": "No new native qualification from local mocks. Normal inspection has no retry/fallback; production Rust/account/package and all original gates remain open.",
+  "rework": "Preserved the failed first native run. Initial follow-up collector pointed to a nonexistent renamed checker; corrected it to the unchanged existing checker and reran the complete focused checks.",
+  "capture": "Skipped: synthetic fixture/CI only."
+}

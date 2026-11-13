@@ -331,7 +331,14 @@ def negative_controls(job, expected_count):
         return False
     wait_until(unavailable, 'injected API failure was not unavailable')
     marker.unlink()
-    wait_until(lambda: count_is(job, expected_count), 'inspection did not recover after injected failure')
+    def recovered():
+        try:
+            return count_is(job, expected_count)
+        except base.Unsupported:
+            if not held(directory / 'alive.lock'):
+                raise
+            return None
+    wait_until(recovered, 'inspection did not recover after injected failure')
 
 
 def probe(report):

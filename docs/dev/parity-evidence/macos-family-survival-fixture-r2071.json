@@ -60,7 +60,20 @@
   },
   "rework": "Initial new-module absence was scaffolding RED, not a product finding. Two Windows mock-lock import errors were corrected. Keeper-loss mutation fails as expected. A genuine new-fixture already-dead-leaf false-exit fault was reproduced then fixed with a held-lease precondition.",
   "native_verification": {
-    "status": "pending"
+    "status": "partial; experiment stopped at fixture recovery race",
+    "recorded_status": "unsupported",
+    "source_head": "99e5d578a33feeee67e64515d654f45514326a57",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43514202692",
+    "job_id": 132191839487,
+    "platform": "Darwin25.6arm64",
+    "verified": "Normal and detached leaf membership after fast ancestors exited; distinct keeper coalitions and two active members each.",
+    "not_reached": "Requested exit/crash, guardian-loss survival and successive fresh job.",
+    "stop_reason": "Expected injected unavailability was still present in the first post-injection snapshot; recovery reader propagated it before a fresh snapshot arrived. Confirmed by local regression.",
+    "cleanup_errors": 0,
+    "other_jobs_skipped": 3,
+    "raw_log_sha256": "fdc1fed606ab06863711f898f81c710dfc4822924fc7c7230d7165c2f7e58720",
+    "private_receipt_sha256": "e1dc1aca8b913fe283e3ff82b4bb0d2a3c4af86eec18d5b2d9142988fe278094",
+    "followup": "R2072 bounded recovery wait; native requalification required."
   },
   "archive": {
     "filename": "macos-family-fixture-candidate-r2071.zip",

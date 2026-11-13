@@ -79,6 +79,33 @@ class FamilyControls(unittest.TestCase):
                 family.end_case({}, CASE, directory)
             self.assertFalse((directory / 'stop').exists())
 
+    def test_injected_failure_recovery_waits_for_a_fresh_available_snapshot(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / '.artifacts') as temp, \
+                patch.object(family, 'held', return_value=True), \
+                patch.object(family, 'keeper_snapshot', side_effect=[self.snapshot(),
+                    family.base.Unsupported('family inspection unavailable'),
+                    family.base.Unsupported('family inspection unavailable'), self.snapshot()]) as inspect:
+            directory = Path(temp)
+            (directory / 'cases').mkdir()
+            (directory / 'request-result.json').write_text(json.dumps({'nonce': NONCE, 'status': 'rejected'}))
+            job = {'directory': directory, 'nonce': NONCE, 'initial': {'coalition_id': 200}}
+            family.negative_controls(job, 2)
+            self.assertEqual(inspect.call_count, 4)
+
+    def test_injected_failure_recovery_cannot_hide_a_dead_keeper(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / '.artifacts') as temp, \
+                patch.object(family, 'held', return_value=False), \
+                patch.object(family, 'keeper_snapshot', side_effect=[self.snapshot(),
+                    family.base.Unsupported('family inspection unavailable'),
+                    family.base.Unsupported('family inspection unavailable')]) as inspect:
+            directory = Path(temp)
+            (directory / 'cases').mkdir()
+            (directory / 'request-result.json').write_text(json.dumps({'nonce': NONCE, 'status': 'rejected'}))
+            job = {'directory': directory, 'nonce': NONCE, 'initial': {'coalition_id': 200}}
+            with self.assertRaises(family.base.Unsupported):
+                family.negative_controls(job, 2)
+            self.assertEqual(inspect.call_count, 3)
+
     def test_survival_requires_later_same_launch_heartbeat_and_held_leaf(self):
         before = self.snapshot()
         after = self.snapshot(heartbeat=2)
