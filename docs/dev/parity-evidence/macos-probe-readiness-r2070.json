@@ -39,11 +39,23 @@
     "scripts/ci/test_macos_launch_coalition_probe.py": "76e04e129a25f39d0f532a2632f9b019422cfb68c11d39a1a760c58f5b763806",
     "scripts/ci/README-macos-coalition-probe.md": "834e9b851561807b0de0c0a654eb7523ad073b005a116025bb550cb7ec150e9a"
   },
-  "native_verification": "Not run on this source. Earlier R2069 native results apply only to its recorded source.",
+  "native_verification": {
+    "status": "phase_passed",
+    "source_head": "0a7e117c22643fb48ffe3b2f6ca6dbcc919baa3e",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43510447597",
+    "job_id": 132179005311,
+    "platform": "Darwin 25.6.0 arm64",
+    "controller_tests": 16,
+    "user_control": "Unsupported: bootstrap exit 5; exact attempted job cleaned up.",
+    "gui_selection": "Passed: two distinct keeper-only job coalitions excluded controller/outside membership; cleanup errors 0.",
+    "other_jobs": "Rust, installer build and release all skipped.",
+    "raw_log_sha256": "5aa02707de1c20b419ebdbf366bc38fee9b886f20faefba38c4b84dfbce5ffd1",
+    "private_native_receipt_sha256": "a24379dd3748c68a8029b0502096d121c7cea05212e81ef6d4027a50df537488",
+    "limits": "Readiness controls and API/job isolation on this runtime only. No descendant, crash, guardian-loss, production integration, account/restart/package or other-runtime acceptance."
+  },
   "family_recovery_acceptance": false,
   "production_tracking_changed": false,
   "remaining": [
-    "Exact-source targeted native probe",
     "Task2b3 descendants/crash/guardian-loss survival",
     "Production integration and all original acceptance gates"
   ],
