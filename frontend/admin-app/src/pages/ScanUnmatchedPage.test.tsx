@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { getJson, postJson } from '../api/adminApi'
@@ -10,9 +10,42 @@ vi.mock('../api/adminApi', () => ({
   postJson: vi.fn(),
 }))
 
-afterEach(() => {
+function resetScanTestState() {
+  cleanup()
   vi.resetAllMocks()
   vi.unstubAllGlobals()
+}
+
+afterEach(resetScanTestState)
+
+test('test teardown aborts in-flight scan reads before discarding their API mocks', async () => {
+  let pendingSignal: AbortSignal | undefined
+  let implementationAtAbort: unknown = null
+  vi.mocked(getJson).mockImplementation(async (url, options) => {
+    if (String(url).startsWith('/api/unmatched_folders?')) {
+      pendingSignal = options?.signal
+      pendingSignal?.addEventListener('abort', () => {
+        implementationAtAbort = vi.mocked(getJson).getMockImplementation()
+      })
+      return new Promise(() => {})
+    }
+    return []
+  })
+  const requestImplementation = vi.mocked(getJson).getMockImplementation()
+
+  render(
+    <MemoryRouter initialEntries={['/scan_management?active_tab=unmatched']}>
+      <ScanUnmatchedPage />
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(pendingSignal).toBeInstanceOf(AbortSignal))
+  expect(pendingSignal?.aborted).toBe(false)
+
+  resetScanTestState()
+
+  expect(pendingSignal?.aborted).toBe(true)
+  expect(implementationAtAbort).toBe(requestImplementation)
+  expect(document.body).toBeEmptyDOMElement()
 })
 
 test('renders a paginated scan table, carries link feedback, and requests the next page', async () => {

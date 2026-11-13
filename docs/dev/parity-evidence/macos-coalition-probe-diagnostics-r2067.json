@@ -91,8 +91,27 @@
     },
     "interpretation": "Ordinary-user own-coalition APIs succeeded; user-domain bootstrap failed5. No per-game isolation, descendant/recovery or production acceptance. Cause of bootstrap failure remains unknown; no elevation or blind rerun."
   },
-  "new_native_diagnosis": "pending exact-source targeted dispatch",
-  "targeted_manual_job_selection": "pending actual GitHub observation",
+  "new_native_diagnosis": {
+    "observed_utc": "2026-11-13T20:03:43.633Z",
+    "source_head": "bba3a4d5fa2d5ca25d9f1316a80b1f5d03f2dd39",
+    "run_id": 43497438422,
+    "job_id": 132134157150,
+    "status": "unsupported",
+    "bootstrap_exit_code": 5,
+    "stderr": "Generic Input/output error; privileged diagnostic suggestion was not followed. Underlying cause remains unknown.",
+    "cleanup_errors": 0,
+    "raw_log_sha256": "922ae297ae5c158aa40696c36a8edf7abd9ea3b6dde1f98944fa401ab94641b7",
+    "scope": "Ordinary-user query APIs succeeded; per-game isolation not established."
+  },
+  "targeted_manual_job_selection": {
+    "status": "observed",
+    "run_id": 43497438422,
+    "source_head": "bba3a4d5fa2d5ca25d9f1316a80b1f5d03f2dd39",
+    "executed_probe_jobs": 1,
+    "skipped_rust_build_release_jobs": 3,
+    "release_performed": false,
+    "limits": "Manual selection works; selected native capability remains unsupported, not passing."
+  },
   "publication_ruling": "Fixture-only skip-CI commit plus one probe-only manual dispatch preserves the live039 main run. New-head required normal full CI remains unsatisfied until later normal CI before merge/release. No waiver or cancellation.",
   "archive": {
     "filename": "macos-coalition-diagnostics-r2067.zip",
