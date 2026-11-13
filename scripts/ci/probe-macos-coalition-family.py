@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Owned macOS descendant/survival experiment; never production tracking."""
 import argparse
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -90,6 +91,68 @@ def verify_survival(before, after, keeper_held, leaf_held):
         raise RuntimeError('owned leaf did not prove survival after guardian loss')
 
 
+def observe_owned(directory, nonce, case, expect_live=True):
+    validate_request({'nonce': nonce, 'case': case, 'mode': 'normal'}, nonce)
+    if read_json(directory / 'job.json') != {'nonce': nonce}:
+        raise RuntimeError('observer job identity mismatch')
+    known = read_snapshot(directory / 'coalition.json', nonce)
+    target = directory / 'cases' / case
+    leaf_info = read_snapshot(target / 'leaf.json', nonce, case)
+    if known is None or leaf_info is None:
+        raise base.Unsupported('owned coalition binding unavailable')
+    if leaf_info['coalition_id'] != known['coalition_id']:
+        raise RuntimeError('observer leaf coalition mismatch')
+    lease = target / 'leaf.lock'
+    if not lease.exists() or held(lease) != expect_live:
+        raise base.Unsupported('owned leaf state unavailable')
+    api = base.CoalitionAPI()
+    own = api.own_snapshot()['coalition_id']
+    if type(own) is not int or own <= 1 or own == known['coalition_id']:
+        raise RuntimeError('observer is not outside the owned coalition')
+    sentinel = (1 << 64) - 1
+    counters = (ctypes.c_uint64 * 2)(sentinel, sentinel)
+    try:
+        result = api.usage(known['coalition_id'], ctypes.byref(counters), ctypes.sizeof(counters))
+    except (OSError, AttributeError) as error:
+        raise base.Unsupported('owned coalition query unavailable') from error
+    started, exited = map(int, counters)
+    if result != 0 or sentinel in (started, exited) or started < exited:
+        raise base.Unsupported('owned coalition query unavailable')
+    if not lease.exists() or held(lease) != expect_live:
+        raise base.Unsupported('owned leaf state unavailable')
+    return {'nonce': nonce, 'case': case, 'coalition_id': known['coalition_id'],
+            'started': started, 'exited': exited, 'active': started - exited,
+            'observer_coalition_id': own}
+
+
+def verify_observation(data, nonce, case, coalition, active, observation=None):
+    if (not isinstance(data, dict) or data.get('nonce') != nonce or data.get('case') != case or
+            data.get('coalition_id') != coalition or data.get('active') != active or
+            type(data.get('observer_coalition_id')) is not int or
+            data['observer_coalition_id'] <= 1 or data['observer_coalition_id'] == coalition or
+            (observation is not None and data.get('observation') != observation)):
+        raise RuntimeError('owned observation identity or count mismatch')
+
+
+def observe_case(job, case, active, expect_live=True):
+    directory, nonce = job['directory'], job['nonce']
+    coalition = job['initial']['coalition_id']
+    controller = observe_owned(directory, nonce, case, expect_live)
+    verify_observation(controller, nonce, case, coalition, active)
+    observation = uuid.uuid4().hex
+    path = directory / 'cases' / case / ('observer-' + observation + '.json')
+    if path.exists():
+        raise RuntimeError('fresh observer output already exists')
+    result = subprocess.run(role_command('observer', directory, nonce, case,
+        observation=observation, expect_state='live' if expect_live else 'retired'),
+        close_fds=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+    fresh = read_snapshot(path, nonce)
+    if result.returncode != 0 or fresh is None:
+        raise RuntimeError('fresh owned observer failed to return a valid result')
+    verify_observation(fresh, nonce, case, coalition, active, observation)
+    return {'controller': controller, 'fresh_process': fresh}
+
+
 def wait_until(predicate, reason, seconds=12):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -100,15 +163,17 @@ def wait_until(predicate, reason, seconds=12):
     raise RuntimeError(reason)
 
 
-def role_command(role, directory, nonce, case=None, mode='normal'):
+def role_command(role, directory, nonce, case=None, mode='normal', observation=None, expect_state='live'):
     args = [sys.executable, SCRIPT, '--role', role, '--directory', str(directory),
             '--nonce', nonce, '--mode', mode]
     if case is not None:
         args += ['--case', case]
+    if observation is not None:
+        args += ['--observation', observation, '--expect-state', expect_state]
     return args
 
 
-def fixture_role(role, directory, nonce, case, mode):
+def fixture_role(role, directory, nonce, case, mode, observation=None, expect_state='live'):
     if read_json(directory / 'job.json') != {'nonce': nonce}:
         raise RuntimeError('owned job metadata mismatch')
     if role == 'guardian':
@@ -117,6 +182,17 @@ def fixture_role(role, directory, nonce, case, mode):
     target = directory / 'cases' / case
     if target.is_symlink() or not target.is_dir():
         raise RuntimeError('owned case directory invalid')
+    if role == 'observer':
+        if not isinstance(observation, str) or re.fullmatch('[0-9a-f]{32}', observation) is None:
+            raise RuntimeError('observer request identity invalid')
+        try:
+            data = observe_owned(directory, nonce, case, expect_state == 'live')
+        except base.Unsupported:
+            base.atomic_json(target / ('observer-' + observation + '.json'),
+                {'nonce': nonce, 'case': case, 'observation': observation, 'unavailable': True})
+            return 2
+        base.atomic_json(target / ('observer-' + observation + '.json'), {**data, 'observation': observation})
+        return 0
     if role in ('wrapper', 'middle'):
         next_role = 'middle' if role == 'wrapper' else 'leaf'
         subprocess.Popen(role_command(next_role, directory, nonce, case, mode),
@@ -251,6 +327,7 @@ def create_job(root, jobs, report):
     if initial['active'] != 1:
         raise RuntimeError('family job lacks keeper-only baseline')
     job['initial'] = initial
+    base.atomic_json(directory / 'coalition.json', initial)
     return job
 
 
@@ -277,6 +354,7 @@ def start_case(job, mode, report):
     if mode == 'detached' and not snapshot['pid'] == snapshot['pgid'] == snapshot['sid']:
         raise RuntimeError('detached leaf lacks new session')
     entry.update({'verified': True, 'snapshot': snapshot, 'ancestors_reaped_and_count_two': True})
+    entry['observations_with_guardian'] = observe_case(job, case, 2)
     return case, directory, entry
 
 
@@ -309,8 +387,10 @@ def loss_case(job, mode, report):
     after = wait_until(later, 'leaf heartbeat stopped after guardian death')
     verify_survival(before, after, held(job['directory'] / 'alive.lock'), held(directory / 'leaf.lock'))
     entry.update({'survived_guardian_loss_before_bootout': True, 'after_loss_snapshot': after})
+    entry['observations_after_guardian_loss'] = observe_case(job, case, 1)
     (directory / 'stop').touch()
     wait_until(lambda: not held(directory / 'leaf.lock'), 'surviving leaf exit lease did not retire')
+    entry['observations_after_all_exit'] = observe_case(job, case, 0, expect_live=False)
 
 
 def negative_controls(job, expected_count):
@@ -363,8 +443,8 @@ def probe(report):
             if len(ids) != 2 or ids & excluded:
                 raise RuntimeError('family guardian jobs are not isolated')
             report['keepers'] = [j['initial'] for j in jobs]
-            case_a, dir_a, _ = start_case(a, 'normal', report)
-            case_b, dir_b, _ = start_case(b, 'detached', report)
+            case_a, dir_a, entry_a = start_case(a, 'normal', report)
+            case_b, dir_b, entry_b = start_case(b, 'detached', report)
             before_control = wait_until(lambda: leaf_state(a, case_a), 'leaf absent before negative controls')
             negative_controls(a, 2)
             wait_until(lambda: (leaf_state(a, case_a) or {}).get('heartbeat', 0) > before_control['heartbeat'],
@@ -373,11 +453,13 @@ def probe(report):
             report['injected_api_failure_classified_unavailable_with_live_family'] = True
             before = wait_until(lambda: leaf_state(b, case_b), 'other leaf absent before independent exit')
             end_case(a, case_a, dir_a)
+            entry_a['observations_after_leaf_exit'] = observe_case(a, case_a, 1, expect_live=False)
             wait_until(lambda: count_is(b, 2), 'other family changed after independent exit')
             wait_until(lambda: (leaf_state(b, case_b) or {}).get('heartbeat', 0) > before['heartbeat'],
                        'independent other-family heartbeat stopped')
             report['independent_family_exit_passed'] = True
             end_case(b, case_b, dir_b, crash=True)
+            entry_b['observations_after_leaf_exit'] = observe_case(b, case_b, 1, expect_live=False)
             report['self_crash_retired_leaf_and_counter'] = True
             loss_case(a, 'normal', report)
             loss_case(b, 'detached', report)
@@ -388,6 +470,7 @@ def probe(report):
             if not held(outside / 'alive.lock'):
                 raise RuntimeError('outside control did not remain alive')
             report['fixture_family_lifetime_passed'] = True
+            report['outside_fresh_observation_passed'] = True
         finally:
             cleanup_jobs(jobs, errors)
             if outside_process is not None:
@@ -407,25 +490,29 @@ def probe(report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--role', choices=('guardian', 'wrapper', 'middle', 'leaf'))
+    parser.add_argument('--role', choices=('guardian', 'wrapper', 'middle', 'leaf', 'observer'))
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--nonce')
     parser.add_argument('--case')
     parser.add_argument('--mode', choices=('normal', 'detached'), default='normal')
+    parser.add_argument('--observation')
+    parser.add_argument('--expect-state', choices=('live', 'retired'), default='live')
     args = parser.parse_args()
     if args.role:
         if sys.platform != 'darwin' or os.geteuid() == 0:
             return 2
         if args.directory is None or args.nonce is None:
             parser.error('owned directory and nonce required')
-        return fixture_role(args.role, args.directory, args.nonce, args.case, args.mode)
+        return fixture_role(args.role, args.directory, args.nonce, args.case, args.mode,
+                            args.observation, args.expect_state)
     if args.output is None:
         parser.error('--output required')
     report = {'phase': 'owned-native-family-and-guardian-loss', 'platform': platform.system(),
         'release': platform.release(), 'architecture': platform.machine(),
         'source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'base_source_sha256': hashlib.sha256(Path(base.__file__).read_bytes()).hexdigest(),
-        'fixture_family_lifetime_passed': False, 'family_recovery_acceptance': False,
+        'fixture_family_lifetime_passed': False, 'outside_fresh_observation_passed': False,
+        'family_recovery_acceptance': False,
         'remaining': ['production Rust/Tauri integration', 'fresh account/ACL and packaged restart',
                       'older/Intel Mac runtimes', 'external launcher/service handoffs', 'all original gates']}
     try:

@@ -1,11 +1,13 @@
 """Protocol and failure controls; native family acceptance is a separate run."""
 import importlib.util
+from contextlib import contextmanager
+import ctypes
 import json
 from pathlib import Path
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location(
     'family_probe', Path(__file__).with_name('probe-macos-coalition-family.py'))
@@ -150,6 +152,97 @@ class FamilyControls(unittest.TestCase):
             errors = []
             family.cleanup_jobs([{'target': 'owned-exact-label', 'directory': Path(temp), 'nonce': NONCE}], errors)
             self.assertTrue(errors)
+
+    @contextmanager
+    def observer_files(self, coalition=None, leaf=None):
+        with tempfile.TemporaryDirectory(dir=ROOT / '.artifacts') as temp:
+            directory = Path(temp)
+            (directory / 'job.json').write_text(json.dumps({'nonce': NONCE}))
+            (directory / 'coalition.json').write_text(json.dumps(coalition or self.snapshot()))
+            case = directory / 'cases' / CASE
+            case.mkdir(parents=True)
+            (case / 'leaf.json').write_text(json.dumps(leaf or self.snapshot()))
+            (case / 'leaf.lock').touch()
+            yield directory
+
+    def observer_api(self, counts=(7, 5), result=0, caller=99, error=None):
+        def query(cid, buffer, size):
+            if error:
+                raise error
+            if counts is not None:
+                target = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint64 * 2)).contents
+                target[0], target[1] = counts
+            return result
+        return types.SimpleNamespace(own_snapshot=lambda: {'coalition_id': caller}, usage=Mock(side_effect=query))
+
+    def test_outside_observer_queries_only_registered_owned_coalition(self):
+        api = self.observer_api()
+        with self.observer_files() as directory, patch.object(family, 'held', return_value=True), \
+                patch.object(family.base, 'CoalitionAPI', return_value=api):
+            data = family.observe_owned(directory, NONCE, CASE)
+        self.assertEqual((data['coalition_id'], data['active'], data['observer_coalition_id']), (200, 2, 99))
+        self.assertEqual(api.usage.call_args.args[0], 200)
+        self.assertEqual(api.usage.call_args.args[2], 16)
+
+    def test_retired_group_keeps_valid_zero_and_one_counts_distinct_from_unknown(self):
+        for active in (0, 1):
+            with self.subTest(active=active), self.observer_files() as directory, \
+                    patch.object(family, 'held', return_value=False), \
+                    patch.object(family.base, 'CoalitionAPI', return_value=self.observer_api(counts=(7, 7-active))):
+                data = family.observe_owned(directory, NONCE, CASE, expect_live=False)
+                self.assertEqual(data['active'], active)
+
+    def test_retired_expectation_rejects_held_or_missing_leaf_lease(self):
+        for present, locked in [(True, True), (False, False)]:
+            with self.subTest(present=present), self.observer_files() as directory, \
+                    patch.object(family, 'held', return_value=locked), \
+                    patch.object(family.base, 'CoalitionAPI') as api:
+                if not present:
+                    (directory / 'cases' / CASE / 'leaf.lock').unlink()
+                with self.assertRaises(family.base.Unsupported):
+                    family.observe_owned(directory, NONCE, CASE, expect_live=False)
+                api.assert_not_called()
+
+    def test_observer_rejects_unbound_metadata_before_any_query(self):
+        for coalition, leaf, case in [(self.snapshot(nonce='c'*32), self.snapshot(), CASE),
+                                     (self.snapshot(), self.snapshot(coalition_id=201), CASE),
+                                     (self.snapshot(), self.snapshot(), '../outside')]:
+            with self.subTest(case=case, coalition=coalition), \
+                    self.observer_files(coalition, leaf) as directory, \
+                    patch.object(family, 'held', return_value=True), \
+                    patch.object(family.base, 'CoalitionAPI') as api:
+                with self.assertRaises(RuntimeError):
+                    family.observe_owned(directory, NONCE, case)
+                api.assert_not_called()
+
+    def test_foreign_query_errors_and_incomplete_counters_remain_unavailable(self):
+        variants = [self.observer_api(counts=None), self.observer_api(result=1),
+                    self.observer_api(counts=(3, 4)), self.observer_api(error=OSError('/private/diagnostic'))]
+        for api in variants:
+            with self.subTest(api=api), self.observer_files() as directory, \
+                    patch.object(family, 'held', return_value=True), \
+                    patch.object(family.base, 'CoalitionAPI', return_value=api):
+                with self.assertRaises(family.base.Unsupported) as error:
+                    family.observe_owned(directory, NONCE, CASE)
+                self.assertNotIn('/private', str(error.exception))
+
+    def test_observer_cannot_adopt_joined_coalition_or_a_lost_leaf(self):
+        for caller, leases in [(200, [True]), (99, [True, False])]:
+            with self.subTest(caller=caller), self.observer_files() as directory, \
+                    patch.object(family, 'held', side_effect=leases), \
+                    patch.object(family.base, 'CoalitionAPI', return_value=self.observer_api(caller=caller)):
+                with self.assertRaises((RuntimeError, family.base.Unsupported)):
+                    family.observe_owned(directory, NONCE, CASE)
+
+    def test_fresh_observer_result_must_match_current_request_and_live_count(self):
+        observation = 'd'*32
+        value = {**self.snapshot(), 'observer_coalition_id': 99, 'observation': observation}
+        family.verify_observation(value, NONCE, CASE, 200, 2, observation)
+        for changes in ({'nonce': 'c'*32}, {'case': 'c'*32}, {'coalition_id': 201},
+                        {'observer_coalition_id': 200}, {'observer_coalition_id': True},
+                        {'observation': 'c'*32}, {'active': 1}):
+            with self.subTest(changes=changes), self.assertRaises(RuntimeError):
+                family.verify_observation({**value, **changes}, NONCE, CASE, 200, 2, observation)
 
 
 if __name__ == '__main__':
